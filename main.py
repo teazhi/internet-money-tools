@@ -9,7 +9,7 @@ import boto3
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import Select, View
+from discord.ui import Select, View, Button
 from dotenv import load_dotenv
 
 # Point to the certifi certificate bundle (useful on macOS)
@@ -84,6 +84,27 @@ class MappingView(View):
             self.add_item(ColumnSelect(mapping_type, options))
 
 ###########################################
+# Price Update Confirmation UI           #
+###########################################
+
+class PriceUpdateView(View):
+    def __init__(self):
+        super().__init__(timeout=30)
+        self.update_all = None  # This will be set to True/False based on user response
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.primary)
+    async def yes_button(self, interaction: discord.Interaction, button: Button):
+        self.update_all = True
+        await interaction.response.send_message("Prices will be updated for all matching products.", ephemeral=True)
+        self.stop()
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
+    async def no_button(self, interaction: discord.Interaction, button: Button):
+        self.update_all = False
+        await interaction.response.send_message("Only products missing a price will be updated.", ephemeral=True)
+        self.stop()
+
+###########################################
 # Slash Commands                          #
 ###########################################
 
@@ -114,7 +135,9 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment, google_sheet_url: str = None):
     """
     Slash command to update an aura CSV file using cost data from a Google Sheet.
-    The updated file and a summary are sent to the executor via DM.
+    After confirming headers, the user is prompted whether they want to update prices for their products.
+    If confirmed, prices for all matching ASIN's will be updated; otherwise, only missing prices will be updated.
+    The updated file and a summary are sent to the executor via DM if any rows were updated.
     """
     await interaction.response.defer()
     try:
@@ -180,18 +203,33 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         await interaction.followup.send(f"Error processing Google Sheet data: {e}", ephemeral=True)
         return
 
+    # Check required headers in aura CSV
     if "asin" not in aura_df.columns or "cost" not in aura_df.columns:
         await interaction.followup.send("The aura CSV file must have both 'asin' and 'cost' columns.", ephemeral=True)
         return
     aura_df["asin"] = aura_df["asin"].astype(str).str.strip()
     aura_df["cost"] = pd.to_numeric(aura_df["cost"], errors='coerce')
 
+    # Ask user if they want to update prices for all products
+    price_view = PriceUpdateView()
+    prompt = "Do you want to update prices for all matching products? (Yes: update all; No: update only missing prices)"
+    await interaction.followup.send(prompt, view=price_view, ephemeral=True)
+    await price_view.wait()
+
+    if price_view.update_all is None:
+        await interaction.followup.send("Price update selection not made in time. Aborting command.", ephemeral=True)
+        return
+
     updated_rows = []
+    # Update rows based on user's selection
     for idx, row in aura_df.iterrows():
-        if pd.isna(row["cost"]):
-            match = sheet_df[sheet_df["ASIN"] == row["asin"]]
-            if not match.empty:
-                new_cost = match.iloc[0]["COGS"]
+        match = sheet_df[sheet_df["ASIN"] == row["asin"]]
+        if not match.empty:
+            new_cost = match.iloc[0]["COGS"]
+            # If update_all is True, update every matching row.
+            # If False, only update if the current cost is missing.
+            if price_view.update_all or pd.isna(row["cost"]):
+                # Only update if there is a valid new cost
                 if not pd.isna(new_cost):
                     aura_df.at[idx, "cost"] = new_cost
                     updated_rows.append({
@@ -212,7 +250,10 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     )
     file = discord.File(fp=BytesIO(output_bytes), filename="aura_updated.csv")
     await interaction.followup.send(embed=embed, ephemeral=True)
-    await interaction.user.send("Aura Updated File", file=discord.File(fp=BytesIO(output_bytes), filename="aura_updated.csv"))
+
+    # Only send a DM if there were rows updated
+    if updated_rows:
+        await interaction.user.send("Aura Updated File", file=file)
 
 ###########################################
 # on_ready Event (after command definitions)

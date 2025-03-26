@@ -113,7 +113,7 @@ def upload_file_to_s3(file_bytes, file_name):
     )
     try:
         s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=file_name, Body=file_bytes)
-        return f"Successfully uploaded '{file_name}' to bucket."
+        return f"Successfully uploaded '{file_name}' to bucket '{CONFIG_S3_BUCKET}'."
     except Exception as e:
         return f"Error uploading '{file_name}' to S3: {e}"
 
@@ -341,7 +341,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     # Ask user whether to update all prices or only missing ones
     price_view = PriceUpdateView()
     prompt = "Do you want to update prices for all matching products? (Yes: update all; No: update only missing prices)"
-    await interaction.response.send_message(prompt, view=price_view, ephemeral=True)
+    await interaction.followup.send(prompt, view=price_view, ephemeral=True)
     await price_view.wait()
 
     if price_view.update_all is None:

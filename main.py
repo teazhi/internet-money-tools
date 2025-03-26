@@ -190,7 +190,6 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     except Exception as e:
         await interaction.response.send_message(f"Error processing the file: {e}", ephemeral=True)
 
-
 @bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
@@ -199,8 +198,8 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 )
 async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, email: str):
     """
-    Each Discord user can only have one sheet. If the user's discord_id is already in the config,
-    we throw an error. The user must remove their sheet before uploading a new one.
+    Each Discord user can only have one sheet. If your Discord ID is already in the config,
+    you must remove it first using `/removesheet`.
     """
     await interaction.response.defer(ephemeral=True)
     try:
@@ -216,7 +215,7 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
                 )
                 return
 
-        # If no entry for this user, create one
+        # Create a new record for this user
         users.append({
             "discord_id": user_id,
             "sheet": sheet_link,
@@ -230,7 +229,6 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
     except Exception as e:
         await interaction.followup.send(f"Error updating your configuration: {e}", ephemeral=True)
 
-
 @bot.tree.command(name="removesheet", description="Remove your sheet link from the system", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 async def slash_removesheet(interaction: discord.Interaction):
@@ -242,7 +240,7 @@ async def slash_removesheet(interaction: discord.Interaction):
         user_id = interaction.user.id
         users = get_users_config()
 
-        # Find the user entry by discord_id
+        # Find and remove your record
         index_to_remove = None
         for idx, user in enumerate(users):
             if user.get("discord_id") == user_id:
@@ -250,13 +248,9 @@ async def slash_removesheet(interaction: discord.Interaction):
                 break
 
         if index_to_remove is None:
-            await interaction.followup.send(
-                "No sheet found for your user ID. Nothing to remove.",
-                ephemeral=True
-            )
+            await interaction.followup.send("No sheet found for your user ID. Nothing to remove.", ephemeral=True)
             return
 
-        # Remove the user's entry
         removed_entry = users.pop(index_to_remove)
         update_users_config(users)
         await interaction.followup.send(
@@ -266,34 +260,35 @@ async def slash_removesheet(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"Error removing your configuration: {e}", ephemeral=True)
 
-
-@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from your associated Google Sheet", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
-@app_commands.describe(
-    aura_file="The aura CSV file to update",
-    google_sheet_url="Optional: Google Sheet URL containing cost data"
-)
-async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment, google_sheet_url: str = None):
+@app_commands.describe(aura_file="The aura CSV file to update")
+async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment):
     """
-    Slash command to update an aura CSV file using cost data from a Google Sheet.
+    Updates an aura CSV file using cost data from the Google Sheet associated with your Discord account.
     """
     await interaction.response.defer()
     try:
+        # Retrieve your associated sheet link from users.json
+        user_id = interaction.user.id
+        users = get_users_config()
+        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
+        if not user_record or not user_record.get("sheet"):
+            await interaction.followup.send(
+                "No associated Google Sheet found for your account. Please upload one using `/uploadsheet`.",
+                ephemeral=True
+            )
+            return
+        google_sheet_url = user_record.get("sheet")
+
+        # Read the aura CSV file
         aura_bytes = await aura_file.read()
         aura_df = pd.read_csv(StringIO(aura_bytes.decode('utf-8')))
     except Exception as e:
-        await interaction.followup.send(f"Error reading aura CSV file: {e}", ephemeral=True)
+        await interaction.followup.send(f"Error reading aura CSV file or retrieving your sheet: {e}", ephemeral=True)
         return
 
-    if not google_sheet_url:
-        if os.path.exists("config.json"):
-            with open("config.json", "r") as f:
-                config = json.load(f)
-            google_sheet_url = config.get("google_sheet_url", "").strip()
-        if not google_sheet_url:
-            await interaction.followup.send("Google Sheet URL not provided and no config.json found.", ephemeral=True)
-            return
-
+    # Fetch the Google Sheet data
     try:
         response = requests.get(google_sheet_url)
         response.raise_for_status()
@@ -330,25 +325,20 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     try:
         sheet_df = sheet_df.rename(columns={mapping["ASIN"]: "ASIN", mapping["COGS"]: "COGS"})
         sheet_df["ASIN"] = sheet_df["ASIN"].astype(str).str.strip()
-        sheet_df["COGS"] = (
-            sheet_df["COGS"]
-            .astype(str)
-            .str.replace('$', '', regex=False)
-            .str.replace(',', '', regex=False)
-        )
+        sheet_df["COGS"] = sheet_df["COGS"].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False)
         sheet_df["COGS"] = pd.to_numeric(sheet_df["COGS"], errors='coerce')
     except Exception as e:
         await interaction.followup.send(f"Error processing Google Sheet data: {e}", ephemeral=True)
         return
 
-    # Check required headers in aura CSV
+    # Ensure aura CSV has required headers
     if "asin" not in aura_df.columns or "cost" not in aura_df.columns:
         await interaction.followup.send("The aura CSV file must have both 'asin' and 'cost' columns.", ephemeral=True)
         return
     aura_df["asin"] = aura_df["asin"].astype(str).str.strip()
     aura_df["cost"] = pd.to_numeric(aura_df["cost"], errors='coerce')
 
-    # Ask user if they want to update prices for all products
+    # Ask user whether to update all prices or only missing ones
     price_view = PriceUpdateView()
     prompt = "Do you want to update prices for all matching products? (Yes: update all; No: update only missing prices)"
     await interaction.followup.send(prompt, view=price_view, ephemeral=True)
@@ -359,7 +349,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         return
 
     updated_rows = []
-    # Update rows based on user's selection
+    # Update rows based on your selection
     for idx, row in aura_df.iterrows():
         match = sheet_df[sheet_df["ASIN"] == row["asin"]]
         if not match.empty:
@@ -398,12 +388,12 @@ async def on_ready():
     print(f"Bot is online as {bot.user}")
     guild = discord.Object(id=GUILD_ID)
     try:
-        # Clear any previously registered global commands
+        # Clear previously registered global commands
         bot.tree.clear_commands(guild=None)
         await bot.tree.sync()
         print("Cleared global commands.")
 
-        # Now sync guild commands only
+        # Sync guild commands only
         synced = await bot.tree.sync(guild=guild)
         print(f"Synced {len(synced)} command(s) to guild {guild.id}.")
     except Exception as e:

@@ -157,7 +157,7 @@ class PriceUpdateView(View):
 # Slash Commands                          #
 ###########################################
 
-@bot.tree.command(name="upload", description="Upload a file to S3")
+@bot.tree.command(name="upload", description="Upload a file to S3", guild=discord.Object(id=1287450087852740699))
 @restrict_to_roles(1341608661822345257)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
@@ -177,7 +177,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     except Exception as e:
         await interaction.response.send_message(f"Error processing the file: {e}", ephemeral=True)
 
-@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email")
+@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email", guild=discord.Object(id=1287450087852740699))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     sheet_link="Your Google Sheet CSV URL",
@@ -205,7 +205,7 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
     except Exception as e:
         await interaction.followup.send(f"Error updating your configuration: {e}", ephemeral=True)
 
-@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet")
+@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet", guild=discord.Object(id=1287450087852740699))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     aura_file="The aura CSV file to update",

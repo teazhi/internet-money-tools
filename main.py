@@ -23,6 +23,7 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+USERS_CONFIG_KEY = "users.json"  # S3 key for the user config file
 
 # Ensure AWS credentials are provided
 if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
@@ -51,6 +52,44 @@ def upload_file_to_s3(file_bytes, file_name):
         return f"Successfully uploaded '{file_name}' to bucket '{CONFIG_S3_BUCKET}'."
     except Exception as e:
         return f"Error uploading '{file_name}' to S3: {e}"
+
+###########################################
+# S3 User Configuration Functions         #
+###########################################
+
+def get_users_config():
+    """
+    Retrieves the users configuration from S3.
+    Expected format: { "users": [ { "sheet": "...", "email": "..." }, ... ] }
+    """
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+    try:
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        return config_data.get("users", [])
+    except Exception as e:
+        print(f"Error fetching users config: {e}")
+        return []
+
+def update_users_config(users):
+    """
+    Updates the users configuration file in S3.
+    """
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+    config_data = json.dumps({"users": users})
+    try:
+        s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY, Body=config_data)
+        print("Users configuration updated successfully.")
+    except Exception as e:
+        print(f"Error updating users config: {e}")
 
 ###########################################
 # Dropdown UI for Column Mapping         #
@@ -126,6 +165,33 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"Error processing the file: {e}", ephemeral=True)
+
+@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email")
+@app_commands.describe(
+    sheet_link="Your Google Sheet CSV URL",
+    email="Your email address"
+)
+async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, email: str):
+    """
+    Slash command for users to update their sheet link and email.
+    This command retrieves the current configuration from S3, updates (or appends) the record, and writes it back.
+    """
+    await interaction.response.defer(ephemeral=True)
+    try:
+        users = get_users_config()
+        updated = False
+        # Check if the user already exists by matching the email
+        for user in users:
+            if user.get("email").lower() == email.lower():
+                user["sheet"] = sheet_link
+                updated = True
+                break
+        if not updated:
+            users.append({"sheet": sheet_link, "email": email})
+        update_users_config(users)
+        await interaction.followup.send(f"Your sheet link and email have been updated for {email}.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Error updating your configuration: {e}", ephemeral=True)
 
 @bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet")
 @app_commands.describe(
@@ -226,10 +292,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         match = sheet_df[sheet_df["ASIN"] == row["asin"]]
         if not match.empty:
             new_cost = match.iloc[0]["COGS"]
-            # If update_all is True, update every matching row.
-            # If False, only update if the current cost is missing.
             if price_view.update_all or pd.isna(row["cost"]):
-                # Only update if there is a valid new cost
                 if not pd.isna(new_cost):
                     aura_df.at[idx, "cost"] = new_cost
                     updated_rows.append({
@@ -251,7 +314,6 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     file = discord.File(fp=BytesIO(output_bytes), filename="aura_updated.csv")
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-    # Only send a DM if there were rows updated
     if updated_rows:
         await interaction.user.send("Aura Updated File", file=file)
 

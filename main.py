@@ -34,6 +34,16 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+def has_required_role(interaction: discord.Interaction, allowed_role_ids: list[int]) -> bool:
+    user_roles = [role.id for role in interaction.user.roles]
+    return any(role_id in user_roles for role_id in allowed_role_ids)
+
+def restrict_to_roles(*role_ids):
+    def predicate(interaction: discord.Interaction) -> bool:
+        return has_required_role(interaction, list(role_ids))
+    return app_commands.check(predicate)
+
+
 ###########################################
 # S3 Uploader Functionality (for /upload)  #
 ###########################################
@@ -148,6 +158,7 @@ class PriceUpdateView(View):
 ###########################################
 
 @bot.tree.command(name="upload", description="Upload a file to S3")
+@restrict_to_roles(1341608661822345257)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
     """
@@ -167,6 +178,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         await interaction.response.send_message(f"Error processing the file: {e}", ephemeral=True)
 
 @bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email")
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     sheet_link="Your Google Sheet CSV URL",
     email="Your email address"
@@ -194,6 +206,7 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
         await interaction.followup.send(f"Error updating your configuration: {e}", ephemeral=True)
 
 @bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet")
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     aura_file="The aura CSV file to update",
     google_sheet_url="Optional: Google Sheet URL containing cost data"
@@ -326,7 +339,7 @@ async def on_ready():
     print(f"Bot is online as {bot.user}")
     guild = discord.Object(id=1287450087852740699)  # Use integer guild ID
     try:
-        bot.tree.copy_global_to(guild=guild)
+        # bot.tree.copy_global_to(guild=guild)
         synced = await bot.tree.sync(guild=guild)
         print(f"Synced {len(synced)} command(s) to guild {guild.id}.")
     except Exception as e:

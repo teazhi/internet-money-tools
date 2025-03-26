@@ -339,6 +339,11 @@ async def on_ready():
     print(f"Bot is online as {bot.user}")
     guild = discord.Object(id=1287450087852740699)  # Use integer guild ID
     try:
+        bot.tree.clear_commands(guild=None)
+
+        await bot.tree.sync()
+        print("Cleared global commands.")
+
         # bot.tree.copy_global_to(guild=guild)
         synced = await bot.tree.sync(guild=guild)
         print(f"Synced {len(synced)} command(s) to guild {guild.id}.")

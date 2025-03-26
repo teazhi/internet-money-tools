@@ -34,43 +34,40 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+###########################################
+# Role Checks                             #
+###########################################
+
 def has_required_role(interaction: discord.Interaction, allowed_role_ids: list[int]) -> bool:
     user_roles = [role.id for role in interaction.user.roles]
     return any(role_id in user_roles for role_id in allowed_role_ids)
 
 def restrict_to_roles(*role_ids):
+    """
+    Decorator that checks if the invoking user has at least one of the allowed roles.
+    """
     def predicate(interaction: discord.Interaction) -> bool:
         return has_required_role(interaction, list(role_ids))
     return app_commands.check(predicate)
 
-
 ###########################################
-# S3 Uploader Functionality (for /upload)  #
-###########################################
-
-def upload_file_to_s3(file_bytes, file_name):
-    """
-    Uploads file bytes to AWS S3 with the specified file name.
-    """
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    )
-    try:
-        s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=file_name, Body=file_bytes)
-        return f"Successfully uploaded '{file_name}' to bucket '{CONFIG_S3_BUCKET}'."
-    except Exception as e:
-        return f"Error uploading '{file_name}' to S3: {e}"
-
-###########################################
-# S3 User Configuration Functions         #
+# S3 Functions for Users Config           #
 ###########################################
 
 def get_users_config():
     """
     Retrieves the users configuration from S3.
-    Expected format: { "users": [ { "sheet": "...", "email": "..." }, ... ] }
+    Expected format: 
+    {
+      "users": [
+        {
+          "discord_id": 123456789,
+          "sheet": "https://docs.google.com/...",
+          "email": "user@example.com"
+        },
+        ...
+      ]
+    }
     """
     s3_client = boto3.client(
         's3',
@@ -102,7 +99,26 @@ def update_users_config(users):
         print(f"Error updating users config: {e}")
 
 ###########################################
-# Dropdown UI for Column Mapping         #
+# S3 File Uploader (for /upload)          #
+###########################################
+
+def upload_file_to_s3(file_bytes, file_name):
+    """
+    Uploads file bytes to AWS S3 with the specified file name.
+    """
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+    try:
+        s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=file_name, Body=file_bytes)
+        return f"Successfully uploaded '{file_name}' to bucket '{CONFIG_S3_BUCKET}'."
+    except Exception as e:
+        return f"Error uploading '{file_name}' to S3: {e}"
+
+###########################################
+# UI Classes for Column Mapping & Price   #
 ###########################################
 
 class ColumnSelect(Select):
@@ -132,14 +148,10 @@ class MappingView(View):
         for mapping_type in missing_types:
             self.add_item(ColumnSelect(mapping_type, options))
 
-###########################################
-# Price Update Confirmation UI           #
-###########################################
-
 class PriceUpdateView(View):
     def __init__(self):
         super().__init__(timeout=30)
-        self.update_all = None  # This will be set to True/False based on user response
+        self.update_all = None  # True/False based on user response
 
     @discord.ui.button(label="Yes", style=discord.ButtonStyle.primary)
     async def yes_button(self, interaction: discord.Interaction, button: Button):
@@ -157,13 +169,14 @@ class PriceUpdateView(View):
 # Slash Commands                          #
 ###########################################
 
-@bot.tree.command(name="upload", description="Upload a file to S3", guild=discord.Object(id=1287450087852740699))
+GUILD_ID = 1287450087852740699  # Replace with your guild ID if needed
+
+@bot.tree.command(name="upload", description="Upload a file to S3", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
     """
     Slash command to upload a file to S3.
-    The result is sent to the executor via DM, with an ephemeral notification in the channel.
     """
     try:
         file_bytes = await file.read()
@@ -177,7 +190,8 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     except Exception as e:
         await interaction.response.send_message(f"Error processing the file: {e}", ephemeral=True)
 
-@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email", guild=discord.Object(id=1287450087852740699))
+
+@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     sheet_link="Your Google Sheet CSV URL",
@@ -185,27 +199,75 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 )
 async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, email: str):
     """
-    Slash command for users to update their sheet link and email.
-    This command retrieves the current configuration from S3, updates (or appends) the record, and writes it back.
+    Each Discord user can only have one sheet. If the user's discord_id is already in the config,
+    we throw an error. The user must remove their sheet before uploading a new one.
     """
     await interaction.response.defer(ephemeral=True)
     try:
+        user_id = interaction.user.id
         users = get_users_config()
-        updated = False
-        # Check if the user already exists by matching the email
+
+        # Check if this user_id already has a sheet
         for user in users:
-            if user.get("email").lower() == email.lower():
-                user["sheet"] = sheet_link
-                updated = True
-                break
-        if not updated:
-            users.append({"sheet": sheet_link, "email": email})
+            if user.get("discord_id") == user_id:
+                await interaction.followup.send(
+                    "You already have a sheet associated. Please remove it first using `/removesheet`.",
+                    ephemeral=True
+                )
+                return
+
+        # If no entry for this user, create one
+        users.append({
+            "discord_id": user_id,
+            "sheet": sheet_link,
+            "email": email
+        })
         update_users_config(users)
-        await interaction.followup.send(f"Your sheet link and email have been updated for {email}.", ephemeral=True)
+        await interaction.followup.send(
+            f"Your sheet link and email have been added. (Discord ID: {user_id})",
+            ephemeral=True
+        )
     except Exception as e:
         await interaction.followup.send(f"Error updating your configuration: {e}", ephemeral=True)
 
-@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet", guild=discord.Object(id=1287450087852740699))
+
+@bot.tree.command(name="removesheet", description="Remove your sheet link from the system", guild=discord.Object(id=GUILD_ID))
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
+async def slash_removesheet(interaction: discord.Interaction):
+    """
+    Remove the sheet associated with your Discord user ID.
+    """
+    await interaction.response.defer(ephemeral=True)
+    try:
+        user_id = interaction.user.id
+        users = get_users_config()
+
+        # Find the user entry by discord_id
+        index_to_remove = None
+        for idx, user in enumerate(users):
+            if user.get("discord_id") == user_id:
+                index_to_remove = idx
+                break
+
+        if index_to_remove is None:
+            await interaction.followup.send(
+                "No sheet found for your user ID. Nothing to remove.",
+                ephemeral=True
+            )
+            return
+
+        # Remove the user's entry
+        removed_entry = users.pop(index_to_remove)
+        update_users_config(users)
+        await interaction.followup.send(
+            f"Removed your sheet: {removed_entry.get('sheet')} (Email: {removed_entry.get('email')})",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.followup.send(f"Error removing your configuration: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from a Google Sheet", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     aura_file="The aura CSV file to update",
@@ -214,9 +276,6 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
 async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment, google_sheet_url: str = None):
     """
     Slash command to update an aura CSV file using cost data from a Google Sheet.
-    After confirming headers, the user is prompted whether they want to update prices for their products.
-    If confirmed, prices for all matching ASIN's will be updated; otherwise, only missing prices will be updated.
-    The updated file and a summary are sent to the executor via DM if any rows were updated.
     """
     await interaction.response.defer()
     try:
@@ -331,20 +390,20 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         await interaction.user.send("Aura Updated File", file=file)
 
 ###########################################
-# on_ready Event (after command definitions)
+# on_ready Event                          #
 ###########################################
 
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user}")
-    guild = discord.Object(id=1287450087852740699)  # Use integer guild ID
+    guild = discord.Object(id=GUILD_ID)
     try:
+        # Clear any previously registered global commands
         bot.tree.clear_commands(guild=None)
-
         await bot.tree.sync()
         print("Cleared global commands.")
 
-        # bot.tree.copy_global_to(guild=guild)
+        # Now sync guild commands only
         synced = await bot.tree.sync(guild=guild)
         print(f"Synced {len(synced)} command(s) to guild {guild.id}.")
     except Exception as e:

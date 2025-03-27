@@ -317,7 +317,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     """
     Updates an aura CSV file using cost data from the Google Sheet associated with your Discord account.
     """
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     try:
         # Retrieve your associated sheet link from users.json
         user_id = interaction.user.id

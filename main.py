@@ -222,16 +222,16 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="uploadsheet", description="Upload or update your Google Sheet link and email", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="setup", description="Setup your Google Sheet link and email", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     sheet_link="Your Google Sheet CSV URL",
     email="Your email address"
 )
-async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, email: str):
+async def slash_setup(interaction: discord.Interaction, sheet_link: str, email: str):
     """
     Each Discord user can only have one sheet. If your Discord ID is already in the config,
-    you must remove it first using `/removesheet`.
+    you must remove it first using `/removeprofile`.
     """
     await interaction.response.defer(ephemeral=True)
     try:
@@ -242,7 +242,7 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
         for user in users:
             if user.get("discord_id") == user_id:
                 embed = create_embed(
-                    "You already have a sheet associated. Please remove it first using `/removesheet`.",
+                    "You already have a profile associated. Please remove it first using `/removeprofile`.",
                     color=discord.Color.red()
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
@@ -267,9 +267,9 @@ async def slash_uploadsheet(interaction: discord.Interaction, sheet_link: str, e
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="removesheet", description="Remove your sheet link from the system", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="removeprofile", description="Remove your profile from the system", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
-async def slash_removesheet(interaction: discord.Interaction):
+async def slash_removeprofile(interaction: discord.Interaction):
     """
     Remove the sheet associated with your Discord user ID.
     """
@@ -287,7 +287,7 @@ async def slash_removesheet(interaction: discord.Interaction):
 
         if index_to_remove is None:
             embed = create_embed(
-                "No sheet found for your user ID. Nothing to remove.",
+                "No profile found for your user ID. Nothing to remove.",
                 color=discord.Color.blue()
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -297,8 +297,9 @@ async def slash_removesheet(interaction: discord.Interaction):
         update_users_config(users)
         embed = create_embed(
             description=(
-                f"Removed your sheet: {removed_entry.get('sheet')} "
-                f"(Email: {removed_entry.get('email')})"
+                f"Successfully removed your profile:"
+                f"\nSheet: {removed_entry.get('sheet')}"
+                f"\nEmail: {removed_entry.get('email')}"
             ),
             color=discord.Color.green()
         )

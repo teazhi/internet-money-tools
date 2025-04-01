@@ -34,6 +34,22 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        embed = create_embed(
+            description="You do not have the required role to use this command.",
+            title="Permission Denied",
+            color=discord.Color.red()
+        )
+        # Try to send the response; if already responded, send a followup message.
+        try:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except discord.errors.InteractionResponded:
+            await interaction.followup.send(embed=embed, ephemeral=True)
+    else:
+        raise error
+
 ###########################################
 # Helper Function for Creating Embeds     #
 ###########################################
@@ -222,7 +238,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="setup", description="Setup your Google Sheet link and email", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="setup", description="Setup your profile with your purchase sheet and email", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     sheet_link="Your Google Sheet CSV URL",

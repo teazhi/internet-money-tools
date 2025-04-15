@@ -197,6 +197,27 @@ def upload_file_to_s3(file_bytes, file_name):
         return f"Successfully uploaded '{file_name}' to bucket."
     except Exception as e:
         return f"Error uploading '{file_name}' to S3: {e}"
+    
+async def run_mapping_views(required_mapping: list, options: list, interaction: discord.Interaction) -> dict:
+    """
+    Splits the required mapping list into chunks of up to 5 items.
+    For each chunk, sends a mapping view to the user and waits for it to complete.
+    Returns a combined dictionary of mapping results.
+    """
+    mapping_result = {}
+    # Process the mapping in chunks of 5 items
+    for i in range(0, len(required_mapping), 5):
+        chunk = required_mapping[i:i+5]
+        view = MappingView(chunk, options)
+        embed = create_embed(
+            description=f"Map the following required columns: {', '.join(chunk)}",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await view.wait()
+        mapping_result.update(view.mapping_result)
+    return mapping_result
+
 
 ###########################################
 # UI Classes for Column Mapping & Price   #
@@ -351,11 +372,11 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 async def slash_setup(interaction: discord.Interaction, email: str):
     """
     The user’s workflow:
-    1. If no Google account is linked, send the OAuth link.
-    2. Once linked (via the /complete_google_auth command), list their spreadsheets.
-    3. Allow the user to select their purchase sheet.
-    4. Present a column mapping view.
-    5. Save the configuration to S3.
+      1. If no Google account is linked, send the OAuth link.
+      2. Once linked (via the /complete_google_auth command), list their spreadsheets.
+      3. Allow the user to select their purchase sheet.
+      4. Present a column mapping view in chunks of five.
+      5. Save the configuration to S3.
     """
     await interaction.response.defer(ephemeral=True)
     try:
@@ -365,13 +386,11 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         # Find if the user already exists in config
         user_record = next((user for user in users if user.get("discord_id") == user_id), None)
 
-        # If the user record exists and has google_tokens, proceed to sheet selection / mapping
+        # If the user record exists and has google_tokens, proceed; otherwise, initiate OAuth linking.
         if user_record and user_record.get("google_tokens"):
             await interaction.followup.send("Your Google account is already linked. Proceeding to sheet selection...", ephemeral=True)
         else:
-            # Start OAuth linking if not present
             oauth_url = get_google_oauth_url(user_id)
-            # Create an interactive button for linking
             button = Button(label="Link Google Account", url=oauth_url)
             view = View()
             view.add_item(button)
@@ -382,7 +401,6 @@ async def slash_setup(interaction: discord.Interaction, email: str):
                 view=view,
                 ephemeral=True
             )
-            # Optionally, you may want to store the email and minimal user record at this point.
             if user_record is None:
                 users.append({
                     "discord_id": user_id,
@@ -417,31 +435,23 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         user_record["sheet_id"] = view.selected_sheet
         update_users_config(users)
 
-        # Now call the Google Sheets API to get the header row (assume it is in row 1)
+        # Now use the Google Sheets API to get the header row (assume it is in row 1)
         headers = get_sheet_headers(access_token, view.selected_sheet)
         if not headers:
             await interaction.followup.send("Could not retrieve the header row from the selected sheet.", ephemeral=True)
             return
 
-        # Use your existing MappingView (or modify as needed) to let the user map required columns.
-        # For this example, suppose we require mapping for the following keys:
+        # Define your required mapping list
         required_mapping = ["Date", "Sale Price", "Name", "Size/Color", "Bundled?", "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"]
-        map_view = MappingView(required_mapping, headers)
-        map_embed = create_embed(
-            description=f"Map the following required columns to your sheet’s columns: {', '.join(required_mapping)}",
-            color=discord.Color.blue()
-        )
-        await interaction.followup.send(embed=map_embed, view=map_view, ephemeral=True)
-        await map_view.wait()
-
-        if len(map_view.mapping_result) < len(required_mapping):
+        # Use the helper to run the mapping views in chunks of five.
+        mapping_result = await run_mapping_views(required_mapping, headers, interaction)
+        if len(mapping_result) < len(required_mapping):
             await interaction.followup.send("Column mapping was not completed in time. Please run `/setup` again.", ephemeral=True)
             return
 
         # Update the user's record with the column mapping.
-        user_record["column_mapping"] = map_view.mapping_result
-        # Optionally, store the provided email if it was not set previously.
-        user_record["email"] = email
+        user_record["column_mapping"] = mapping_result
+        user_record["email"] = email  # Update email if needed
         update_users_config(users)
 
         await interaction.followup.send("Your profile has been successfully set up!", ephemeral=True)

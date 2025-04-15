@@ -218,6 +218,18 @@ async def run_mapping_views(required_mapping: list, options: list, interaction: 
         mapping_result.update(view.mapping_result)
     return mapping_result
 
+def safe_option_text(text: str) -> str:
+    """
+    Ensures the provided text is between 1 and 100 characters.
+    If text is empty, returns a fallback value.
+    If text is longer than 100 characters, trims it and appends '...'
+    """
+    text = str(text).strip()
+    if not text:
+        return "N/A"  # Provide a fallback if the header is empty.
+    if len(text) > 100:
+        return text[:97] + "..."  # Trim text to 97 characters then add ellipsis.
+    return text
 
 ###########################################
 # UI Classes for Column Mapping & Price   #
@@ -226,7 +238,13 @@ async def run_mapping_views(required_mapping: list, options: list, interaction: 
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
-        options = [discord.SelectOption(label=col, value=col) for col in options_list]
+        options = [
+            discord.SelectOption(
+                label=safe_option_text(col),
+                value=safe_option_text(col)
+            )
+            for col in options_list
+        ]
         super().__init__(
             placeholder=f"Select column for {mapping_type}",
             min_values=1,

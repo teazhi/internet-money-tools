@@ -36,7 +36,6 @@ def get_google_oauth_url(discord_id: int) -> str:
     oauth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
     return oauth_url
 
-# Point to the certifi certificate bundle (useful on macOS)
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 # AWS and Discord configuration from environment

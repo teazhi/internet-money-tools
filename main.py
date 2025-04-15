@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 
 import urllib.parse
 
+# Load environment variables
+load_dotenv()
+
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
@@ -35,9 +38,6 @@ def get_google_oauth_url(discord_id: int) -> str:
 
 # Point to the certifi certificate bundle (useful on macOS)
 os.environ['SSL_CERT_FILE'] = certifi.where()
-
-# Load environment variables
-load_dotenv()
 
 # AWS and Discord configuration from environment
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")

@@ -12,6 +12,27 @@ from discord import app_commands
 from discord.ui import Select, View, Button
 from dotenv import load_dotenv
 
+import urllib.parse
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+
+def get_google_oauth_url(discord_id: int) -> str:
+    base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        # Request both read-only access to spreadsheets and drive files so we can list sheets
+        "scope": "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
+        "access_type": "offline",    # to get a refresh token
+        "prompt": "consent",         # always prompt so that you get a refresh token on the first run
+        "state": str(discord_id)     # pass the Discord user ID in state for later identification
+    }
+    oauth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    return oauth_url
+
 # Point to the certifi certificate bundle (useful on macOS)
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
@@ -50,9 +71,37 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         raise error
 
-###########################################
-# Helper Function for Creating Embeds     #
-###########################################
+def list_user_spreadsheets(access_token: str) -> list:
+    """
+    Lists spreadsheets in the user's Google Drive.
+    """
+    url = "https://www.googleapis.com/drive/v3/files"
+    query = "mimeType='application/vnd.google-apps.spreadsheet'"
+    params = {"q": query, "fields": "files(id, name)"}
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, params=params, headers=headers)
+    if response.ok:
+        data = response.json()
+        return data.get("files", [])
+    else:
+        raise Exception(f"Error listing spreadsheets: {response.text}")
+
+def get_sheet_headers(access_token: str, spreadsheet_id: str) -> list:
+    """
+    Retrieves the header row (assumed to be the first row) from the specified spreadsheet.
+    """
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/A1:Z1"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, headers=headers)
+    if response.ok:
+        data = response.json()
+        values = data.get("values", [])
+        if values:
+            return values[0]
+        else:
+            return []
+    else:
+        raise Exception(f"Error reading sheet headers: {response.text}")
 
 def create_embed(
     description: str,
@@ -209,11 +258,69 @@ class PriceUpdateView(View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         self.stop()
 
+class SheetSelect(discord.ui.Select):
+    def __init__(self, sheets_list: list):
+        options = [
+            discord.SelectOption(label=sheet["name"], value=sheet["id"])
+            for sheet in sheets_list
+        ]
+        super().__init__(
+            placeholder="Select your purchase sheet",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_sheet = self.values[0]
+        await interaction.response.send_message(f"Selected sheet: {self.values[0]}", ephemeral=True)
+        self.view.stop()
+
+class SheetSelectView(discord.ui.View):
+    def __init__(self, sheets_list: list):
+        super().__init__(timeout=60)
+        self.selected_sheet = None
+        self.add_item(SheetSelect(sheets_list))
+
 ###########################################
 # Slash Commands                          #
 ###########################################
 
 GUILD_ID = 1287450087852740699  # Replace with your guild ID if needed
+
+@bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guild=discord.Object(id=GUILD_ID))
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
+@app_commands.describe(code="The authorization code from Google")
+async def complete_google_auth(interaction: discord.Interaction, code: str):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        # Exchange the authorization code for tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+        token_response = requests.post(token_url, data=payload)
+        token_response.raise_for_status()
+        tokens = token_response.json()  # contains access_token, refresh_token, etc.
+
+        # Update the user's configuration with the tokens.
+        user_id = interaction.user.id
+        users = get_users_config()
+        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
+        if user_record is None:
+            # Create a minimal record if it does not exist.
+            user_record = {"discord_id": user_id}
+            users.append(user_record)
+        user_record["google_tokens"] = tokens
+        update_users_config(users)
+
+        await interaction.followup.send("Your Google account has been successfully linked! Now run `/setup` again to select your purchase sheet.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"Error completing Google OAuth: {e}", ephemeral=True)
 
 @bot.tree.command(name="upload", description="Upload a file to S3", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257)
@@ -238,47 +345,112 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="setup", description="Setup your profile with your purchase sheet and email", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="setup", description="Setup your profile with your Google account, purchase sheet, and email", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
-    sheet_link="Your Google Sheet CSV URL",
     email="Your email address"
 )
-async def slash_setup(interaction: discord.Interaction, sheet_link: str, email: str):
+async def slash_setup(interaction: discord.Interaction, email: str):
     """
-    Each Discord user can only have one sheet. If your Discord ID is already in the config,
-    you must remove it first using `/removeprofile`.
+    The user’s workflow:
+    1. If no Google account is linked, send the OAuth link.
+    2. Once linked (via the /complete_google_auth command), list their spreadsheets.
+    3. Allow the user to select their purchase sheet.
+    4. Present a column mapping view.
+    5. Save the configuration to S3.
     """
     await interaction.response.defer(ephemeral=True)
     try:
         user_id = interaction.user.id
         users = get_users_config()
 
-        # Check if this user_id already has a sheet
-        for user in users:
-            if user.get("discord_id") == user_id:
-                embed = create_embed(
-                    "You already have a profile associated. Please remove it first using `/removeprofile`.",
-                    color=discord.Color.red()
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                return
+        # Find if the user already exists in config
+        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
 
-        # Create a new record for this user
-        users.append({
-            "discord_id": user_id,
-            "sheet": sheet_link,
-            "email": email
-        })
-        update_users_config(users)
-        embed = create_embed(
-            description=f"Your sheet link and email have been added. (Discord ID: {user_id})",
-            color=discord.Color.green()
+        # If the user record exists and has google_tokens, proceed to sheet selection / mapping
+        if user_record and user_record.get("google_tokens"):
+            await interaction.followup.send("Your Google account is already linked. Proceeding to sheet selection...", ephemeral=True)
+        else:
+            # Start OAuth linking if not present
+            oauth_url = get_google_oauth_url(user_id)
+            # Create an interactive button for linking
+            button = Button(label="Link Google Account", url=oauth_url)
+            view = View()
+            view.add_item(button)
+            await interaction.followup.send(
+                "Please click the button below to link your Google account. "
+                "After you approve the consent prompt, you'll receive an authorization code. "
+                "Then run `/complete_google_auth code:<your-code>` to complete the linking process.",
+                view=view,
+                ephemeral=True
+            )
+            # Optionally, you may want to store the email and minimal user record at this point.
+            if user_record is None:
+                users.append({
+                    "discord_id": user_id,
+                    "email": email
+                })
+                update_users_config(users)
+            return
+
+        # If Google is already linked, continue by listing the user's spreadsheets
+        tokens = user_record["google_tokens"]
+        access_token = tokens.get("access_token")
+        sheets_list = list_user_spreadsheets(access_token)
+
+        if not sheets_list:
+            await interaction.followup.send("No spreadsheets found in your Google Drive.", ephemeral=True)
+            return
+
+        # Present a dropdown menu so the user can choose the purchase sheet.
+        view = SheetSelectView(sheets_list)
+        prompt_embed = create_embed(
+            description="Select your purchase sheet from the list below.",
+            color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=prompt_embed, view=view, ephemeral=True)
+        await view.wait()
+
+        if not view.selected_sheet:
+            await interaction.followup.send("No purchase sheet was selected in time. Please try `/setup` again.", ephemeral=True)
+            return
+
+        # Save the selected sheet ID in the user record.
+        user_record["sheet_id"] = view.selected_sheet
+        update_users_config(users)
+
+        # Now call the Google Sheets API to get the header row (assume it is in row 1)
+        headers = get_sheet_headers(access_token, view.selected_sheet)
+        if not headers:
+            await interaction.followup.send("Could not retrieve the header row from the selected sheet.", ephemeral=True)
+            return
+
+        # Use your existing MappingView (or modify as needed) to let the user map required columns.
+        # For this example, suppose we require mapping for the following keys:
+        required_mapping = ["Date", "Sale Price", "Name", "Size/Color", "Bundled?", "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"]
+        map_view = MappingView(required_mapping, headers)
+        map_embed = create_embed(
+            description=f"Map the following required columns to your sheet’s columns: {', '.join(required_mapping)}",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=map_embed, view=map_view, ephemeral=True)
+        await map_view.wait()
+
+        if len(map_view.mapping_result) < len(required_mapping):
+            await interaction.followup.send("Column mapping was not completed in time. Please run `/setup` again.", ephemeral=True)
+            return
+
+        # Update the user's record with the column mapping.
+        user_record["column_mapping"] = map_view.mapping_result
+        # Optionally, store the provided email if it was not set previously.
+        user_record["email"] = email
+        update_users_config(users)
+
+        await interaction.followup.send("Your profile has been successfully set up!", ephemeral=True)
+
     except Exception as e:
         embed = create_embed(
-            description=f"Error updating your configuration: {e}",
+            description=f"Error during setup: {e}",
             color=discord.Color.red()
         )
         await interaction.followup.send(embed=embed, ephemeral=True)

@@ -226,7 +226,7 @@ def safe_option_text(text: str) -> str:
     """
     text = str(text).strip()
     if not text:
-        return "N/A"  # Provide a fallback if the header is empty.
+        return "Untitled"
     if len(text) > 100:
         return text[:97] + "..."
     return text
@@ -301,8 +301,14 @@ class PriceUpdateView(View):
 
 class SheetSelect(discord.ui.Select):
     def __init__(self, sheets_list: list):
+        if len(sheets_list) > 25:
+            sheets_list = sheets_list[:25]
+
         options = [
-            discord.SelectOption(label=sheet["name"], value=sheet["id"])
+            discord.SelectOption(
+                label=safe_option_text(sheet["name"]),
+                value=sheet["id"]
+            )
             for sheet in sheets_list
         ]
         super().__init__(
@@ -314,7 +320,10 @@ class SheetSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.selected_sheet = self.values[0]
-        await interaction.response.send_message(f"Selected sheet: {self.values[0]}", ephemeral=True)
+        await interaction.response.send_message(
+            f"Selected sheet: {self.values[0]}",
+            ephemeral=True
+        )
         self.view.stop()
 
 class SheetSelectView(discord.ui.View):

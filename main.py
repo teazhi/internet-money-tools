@@ -228,7 +228,7 @@ def safe_option_text(text: str) -> str:
     if not text:
         return "N/A"  # Provide a fallback if the header is empty.
     if len(text) > 100:
-        return text[:97] + "..."  # Trim text to 97 characters then add ellipsis.
+        return text[:97] + "..."
     return text
 
 ###########################################
@@ -238,6 +238,10 @@ def safe_option_text(text: str) -> str:
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
+        # Discord limits a select menu to 25 options.
+        if len(options_list) > 25:
+            print(f"Warning: Options list for '{mapping_type}' has more than 25 items. Truncating to the first 25.")
+            options_list = options_list[:25]
         options = [
             discord.SelectOption(
                 label=safe_option_text(col),

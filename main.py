@@ -238,17 +238,27 @@ def safe_option_text(text: str) -> str:
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
-        # Discord limits a select menu to 25 options.
+        
         if len(options_list) > 25:
-            print(f"Warning: Options list for '{mapping_type}' has more than 25 items. Truncating to the first 25.")
             options_list = options_list[:25]
-        options = [
-            discord.SelectOption(
-                label=safe_option_text(col),
-                value=safe_option_text(col)
+
+        seen = set()
+        options = []
+        for idx, col in enumerate(options_list):
+            label = safe_option_text(col)
+            
+            value = col
+            if len(value) > 100:
+                value = value[:97] + "..."
+            
+            if value in seen:
+                value = f"{value}-{idx}"
+            seen.add(value)
+            
+            options.append(
+                discord.SelectOption(label=label, value=value)
             )
-            for col in options_list
-        ]
+
         super().__init__(
             placeholder=f"Select column for {mapping_type}",
             min_values=1,
@@ -304,13 +314,14 @@ class SheetSelect(discord.ui.Select):
         if len(sheets_list) > 25:
             sheets_list = sheets_list[:25]
 
-        options = [
-            discord.SelectOption(
-                label=safe_option_text(sheet["name"]),
-                value=sheet["id"]
-            )
-            for sheet in sheets_list
-        ]
+        seen = set()
+        options = []
+        for idx, sheet in enumerate(sheets_list):
+            label = safe_option_text(sheet["name"])
+            value = sheet["id"]
+
+            options.append(discord.SelectOption(label=label, value=value))
+
         super().__init__(
             placeholder="Select your purchase sheet",
             min_values=1,

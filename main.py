@@ -554,8 +554,8 @@ async def slash_setup(interaction: discord.Interaction, email: str):
 
     # 6) Column mapping (in chunks of 5)
     required_mapping = [
-        "Date", "Sale Price", "Name", "Size/Color", "Bundled?",
-        "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"
+        "Date", "Sale Price", "Name", "Size/Color", "# Units in Bundle",
+        "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"
     ]
     mapping_result = await run_mapping_views(required_mapping, headers, interaction)
     if len(mapping_result) < len(required_mapping):

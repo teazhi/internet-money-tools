@@ -140,17 +140,6 @@ def restrict_to_roles(*role_ids):
 def get_users_config():
     """
     Retrieves the users configuration from S3.
-    Expected format: 
-    {
-      "users": [
-        {
-          "discord_id": 123456789,
-          "sheet": "https://docs.google.com/...",
-          "email": "user@example.com"
-        },
-        ...
-      ]
-    }
     """
     s3_client = boto3.client(
         's3',
@@ -342,6 +331,17 @@ class WorksheetSelectView(View):
         self.chosen_sheet_title = None
         self.add_item(WorksheetSelect(worksheets))
 
+class ConfirmView(View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.confirmed = False
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    async def confirm_button(self, interaction: discord.Interaction, button: Button):
+        self.confirmed = True
+        await interaction.response.send_message("✅ Thanks for confirming. Let’s begin column mapping.", ephemeral=True)
+        self.stop()
+
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
@@ -481,8 +481,8 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     guild=discord.Object(id=GUILD_ID)
 )
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
-@app_commands.describe(email="Your email address")
-async def slash_setup(interaction: discord.Interaction, email: str):
+@app_commands.describe(email="Your receiving email address")
+async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     # 1) Defer so we can send multiple followups
     await interaction.response.defer(ephemeral=True)
 
@@ -497,13 +497,13 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         view = View()
         view.add_item(btn)
         await interaction.followup.send(
-            "Click to link your Google account. After consenting, you'll get a code—"
-            "run `/complete_google_auth code:<that‑code>` next.",
+            "Click the button to link your Google account. \n**NOTE:** Make sure the account you link has your purchase sheet."
+            "\nAfter consenting, you'll get a code—run `/complete_google_auth code:<that‑code>` next.",
             view=view,
             ephemeral=True
         )
         if user_record is None:
-            users.append({"discord_id": user_id, "email": email})
+            users.append({"discord_id": user_id, "email": receiving_email})
             update_users_config(users)
         return
 
@@ -517,7 +517,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
     # 4) Show Drive-file picker
     file_view = SheetSelectView(files)
     await interaction.followup.send(
-        "Select **which spreadsheet** you’d like to use:",
+        "Select which **spreadsheet** you’d like to use:",
         view=file_view, ephemeral=True
     )
     await file_view.wait()
@@ -535,7 +535,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
 
     ws_view = WorksheetSelectView(worksheets)
     await interaction.followup.send(
-        "Now select **which tab** (worksheet) to map:",
+        "Now select which **tab** (worksheet) to map:",
         view=ws_view, ephemeral=True
     )
     await ws_view.wait()
@@ -558,6 +558,24 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         "Date", "Sale Price", "Name", "Size/Color", "# Units in Bundle",
         "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"
     ]
+
+    confirm_view = ConfirmView()
+    confirm_embed = create_embed(
+        description=(
+            "Before we begin mapping, please make sure your sheet has column that can be mapped to **all** of these:\n\n"
+            + "\n".join(f"- **{col}**" for col in required_mapping)
+        ),
+        title="Required Columns",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=confirm_embed, view=confirm_view, ephemeral=True)
+    await confirm_view.wait()
+    if not confirm_view.confirmed:
+        return await interaction.followup.send(
+            "❌ You did not confirm in time. Please run `/setup` again when you’re ready.",
+            ephemeral=True
+        )
+    
     mapping_result = await run_mapping_views(required_mapping, headers, interaction)
     if len(mapping_result) < len(required_mapping):
         return await interaction.followup.send(
@@ -566,7 +584,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
 
     # 8) Persist profile info so far
     user_record["column_mapping"] = mapping_result
-    user_record["email"] = email
+    user_record["email"] = receiving_email
     update_users_config(users)
 
     # 9) Ask for listing_loader_key
@@ -634,8 +652,7 @@ async def slash_removeprofile(interaction: discord.Interaction):
         embed = create_embed(
             description=(
                 f"Successfully removed your profile:"
-                f"\nSheet: {removed_entry.get('sheet')}"
-                f"\nEmail: {removed_entry.get('email')}"
+                f"\nEmail: {removed_entry.get('receiving_email')}"
             ),
             color=discord.Color.green()
         )

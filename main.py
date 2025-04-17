@@ -344,31 +344,27 @@ class WorksheetSelectView(View):
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
-
         if len(options_list) > 25:
             options_list = options_list[:25]
 
         seen_vals = set()
         options = []
         for idx, raw in enumerate(options_list):
+            # make sure both label and value are 1–100 chars
             label = safe_option_text(raw)
+            val   = safe_option_text(raw)
 
-            val = str(raw).strip()
-            if len(val) > 100:
-                val = val[:97] + "..."
-            
             if val in seen_vals:
                 suffix = f"-{idx}"
-                max_base = 100 - len(suffix)
-                val = val[:max_base] + suffix
-            seen_vals.add(val)
+                base = val[:100 - len(suffix)]
+                val = base + suffix
 
+            seen_vals.add(val)
             options.append(discord.SelectOption(label=label, value=val))
 
         super().__init__(
             placeholder=f"Select column for {mapping_type}",
-            min_values=1,
-            max_values=1,
+            min_values=1, max_values=1,
             options=options
         )
 

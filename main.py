@@ -518,7 +518,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         return await interaction.followup.send("No Google Sheets found in your Drive.", ephemeral=True)
 
     # Show Drive‑file picker
-    file_view = SpreadsheetSelectView(files)
+    file_view = SheetSelectView(files)
     await interaction.followup.send(
         "Select **which spreadsheet** you’d like to use:",
         view=file_view, ephemeral=True

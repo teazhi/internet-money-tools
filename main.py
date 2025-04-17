@@ -238,26 +238,26 @@ def safe_option_text(text: str) -> str:
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
         self.mapping_type = mapping_type
-        
+
         if len(options_list) > 25:
             options_list = options_list[:25]
 
-        seen = set()
+        seen_vals = set()
         options = []
-        for idx, col in enumerate(options_list):
-            label = safe_option_text(col)
+        for idx, raw in enumerate(options_list):
+            label = safe_option_text(raw)
+
+            val = str(raw).strip()
+            if len(val) > 100:
+                val = val[:97] + "..."
             
-            value = col
-            if len(value) > 100:
-                value = value[:97] + "..."
-            
-            if value in seen:
-                value = f"{value}-{idx}"
-            seen.add(value)
-            
-            options.append(
-                discord.SelectOption(label=label, value=value)
-            )
+            if val in seen_vals:
+                suffix = f"-{idx}"
+                max_base = 100 - len(suffix)
+                val = val[:max_base] + suffix
+            seen_vals.add(val)
+
+            options.append(discord.SelectOption(label=label, value=val))
 
         super().__init__(
             placeholder=f"Select column for {mapping_type}",
@@ -314,11 +314,20 @@ class SheetSelect(discord.ui.Select):
         if len(sheets_list) > 25:
             sheets_list = sheets_list[:25]
 
-        seen = set()
+        seen_vals = set()
         options = []
         for idx, sheet in enumerate(sheets_list):
             label = safe_option_text(sheet["name"])
-            value = sheet["id"]
+
+            value = str(sheet["id"]).strip()
+            if len(value) > 100:
+                value = value[:97] + "..."
+
+            if value in seen_vals:
+                suffix = f"-{idx}"
+                max_base = 100 - len(suffix)
+                value = value[:max_base] + suffix
+            seen_vals.add(value)
 
             options.append(discord.SelectOption(label=label, value=value))
 

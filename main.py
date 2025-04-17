@@ -4,6 +4,7 @@ import json
 import requests
 import pandas as pd
 from io import StringIO, BytesIO
+import asyncio
 
 import boto3
 import discord
@@ -476,7 +477,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 
 @bot.tree.command(
     name="setup",
-    description="Setup your profile with your Google account, spreadsheet, worksheet and column mapping",
+    description="Setup your profile with your Google account, spreadsheet, worksheet, column mapping, and listing loader key",
     guild=discord.Object(id=GUILD_ID)
 )
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
@@ -496,7 +497,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         view = View()
         view.add_item(btn)
         await interaction.followup.send(
-            "Click to link your Google account.  After consenting, you'll get a code—"
+            "Click to link your Google account. After consenting, you'll get a code—"
             "run `/complete_google_auth code:<that‑code>` next.",
             view=view,
             ephemeral=True
@@ -513,7 +514,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
     if not files:
         return await interaction.followup.send("No Google Sheets found in your Drive.", ephemeral=True)
 
-    # Show Drive‑file picker
+    # 4) Show Drive-file picker
     file_view = SheetSelectView(files)
     await interaction.followup.send(
         "Select **which spreadsheet** you’d like to use:",
@@ -527,7 +528,7 @@ async def slash_setup(interaction: discord.Interaction, email: str):
     user_record["sheet_id"] = spreadsheet_id
     update_users_config(users)
 
-    # 4) List **tabs** inside that spreadsheet
+    # 5) List tabs in that spreadsheet
     worksheets = list_worksheets(access_token, spreadsheet_id)
     if not worksheets:
         return await interaction.followup.send("No tabs found in that spreadsheet.", ephemeral=True)
@@ -545,14 +546,14 @@ async def slash_setup(interaction: discord.Interaction, email: str):
     user_record["worksheet_title"] = worksheet_title
     update_users_config(users)
 
-    # 5) Fetch the header row from that exact worksheet
+    # 6) Fetch headers from the chosen worksheet
     headers = get_sheet_headers(access_token, spreadsheet_id, worksheet_title)
     if not headers:
         return await interaction.followup.send(
             "Could not read row 1 from that tab.", ephemeral=True
         )
 
-    # 6) Column mapping (in chunks of 5)
+    # 7) Column mapping (in chunks of 5)
     required_mapping = [
         "Date", "Sale Price", "Name", "Size/Color", "# Units in Bundle",
         "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"
@@ -563,14 +564,42 @@ async def slash_setup(interaction: discord.Interaction, email: str):
             "Mapping timed out or incomplete. Please try `/setup` again.", ephemeral=True
         )
 
-    # 7) Persist final config
+    # 8) Persist profile info so far
     user_record["column_mapping"] = mapping_result
     user_record["email"] = email
     update_users_config(users)
 
-    # 8) Done!
+    # 9) Ask for listing_loader_key
     await interaction.followup.send(
-        "🎉 Setup complete! I’ll now use your linked sheet, tab, and column map for all future commands.",
+        "Please specify your listing loader key (without the `.xlsm` extension):",
+        ephemeral=True
+    )
+
+    def check(m: discord.Message):
+        return (
+            m.author.id == user_id
+            and m.channel == interaction.channel
+            and not m.author.bot
+        )
+
+    try:
+        msg: discord.Message = await bot.wait_for("message", check=check, timeout=60)
+    except asyncio.TimeoutError:
+        return await interaction.followup.send(
+            "⏰ Timeout: you took too long to respond. Please run `/setup` again to finish configuration.",
+            ephemeral=True
+        )
+
+    loader_key = msg.content.strip()
+    if not loader_key.lower().endswith(".xlsm"):
+        loader_key += ".xlsm"
+    user_record["listing_loader_key"] = loader_key
+    update_users_config(users)
+
+    # 10) Final confirmation
+    await interaction.followup.send(
+        f"🎉 Setup complete! Your listing loader key is set to `{loader_key}`. "
+        "I’ll now use your linked sheet, tab, column map, and loader file for all future commands.",
         ephemeral=True
     )
 

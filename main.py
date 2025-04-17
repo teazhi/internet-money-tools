@@ -524,10 +524,10 @@ async def slash_setup(interaction: discord.Interaction, email: str):
         view=file_view, ephemeral=True
     )
     await file_view.wait()
-    if not file_view.selected_file:
+    if not file_view.selected_sheet:
         return await interaction.followup.send("No spreadsheet selected. Try `/setup` again.", ephemeral=True)
 
-    spreadsheet_id = file_view.selected_file
+    spreadsheet_id = file_view.selected_sheet
     user_record["sheet_id"] = spreadsheet_id
     update_users_config(users)
 

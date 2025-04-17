@@ -84,11 +84,12 @@ def list_user_spreadsheets(access_token: str) -> list:
     else:
         raise Exception(f"Error listing spreadsheets: {response.text}")
 
-def get_sheet_headers(access_token: str, spreadsheet_id: str) -> list:
+def get_sheet_headers(access_token, spreadsheet_id, title) -> list[str]:
     """
     Retrieves the header row (assumed to be the first row) from the specified spreadsheet.
     """
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/A1:Z1"
+    range_ = f"'{title}'!A1:Z1"
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_}"
     headers = {"Authorization": f"Bearer {access_token}"}
     response = requests.get(url, headers=headers)
     if response.ok:
@@ -231,9 +232,114 @@ def safe_option_text(text: str) -> str:
         return text[:97] + "..."
     return text
 
+def list_worksheets(access_token: str, spreadsheet_id: str) -> list[dict]:
+    """
+    Returns a list of sheet‐tabs in the spreadsheet:
+      [ { 'sheetId': xxx, 'title': 'Leads' }, … ]
+    """
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}"
+    params = { "fields": "sheets(properties(sheetId,title))" }
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(url, params=params, headers=headers)
+    r.raise_for_status()
+    sheets = r.json().get("sheets", [])
+    return [s["properties"] for s in sheets]
+
 ###########################################
 # UI Classes for Column Mapping & Price   #
 ###########################################
+
+class SheetSelect(discord.ui.Select):
+    def __init__(self, sheets_list: list):
+        if len(sheets_list) > 25:
+            sheets_list = sheets_list[:25]
+
+        seen_vals = set()
+        options = []
+        for idx, sheet in enumerate(sheets_list):
+            label = safe_option_text(sheet["name"])
+
+            value = str(sheet["id"]).strip()
+            if len(value) > 100:
+                value = value[:97] + "..."
+
+            if value in seen_vals:
+                suffix = f"-{idx}"
+                max_base = 100 - len(suffix)
+                value = value[:max_base] + suffix
+            seen_vals.add(value)
+
+            options.append(discord.SelectOption(label=label, value=value))
+
+        super().__init__(
+            placeholder="Select your purchase sheet",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_sheet = self.values[0]
+        await interaction.response.send_message(
+            f"Selected sheet: {self.values[0]}",
+            ephemeral=True
+        )
+        self.view.stop()
+
+class SheetSelectView(discord.ui.View):
+    def __init__(self, sheets_list: list):
+        super().__init__(timeout=60)
+        self.selected_sheet = None
+        self.add_item(SheetSelect(sheets_list))
+
+class WorksheetSelect(discord.ui.Select):
+    def __init__(self, worksheets: list[dict]):
+        # cap to 25 tabs
+        if len(worksheets) > 25:
+            worksheets = worksheets[:25]
+
+        seen = set()
+        options = []
+        for idx, ws in enumerate(worksheets):
+            label = safe_option_text(ws["title"])
+            # use the title as value (truncated + de‑duped exactly like ColumnSelect)
+            val = ws["title"]
+            if len(val) > 100:
+                val = val[:97] + "..."
+            if val in seen:
+                suffix = f"-{idx}"
+                val = val[: 100-len(suffix) ] + suffix
+            seen.add(val)
+            options.append(discord.SelectOption(label=label, value=val))
+
+        super().__init__(
+            placeholder="Pick which tab in that spreadsheet",
+            min_values=1, max_values=1,
+            options=options
+        )
+        self._worksheets = worksheets
+
+    async def callback(self, interaction: discord.Interaction):
+        # find the real sheet by truncated value
+        chosen = self.values[0]
+        for prop in self._worksheets:
+            title = prop["title"]
+            # same truncation logic
+            cmp = title if len(title) <= 100 else title[:97]+"..."
+            if cmp == chosen or cmp.startswith(chosen[:-3]):
+                self.view.chosen_sheet_title = prop["title"]
+                break
+
+        await interaction.response.send_message(
+            f"✅ You picked tab: **{self.view.chosen_sheet_title}**", ephemeral=True
+        )
+        self.view.stop()
+
+class WorksheetSelectView(View):
+    def __init__(self, worksheets):
+        super().__init__(timeout=60)
+        self.chosen_sheet_title = None
+        self.add_item(WorksheetSelect(worksheets))
 
 class ColumnSelect(Select):
     def __init__(self, mapping_type: str, options_list: list):
@@ -309,49 +415,6 @@ class PriceUpdateView(View):
         await interaction.response.send_message(embed=embed, ephemeral=True)
         self.stop()
 
-class SheetSelect(discord.ui.Select):
-    def __init__(self, sheets_list: list):
-        if len(sheets_list) > 25:
-            sheets_list = sheets_list[:25]
-
-        seen_vals = set()
-        options = []
-        for idx, sheet in enumerate(sheets_list):
-            label = safe_option_text(sheet["name"])
-
-            value = str(sheet["id"]).strip()
-            if len(value) > 100:
-                value = value[:97] + "..."
-
-            if value in seen_vals:
-                suffix = f"-{idx}"
-                max_base = 100 - len(suffix)
-                value = value[:max_base] + suffix
-            seen_vals.add(value)
-
-            options.append(discord.SelectOption(label=label, value=value))
-
-        super().__init__(
-            placeholder="Select your purchase sheet",
-            min_values=1,
-            max_values=1,
-            options=options
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        self.view.selected_sheet = self.values[0]
-        await interaction.response.send_message(
-            f"Selected sheet: {self.values[0]}",
-            ephemeral=True
-        )
-        self.view.stop()
-
-class SheetSelectView(discord.ui.View):
-    def __init__(self, sheets_list: list):
-        super().__init__(timeout=60)
-        self.selected_sheet = None
-        self.add_item(SheetSelect(sheets_list))
-
 ###########################################
 # Slash Commands                          #
 ###########################################
@@ -415,104 +478,105 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="setup", description="Setup your profile with your Google account, purchase sheet, and email", guild=discord.Object(id=GUILD_ID))
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
-@app_commands.describe(
-    email="Your email address"
+@bot.tree.command(
+    name="setup",
+    description="Setup your profile with your Google account, spreadsheet, worksheet and column mapping",
+    guild=discord.Object(id=GUILD_ID)
 )
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
+@app_commands.describe(email="Your email address")
 async def slash_setup(interaction: discord.Interaction, email: str):
-    """
-    The user’s workflow:
-      1. If no Google account is linked, send the OAuth link.
-      2. Once linked (via the /complete_google_auth command), list their spreadsheets.
-      3. Allow the user to select their purchase sheet.
-      4. Present a column mapping view in chunks of five.
-      5. Save the configuration to S3.
-    """
+    # 1) Defer so we can send multiple followups
     await interaction.response.defer(ephemeral=True)
-    try:
-        user_id = interaction.user.id
-        users = get_users_config()
 
-        # Find if the user already exists in config
-        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
+    user_id = interaction.user.id
+    users = get_users_config()
+    user_record = next((u for u in users if u["discord_id"] == user_id), None)
 
-        # If the user record exists and has google_tokens, proceed; otherwise, initiate OAuth linking.
-        if user_record and user_record.get("google_tokens"):
-            await interaction.followup.send("Your Google account is already linked. Proceeding to sheet selection...", ephemeral=True)
-        else:
-            oauth_url = get_google_oauth_url(user_id)
-            button = Button(label="Link Google Account", url=oauth_url)
-            view = View()
-            view.add_item(button)
-            await interaction.followup.send(
-                "Please click the button below to link your Google account. "
-                "After you approve the consent prompt, you'll receive an authorization code. "
-                "Then run `/complete_google_auth code:<your-code>` to complete the linking process.",
-                view=view,
-                ephemeral=True
-            )
-            if user_record is None:
-                users.append({
-                    "discord_id": user_id,
-                    "email": email
-                })
-                update_users_config(users)
-            return
-
-        # If Google is already linked, continue by listing the user's spreadsheets
-        tokens = user_record["google_tokens"]
-        access_token = tokens.get("access_token")
-        sheets_list = list_user_spreadsheets(access_token)
-
-        if not sheets_list:
-            await interaction.followup.send("No spreadsheets found in your Google Drive.", ephemeral=True)
-            return
-
-        # Present a dropdown menu so the user can choose the purchase sheet.
-        view = SheetSelectView(sheets_list)
-        prompt_embed = create_embed(
-            description="Select your purchase sheet from the list below.",
-            color=discord.Color.blue()
+    # 2) If no tokens yet, send OAuth button & save minimal record
+    if not (user_record and user_record.get("google_tokens")):
+        oauth_url = get_google_oauth_url(user_id)
+        btn = Button(label="Link Google Account", url=oauth_url)
+        view = View()
+        view.add_item(btn)
+        await interaction.followup.send(
+            "Click to link your Google account.  After consenting, you'll get a code—"
+            "run `/complete_google_auth code:<that‑code>` next.",
+            view=view,
+            ephemeral=True
         )
-        await interaction.followup.send(embed=prompt_embed, view=view, ephemeral=True)
-        await view.wait()
+        if user_record is None:
+            users.append({"discord_id": user_id, "email": email})
+            update_users_config(users)
+        return
 
-        if not view.selected_sheet:
-            await interaction.followup.send("No purchase sheet was selected in time. Please try `/setup` again.", ephemeral=True)
-            return
+    # 3) Already linked → list Drive spreadsheets
+    tokens = user_record["google_tokens"]
+    access_token = tokens["access_token"]
+    files = list_user_spreadsheets(access_token)
+    if not files:
+        return await interaction.followup.send("No Google Sheets found in your Drive.", ephemeral=True)
 
-        # Save the selected sheet ID in the user record.
-        user_record["sheet_id"] = view.selected_sheet
-        update_users_config(users)
+    # Show Drive‑file picker
+    file_view = SpreadsheetSelectView(files)
+    await interaction.followup.send(
+        "Select **which spreadsheet** you’d like to use:",
+        view=file_view, ephemeral=True
+    )
+    await file_view.wait()
+    if not file_view.selected_file:
+        return await interaction.followup.send("No spreadsheet selected. Try `/setup` again.", ephemeral=True)
 
-        # Now use the Google Sheets API to get the header row (assume it is in row 1)
-        headers = get_sheet_headers(access_token, view.selected_sheet)
-        if not headers:
-            await interaction.followup.send("Could not retrieve the header row from the selected sheet.", ephemeral=True)
-            return
+    spreadsheet_id = file_view.selected_file
+    user_record["sheet_id"] = spreadsheet_id
+    update_users_config(users)
 
-        # Define your required mapping list
-        required_mapping = ["Date", "Sale Price", "Name", "Size/Color", "Bundled?", "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"]
-        # Use the helper to run the mapping views in chunks of five.
-        mapping_result = await run_mapping_views(required_mapping, headers, interaction)
-        if len(mapping_result) < len(required_mapping):
-            await interaction.followup.send("Column mapping was not completed in time. Please run `/setup` again.", ephemeral=True)
-            return
+    # 4) List **tabs** inside that spreadsheet
+    worksheets = list_worksheets(access_token, spreadsheet_id)
+    if not worksheets:
+        return await interaction.followup.send("No tabs found in that spreadsheet.", ephemeral=True)
 
-        # Update the user's record with the column mapping.
-        user_record["column_mapping"] = mapping_result
-        user_record["email"] = email  # Update email if needed
-        update_users_config(users)
+    ws_view = WorksheetSelectView(worksheets)
+    await interaction.followup.send(
+        "Now select **which tab** (worksheet) to map:",
+        view=ws_view, ephemeral=True
+    )
+    await ws_view.wait()
+    if not ws_view.chosen_sheet_title:
+        return await interaction.followup.send("No tab selected. Try `/setup` again.", ephemeral=True)
 
-        await interaction.followup.send("Your profile has been successfully set up!", ephemeral=True)
+    worksheet_title = ws_view.chosen_sheet_title
+    user_record["worksheet_title"] = worksheet_title
+    update_users_config(users)
 
-    except Exception as e:
-        embed = create_embed(
-            description=f"Error during setup: {e}",
-            color=discord.Color.red()
+    # 5) Fetch the header row from that exact worksheet
+    headers = get_sheet_headers(access_token, spreadsheet_id, worksheet_title)
+    if not headers:
+        return await interaction.followup.send(
+            "Could not read row 1 from that tab.", ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # 6) Column mapping (in chunks of 5)
+    required_mapping = [
+        "Date", "Sale Price", "Name", "Size/Color", "Bundled?",
+        "Amount Purchased", "ASIN", "COGS", "Order #", "Prep Notes"
+    ]
+    mapping_result = await run_mapping_views(required_mapping, headers, interaction)
+    if len(mapping_result) < len(required_mapping):
+        return await interaction.followup.send(
+            "Mapping timed out or incomplete. Please try `/setup` again.", ephemeral=True
+        )
+
+    # 7) Persist final config
+    user_record["column_mapping"] = mapping_result
+    user_record["email"] = email
+    update_users_config(users)
+
+    # 8) Done!
+    await interaction.followup.send(
+        "🎉 Setup complete! I’ll now use your linked sheet, tab, and column map for all future commands.",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="removeprofile", description="Remove your profile from the system", guild=discord.Object(id=GUILD_ID))
 @restrict_to_roles(1341608661822345257, 1287450087852740702)

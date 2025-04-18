@@ -481,7 +481,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     guild=discord.Object(id=GUILD_ID)
 )
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
-@app_commands.describe(email="Your receiving email address")
+@app_commands.describe(receiving_email="Your receiving email address")
 async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     # 1) Defer so we can send multiple followups
     await interaction.response.defer(ephemeral=True)

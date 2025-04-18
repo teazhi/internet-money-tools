@@ -477,7 +477,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 
 @bot.tree.command(
     name="setup",
-    description="Setup your profile with your Google account, spreadsheet, worksheet, column mapping, and listing loader key",
+    description="Setup your profile with your Google account",
     guild=discord.Object(id=GUILD_ID)
 )
 @restrict_to_roles(1341608661822345257, 1287450087852740702)

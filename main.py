@@ -614,10 +614,30 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     user_record["listing_loader_key"] = loader_key
     update_users_config(users)
 
-    # 10) Final confirmation
     await interaction.followup.send(
-        f"🎉 Setup complete! Your listing loader key is set to `{loader_key}`. "
-        "I’ll now use your linked sheet, tab, column map, and loader file for all future commands.",
+        "Please specify your **sellerboard** file key (without the `.xlsx` extension):",
+        ephemeral=True
+    )
+
+    try:
+        sb_msg: discord.Message = await bot.wait_for("message", check=check, timeout=60)
+    except asyncio.TimeoutError:
+        return await interaction.followup.send(
+            "⏰ Timeout: you took too long to provide your sellerboard file key. Please run `/setup` again to finish configuration.",
+            ephemeral=True
+        )
+
+    sb_file_key = sb_msg.content.strip()
+    if not sb_file_key.lower().endswith(".xlsx"):
+        sb_file_key += ".xlsx"
+    user_record["sb_file_key"] = sb_file_key
+    update_users_config(users)
+    
+    await interaction.followup.send(
+        f"🎉 Setup complete!\n"
+        f"• Listing loader: `{loader_key}`\n"
+        f"• Sellerboard file: `{sb_file_key}`\n\n"
+        "I’ll now use your linked sheet, tab, column map, loader file, and sellerboard file for all future commands.",
         ephemeral=True
     )
 

@@ -416,9 +416,9 @@ class PriceUpdateView(View):
 # Slash Commands                          #
 ###########################################
 
-GUILD_ID = 1287450087852740699  # Replace with your guild ID if needed
+GUILD_IDS = [1287450087852740699, 1325968966807453716]
 
-@bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(code="The authorization code from Google")
 async def complete_google_auth(interaction: discord.Interaction, code: str):
@@ -452,7 +452,7 @@ async def complete_google_auth(interaction: discord.Interaction, code: str):
     except Exception as e:
         await interaction.followup.send(f"Error completing Google OAuth: {e}", ephemeral=True)
 
-@bot.tree.command(name="upload", description="Upload a file to S3", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="upload", description="Upload a file to S3", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @restrict_to_roles(1341608661822345257)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
@@ -478,7 +478,7 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
 @bot.tree.command(
     name="setup",
     description="Setup your profile with your Google account",
-    guild=discord.Object(id=GUILD_ID)
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(receiving_email="Your email address you want results sent to")
@@ -641,7 +641,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
         ephemeral=True
     )
 
-@bot.tree.command(name="removeprofile", description="Remove your profile from the system", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="removeprofile", description="Remove your profile from the system", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 async def slash_removeprofile(interaction: discord.Interaction):
     """
@@ -684,7 +684,7 @@ async def slash_removeprofile(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from your associated Google Sheet", guild=discord.Object(id=GUILD_ID))
+@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from your associated Google Sheet", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(aura_file="The aura CSV file to update")
 async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment):
@@ -853,16 +853,16 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user}")
-    guild = discord.Object(id=GUILD_ID)
     try:
-        # Clear previously registered global commands
         bot.tree.clear_commands(guild=None)
         await bot.tree.sync()
         print("Cleared global commands.")
 
-        # Sync guild commands only
-        synced = await bot.tree.sync(guild=guild)
-        print(f"Synced {len(synced)} command(s) to guild {guild.id}.")
+        for gid in GUILD_IDS:
+            guild_obj = discord.Object(id=gid)
+            synced = await bot.tree.sync(guild=guild_obj)
+            print(f"Synced {len(synced)} commands to guild {gid}.")
+            
     except Exception as e:
         print(e)
 

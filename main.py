@@ -453,7 +453,7 @@ async def complete_google_auth(interaction: discord.Interaction, code: str):
         await interaction.followup.send(f"Error completing Google OAuth: {e}", ephemeral=True)
 
 @bot.tree.command(name="upload", description="Upload a file to S3", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
-@restrict_to_roles(1341608661822345257)
+@restrict_to_roles(1341608661822345257, 1325994845520531598)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
     """

@@ -69,6 +69,54 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             await interaction.followup.send(embed=embed, ephemeral=True)
     else:
         raise error
+    
+def refresh_access_token(user_record):
+    """
+    Use the stored refresh_token to get a new access_token.
+    Updates user_record["google_tokens"] in S3 if successful.
+    Returns the new access_token string.
+    """
+    refresh_token = user_record["google_tokens"].get("refresh_token")
+    if not refresh_token:
+        raise Exception("No refresh_token found. User must re-link Google account.")
+
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+    resp = requests.post(token_url, data=payload)
+    resp.raise_for_status()
+    new_tokens = resp.json()
+    # new_tokens typically contains at least "access_token" and "expires_in"
+    # Keep the old refresh_token if Google didn’t return a new one:
+    if "refresh_token" not in new_tokens:
+        new_tokens["refresh_token"] = refresh_token
+
+    # Merge into existing tokens dict so we don’t lose any fields
+    user_record["google_tokens"].update(new_tokens)
+    update_users_config(get_users_config())  # save the merged tokens back to S3
+    return new_tokens["access_token"]
+
+def safe_list_spreadsheets(user_record):
+    """
+    Tries to list spreadsheets using the current access_token.
+    If a 401 occurs, refreshes the token once and retries.
+    """
+    access_token = user_record["google_tokens"]["access_token"]
+    try:
+        return list_user_spreadsheets(access_token)
+    except Exception as e:
+        # Detect 401 from the exception message (you could also check response.status_code directly)
+        if "401" in str(e) or "Invalid Credentials" in str(e):
+            # Refresh and retry
+            new_access = refresh_access_token(user_record)
+            return list_user_spreadsheets(new_access)
+        else:
+            # Some other error
+            raise
 
 def list_user_spreadsheets(access_token: str) -> list:
     """
@@ -439,12 +487,22 @@ async def complete_google_auth(interaction: discord.Interaction, code: str):
 
         # Update the user's configuration with the tokens.
         user_id = interaction.user.id
+                # …after token_response.raise_for_status()…
+        tokens = token_response.json()  # may or may not contain "refresh_token"
+
+        # 1) Load existing users and find (or create) this user’s record
         users = get_users_config()
-        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
+        user_record = next((u for u in users if u.get("discord_id") == user_id), None)
         if user_record is None:
-            # Create a minimal record if it does not exist.
-            user_record = {"discord_id": user_id}
+            user_record = {"discord_id": user_id, "google_tokens": {}}
             users.append(user_record)
+
+        # 2) Preserve old refresh_token if Google didn’t return a new one
+        old_tokens = user_record.get("google_tokens", {})
+        if "refresh_token" not in tokens and "refresh_token" in old_tokens:
+            tokens["refresh_token"] = old_tokens["refresh_token"]
+
+        # 3) Overwrite the stored tokens (merging refresh_token as needed)
         user_record["google_tokens"] = tokens
         update_users_config(users)
 
@@ -510,7 +568,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     # 3) Already linked → list Drive spreadsheets
     tokens = user_record["google_tokens"]
     access_token = tokens["access_token"]
-    files = list_user_spreadsheets(access_token)
+    files = safe_list_spreadsheets(user_record)
     if not files:
         return await interaction.followup.send("No Google Sheets found in your Drive.", ephemeral=True)
 

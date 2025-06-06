@@ -954,12 +954,16 @@ async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_f
             "No Google Sheet linked to your account. Please run `/setup` first.", ephemeral=True
         )
 
-    # 2) Read the reimbursement CSV
     try:
         blob = await reimbursement_file.read()
-        reimburse_df = pd.read_csv(StringIO(blob.decode("utf-8")))
+        try:
+            reimburse_df = pd.read_csv(BytesIO(blob), encoding="utf-8")
+        except UnicodeDecodeError:
+            # fallback if it isn’t valid UTF-8
+            reimburse_df = pd.read_csv(BytesIO(blob), encoding="latin-1")
     except Exception as e:
         return await interaction.followup.send(f"Error reading CSV: {e}", ephemeral=True)
+
 
     # 3) Build the max-COGS map
     try:

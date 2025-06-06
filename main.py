@@ -587,7 +587,18 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     update_users_config(users)
 
     # 5) List tabs in that spreadsheet
-    worksheets = list_worksheets(access_token, spreadsheet_id)
+        # 5) List tabs in that spreadsheet (use refresh if 401)
+    try:
+        worksheets = list_worksheets(access_token, spreadsheet_id)
+    except requests.exceptions.HTTPError as e:
+        # if it’s a 401 Unauthorized, refresh and retry once
+        if e.response.status_code == 401:
+            new_access = refresh_access_token(user_record)
+            worksheets = list_worksheets(new_access, spreadsheet_id)
+        else:
+            # some other error (e.g. bad spreadsheet ID)
+            raise
+
     if not worksheets:
         return await interaction.followup.send("No tabs found in that spreadsheet.", ephemeral=True)
 

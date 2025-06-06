@@ -753,54 +753,90 @@ async def slash_removeprofile(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="updateaura", description="Update aura CSV with cost data from your associated Google Sheet", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
+@bot.tree.command(
+    name="updateaura",
+    description="Update aura CSV with cost data from your associated Google Sheet",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(aura_file="The aura CSV file to update")
 async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment):
-    """
-    Updates an aura CSV file using cost data from the Google Sheet associated with your Discord account.
-    """
     await interaction.response.defer(ephemeral=True)
-    try:
-        # Retrieve your associated sheet link from users.json
-        user_id = interaction.user.id
-        users = get_users_config()
-        user_record = next((user for user in users if user.get("discord_id") == user_id), None)
-        if not user_record or not user_record.get("sheet"):
-            embed = create_embed(
-                "No associated Google Sheet found for your account. Please upload one using `/uploadsheet`.",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-        google_sheet_url = user_record.get("sheet")
 
-        # Read the aura CSV file
+    # 1) Load user_record and confirm sheet_id + worksheet_title exist
+    user_id = interaction.user.id
+    users = get_users_config()
+    user_record = next((u for u in users if u.get("discord_id") == user_id), None)
+
+    # *** instead of checking "sheet", check "sheet_id" and "worksheet_title" ***
+    if not user_record or not user_record.get("sheet_id") or not user_record.get("worksheet_title"):
+        return await interaction.followup.send(
+            "No associated Google Sheet found for your account. Please run `/setup` again.",
+            ephemeral=True
+        )
+
+    sheet_id = user_record["sheet_id"]
+    worksheet_title = user_record["worksheet_title"]
+
+    # 2) Read the aura CSV file the user just uploaded
+    try:
         aura_bytes = await aura_file.read()
-        aura_df = pd.read_csv(StringIO(aura_bytes.decode('utf-8')))
+        aura_df = pd.read_csv(StringIO(aura_bytes.decode("utf-8")))
     except Exception as e:
-        embed = create_embed(
-            f"Error reading aura CSV file or retrieving your sheet: {e}",
-            color=discord.Color.red()
+        return await interaction.followup.send(
+            f"Error reading the aura CSV you uploaded: {e}", ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
 
-    # Fetch the Google Sheet data
+    # 3) Fetch the entire Google Sheet tab via Sheets API
+    #    (This uses the same access_token / refresh logic you already have.)
     try:
-        response = requests.get(google_sheet_url)
-        response.raise_for_status()
-        csv_data = StringIO(response.text)
-        sheet_df = pd.read_csv(csv_data, dtype=str)
-    except Exception as e:
-        embed = create_embed(
-            f"Error fetching Google Sheet data: {e}",
-            color=discord.Color.red()
+        access_token = user_record["google_tokens"]["access_token"]
+        # Build a GET to Sheets API to fetch the whole sheet as CSV. You can use the "values" endpoint:
+        csv_url = (
+            f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+            f"/values/{urllib.parse.quote(worksheet_title)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE"
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(csv_url, headers=headers)
+        if resp.status_code == 401:
+            # token expired → refresh and retry
+            new_access = refresh_access_token(user_record)
+            headers = {"Authorization": f"Bearer {new_access}"}
+            resp = requests.get(csv_url, headers=headers)
 
-    # Auto-detect mapping for ASIN and COGS (case-insensitive)
+        resp.raise_for_status()
+        sheet_json = resp.json()
+        values = sheet_json.get("values", [])
+        if len(values) < 2:
+            # no data beyond the header row
+            return await interaction.followup.send(
+                "Your Google sheet didn’t contain any rows beyond the header.", ephemeral=True
+            )
+
+        # After you fetch `values = sheet_json.get("values", [])`:
+        columns = values[0]
+        rows = values[1:]
+
+        # Ensure every row has exactly len(columns) entries:
+        max_len = len(columns)
+        normalized_rows = []
+        for r in rows:
+            if len(r) < max_len:
+                # pad missing cells with empty strings
+                r = r + [""] * (max_len - len(r))
+            elif len(r) > max_len:
+                # truncate any extra cells
+                r = r[:max_len]
+            normalized_rows.append(r)
+
+        sheet_df = pd.DataFrame(normalized_rows, columns=columns)
+
+    except Exception as e:
+        return await interaction.followup.send(
+            f"Error fetching data from your Google Sheet: {e}", ephemeral=True
+        )
+
+    # 4) Find which columns correspond to ASIN and COGS, prompting if needed
     sheet_columns = list(sheet_df.columns)
     columns_lower = {col.lower(): col for col in sheet_columns}
     mapping = {}
@@ -819,58 +855,48 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         embed = create_embed(
             description=(
                 f"Please select the correct column for **{', '.join(missing)}** "
-                "from the Google Sheet:"
+                "from your Google Sheet:"
             ),
             color=discord.Color.blue()
         )
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
         await view.wait()
         if not view.mapping_result or len(view.mapping_result) < len(missing):
-            embed = create_embed(
-                "Column mapping not completed in time. Please try the command again.",
-                color=discord.Color.red()
+            return await interaction.followup.send(
+                "Column mapping not completed in time. Please try again.", ephemeral=True
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
         mapping.update(view.mapping_result)
 
+    # 5) Normalize and merge COGS data into the aura_df
     try:
         sheet_df = sheet_df.rename(columns={mapping["ASIN"]: "ASIN", mapping["COGS"]: "COGS"})
         sheet_df["ASIN"] = sheet_df["ASIN"].astype(str).str.strip()
         sheet_df["COGS"] = (
             sheet_df["COGS"]
             .astype(str)
-            .str.replace('$', '', regex=False)
-            .str.replace(',', '', regex=False)
-        )
-        sheet_df["COGS"] = pd.to_numeric(sheet_df["COGS"], errors='coerce')
+            .str.replace("$", "", regex=False)
+            .str.replace(",", "", regex=False)
+        ).astype(float)
     except Exception as e:
-        embed = create_embed(
-            f"Error processing Google Sheet data: {e}",
-            color=discord.Color.red()
+        return await interaction.followup.send(
+            f"Error processing columns in your Google Sheet: {e}", ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
 
-    # Ensure aura CSV has required headers
     if "asin" not in aura_df.columns or "cost" not in aura_df.columns:
-        embed = create_embed(
-            "The aura CSV file must have both 'asin' and 'cost' columns.",
-            color=discord.Color.red()
+        return await interaction.followup.send(
+            "Your aura CSV must have both ‘asin’ and ‘cost’ columns.", ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
 
     aura_df["asin"] = aura_df["asin"].astype(str).str.strip()
-    aura_df["cost"] = pd.to_numeric(aura_df["cost"], errors='coerce')
+    aura_df["cost"] = pd.to_numeric(aura_df["cost"], errors="coerce")
 
-    # Ask user whether to update all prices or only missing ones
+    # 6) Ask user whether to overwrite all or only missing cost values
     price_view = PriceUpdateView()
     prompt_embed = create_embed(
         description=(
             "Do you want to update prices for all matching products?\n"
-            "**Yes**: update all\n"
-            "**No**: update only missing prices"
+            "**Yes**: overwrite all costs\n"
+            "**No**: only fill in missing costs"
         ),
         color=discord.Color.blue()
     )
@@ -878,13 +904,11 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     await price_view.wait()
 
     if price_view.update_all is None:
-        embed = create_embed(
-            "Price update selection not made in time. Aborting command.",
-            color=discord.Color.red()
+        return await interaction.followup.send(
+            "Timed out waiting for your choice. Try `/updateaura` again.", ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return
 
+    # 7) Perform the actual merging
     updated_rows = []
     for idx, row in aura_df.iterrows():
         match = sheet_df[sheet_df["ASIN"] == row["asin"]]
@@ -892,17 +916,14 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
             new_cost = match.iloc[0]["COGS"]
             if price_view.update_all or pd.isna(row["cost"]):
                 if not pd.isna(new_cost):
+                    old_cost = row["cost"]
                     aura_df.at[idx, "cost"] = new_cost
-                    updated_rows.append({
-                        "index": idx,
-                        "asin": row["asin"],
-                        "old_cost": row["cost"],
-                        "new_cost": new_cost
-                    })
+                    updated_rows.append({"index": idx, "asin": row["asin"], "old_cost": old_cost, "new_cost": new_cost})
 
+    # 8) Send back a new CSV with updated “cost” column
     output_buffer = StringIO()
     aura_df.to_csv(output_buffer, index=False)
-    output_bytes = output_buffer.getvalue().encode('utf-8')
+    output_bytes = output_buffer.getvalue().encode("utf-8")
 
     embed_summary = create_embed(
         description=f"Updated **{len(updated_rows)}** row(s) in the aura CSV file.",
@@ -913,7 +934,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     await interaction.followup.send(embed=embed_summary, ephemeral=True)
 
     if updated_rows:
-        await interaction.user.send("Aura Updated File", file=file)
+        await interaction.user.send("Here’s your updated aura CSV:", file=file)
 
 ###########################################
 # on_ready Event                          #

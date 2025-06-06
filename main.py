@@ -283,6 +283,186 @@ def list_worksheets(access_token: str, spreadsheet_id: str) -> list[dict]:
     sheets = r.json().get("sheets", [])
     return [s["properties"] for s in sheets]
 
+# ─── EXTRA HELPERS FOR “UNDERPAID REIMBURSEMENTS” ─────────────────────────────
+
+def fetch_all_sheet_titles_for_user(user_record) -> list[str]:
+    """
+    Uses the stored refresh_token to get a fresh access_token,
+    then calls spreadsheets.get?fields=sheets(properties(title))
+    to return a list of all worksheet titles in that user’s Sheet.
+    """
+    # 1) Grab a valid access_token (refresh if needed)
+    access_token = user_record["google_tokens"]["access_token"]
+    # Try one request; if 401, refresh and retry
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_record['sheet_id']}?fields=sheets(properties(title))"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 401:
+        access_token = refresh_access_token(user_record)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+
+    data = resp.json()
+    return [sheet["properties"]["title"] for sheet in data.get("sheets", [])]
+
+
+def fetch_google_sheet_as_df(user_record, worksheet_title) -> pd.DataFrame:
+    """
+    Fetches one worksheet’s entire A1:ZZ range, pads/truncates rows to match headers,
+    and returns a DataFrame with the first row as column names.
+    """
+    sheet_id = user_record["sheet_id"]
+    access_token = user_record["google_tokens"]["access_token"]
+    range_ = f"'{worksheet_title}'!A1:ZZ"
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+        f"/values/{urllib.parse.quote(range_)}?majorDimension=ROWS"
+    )
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 401:
+        access_token = refresh_access_token(user_record)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+
+    values = resp.json().get("values", [])
+    if not values:
+        return pd.DataFrame()
+
+    headers_row = values[0]
+    records = []
+    for row in values[1:]:
+        # pad or truncate so len(row) == len(headers_row)
+        if len(row) < len(headers_row):
+            row = row + [""] * (len(headers_row) - len(row))
+        elif len(row) > len(headers_row):
+            row = row[: len(headers_row)]
+        records.append(row)
+
+    return pd.DataFrame(records, columns=headers_row)
+
+
+def build_highest_cogs_map_for_user(user_record) -> dict[str, float]:
+    """
+    Fetches every worksheet title, then for each sheet:
+      - normalizes headers to lowercase
+      - finds any “asin” column and any “cogs” column (by substring match)
+      - strips “$” and commas from COGS, coercing to float
+      - groups by ASIN and takes max(COGS)
+    Returns a map { asin_string: highest_cogs_float } across all worksheets.
+    """
+    max_cogs: dict[str, float] = {}
+    titles = fetch_all_sheet_titles_for_user(user_record)
+
+    for title in titles:
+        df = fetch_google_sheet_as_df(user_record, title)
+        if df.empty:
+            continue
+
+        # Print debug info if desired:
+        # print(f"[DEBUG] Raw headers for '{title}': {list(df.columns)}")
+
+        # lowercase all headers
+        df.columns = [c.strip().lower() for c in df.columns]
+
+        # pick first column that contains “asin” and first that contains “cogs”
+        asin_cols = [c for c in df.columns if "asin" in c]
+        cogs_cols = [c for c in df.columns if "cogs" in c]
+        if not asin_cols or not cogs_cols:
+            # skip sheets that don’t have an ASIN or COGS header
+            continue
+
+        asin_col = asin_cols[0]
+        cogs_col = cogs_cols[0]
+
+        # strip “$” and commas from COGS, coerce to float
+        df[cogs_col] = (
+            df[cogs_col]
+            .astype(str)
+            .str.replace("$", "", regex=False)
+            .str.replace(",", "", regex=False)
+        )
+        df[cogs_col] = pd.to_numeric(df[cogs_col], errors="coerce")
+        df = df.dropna(subset=[asin_col, cogs_col])
+        if df.empty:
+            continue
+
+        grouped = df.groupby(asin_col, as_index=False)[cogs_col].max()
+        for _, row in grouped.iterrows():
+            asin = str(row[asin_col]).strip()
+            cogs = float(row[cogs_col])
+            if asin in max_cogs:
+                if cogs > max_cogs[asin]:
+                    max_cogs[asin] = cogs
+            else:
+                max_cogs[asin] = cogs
+
+    return max_cogs
+
+
+def filter_underpaid_reimbursements(aura_df: pd.DataFrame, max_cogs_map: dict[str, float]) -> pd.DataFrame:
+    """
+    Given a DataFrame of reimbursements (with columns including “asin” and “amount-per-unit”),
+    returns a new DataFrame containing only rows where 
+      (amount-per-unit < max_cogs_map[asin]) and reason != "Reimbursement_Reversal".
+
+    Output columns: 
+      reimbursement-id, reason, sku, asin, product-name,
+      amount-per-unit, amount-total, quantity-reimbursed-total,
+      highest_cogs, shortfall_amount
+    """
+    # lowercase columns for consistency
+    aura_df.columns = [c.strip().lower() for c in aura_df.columns]
+
+    required_cols = {
+        "reimbursement-id", "reason", "sku", "asin",
+        "product-name", "amount-per-unit", "amount-total", "quantity-reimbursed-total"
+    }
+    if not required_cols.issubset(set(aura_df.columns)):
+        raise ValueError(f"Missing columns {required_cols - set(aura_df.columns)} in reimbursement CSV")
+
+    # parse “amount-per-unit” into float
+    def parse_money(x):
+        try:
+            return float(str(x).replace("$", "").replace(",", "").strip())
+        except:
+            return None
+
+    aura_df["reimb_amount_per_unit"] = aura_df["amount-per-unit"].apply(parse_money)
+    aura_df = aura_df.dropna(subset=["asin", "reimb_amount_per_unit"])
+
+    rows = []
+    for _, r in aura_df.iterrows():
+        if str(r["reason"]).strip().lower() == "reimbursement_reversal":
+            continue
+        asin = str(r["asin"]).strip()
+        reimb_amt = float(r["reimb_amount_per_unit"])
+        highest = max_cogs_map.get(asin)
+        if highest is not None and reimb_amt < highest:
+            shortfall = round(highest - reimb_amt, 2)
+            rows.append({
+                "reimbursement-id": r["reimbursement-id"],
+                "reason": r["reason"],
+                "sku": r["sku"],
+                "asin": r["asin"],
+                "product-name": r["product-name"],
+                "amount-per-unit": r["amount-per-unit"],
+                "amount-total": r["amount-total"],
+                "quantity-reimbursed-total": r["quantity-reimbursed-total"],
+                "highest_cogs": highest,
+                "shortfall_amount": shortfall
+            })
+
+    cols = [
+        "reimbursement-id", "reason", "sku", "asin", "product-name",
+        "amount-per-unit", "amount-total", "quantity-reimbursed-total",
+        "highest_cogs", "shortfall_amount"
+    ]
+    return pd.DataFrame(rows, columns=cols)
+
+
 ###########################################
 # UI Classes for Column Mapping & Price   #
 ###########################################
@@ -752,6 +932,66 @@ async def slash_removeprofile(interaction: discord.Interaction):
             color=discord.Color.red()
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(
+    name="find_underpaid",
+    description="Find underpaid reimbursements by comparing your uploaded CSV to your Google Sheet’s max COGS",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
+@app_commands.describe(
+    reimbursement_file="Attach the reimbursement CSV to check"
+)
+async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_file: discord.Attachment):
+    await interaction.response.defer(ephemeral=True)
+
+    # 1) Load the user’s record from S3
+    user_id = interaction.user.id
+    users = get_users_config()
+    user_record = next((u for u in users if u.get("discord_id") == user_id), None)
+    if not user_record or not user_record.get("sheet_id") or not user_record.get("worksheet_title"):
+        return await interaction.followup.send(
+            "No Google Sheet linked to your account. Please run `/setup` first.", ephemeral=True
+        )
+
+    # 2) Read the reimbursement CSV
+    try:
+        blob = await reimbursement_file.read()
+        reimburse_df = pd.read_csv(StringIO(blob.decode("utf-8")))
+    except Exception as e:
+        return await interaction.followup.send(f"Error reading CSV: {e}", ephemeral=True)
+
+    # 3) Build the max-COGS map
+    try:
+        max_map = build_highest_cogs_map_for_user(user_record)
+    except Exception as e:
+        return await interaction.followup.send(f"Error fetching your Sheet data: {e}", ephemeral=True)
+
+    if not max_map:
+        return await interaction.followup.send(
+            "Could not find any COGS data in your Google Sheet’s worksheets.", ephemeral=True
+        )
+
+    # 4) Filter for underpaid rows
+    try:
+        underpaid_df = filter_underpaid_reimbursements(reimburse_df, max_map)
+    except Exception as e:
+        return await interaction.followup.send(f"Error processing reimbursements: {e}", ephemeral=True)
+
+    if underpaid_df.empty:
+        return await interaction.followup.send("No underpaid reimbursements found.", ephemeral=True)
+
+    # 5) Convert result to CSV and send back as a file
+    out_buf = StringIO()
+    underpaid_df.to_csv(out_buf, index=False)
+    out_bytes = out_buf.getvalue().encode("utf-8")
+    discord_file = discord.File(fp=BytesIO(out_bytes), filename="underpaid_reimbursements.csv")
+
+    embed = create_embed(
+        description=f"Found {len(underpaid_df)} underpaid reimbursement(s). Sending file...",
+        color=discord.Color.green()
+    )
+    await interaction.followup.send(embed=embed, file=discord_file, ephemeral=True)
 
 @bot.tree.command(
     name="updateaura",

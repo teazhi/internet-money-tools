@@ -133,23 +133,32 @@ def list_user_spreadsheets(access_token: str) -> list:
     else:
         raise Exception(f"Error listing spreadsheets: {response.text}")
 
-def get_sheet_headers(access_token, spreadsheet_id, title) -> list[str]:
+def get_sheet_headers(user_record, spreadsheet_id, title) -> list[str]:
     """
-    Retrieves the header row (assumed to be the first row) from the specified spreadsheet.
+    Retrieves the header row (assumed to be the first row) from the specified spreadsheet,
+    refreshing the access token once if we get a 401 Unauthorized.
     """
-    range_ = f"'{title}'!A1:Z1"
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_}"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(url, headers=headers)
-    if response.ok:
-        data = response.json()
-        values = data.get("values", [])
-        if values:
-            return values[0]
-        else:
-            return []
-    else:
-        raise Exception(f"Error reading sheet headers: {response.text}")
+    def _fetch(token):
+        range_ = f"'{title}'!A1:Z1"
+        url    = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_}"
+        headers = {"Authorization": f"Bearer {token}"}
+        return requests.get(url, headers=headers)
+
+    # 1) Try with the current access_token
+    token = user_record["google_tokens"]["access_token"]
+    resp = _fetch(token)
+
+    # 2) If unauthorized, refresh the token and try again
+    if resp.status_code == 401:
+        token = refresh_access_token(user_record)
+        resp = _fetch(token)
+
+    # 3) Now raise for any other error
+    resp.raise_for_status()
+
+    # 4) Parse and return the first row (or empty list)
+    values = resp.json().get("values", [])
+    return values[0] if values else []
 
 def create_embed(
     description: str,
@@ -796,7 +805,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     update_users_config(users)
 
     # 6) Fetch headers from the chosen worksheet
-    headers = get_sheet_headers(access_token, spreadsheet_id, worksheet_title)
+    headers = get_sheet_headers(user_record, spreadsheet_id, worksheet_title)
     if not headers:
         return await interaction.followup.send(
             "Could not read row 1 from that tab.", ephemeral=True

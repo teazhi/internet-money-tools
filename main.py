@@ -655,6 +655,70 @@ class PriceUpdateView(View):
 
 GUILD_IDS = [1287450087852740699, 1325968966807453716]
 
+# Create a Lambda client
+lambda_client = boto3.client(
+    "lambda",
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=os.getenv("AWS_REGION", "us-east-1")
+)
+
+@bot.tree.command(
+    name="run_lambda",
+    description="Invoke an AWS Lambda function by name",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to_roles(1341608661822345257, 1287450087852740702)
+@app_commands.describe(
+    function_name="The name (or ARN) of the Lambda function",
+    payload="JSON string payload to send to the function (optional)"
+)
+async def run_lambda(
+    interaction: discord.Interaction,
+    function_name: str,
+    payload: str = "{}"
+):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        # Parse the payload JSON
+        payload_dict = json.loads(payload)
+    except json.JSONDecodeError:
+        return await interaction.followup.send(
+            "❌ Invalid JSON payload. Please provide a valid JSON string.",
+            ephemeral=True
+        )
+
+    try:
+        # Invoke the Lambda function
+        response = lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload_dict)
+        )
+        # Read the response payload
+        response_payload = response["Payload"].read().decode("utf-8")
+        result = json.loads(response_payload)
+
+        # Send back the result (truncate if too long)
+        result_str = json.dumps(result, indent=2)
+        if len(result_str) > 1900:
+            result_str = result_str[:1900] + "\n…(truncated)"
+        
+        embed = create_embed(
+            title=f"Lambda `{function_name}` Invoked",
+            description=f"```json\n{result_str}\n```",
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    except Exception as e:
+        embed = create_embed(
+            title="Error Running Lambda",
+            description=str(e),
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
 @bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(code="The authorization code from Google")

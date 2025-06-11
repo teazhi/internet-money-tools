@@ -12,6 +12,7 @@ from discord.ext import commands
 from discord import app_commands
 from discord.ui import Select, View, Button
 from dotenv import load_dotenv
+import botocore
 
 import urllib.parse
 
@@ -49,6 +50,29 @@ USERS_CONFIG_KEY = "users.json"  # S3 key for the user config file
 # Ensure AWS credentials are provided
 if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
     raise Exception("AWS credentials not found. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your .env file.")
+
+PERMS_KEY = "command_permissions.json"
+
+def get_command_perms():
+    s3 = boto3.client('s3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    )
+    try:
+        body = s3.get_object(Bucket=CONFIG_S3_BUCKET, Key=PERMS_KEY)["Body"].read().decode()
+        return json.loads(body)
+    except s3.exceptions.NoSuchKey:
+        return {}
+    except:
+        return {}
+
+def update_command_perms(perms):
+    s3 = boto3.client('s3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    )
+    s3.put_object(Bucket=CONFIG_S3_BUCKET, Key=PERMS_KEY, Body=json.dumps(perms))
+
 
 # Set up Discord bot
 intents = discord.Intents.default()
@@ -182,13 +206,22 @@ def has_required_role(interaction: discord.Interaction, allowed_role_ids: list[i
     user_roles = [role.id for role in interaction.user.roles]
     return any(role_id in user_roles for role_id in allowed_role_ids)
 
-def restrict_to_roles(*role_ids):
-    """
-    Decorator that checks if the invoking user has at least one of the allowed roles.
-    """
-    def predicate(interaction: discord.Interaction) -> bool:
-        return has_required_role(interaction, list(role_ids))
-    return app_commands.check(predicate)
+def restrict_to(*static_role_ids):
+    def decorator(func):
+        async def predicate(interaction: discord.Interaction) -> bool:
+            # 1) static roles
+            if static_role_ids and any(r.id in static_role_ids for r in interaction.user.roles):
+                return True
+            # 2) dynamic roles & users from S3
+            perms = get_command_perms()
+            entry = perms.get(interaction.command.name, {}) or {}
+            if any(r.id in entry.get("roles", []) for r in interaction.user.roles):
+                return True
+            if interaction.user.id in entry.get("users", []):
+                return True
+            return False
+        return app_commands.check(predicate)(func)
+    return decorator
 
 ###########################################
 # S3 Functions for Users Config           #
@@ -655,32 +688,59 @@ class PriceUpdateView(View):
 
 GUILD_IDS = [1287450087852740699, 1325968966807453716]
 
-# Create a Lambda client
 lambda_client = boto3.client(
     "lambda",
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=os.getenv("AWS_REGION", "us-east-1")
+    region_name="us-east-2"
 )
 
 @bot.tree.command(
     name="run_lambda",
-    description="Invoke an AWS Lambda function by name",
+    description="Invoke a Lambda or list your functions",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
+@restrict_to(1278565917206249503)
 @app_commands.describe(
-    function_name="The name (or ARN) of the Lambda function",
-    payload="JSON string payload to send to the function (optional)"
+    function_name="The name/ARN of the Lambda, or ‘list’ to enumerate all functions",
+    payload="JSON payload (optional when invoking)"
 )
-async def run_lambda(
-    interaction: discord.Interaction,
-    function_name: str,
-    payload: str = "{}"
-):
+async def run_lambda(interaction: discord.Interaction, function_name: str, payload: str = "{}"):
     await interaction.response.defer(ephemeral=True)
+
+    # LIST FUNCTIONS (with region debug + paginator)
+    if function_name.lower() in ("list", "__list__", "functions"):
+        region = lambda_client.meta.region_name
+        try:
+            paginator = lambda_client.get_paginator("list_functions")
+            funcs = []
+            for page in paginator.paginate():
+                funcs.extend(page.get("Functions", []))
+
+            if not funcs:
+                return await interaction.followup.send(
+                    "*(no functions found in this region)*",
+                    ephemeral=True
+                )
+
+            lines = [f"- `{f['FunctionName']}` ({f['Runtime']})" for f in funcs]
+            await interaction.followup.send(
+                "Here are your Lambda functions:\n" + "\n".join(lines),
+                ephemeral=True
+            )
+        except botocore.exceptions.ClientError as err:
+            code = err.response["Error"]["Code"]
+            if code == "AccessDeniedException":
+                return await interaction.followup.send(
+                    "❌ I lack `ListFunctions` permission in IAM. Please update your policy.",
+                    ephemeral=True
+                )
+            else:
+                return await interaction.followup.send(f"❌ Error listing functions: {err}", ephemeral=True)
+        return
+
+    # ─── INVOKE FUNCTION ───────────────────────────────────────────────
     try:
-        # Parse the payload JSON
         payload_dict = json.loads(payload)
     except json.JSONDecodeError:
         return await interaction.followup.send(
@@ -689,38 +749,123 @@ async def run_lambda(
         )
 
     try:
-        # Invoke the Lambda function
-        response = lambda_client.invoke(
+        resp = lambda_client.invoke(
             FunctionName=function_name,
             InvocationType="RequestResponse",
             Payload=json.dumps(payload_dict)
         )
-        # Read the response payload
-        response_payload = response["Payload"].read().decode("utf-8")
-        result = json.loads(response_payload)
-
-        # Send back the result (truncate if too long)
+        result = json.loads(resp["Payload"].read().decode())
         result_str = json.dumps(result, indent=2)
         if len(result_str) > 1900:
             result_str = result_str[:1900] + "\n…(truncated)"
-        
+
         embed = create_embed(
-            title=f"Lambda `{function_name}` Invoked",
+            title=f"Invoked `{function_name}`",
             description=f"```json\n{result_str}\n```",
             color=discord.Color.green()
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    except botocore.exceptions.ClientError as err:
+        code = err.response["Error"]["Code"]
+        if code == "AccessDeniedException":
+            msg = "❌ I don’t have permission to invoke that function. Please update IAM to allow `lambda:InvokeFunction` on it."
+        else:
+            msg = f"❌ Error invoking Lambda: {err}"
+        await interaction.followup.send(msg, ephemeral=True)
+
     except Exception as e:
-        embed = create_embed(
-            title="Error Running Lambda",
-            description=str(e),
-            color=discord.Color.red()
+        await interaction.followup.send(f"❌ Unexpected error: {e}", ephemeral=True)
+
+@bot.tree.command(name="grant_user_access", description="Grant a user permission to use a command")
+@restrict_to(1278565917206249503)
+@app_commands.describe(command_name="Slash command name", user="User to grant")
+async def grant_user_access(interaction, command_name: str, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
+    perms = get_command_perms()
+    entry = perms.setdefault(command_name, {"roles": [], "users": []})
+    if user.id in entry["users"]:
+        return await interaction.followup.send("Already has access.", ephemeral=True)
+    entry["users"].append(user.id)
+    update_command_perms(perms)
+    await interaction.followup.send(f"Granted {user.mention} access to /{command_name}", ephemeral=True)
+
+@bot.tree.command(name="revoke_user_access", description="Revoke a user’s permission for a command")
+@restrict_to(1278565917206249503)
+@app_commands.describe(command_name="Slash command name", user="User to revoke")
+async def revoke_user_access(interaction, command_name: str, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
+    perms = get_command_perms()
+    entry = perms.get(command_name, {"roles": [], "users": []})
+    if user.id not in entry["users"]:
+        return await interaction.followup.send("User did not have access.", ephemeral=True)
+    entry["users"].remove(user.id)
+    if not entry["roles"] and not entry["users"]:
+        perms.pop(command_name, None)
+    update_command_perms(perms)
+    await interaction.followup.send(f"Revoked {user.mention}’s access to /{command_name}", ephemeral=True)
+
+@bot.tree.command(
+    name="grant_access",
+    description="Grant a role permission to use a bot command",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to(1341608661822345257)
+@app_commands.describe(
+    command_name="Name of the slash command (without the slash)",
+    role="Role to grant access to (mention or ID)"
+)
+async def grant_access(interaction: discord.Interaction, command_name: str, role: discord.Role):
+    # 1) Defer so Discord shows the spinner
+    await interaction.response.defer(ephemeral=True)
+
+    # 2) Read and initialize your permissions map
+    perms = get_command_perms()
+    entry = perms.setdefault(command_name, {"roles": [], "users": []})
+
+    # 3) If already granted, immediately follow up
+    if role.id in entry["roles"]:
+        return await interaction.followup.send(
+            f"❗ Role {role.mention} already has access to `/{command_name}`.",
+            ephemeral=True
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # 4) Add the role and persist to S3
+    entry["roles"].append(role.id)
+    update_command_perms(perms)
+
+    # 5) Final follow-up stops the spinner and shows success
+    await interaction.followup.send(
+        f"✅ Granted {role.mention} access to `/{command_name}`.",
+        ephemeral=True
+    )
+
+
+@bot.tree.command(
+    name="revoke_access",
+    description="Revoke a role’s permission to use a bot command",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to(1278565917206249503)
+@app_commands.describe(
+    command_name="Name of the slash command (without the slash)",
+    role="Role to revoke (mention or ID)"
+)
+async def revoke_access(interaction: discord.Interaction, command_name: str, role: discord.Role):
+    await interaction.response.defer(ephemeral=True)
+    perms = get_command_perms()
+    entry = perms.get(command_name, {"roles": [], "users": []})
+    if role.id not in entry["roles"]:
+        return await interaction.followup.send(f"❌ {role.mention} doesn’t have access to `/{command_name}`.", ephemeral=True)
+    entry["roles"].remove(role.id)
+    # if no roles **and** no users left, remove the command entirely
+    if not entry["roles"] and not entry["users"]:
+        perms.pop(command_name, None)
+    update_command_perms(perms)
+    await interaction.followup.send(f"✅ Revoked {role.mention}’s access to `/{command_name}`.", ephemeral=True)
+
 
 @bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(code="The authorization code from Google")
 async def complete_google_auth(interaction: discord.Interaction, code: str):
     await interaction.response.defer(ephemeral=True)
@@ -764,7 +909,6 @@ async def complete_google_auth(interaction: discord.Interaction, code: str):
         await interaction.followup.send(f"Error completing Google OAuth: {e}", ephemeral=True)
 
 @bot.tree.command(name="upload", description="Upload a file to S3", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
-@restrict_to_roles(1341608661822345257, 1325994845520531598)
 @app_commands.describe(file="The file to upload")
 async def slash_upload(interaction: discord.Interaction, file: discord.Attachment):
     """
@@ -791,7 +935,6 @@ async def slash_upload(interaction: discord.Interaction, file: discord.Attachmen
     description="Setup your profile with your Google account",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(receiving_email="Your email address you want results sent to")
 async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     # 1) Defer so we can send multiple followups
@@ -964,7 +1107,6 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     )
 
 @bot.tree.command(name="removeprofile", description="Remove your profile from the system", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
 async def slash_removeprofile(interaction: discord.Interaction):
     """
     Remove the sheet associated with your Discord user ID.
@@ -1011,7 +1153,6 @@ async def slash_removeprofile(interaction: discord.Interaction):
     description="Find underpaid reimbursements by comparing your uploaded CSV to your Google Sheet’s max COGS",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(
     reimbursement_file="Attach the reimbursement CSV to check"
 )
@@ -1075,7 +1216,6 @@ async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_f
     description="Update aura CSV with cost data from your associated Google Sheet",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to_roles(1341608661822345257, 1287450087852740702)
 @app_commands.describe(aura_file="The aura CSV file to update")
 async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.Attachment):
     await interaction.response.defer(ephemeral=True)

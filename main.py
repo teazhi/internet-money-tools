@@ -1532,7 +1532,7 @@ async def orders_report_command(interaction: discord.Interaction, report_date: s
             description=embed_data["description"],
             color=embed_data["color"]
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 

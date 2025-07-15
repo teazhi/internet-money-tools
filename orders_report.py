@@ -17,18 +17,19 @@ class OrdersReport:
         return df
 
     def process_orders(self, df: pd.DataFrame, for_date: Optional[date] = None) -> Dict[str, int]:
-        # Use today's date if not specified
         if for_date is None:
             for_date = date.today()
-        # Find the date column
         date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
         if not date_columns:
             filtered_df = df
         else:
             date_col = date_columns[0]
-            df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            # Specify format for PurchaseDate(UTC)
+            if date_col == 'PurchaseDate(UTC)':
+                df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
+            else:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
             filtered_df = df[df[date_col].dt.date == for_date]
-        # Find the order status column
         status_col = None
         for col in df.columns:
             if col.lower().replace(' ', '') == 'orderstatus':
@@ -37,7 +38,6 @@ class OrdersReport:
         if not status_col:
             raise ValueError("OrderStatus column not found in CSV.")
         filtered_df = filtered_df[filtered_df[status_col].isin(['Shipped', 'Unshipped'])]
-        # Find the products/ASIN column
         product_col = None
         for col in df.columns:
             if 'product' in col.lower() or 'asin' in col.lower():

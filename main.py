@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 import botocore
 
 import urllib.parse
+from orders_report import OrdersReport
+from datetime import datetime, date
 
 # Load environment variables
 load_dotenv()
@@ -115,11 +117,11 @@ def refresh_access_token(user_record):
     resp.raise_for_status()
     new_tokens = resp.json()
     # new_tokens typically contains at least "access_token" and "expires_in"
-    # Keep the old refresh_token if Google didn’t return a new one:
+    # Keep the old refresh_token if Google didn't return a new one:
     if "refresh_token" not in new_tokens:
         new_tokens["refresh_token"] = refresh_token
 
-    # Merge into existing tokens dict so we don’t lose any fields
+    # Merge into existing tokens dict so we don't lose any fields
     user_record["google_tokens"].update(new_tokens)
     update_users_config(get_users_config())  # save the merged tokens back to S3
     return new_tokens["access_token"]
@@ -314,7 +316,7 @@ def safe_option_text(text: str) -> str:
 
 def list_worksheets(access_token: str, spreadsheet_id: str) -> list[dict]:
     """
-    Returns a list of sheet‐tabs in the spreadsheet:
+    Returns a list of sheet-tabs in the spreadsheet:
       [ { 'sheetId': xxx, 'title': 'Leads' }, … ]
     """
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}"
@@ -325,13 +327,13 @@ def list_worksheets(access_token: str, spreadsheet_id: str) -> list[dict]:
     sheets = r.json().get("sheets", [])
     return [s["properties"] for s in sheets]
 
-# ─── EXTRA HELPERS FOR “UNDERPAID REIMBURSEMENTS” ─────────────────────────────
+# ─── EXTRA HELPERS FOR "UNDERPAID REIMBURSEMENTS" ─────────────────────────────
 
 def fetch_all_sheet_titles_for_user(user_record) -> list[str]:
     """
     Uses the stored refresh_token to get a fresh access_token,
     then calls spreadsheets.get?fields=sheets(properties(title))
-    to return a list of all worksheet titles in that user’s Sheet.
+    to return a list of all worksheet titles in that user's Sheet.
     """
     # 1) Grab a valid access_token (refresh if needed)
     access_token = user_record["google_tokens"]["access_token"]
@@ -351,7 +353,7 @@ def fetch_all_sheet_titles_for_user(user_record) -> list[str]:
 
 def fetch_google_sheet_as_df(user_record, worksheet_title) -> pd.DataFrame:
     """
-    Fetches one worksheet’s entire A1:ZZ range, pads/truncates rows to match headers,
+    Fetches one worksheet's entire A1:ZZ range, pads/truncates rows to match headers,
     and returns a DataFrame with the first row as column names.
     """
     sheet_id = user_record["sheet_id"]
@@ -390,8 +392,8 @@ def build_highest_cogs_map_for_user(user_record) -> dict[str, float]:
     """
     Fetches every worksheet title, then for each sheet:
       - normalizes headers to lowercase
-      - finds any “asin” column and any “cogs” column (by substring match)
-      - strips “$” and commas from COGS, coercing to float
+      - finds any "asin" column and any "cogs" column (by substring match)
+      - strips "$" and commas from COGS, coercing to float
       - groups by ASIN and takes max(COGS)
     Returns a map { asin_string: highest_cogs_float } across all worksheets.
     """
@@ -409,17 +411,17 @@ def build_highest_cogs_map_for_user(user_record) -> dict[str, float]:
         # lowercase all headers
         df.columns = [c.strip().lower() for c in df.columns]
 
-        # pick first column that contains “asin” and first that contains “cogs”
+        # pick first column that contains "asin" and first that contains "cogs"
         asin_cols = [c for c in df.columns if "asin" in c]
         cogs_cols = [c for c in df.columns if "cogs" in c]
         if not asin_cols or not cogs_cols:
-            # skip sheets that don’t have an ASIN or COGS header
+            # skip sheets that don't have an ASIN or COGS header
             continue
 
         asin_col = asin_cols[0]
         cogs_col = cogs_cols[0]
 
-        # strip “$” and commas from COGS, coerce to float
+        # strip "$" and commas from COGS, coerce to float
         df[cogs_col] = (
             df[cogs_col]
             .astype(str)
@@ -446,7 +448,7 @@ def build_highest_cogs_map_for_user(user_record) -> dict[str, float]:
 
 def filter_underpaid_reimbursements(aura_df: pd.DataFrame, max_cogs_map: dict[str, float]) -> pd.DataFrame:
     """
-    Given a DataFrame of reimbursements (with columns including “asin” and “amount-per-unit”),
+    Given a DataFrame of reimbursements (with columns including "asin" and "amount-per-unit"),
     returns a new DataFrame containing only rows where 
       (amount-per-unit < max_cogs_map[asin]) and reason != "Reimbursement_Reversal".
 
@@ -465,7 +467,7 @@ def filter_underpaid_reimbursements(aura_df: pd.DataFrame, max_cogs_map: dict[st
     if not required_cols.issubset(set(aura_df.columns)):
         raise ValueError(f"Missing columns {required_cols - set(aura_df.columns)} in reimbursement CSV")
 
-    # parse “amount-per-unit” into float
+    # parse "amount-per-unit" into float
     def parse_money(x):
         try:
             return float(str(x).replace("$", "").replace(",", "").strip())
@@ -562,7 +564,7 @@ class WorksheetSelect(discord.ui.Select):
         options = []
         for idx, ws in enumerate(worksheets):
             label = safe_option_text(ws["title"])
-            # use the title as value (truncated + de‑duped exactly like ColumnSelect)
+            # use the title as value (truncated + de-duped exactly like ColumnSelect)
             val = ws["title"]
             if len(val) > 100:
                 val = val[:97] + "..."
@@ -609,7 +611,7 @@ class ConfirmView(View):
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm_button(self, interaction: discord.Interaction, button: Button):
         self.confirmed = True
-        await interaction.response.send_message("✅ Thanks for confirming. Let’s begin column mapping.", ephemeral=True)
+        await interaction.response.send_message("✅ Thanks for confirming. Let's begin column mapping.", ephemeral=True)
         self.stop()
 
 class ColumnSelect(Select):
@@ -700,9 +702,9 @@ lambda_client = boto3.client(
     description="Invoke a Lambda or list your functions",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to(1278565917206249503)
+@restrict_to(1341608661822345257)
 @app_commands.describe(
-    function_name="The name/ARN of the Lambda, or ‘list’ to enumerate all functions",
+    function_name="The name/ARN of the Lambda, or 'list' to enumerate all functions",
     payload="JSON payload (optional when invoking)"
 )
 async def run_lambda(interaction: discord.Interaction, function_name: str, payload: str = "{}"):
@@ -769,7 +771,7 @@ async def run_lambda(interaction: discord.Interaction, function_name: str, paylo
     except botocore.exceptions.ClientError as err:
         code = err.response["Error"]["Code"]
         if code == "AccessDeniedException":
-            msg = "❌ I don’t have permission to invoke that function. Please update IAM to allow `lambda:InvokeFunction` on it."
+            msg = "❌ I don't have permission to invoke that function. Please update IAM to allow `lambda:InvokeFunction` on it."
         else:
             msg = f"❌ Error invoking Lambda: {err}"
         await interaction.followup.send(msg, ephemeral=True)
@@ -777,8 +779,8 @@ async def run_lambda(interaction: discord.Interaction, function_name: str, paylo
     except Exception as e:
         await interaction.followup.send(f"❌ Unexpected error: {e}", ephemeral=True)
 
-@bot.tree.command(name="grant_user_access", description="Grant a user permission to use a command")
-@restrict_to(1278565917206249503)
+@bot.tree.command(name="grant_user_access", description="Grant a user permission to use a command", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
+@restrict_to(1341608661822345257)
 @app_commands.describe(command_name="Slash command name", user="User to grant")
 async def grant_user_access(interaction, command_name: str, user: discord.User):
     await interaction.response.defer(ephemeral=True)
@@ -790,8 +792,8 @@ async def grant_user_access(interaction, command_name: str, user: discord.User):
     update_command_perms(perms)
     await interaction.followup.send(f"Granted {user.mention} access to /{command_name}", ephemeral=True)
 
-@bot.tree.command(name="revoke_user_access", description="Revoke a user’s permission for a command")
-@restrict_to(1278565917206249503)
+@bot.tree.command(name="revoke_user_access", description="Revoke a user's permission for a command", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
+@restrict_to(1341608661822345257)
 @app_commands.describe(command_name="Slash command name", user="User to revoke")
 async def revoke_user_access(interaction, command_name: str, user: discord.User):
     await interaction.response.defer(ephemeral=True)
@@ -803,7 +805,7 @@ async def revoke_user_access(interaction, command_name: str, user: discord.User)
     if not entry["roles"] and not entry["users"]:
         perms.pop(command_name, None)
     update_command_perms(perms)
-    await interaction.followup.send(f"Revoked {user.mention}’s access to /{command_name}", ephemeral=True)
+    await interaction.followup.send(f"Revoked {user.mention}'s access to /{command_name}", ephemeral=True)
 
 @bot.tree.command(
     name="grant_access",
@@ -843,10 +845,10 @@ async def grant_access(interaction: discord.Interaction, command_name: str, role
 
 @bot.tree.command(
     name="revoke_access",
-    description="Revoke a role’s permission to use a bot command",
+    description="Revoke a role's permission to use a bot command",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
-@restrict_to(1278565917206249503)
+@restrict_to(1341608661822345257)
 @app_commands.describe(
     command_name="Name of the slash command (without the slash)",
     role="Role to revoke (mention or ID)"
@@ -856,14 +858,79 @@ async def revoke_access(interaction: discord.Interaction, command_name: str, rol
     perms = get_command_perms()
     entry = perms.get(command_name, {"roles": [], "users": []})
     if role.id not in entry["roles"]:
-        return await interaction.followup.send(f"❌ {role.mention} doesn’t have access to `/{command_name}`.", ephemeral=True)
+        return await interaction.followup.send(f"❌ {role.mention} doesn't have access to `/{command_name}`.", ephemeral=True)
     entry["roles"].remove(role.id)
     # if no roles **and** no users left, remove the command entirely
     if not entry["roles"] and not entry["users"]:
         perms.pop(command_name, None)
     update_command_perms(perms)
-    await interaction.followup.send(f"✅ Revoked {role.mention}’s access to `/{command_name}`.", ephemeral=True)
+    await interaction.followup.send(f"✅ Revoked {role.mention}'s access to `/{command_name}`.", ephemeral=True)
 
+@bot.tree.command(
+    name="list_access",
+    description="List which roles and users have access to each slash command",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to(1287450087852740705)
+async def list_access(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    perms = get_command_perms()  # { "command_name": { "roles":[role_ids], "users":[user_ids] } }
+    if not perms:
+        return await interaction.followup.send("No custom access rules configured.", ephemeral=True)
+
+    embed = discord.Embed(
+        title="Command Access List",
+        color=discord.Color.blue(),
+        description="Shows which roles and users are permitted to invoke each command."
+    )
+
+    for cmd_name, entry in perms.items():
+        roles = entry.get("roles", [])
+        users = entry.get("users", [])
+        # Mention roles/users where possible
+        role_mentions = " ".join(f"<@&{r}>" for r in roles) or "—"
+        user_mentions = " ".join(f"<@{u}>" for u in users) or "—"
+        embed.add_field(
+            name=f"/{cmd_name}",
+            value=f"**Roles:** {role_mentions}\n**Users:** {user_mentions}",
+            inline=False
+        )
+
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(
+    name="list_commands",
+    description="List all available slash commands",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@restrict_to(1287450087852740705)
+async def list_commands(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    embed = discord.Embed(
+        title="Available Slash Commands",
+        color=discord.Color.blue(),
+        description="Here are all the slash commands I know:"
+    )
+
+    # 1) Global commands
+    global_cmds = bot.tree.get_commands(guild=None)
+    if global_cmds:
+        embed.add_field(name="🌐 Global", value="\n".join(f"/{c.name}" for c in global_cmds), inline=False)
+
+    # 2) Guild-scoped commands
+    for gid in GUILD_IDS:
+        guild_obj = discord.Object(id=gid)
+        guild_cmds = bot.tree.get_commands(guild=guild_obj)
+        if guild_cmds:
+            embed.add_field(
+                name=f"🏠 Guild {gid}",
+                value="\n".join(f"/{c.name}" for c in guild_cmds),
+                inline=False
+            )
+
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="complete_google_auth", description="Complete Google OAuth linking by providing the authorization code", guilds=[discord.Object(id=gid) for gid in GUILD_IDS])
 @app_commands.describe(code="The authorization code from Google")
@@ -885,17 +952,17 @@ async def complete_google_auth(interaction: discord.Interaction, code: str):
 
         # Update the user's configuration with the tokens.
         user_id = interaction.user.id
-                # …after token_response.raise_for_status()…
+        # …after token_response.raise_for_status()…
         tokens = token_response.json()  # may or may not contain "refresh_token"
 
-        # 1) Load existing users and find (or create) this user’s record
+        # 1) Load existing users and find (or create) this user's record
         users = get_users_config()
         user_record = next((u for u in users if u.get("discord_id") == user_id), None)
         if user_record is None:
             user_record = {"discord_id": user_id, "google_tokens": {}}
             users.append(user_record)
 
-        # 2) Preserve old refresh_token if Google didn’t return a new one
+        # 2) Preserve old refresh_token if Google didn't return a new one
         old_tokens = user_record.get("google_tokens", {})
         if "refresh_token" not in tokens and "refresh_token" in old_tokens:
             tokens["refresh_token"] = old_tokens["refresh_token"]
@@ -952,12 +1019,16 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
         view.add_item(btn)
         await interaction.followup.send(
             "Click the button to link your Google account. \n**NOTE:** Make sure the account you link has your purchase sheet."
-            "\nAfter consenting, you'll get a code—run `/complete_google_auth code:<that‑code>` next.",
+            "\nAfter consenting, you'll get a code—run `/complete_google_auth code:<that-code>` next.",
             view=view,
             ephemeral=True
         )
         if user_record is None:
-            users.append({"discord_id": user_id, "email": receiving_email})
+            users.append({
+                "discord_id": user_id, 
+                "email": receiving_email,
+                "run_scripts": True  # Set run_scripts to true by default
+            })
             update_users_config(users)
         return
 
@@ -971,7 +1042,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     # 4) Show Drive-file picker
     file_view = SheetSelectView(files)
     await interaction.followup.send(
-        "Select which **spreadsheet** you’d like to use:",
+        "Select which **spreadsheet** you'd like to use:",
         view=file_view, ephemeral=True
     )
     await file_view.wait()
@@ -983,11 +1054,11 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     update_users_config(users)
 
     # 5) List tabs in that spreadsheet
-        # 5) List tabs in that spreadsheet (use refresh if 401)
+    # 5) List tabs in that spreadsheet (use refresh if 401)
     try:
         worksheets = list_worksheets(access_token, spreadsheet_id)
     except requests.exceptions.HTTPError as e:
-        # if it’s a 401 Unauthorized, refresh and retry once
+        # if it's a 401 Unauthorized, refresh and retry once
         if e.response.status_code == 401:
             new_access = refresh_access_token(user_record)
             worksheets = list_worksheets(new_access, spreadsheet_id)
@@ -1015,7 +1086,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     headers = get_sheet_headers(user_record, spreadsheet_id, worksheet_title)
     if not headers:
         return await interaction.followup.send(
-            "Could not read row 1 from that tab.", ephemeral=True
+            "Could not read row 1 from that tab.", ephemeral=True
         )
 
     # 7) Column mapping (in chunks of 5)
@@ -1037,7 +1108,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
     await confirm_view.wait()
     if not confirm_view.confirmed:
         return await interaction.followup.send(
-            "❌ You did not confirm in time. Please run `/setup` again when you’re ready.",
+            "❌ You did not confirm in time. Please run `/setup` again when you're ready.",
             ephemeral=True
         )
     
@@ -1102,7 +1173,7 @@ async def slash_setup(interaction: discord.Interaction, receiving_email: str):
         f"🎉 Setup complete!\n"
         f"• Listing loader: `{loader_key}`\n"
         f"• Sellerboard file: `{sb_file_key}`\n\n"
-        "I’ll now use your linked sheet, tab, column map, loader file, and sellerboard file for all future commands.",
+        "I'll now use your linked sheet, tab, column map, loader file, and sellerboard file for all future commands.",
         ephemeral=True
     )
 
@@ -1150,7 +1221,7 @@ async def slash_removeprofile(interaction: discord.Interaction):
 
 @bot.tree.command(
     name="find_underpaid",
-    description="Find underpaid reimbursements by comparing your uploaded CSV to your Google Sheet’s max COGS",
+    description="Find underpaid reimbursements by comparing your uploaded CSV to your Google Sheet's max COGS",
     guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
 )
 @app_commands.describe(
@@ -1159,7 +1230,7 @@ async def slash_removeprofile(interaction: discord.Interaction):
 async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_file: discord.Attachment):
     await interaction.response.defer(ephemeral=True)
 
-    # 1) Load the user’s record from S3
+    # 1) Load the user's record from S3
     user_id = interaction.user.id
     users = get_users_config()
     user_record = next((u for u in users if u.get("discord_id") == user_id), None)
@@ -1173,7 +1244,7 @@ async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_f
         try:
             reimburse_df = pd.read_csv(BytesIO(blob), encoding="utf-8")
         except UnicodeDecodeError:
-            # fallback if it isn’t valid UTF-8
+            # fallback if it isn't valid UTF-8
             reimburse_df = pd.read_csv(BytesIO(blob), encoding="latin-1")
     except Exception as e:
         return await interaction.followup.send(f"Error reading CSV: {e}", ephemeral=True)
@@ -1187,7 +1258,7 @@ async def slash_find_underpaid(interaction: discord.Interaction, reimbursement_f
 
     if not max_map:
         return await interaction.followup.send(
-            "Could not find any COGS data in your Google Sheet’s worksheets.", ephemeral=True
+            "Could not find any COGS data in your Google Sheet's worksheets.", ephemeral=True
         )
 
     # 4) Filter for underpaid rows
@@ -1267,7 +1338,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
         if len(values) < 2:
             # no data beyond the header row
             return await interaction.followup.send(
-                "Your Google sheet didn’t contain any rows beyond the header.", ephemeral=True
+                "Your Google sheet didn't contain any rows beyond the header.", ephemeral=True
             )
 
         # After you fetch `values = sheet_json.get("values", [])`:
@@ -1341,7 +1412,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
 
     if "asin" not in aura_df.columns or "cost" not in aura_df.columns:
         return await interaction.followup.send(
-            "Your aura CSV must have both ‘asin’ and ‘cost’ columns.", ephemeral=True
+            "Your aura CSV must have both 'asin' and 'cost' columns.", ephemeral=True
         )
 
     aura_df["asin"] = aura_df["asin"].astype(str).str.strip()
@@ -1377,7 +1448,7 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
                     aura_df.at[idx, "cost"] = new_cost
                     updated_rows.append({"index": idx, "asin": row["asin"], "old_cost": old_cost, "new_cost": new_cost})
 
-    # 8) Send back a new CSV with updated “cost” column
+    # 8) Send back a new CSV with updated "cost" column
     output_buffer = StringIO()
     aura_df.to_csv(output_buffer, index=False)
     output_bytes = output_buffer.getvalue().encode("utf-8")
@@ -1391,7 +1462,79 @@ async def slash_updateaura(interaction: discord.Interaction, aura_file: discord.
     await interaction.followup.send(embed=embed_summary, ephemeral=True)
 
     if updated_rows:
-        await interaction.user.send("Here’s your updated aura CSV:", file=file)
+        await interaction.user.send("Here's your updated aura CSV:", file=file)
+
+@bot.tree.command(
+    name="toggle_scripts",
+    description="Toggle whether your scripts are active",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+async def slash_toggle_scripts(interaction: discord.Interaction):
+    """
+    Toggle whether your scripts are active.
+    """
+    await interaction.response.defer(ephemeral=True)
+    try:
+        user_id = interaction.user.id
+        users = get_users_config()
+        user_record = next((u for u in users if u.get("discord_id") == user_id), None)
+
+        if not user_record:
+            return await interaction.followup.send(
+                "No profile found. Please run `/setup` first.",
+                ephemeral=True
+            )
+
+        # Toggle the run_scripts status
+        current_status = user_record.get("run_scripts", False)
+        user_record["run_scripts"] = not current_status
+        update_users_config(users)
+
+        status_text = "activated" if not current_status else "deactivated"
+        embed = create_embed(
+            description=f"Your scripts have been {status_text}.",
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as e:
+        embed = create_embed(
+            description=f"Error toggling scripts: {e}",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(
+    name="orders_report",
+    description="Get a summary of ASINs sold for a specific date (defaults to today)",
+    guilds=[discord.Object(id=gid) for gid in GUILD_IDS]
+)
+@app_commands.describe(
+    report_date="Date in YYYY-MM-DD format (optional, defaults to today)"
+)
+async def orders_report_command(interaction: discord.Interaction, report_date: str = None):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        if report_date:
+            try:
+                for_date = datetime.strptime(report_date, "%Y-%m-%d").date()
+            except ValueError:
+                return await interaction.followup.send(
+                    f"❌ Invalid date format. Please use YYYY-MM-DD.", ephemeral=True
+                )
+        else:
+            for_date = date.today()
+        report = OrdersReport()
+        df = report.download_csv_report()
+        asin_counts = report.process_orders(df, for_date=for_date)
+        embed_data = report.make_summary_embed(asin_counts, for_date)
+        embed = discord.Embed(
+            title=embed_data["title"],
+            description=embed_data["description"],
+            color=embed_data["color"]
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
 ###########################################
 # on_ready Event                          #

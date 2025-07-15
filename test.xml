@@ -1,0 +1,252 @@
+<data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/strong"/>
+    <xpath position="before" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/div[@t-field='doc.partner_invoice_id']" meta-t-field="doc.partner_invoice_id" meta-t-options="{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}">
+      <strong>
+        <t t-if="doc.partner_shipping_id == doc.partner_invoice_id">
+          <span class="o_small-fs"/>
+          <span class="h5-fs"/>
+          <span class="h4-fs"/>
+          <span class="h5-fs">
+                        Invoicing and Shipping Address
+                    </span>
+        </t>
+        <t t-else="">
+          <span class="h5-fs">
+                        Invoicing Address
+                    </span>
+        </t>
+      </strong>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']//div[@t-field='doc.partner_invoice_id']" meta-t-field="doc.partner_invoice_id" meta-t-options="{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}">
+      <attribute name="class">o_small-fs h5-fs h4-fs</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/t/strong" meta-class="d-block mt-3">
+      <strong class="d-block mt-3"/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/t/strong/strong" position="inside">
+      <span class="h5-fs">Shipping Address</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/t/strong" meta-class="d-block mt-3">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']/t/strong/strong" position="move" meta-class="d-block mt-3"/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//t[@t-set='information_block']//div[@t-field='doc.partner_shipping_id']" meta-t-field="doc.partner_shipping_id" meta-t-options="{'widget': 'contact', 'fields': ['address', 'name', 'phone'], 'no_marker': True, 'phone_icons': True}">
+      <attribute name="class">o_small-fs h5-fs h4-fs</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t" meta-t-if="is_proforma">
+      <t t-if="is_proforma"/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t/t" position="inside">
+      <span style="font-size: 12px;">Pro-Forma Invoice #</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t" meta-t-if="is_proforma">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t/t" position="move" meta-t-if="is_proforma"/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[2]" meta-t-elif="doc.state in ['draft', 'sent']">
+      <t t-elif="doc.state in ['draft', 'sent']"/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[2]/t" position="inside">
+      <span style="font-size: 12px;">Quotation #</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[2]" meta-t-elif="doc.state in ['draft', 'sent']">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[2]/t" position="move" meta-t-elif="doc.state in ['draft', 'sent']"/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[3]" meta-t-else="">
+      <t t-else=""/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[3]/t" position="inside">
+      <span style="font-size: 12px;">Order #</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[3]" meta-t-else="">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='quotation_number']/strong/t[3]/t" position="move" meta-t-else=""/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@t-field='doc.name']" meta-t-field="doc.name">
+      <attribute name="style">font-size: 12px;</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@name='informations_reference']/strong"/>
+    <xpath position="before" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@name='informations_reference']/div[@t-field='doc.client_order_ref']" meta-t-field="doc.client_order_ref">
+      <span style="font-size: 12px;">
+        <strong>Your Reference</strong>
+      </span>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@t-field='doc.client_order_ref']" meta-t-field="doc.client_order_ref">
+      <attribute name="style">font-size: 12px;</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong" meta-t-if="is_proforma">
+      <strong t-if="is_proforma"/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong/strong" position="inside">
+      <span style="font-size: 12px;">Issued Date</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong" meta-t-if="is_proforma">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong/strong" position="move" meta-t-if="is_proforma"/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[2]" meta-t-elif="doc.state in ['draft', 'sent']">
+      <strong t-elif="doc.state in ['draft', 'sent']"/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[2]/strong" position="inside">
+      <span style="font-size: 12px;">Quotation Date</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[2]" meta-t-elif="doc.state in ['draft', 'sent']">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[2]/strong" position="move" meta-t-elif="doc.state in ['draft', 'sent']"/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[3]" meta-t-else="">
+      <strong t-else=""/>
+    </xpath>
+    <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[3]/strong" position="inside">
+      <span style="font-size: 12px;">Order Date</span>
+    </xpath>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[3]" meta-t-else="">
+      <xpath expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[@name='informations_date']/strong[3]/strong" position="move" meta-t-else=""/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@t-field='doc.date_order']" meta-t-field="doc.date_order" meta-t-options="{'widget': 'date'}">
+      <attribute name="style">font-size: 12px;</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@name='expiration_date']/strong"/>
+    <xpath position="before" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@name='expiration_date']/div[@t-field='doc.validity_date']" meta-t-field="doc.validity_date">
+      <span style="font-size: 12px;">
+        <strong>Expiration</strong>
+      </span>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//div[@t-field='doc.validity_date']" meta-t-field="doc.validity_date">
+      <attribute name="style">font-size: 12px;</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[5]/strong"/>
+    <xpath position="before" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[5]/div" meta-t-if="doc.incoterm_location">
+      <span style="font-size: 12px;">
+        <strong>Incoterm</strong>
+      </span>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[6]/strong"/>
+    <xpath position="before" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[@id='informations']/div[6]/div[@t-field='doc.user_id']" meta-t-field="doc.user_id">
+      <span style="font-size: 12px;">
+        <strong>Salesperson</strong>
+      </span>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[3]" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/table/thead/tr/th[@name='th_taxes']" meta-name="th_taxes" meta-class="text-end"/>
+    <xpath position="after" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/table/thead/tr/th[@name='th_quantity']" meta-name="th_quantity" meta-class="text-end text-nowrap">
+      <th>
+        <div>BARCODE</div>
+      </th>
+      <th>
+        <div>PACKING</div>
+      </th>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="replace" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/table/tbody/t[2]/tr/t/td[@name='td_taxes']" meta-name="td_taxes" meta-t-attf-class="text-end {{ 'text-nowrap' if len(taxes) &lt; 10 else '' }}"/>
+    <xpath position="after" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/table/tbody/t[2]/tr/t/td[@name='td_quantity']" meta-name="td_quantity" meta-t-attf-class="text-end {{ 'text-nowrap' if (not line.product_packaging_id or len(line.product_packaging_id.name) &lt; 10) else '' }}">
+      <td>
+        <p>
+          <span t-field="line.product_id.barcode"/>
+          <br/>
+        </p>
+      </td>
+      <td>
+        <p>
+          <span t-field="line.product_id.x_studio_stock_specifications"/>
+          <br/>
+        </p>
+      </td>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//td[@name='td_section_line']" meta-name="td_section_line" meta-colspan="99">
+      <attribute name="colspan">100</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//td[@name='td_note_line']" meta-name="td_note_line" meta-colspan="99">
+      <attribute name="colspan">100</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="attributes" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']//td[@name='td_section_subtotal']" meta-name="td_section_subtotal" meta-colspan="99">
+      <attribute name="colspan">100</attribute>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[5]" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[6]" meta-t-if="not doc.signature" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[8]" meta-t-if="not (doc.sale_order_option_ids and doc.state in ['draft', 'sent'])" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[9]/div" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="after" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[10]/p[@id='carrier_description']" meta-t-if="doc.carrier_id.carrier_description" meta-id="carrier_description">
+      <xpath position="move" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[10]/p[@id='carrier_description']/div" meta-t-out="doc.carrier_id.carrier_description"/>
+      <p>
+        <br/>
+      </p>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[10]/div[2]" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+  <data>
+    <xpath position="inside" expr="/t[@t-name='sale.report_saleorder_document']//t[@t-call='web.external_layout']/div/div[11]" meta-class="oe_structure">
+      <br/>
+    </xpath>
+  </data>
+</data>

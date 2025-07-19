@@ -17,10 +17,13 @@ import botocore
 import urllib.parse
 from orders_report import OrdersReport
 from datetime import datetime, date, timedelta
+from orders_analysis import OrdersAnalysis
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 import requests as pyrequests
+import pandas as pd
+import tempfile
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1394474327063269386/TwQ7TDU_l9qDDQB7ZsaE1BglSYck6Vzkv-mO39XJnjxchW3MKvryoPCpieZevH4a03Sn"
 
@@ -1509,6 +1512,71 @@ async def slash_toggle_scripts(interaction: discord.Interaction):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+def build_orders_embeds(analysis, for_date, stockout_excel_path=None):
+    today_sales = analysis["today_sales"]
+    stockout_30d = analysis["stockout_30d"]
+    low_stock = analysis["low_stock"]
+    restock_priority = analysis["restock_priority"]
+    stock_info = analysis["stock_info"]
+
+    # Top sellers by units
+    top_sellers = sorted(today_sales.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_sellers_str = "\n".join([
+        f"{i+1}. {asin} — {count} units" for i, (asin, count) in enumerate(top_sellers)
+    ]) if top_sellers else "No sales."
+
+    # Low stock warnings
+    low_stock_str = "\n".join([
+        f"{asin} ({info['title']}): {info['days_left']} days left, REORDER {info['reorder_qty']} (Status: {info['running_out']})"
+        for asin, info in low_stock.items()
+    ]) or "None."
+
+    # Restock priority
+    restock_str = "\n".join([
+        f"{asin} ({info['title']}): Selling fast, only {info['days_left']} days left, REORDER {info['reorder_qty']}!"
+        for asin, info in restock_priority.items()
+    ]) or "None."
+
+    embed1 = discord.Embed(
+        title=f"📊 Orders & Stock Summary - {for_date.strftime('%Y-%m-%d')}",
+        color=0x4CAF50
+    )
+    embed1.add_field(name="🚀 Top Sellers (Units)", value=top_sellers_str, inline=False)
+    embed1.add_field(name="⚠️ Low Stock Warnings", value=low_stock_str, inline=False)
+    embed1.add_field(name="🚨 Restock Priority", value=restock_str, inline=False)
+
+    # 30-day stockout risk and reorder suggestion (split into multiple fields if needed)
+    stockout_lines = [
+        f"ASIN: {asin} | Sold: {info['sold_today']} | Stock: {info['current_stock']} | Days Left: {info['days_left']} | Suggest Reorder: {info['suggested_reorder']}"
+        for asin, info in stockout_30d.items()
+    ]
+    stockout_fields = []
+    chunk = []
+    chunk_len = 0
+    for line in stockout_lines:
+        if chunk_len + len(line) + 1 > 1024:
+            stockout_fields.append("\n".join(chunk))
+            chunk = [line]
+            chunk_len = len(line) + 1
+        else:
+            chunk.append(line)
+            chunk_len += len(line) + 1
+    if chunk:
+        stockout_fields.append("\n".join(chunk))
+    if not stockout_fields:
+        stockout_fields = ["None."]
+
+    embed2 = discord.Embed(
+        title=f"📉 30-Day Stockout Risk & Reorder Suggestion - {for_date.strftime('%Y-%m-%d')}",
+        color=0xE67E22
+    )
+    for i, field in enumerate(stockout_fields):
+        embed2.add_field(name=f"Stockout Risk (Part {i+1})", value=field, inline=False)
+    if stockout_excel_path:
+        embed2.add_field(name="Download Full Report", value="[See attached Excel file]", inline=False)
+
+    return [embed1, embed2]
+
 @bot.tree.command(
     name="orders_report",
     description="Get a summary of ASINs sold for a specific date (defaults to today)",
@@ -1517,8 +1585,11 @@ async def slash_toggle_scripts(interaction: discord.Interaction):
 @app_commands.describe(
     report_date="Date in YYYY-MM-DD format (optional, defaults to today)"
 )
-async def orders_report_command(interaction: discord.Interaction, report_date: str = None):
-    await interaction.response.defer(ephemeral=True)
+async def orders_report_command(
+    interaction: discord.Interaction,
+    report_date: str = None
+):
+    await interaction.response.defer()
     try:
         if report_date:
             try:
@@ -1529,37 +1600,62 @@ async def orders_report_command(interaction: discord.Interaction, report_date: s
                 )
         else:
             for_date = date.today()
-        report = OrdersReport()
-        df = report.download_csv_report()
-        asin_counts = report.process_orders(df, for_date=for_date)
-        embed_data = report.make_summary_embed(asin_counts, for_date)
-        embed = discord.Embed(
-            title=embed_data["title"],
-            description=embed_data["description"],
-            color=embed_data["color"]
-        )
-        await interaction.followup.send(embed=embed)
+        analysis = OrdersAnalysis().analyze(for_date)
+        # Generate Excel file for stockout risk
+        stockout_30d = analysis["stockout_30d"]
+        if stockout_30d:
+            df_stockout = pd.DataFrame([
+                {"ASIN": asin, **info} for asin, info in stockout_30d.items()
+            ])
+            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                df_stockout.to_excel(tmp.name, index=False)
+                excel_path = tmp.name
+        else:
+            excel_path = None
+        embeds = build_orders_embeds(analysis, for_date, stockout_excel_path=excel_path)
+        # Send first embed
+        await interaction.followup.send(embed=embeds[0])
+        # Send second embed with Excel file if available
+        if excel_path:
+            await interaction.followup.send(embed=embeds[1], file=discord.File(excel_path, filename=f"stockout_risk_{for_date}.xlsx"))
+            os.remove(excel_path)
+        else:
+            await interaction.followup.send(embed=embeds[1])
+        OrdersAnalysis().save_today_sales_as_yesterday(analysis["today_sales"])
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
-def send_orders_report_to_webhook():
+SCHEDULED_REPORT_CHANNEL_ID = 1394474427667972229
+
+async def send_orders_report_to_channel():
     try:
-        # Get yesterday's date in EST
         est = pytz.timezone('US/Eastern')
         now_est = datetime.now(est)
         yesterday_est = now_est.date() - timedelta(days=1)
-        report = OrdersReport()
-        df = report.download_csv_report()
-        asin_counts = report.process_orders(df, for_date=yesterday_est)
-        embed_data = report.make_summary_embed(asin_counts, yesterday_est)
-        embed = {
-            "title": embed_data["title"],
-            "description": embed_data["description"],
-            "color": embed_data["color"]
-        }
-        payload = {"embeds": [embed]}
-        resp = pyrequests.post(WEBHOOK_URL, json=payload, timeout=10)
-        resp.raise_for_status()
+        analysis = OrdersAnalysis().analyze(yesterday_est)
+        # Generate Excel file for stockout risk
+        stockout_30d = analysis["stockout_30d"]
+        if stockout_30d:
+            df_stockout = pd.DataFrame([
+                {"ASIN": asin, **info} for asin, info in stockout_30d.items()
+            ])
+            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+                df_stockout.to_excel(tmp.name, index=False)
+                excel_path = tmp.name
+        else:
+            excel_path = None
+        embeds = build_orders_embeds(analysis, yesterday_est, stockout_excel_path=excel_path)
+        channel = bot.get_channel(SCHEDULED_REPORT_CHANNEL_ID)
+        if channel is not None:
+            await channel.send(embed=embeds[0])
+            if excel_path:
+                await channel.send(embed=embeds[1], file=discord.File(excel_path, filename=f"stockout_risk_{yesterday_est}.xlsx"))
+                os.remove(excel_path)
+            else:
+                await channel.send(embed=embeds[1])
+        else:
+            print(f"[OrdersReport Scheduler] Error: Channel ID {SCHEDULED_REPORT_CHANNEL_ID} not found.")
+        OrdersAnalysis().save_today_sales_as_yesterday(analysis["today_sales"])
     except Exception as e:
         print(f"[OrdersReport Scheduler] Error: {e}")
 
@@ -1586,7 +1682,7 @@ async def on_ready():
 
         # Start the scheduler only once
         if not scheduler_started:
-            scheduler.add_job(send_orders_report_to_webhook, 'cron', hour=0, minute=0, timezone='US/Eastern')
+            scheduler.add_job(lambda: asyncio.create_task(send_orders_report_to_channel()), 'cron', hour=0, minute=0, timezone='US/Eastern')
             scheduler.start()
             scheduler_started = True
 

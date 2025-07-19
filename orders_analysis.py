@@ -1,0 +1,157 @@
+import requests
+import pandas as pd
+from io import StringIO
+from datetime import datetime, date, timedelta
+import json
+import os
+from typing import Dict, Optional
+
+ORDERS_REPORT_URL = "https://app.sellerboard.com/en/automation/reports?id=e0989fcf9a9e40b8a116318d4fd7ee84&format=csv&t=c3c41a4645fa4003ab1254d06820b076"
+STOCK_REPORT_URL = "https://app.sellerboard.com/en/automation/reports?id=b1e7d7e73f72404588b44df0839067dc&format=csv&t=c3c41a4645fa4003ab1254d06820b076"
+YESTERDAY_SALES_FILE = "yesterday_sales.json"
+
+class OrdersAnalysis:
+    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None):
+        self.orders_url = orders_url or ORDERS_REPORT_URL
+        self.stock_url = stock_url or STOCK_REPORT_URL
+
+    def download_csv(self, url: str) -> pd.DataFrame:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        df = pd.read_csv(StringIO(response.text))
+        return df
+
+    def get_orders_for_date(self, df: pd.DataFrame, for_date: date) -> pd.DataFrame:
+        date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
+        if not date_columns:
+            filtered_df = df
+        else:
+            date_col = date_columns[0]
+            if date_col == 'PurchaseDate(UTC)':
+                df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
+            else:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            filtered_df = df[df[date_col].dt.date == for_date]
+        status_col = None
+        for col in df.columns:
+            if col.lower().replace(' ', '') == 'orderstatus':
+                status_col = col
+                break
+        if not status_col:
+            raise ValueError("OrderStatus column not found in CSV.")
+        filtered_df = filtered_df[filtered_df[status_col].isin(['Shipped', 'Unshipped'])]
+        return filtered_df
+
+    def asin_sales_count(self, orders_df: pd.DataFrame) -> Dict[str, int]:
+        product_col = None
+        for col in orders_df.columns:
+            if 'product' in col.lower() or 'asin' in col.lower():
+                product_col = col
+                break
+        if not product_col:
+            raise ValueError("Products column not found in CSV.")
+        return orders_df[product_col].value_counts().to_dict()
+
+    def load_yesterday_sales(self) -> Dict[str, int]:
+        if os.path.exists(YESTERDAY_SALES_FILE):
+            with open(YESTERDAY_SALES_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+
+    def save_today_sales_as_yesterday(self, today_sales: Dict[str, int]):
+        with open(YESTERDAY_SALES_FILE, 'w') as f:
+            json.dump(today_sales, f)
+
+    def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
+        asin_col = None
+        for col in stock_df.columns:
+            if col.strip().upper() == 'ASIN':
+                asin_col = col
+                break
+        if not asin_col:
+            raise ValueError("ASIN column not found in stock report.")
+        stock_info = {}
+        for _, row in stock_df.iterrows():
+            asin = str(row[asin_col])
+            stock_info[asin] = row.to_dict()
+        return stock_info
+
+    def analyze(self, for_date: date, prev_date: Optional[date] = None) -> dict:
+        # Download and filter orders
+        orders_df = self.download_csv(self.orders_url)
+        today_orders = self.get_orders_for_date(orders_df, for_date)
+        today_sales = self.asin_sales_count(today_orders)
+
+        # Download stock report
+        stock_df = self.download_csv(self.stock_url)
+        stock_info = self.get_stock_info(stock_df)
+
+        # Load yesterday's sales
+        if prev_date is None:
+            prev_date = for_date - timedelta(days=1)
+        yesterday_sales = self.load_yesterday_sales()
+
+        # Velocity change calculation
+        velocity = {}
+        for asin, today_count in today_sales.items():
+            yest_count = yesterday_sales.get(asin, 0)
+            change = today_count - yest_count
+            pct = (change / yest_count * 100) if yest_count else (100 if today_count else 0)
+            velocity[asin] = {"today": today_count, "yesterday": yest_count, "change": change, "pct": pct}
+
+        # Low stock warning and restock recommendation
+        low_stock = {}
+        restock_priority = {}
+        for asin, sales in today_sales.items():
+            stock = stock_info.get(asin)
+            if not stock:
+                continue
+            try:
+                days_left = float(stock.get('Days of stock left', 9999))
+            except Exception:
+                days_left = 9999
+            running_out = str(stock.get('Running out of stock', '')).strip().upper()
+            reorder_qty = stock.get('Recommended quantity for reordering', None)
+            time_to_reorder = str(stock.get('Time to reorder', '')).strip().upper()
+            if days_left < 7 or running_out in ("SOON", "YES"):
+                low_stock[asin] = {
+                    "days_left": days_left,
+                    "running_out": running_out,
+                    "reorder_qty": reorder_qty,
+                    "time_to_reorder": time_to_reorder,
+                    "title": stock.get('Title', '')
+                }
+            # Restock priority: fast mover + low stock
+            if (sales >= 3 or velocity[asin]["pct"] > 20) and (days_left < 7 or running_out in ("SOON", "YES")):
+                restock_priority[asin] = low_stock[asin]
+
+        # 30-day stockout risk and reorder suggestion
+        stockout_30d = {}
+        for asin, sold_today in today_sales.items():
+            stock = stock_info.get(asin)
+            if not stock:
+                continue
+            try:
+                current_stock = float(stock.get('FBA/FBM Stock', 0))
+            except Exception:
+                current_stock = 0
+            days_left = current_stock / max(sold_today, 1)
+            if days_left < 30:
+                suggested_reorder = max(0, int((30 * sold_today) - current_stock))
+                stockout_30d[asin] = {
+                    "title": stock.get('Title', ''),
+                    "sold_today": sold_today,
+                    "current_stock": current_stock,
+                    "days_left": round(days_left, 1),
+                    "suggested_reorder": suggested_reorder
+                }
+
+        return {
+            "today_sales": today_sales,
+            "velocity": velocity,
+            "low_stock": low_stock,
+            "restock_priority": restock_priority,
+            "stock_info": stock_info,
+            "orders_df": today_orders,
+            "stockout_30d": stockout_30d,
+        } 

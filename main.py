@@ -16,7 +16,13 @@ import botocore
 
 import urllib.parse
 from orders_report import OrdersReport
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
+import requests as pyrequests
+
+WEBHOOK_URL = "https://discord.com/api/webhooks/1394474327063269386/TwQ7TDU_l9qDDQB7ZsaE1BglSYck6Vzkv-mO39XJnjxchW3MKvryoPCpieZevH4a03Sn"
 
 # Load environment variables
 load_dotenv()
@@ -688,7 +694,7 @@ class PriceUpdateView(View):
 # Slash Commands                          #
 ###########################################
 
-GUILD_IDS = [1287450087852740699, 1325968966807453716]
+GUILD_IDS = [1287450087852740699, 1325968966807453716, 1315526864927854663]
 
 lambda_client = boto3.client(
     "lambda",
@@ -1536,12 +1542,37 @@ async def orders_report_command(interaction: discord.Interaction, report_date: s
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
 
+def send_orders_report_to_webhook():
+    try:
+        # Get yesterday's date in EST
+        est = pytz.timezone('US/Eastern')
+        now_est = datetime.now(est)
+        yesterday_est = now_est.date() - timedelta(days=1)
+        report = OrdersReport()
+        df = report.download_csv_report()
+        asin_counts = report.process_orders(df, for_date=yesterday_est)
+        embed_data = report.make_summary_embed(asin_counts, yesterday_est)
+        embed = {
+            "title": embed_data["title"],
+            "description": embed_data["description"],
+            "color": embed_data["color"]
+        }
+        payload = {"embeds": [embed]}
+        resp = pyrequests.post(WEBHOOK_URL, json=payload, timeout=10)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[OrdersReport Scheduler] Error: {e}")
+
 ###########################################
 # on_ready Event                          #
 ###########################################
 
+scheduler = AsyncIOScheduler()
+scheduler_started = False  # Add a flag to prevent double-starting
+
 @bot.event
 async def on_ready():
+    global scheduler_started
     print(f"Bot is online as {bot.user}")
     try:
         bot.tree.clear_commands(guild=None)
@@ -1552,7 +1583,13 @@ async def on_ready():
             guild_obj = discord.Object(id=gid)
             synced = await bot.tree.sync(guild=guild_obj)
             print(f"Synced {len(synced)} commands to guild {gid}.")
-            
+
+        # Start the scheduler only once
+        if not scheduler_started:
+            scheduler.add_job(send_orders_report_to_webhook, 'cron', hour=0, minute=0, timezone='US/Eastern')
+            scheduler.start()
+            scheduler_started = True
+
     except Exception as e:
         print(e)
 

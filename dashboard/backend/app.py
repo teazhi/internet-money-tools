@@ -40,10 +40,8 @@ CORS(app, supports_credentials=True, origins=allowed_origins)
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
 DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
 # Dynamic Discord redirect URI for development and production
-if os.environ.get('RAILWAY_STATIC_URL'):
-    default_redirect = f"https://{os.environ.get('RAILWAY_STATIC_URL')}/auth/discord/callback"
-else:
-    default_redirect = 'http://localhost:5000/auth/discord/callback'
+# Force production Railway URL since we know it
+default_redirect = 'https://internet-money-tools-production.up.railway.app/auth/discord/callback'
     
 DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', default_redirect)
 
@@ -169,6 +167,7 @@ def safe_google_api_call(user_record, api_call_func):
 
 @app.route('/auth/discord')
 def discord_login():
+    print(f"[DEBUG] Discord OAuth redirect URI being used: {DISCORD_REDIRECT_URI}")
     discord_auth_url = (
         f"https://discord.com/api/oauth2/authorize"
         f"?client_id={DISCORD_CLIENT_ID}"
@@ -176,6 +175,7 @@ def discord_login():
         f"&response_type=code"
         f"&scope=identify"
     )
+    print(f"[DEBUG] Full Discord auth URL: {discord_auth_url}")
     return redirect(discord_auth_url)
 
 @app.route('/auth/discord/callback')
@@ -1041,6 +1041,11 @@ def debug_redirect():
         'railway_env': os.environ.get('RAILWAY_STATIC_URL'),
         'message': f'Would redirect to: {frontend_url}'
     })
+
+@app.route('/test/redirect')
+def test_redirect():
+    """Test actual redirect behavior"""
+    return redirect("https://internet-money-tools.vercel.app/dashboard")
 
 if __name__ == '__main__':
     # Production configuration

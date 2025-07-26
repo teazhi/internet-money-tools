@@ -117,6 +117,51 @@ const Overview = () => {
     return 'Unknown Date';
   };
 
+  const getDateDisplayInfo = () => {
+    if (!analytics?.report_date) return { text: 'Unknown Date', subtitle: null };
+    
+    const reportDate = new Date(analytics.report_date);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    
+    // Check if report date is yesterday
+    const isYesterday = reportDate.toDateString() === yesterday.toDateString();
+    const isToday = reportDate.toDateString() === today.toDateString();
+    
+    const formatted = reportDate.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
+    if (isYesterday) {
+      const now = new Date();
+      const switchTime = new Date();
+      switchTime.setHours(23, 59, 0, 0);
+      const timeUntilSwitch = switchTime - now;
+      
+      if (timeUntilSwitch > 0) {
+        const hours = Math.floor(timeUntilSwitch / (1000 * 60 * 60));
+        const minutes = Math.floor((timeUntilSwitch % (1000 * 60 * 60)) / (1000 * 60));
+        return {
+          text: `${formatted} (Yesterday's Complete Data)`,
+          subtitle: `Will switch to today's data in ${hours}h ${minutes}m`
+        };
+      }
+    }
+    
+    if (isToday) {
+      return {
+        text: `${formatted} (Today's Data)`,
+        subtitle: 'Live data for today'
+      };
+    }
+    
+    return { text: formatted, subtitle: null };
+  };
+
   const getSetupProgress = () => {
     let progress = 0;
     let steps = [];
@@ -324,11 +369,13 @@ const Overview = () => {
               Welcome back, {user?.discord_username}!
             </h1>
             <p className="text-builders-100">
-              {analytics?.is_yesterday ? 
-                `Here's your business overview for ${getReportDate()}` :
-                `Here's your business overview for ${getReportDate()}`
-              }
+              Here's your business overview for {getDateDisplayInfo().text}
             </p>
+            {getDateDisplayInfo().subtitle && (
+              <p className="text-builders-200 text-sm mt-1">
+                📅 {getDateDisplayInfo().subtitle}
+              </p>
+            )}
             {lastUpdated && (
               <p className="text-builders-200 text-sm mt-1">
                 Last updated: {lastUpdated.toLocaleTimeString()}
@@ -489,9 +536,12 @@ const Overview = () => {
                   {error ? 'Error loading sales data' : 'No sales data available for this date'}
                 </p>
                 {analytics?.report_date && (
-                  <p className="text-gray-400 text-xs mt-1">
-                    Showing data for {getReportDate()}
-                  </p>
+                  <div className="text-gray-400 text-xs mt-1">
+                    <p>Showing data for {getDateDisplayInfo().text}</p>
+                    {getDateDisplayInfo().subtitle && (
+                      <p className="mt-1">📅 {getDateDisplayInfo().subtitle}</p>
+                    )}
+                  </div>
                 )}
               </div>
             )}

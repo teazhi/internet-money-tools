@@ -523,7 +523,7 @@ def get_orders_analytics():
         # Import the orders analysis class (copied to backend directory)
         from orders_analysis import OrdersAnalysis
         
-        # Get query parameter for date, default to yesterday
+        # Get query parameter for date, default to yesterday until 11:59 PM
         target_date_str = request.args.get('date')
         if target_date_str:
             try:
@@ -531,8 +531,16 @@ def get_orders_analytics():
             except ValueError:
                 return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
         else:
-            # Default to yesterday's data for dashboard
-            target_date = date.today() - timedelta(days=1)
+            # Show yesterday's data until 11:59 PM today, then show today's data
+            now = datetime.now()
+            if now.hour == 23 and now.minute == 59:
+                # At 11:59 PM, switch to today's data
+                target_date = date.today()
+                print(f"[Dashboard Analytics] Switching to today's data at 11:59 PM")
+            else:
+                # Show yesterday's complete data throughout the day
+                target_date = date.today() - timedelta(days=1)
+                print(f"[Dashboard Analytics] Showing yesterday's data (will switch at 11:59 PM)")
         
         print(f"[Dashboard Analytics] Fetching data for date: {target_date}")
         print(f"[Dashboard Analytics] About to call OrdersAnalysis")

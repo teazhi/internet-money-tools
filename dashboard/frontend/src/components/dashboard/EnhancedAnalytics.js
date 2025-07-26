@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import SmartRestockAlerts from '../SmartRestockAlerts';
+import { API_ENDPOINTS } from '../../config/api';
 
 const EnhancedAnalytics = () => {
   const { user } = useAuth();
@@ -35,8 +36,8 @@ const EnhancedAnalytics = () => {
       setError(null);
       setLoading(true);
       const url = selectedDate ? 
-        `/api/analytics/orders?date=${selectedDate}` : 
-        '/api/analytics/orders';
+        `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
+        API_ENDPOINTS.ANALYTICS_ORDERS;
       
       const response = await axios.get(url, { withCredentials: true });
       setAnalytics(response.data);

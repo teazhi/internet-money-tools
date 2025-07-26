@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, redirect, url_for
+from flask import Flask, request, jsonify, session, redirect, url_for, send_from_directory
 from flask_cors import CORS
 import os
 import json
@@ -905,24 +905,19 @@ def admin_bulk_update():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/')
-def root():
-    """Root endpoint - shows available routes"""
-    routes = {
-        'dashboard_url': 'This is the API backend. Frontend should be deployed separately.',
-        'auth': {
-            'discord_login': '/auth/discord',
-            'logout': '/auth/logout'
-        },
-        'api': {
-            'health': '/api/health',
-            'user': '/api/user',
-            'analytics': '/api/analytics/orders',
-            'settings': '/api/user/settings'
-        },
-        'frontend_deployment': 'Deploy the React frontend to Vercel or serve static files',
-        'documentation': 'See DEPLOYMENT.md for setup instructions'
-    }
-    return jsonify(routes)
+def serve_react_app():
+    """Serve React app"""
+    return send_from_directory(os.path.join(os.getcwd(), '../frontend/build'), 'index.html')
+
+@app.route('/<path:path>')
+def serve_react_files(path):
+    """Serve React static files"""
+    frontend_build_dir = os.path.join(os.getcwd(), '../frontend/build')
+    if os.path.exists(os.path.join(frontend_build_dir, path)):
+        return send_from_directory(frontend_build_dir, path)
+    else:
+        # For React Router - serve index.html for any unknown routes
+        return send_from_directory(frontend_build_dir, 'index.html')
 
 @app.route('/api/health')
 def health_check():

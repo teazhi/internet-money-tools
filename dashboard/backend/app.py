@@ -904,6 +904,26 @@ def admin_bulk_update():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/')
+def root():
+    """Root endpoint - shows available routes"""
+    routes = {
+        'dashboard_url': 'This is the API backend. Frontend should be deployed separately.',
+        'auth': {
+            'discord_login': '/auth/discord',
+            'logout': '/auth/logout'
+        },
+        'api': {
+            'health': '/api/health',
+            'user': '/api/user',
+            'analytics': '/api/analytics/orders',
+            'settings': '/api/user/settings'
+        },
+        'frontend_deployment': 'Deploy the React frontend to Vercel or serve static files',
+        'documentation': 'See DEPLOYMENT.md for setup instructions'
+    }
+    return jsonify(routes)
+
 @app.route('/api/health')
 def health_check():
     """Health check endpoint for Railway"""

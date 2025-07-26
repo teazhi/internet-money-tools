@@ -1,0 +1,1 @@
+web: cd dashboard/backend && python app.py

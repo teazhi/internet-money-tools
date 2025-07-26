@@ -214,7 +214,18 @@ def discord_callback():
     session['discord_username'] = user_data['username']
     session['discord_avatar'] = user_data.get('avatar')
     
-    return redirect('http://localhost:3000/dashboard')
+    # Dynamic redirect based on environment
+    if os.environ.get('RAILWAY_STATIC_URL'):
+        frontend_url = f"https://{os.environ.get('RAILWAY_STATIC_URL')}/dashboard"
+    elif os.environ.get('FRONTEND_URL'):
+        frontend_url = f"{os.environ.get('FRONTEND_URL')}/dashboard"
+    else:
+        # For Railway deployment, use the same domain
+        host = request.headers.get('Host', 'localhost:3000')
+        protocol = 'https' if 'railway.app' in host else 'http'
+        frontend_url = f"{protocol}://{host}/dashboard"
+    
+    return redirect(frontend_url)
 
 @app.route('/auth/logout')
 def logout():
@@ -947,6 +958,66 @@ def root():
             
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
             <p><small>Railway Deployment: <strong>Success</strong> ✅ | API Version: 1.0.0</small></p>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.route('/dashboard')
+@app.route('/dashboard/')
+@app.route('/dashboard/<path:path>')
+def serve_dashboard(path=None):
+    """Serve dashboard routes - redirect to API instructions for now"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>builders+ Dashboard</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; background: #f8fafc; }
+            .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; }
+            .success { color: #059669; }
+            .info { color: #0369a1; }
+            .warning { color: #d97706; }
+            h1 { color: #1e293b; }
+            .code { background: #f1f5f9; padding: 10px; border-radius: 6px; font-family: monospace; margin: 10px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 builders+ Dashboard</h1>
+            <p class="success">✅ Authentication successful!</p>
+            <p class="info">You've been logged in via Discord OAuth.</p>
+            
+            <div class="warning">
+                <h3>⚠️ Frontend Deployment Needed</h3>
+                <p>The React frontend needs to be deployed to access the full dashboard.</p>
+            </div>
+            
+            <h3>Options to Access Your Dashboard:</h3>
+            
+            <h4>Option 1: Run Frontend Locally</h4>
+            <div class="code">
+cd dashboard/frontend<br>
+REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app npm start
+            </div>
+            <p>This will open the dashboard at <code>http://localhost:3000</code></p>
+            
+            <h4>Option 2: Deploy Frontend to Vercel (Recommended)</h4>
+            <ol>
+                <li>Go to <a href="https://vercel.com" target="_blank">vercel.com</a></li>
+                <li>Import your GitHub repository</li>
+                <li>Set root directory to: <code>dashboard/frontend</code></li>
+                <li>Add environment variable: <code>REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app</code></li>
+            </ol>
+            
+            <h4>Available Now:</h4>
+            <ul>
+                <li><a href="/api/health">Health Check</a></li>
+                <li><a href="/api/user">User Info</a></li>
+                <li><a href="/api/analytics/orders">Analytics API</a></li>
+                <li><a href="/auth/logout">Logout</a></li>
+            </ul>
         </div>
     </body>
     </html>

@@ -18,17 +18,23 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
 
-# Configure session for cookies to work properly
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+# Configure session for cookies to work properly with cross-domain
+app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS cross-domain
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-domain
+app.config['SESSION_COOKIE_DOMAIN'] = None  # Allow cross-domain
 
 # Configure file uploads
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = '/tmp'
 
 # CORS configuration for development and production
-allowed_origins = ["http://localhost:3000"]
+allowed_origins = [
+    "http://localhost:3000",
+    "https://internet-money-tools.vercel.app",  # Add Vercel frontend
+    "https://internet-money-tools-git-main-teazhis-projects.vercel.app",  # Vercel preview URLs
+    "https://internet-money-tools-dfqzt1xy0-teazhis-projects.vercel.app"  # Vercel deployment URLs
+]
 if os.environ.get('FRONTEND_URL'):
     allowed_origins.append(os.environ.get('FRONTEND_URL'))
 if os.environ.get('RAILWAY_STATIC_URL'):
@@ -213,6 +219,9 @@ def discord_callback():
     session['discord_id'] = user_data['id']  # Keep as string to avoid precision loss
     session['discord_username'] = user_data['username']
     session['discord_avatar'] = user_data.get('avatar')
+    
+    print(f"[DEBUG] Session set with discord_id: {session['discord_id']}")
+    print(f"[DEBUG] Full session data: {dict(session)}")
     
     # FORCE redirect to Vercel frontend - UPDATED
     frontend_url = "https://internet-money-tools.vercel.app/dashboard"

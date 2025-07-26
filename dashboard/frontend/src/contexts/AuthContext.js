@@ -22,11 +22,14 @@ export const AuthProvider = ({ children }) => {
   const checkAuthStatus = async () => {
     try {
       console.log('Checking auth status...');
+      console.log('Making request to:', axios.defaults.baseURL + '/api/user');
       const response = await axios.get('/api/user', { withCredentials: true });
       console.log('Auth check response:', response.data);
       setUser(response.data);
     } catch (error) {
       console.error('Auth check failed:', error);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
       setUser(null);
     } finally {
       setLoading(false);

@@ -905,49 +905,53 @@ def admin_bulk_update():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/')
-def serve_react_app():
-    """Serve React app"""
-    frontend_build_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../frontend/build')
-    index_path = os.path.join(frontend_build_dir, 'index.html')
-    
-    # Check if React build exists
-    if os.path.exists(index_path):
-        return send_from_directory(frontend_build_dir, 'index.html')
-    else:
-        # Fallback: show API info if React build not found
-        return jsonify({
-            'message': 'builders+ Dashboard API',
-            'status': 'Frontend build not found - serving API only',
-            'available_endpoints': {
-                'health': '/api/health',
-                'discord_auth': '/auth/discord',
-                'analytics': '/api/analytics/orders',
-                'user': '/api/user',
-                'settings': '/api/user/settings'
-            },
-            'note': 'Frontend is building or build failed. Check Railway deployment logs.',
-            'build_path_checked': frontend_build_dir,
-            'index_exists': os.path.exists(index_path)
-        })
+def root():
+    """Root endpoint - API backend is working"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>builders+ Dashboard API</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; background: #f8fafc; }
+            .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; }
+            .endpoint { background: #f1f5f9; padding: 10px; margin: 10px 0; border-radius: 6px; font-family: monospace; }
+            .success { color: #059669; }
+            .info { color: #0369a1; }
+            h1 { color: #1e293b; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 builders+ Dashboard API</h1>
+            <p class="success">✅ Backend is running successfully on Railway!</p>
+            
+            <h3>Available API Endpoints:</h3>
+            <div class="endpoint">GET /api/health - Health check</div>
+            <div class="endpoint">GET /auth/discord - Discord authentication</div>
+            <div class="endpoint">GET /api/analytics/orders - Analytics data</div>
+            <div class="endpoint">GET /api/user - User information</div>
+            <div class="endpoint">GET /api/user/settings - User settings</div>
+            
+            <h3>Next Steps:</h3>
+            <p class="info">📱 <strong>Frontend Options:</strong></p>
+            <ul>
+                <li><strong>Option 1:</strong> Deploy React frontend to <a href="https://vercel.com" target="_blank">Vercel</a> (recommended)</li>
+                <li><strong>Option 2:</strong> Run frontend locally and connect to this API</li>
+                <li><strong>Option 3:</strong> Use API endpoints directly for custom integrations</li>
+            </ul>
+            
+            <p class="info">🔧 <strong>For local development:</strong></p>
+            <div class="endpoint">npm start</div>
+            <p>Set REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app</p>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
+            <p><small>Railway Deployment: <strong>Success</strong> ✅ | API Version: 1.0.0</small></p>
+        </div>
+    </body>
+    </html>
+    """
 
-@app.route('/<path:path>')
-def serve_react_files(path):
-    """Serve React static files"""
-    # Skip API routes
-    if path.startswith('api/') or path.startswith('auth/'):
-        return jsonify({'error': 'Not Found'}), 404
-        
-    frontend_build_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../frontend/build')
-    
-    if os.path.exists(os.path.join(frontend_build_dir, path)):
-        return send_from_directory(frontend_build_dir, path)
-    else:
-        # For React Router - serve index.html for any unknown routes
-        index_path = os.path.join(frontend_build_dir, 'index.html')
-        if os.path.exists(index_path):
-            return send_from_directory(frontend_build_dir, 'index.html')
-        else:
-            return jsonify({'error': 'Frontend build not found', 'path_requested': path}), 404
 
 @app.route('/api/health')
 def health_check():

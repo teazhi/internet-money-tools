@@ -3,7 +3,7 @@ const getApiBaseUrl = () => {
   // Check if we're in production
   if (process.env.NODE_ENV === 'production') {
     // Use environment variable for production API URL
-    return process.env.REACT_APP_API_URL || 'https://your-backend.railway.app';
+    return process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
   }
   // Development URL
   return 'http://localhost:5000';

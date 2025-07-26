@@ -8,7 +8,7 @@ import axios from 'axios';
 import './index.css';
 
 // Configure axios defaults
-axios.defaults.baseURL = 'http://localhost:5000';
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
 axios.defaults.withCredentials = true;
 
 function App() {

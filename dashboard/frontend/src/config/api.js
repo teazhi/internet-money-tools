@@ -5,8 +5,8 @@ const getApiBaseUrl = () => {
     // Use environment variable for production API URL
     return process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
   }
-  // Development URL
-  return 'http://localhost:5000';
+  // Development URL - fallback to Railway for safety
+  return 'https://internet-money-tools-production.up.railway.app';
 };
 
 export const API_BASE_URL = getApiBaseUrl();

@@ -34,7 +34,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = () => {
-    window.location.href = 'http://localhost:5000/auth/discord';
+    const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
+    console.log('Environment REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+    console.log('Using API URL for Discord auth:', apiBaseUrl);
+    window.location.href = `${apiBaseUrl}/auth/discord`;
   };
 
   const logout = async () => {

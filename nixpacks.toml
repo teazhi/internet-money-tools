@@ -1,9 +1,11 @@
-[build]
-cmd = "cd dashboard/frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt"
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "python311"]
+
+[phases.install]
+cmd = "cd dashboard/frontend && npm ci"
+
+[phases.build]
+cmd = "cd dashboard/frontend && npm run build && cd ../backend && pip install -r requirements.txt"
 
 [start]
 cmd = "cd dashboard/backend && python app.py"
-
-[variables]
-NIXPACKS_PYTHON_VERSION = "3.11"
-NODE_VERSION = "18"

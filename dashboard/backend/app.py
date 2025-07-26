@@ -907,17 +907,47 @@ def admin_bulk_update():
 @app.route('/')
 def serve_react_app():
     """Serve React app"""
-    return send_from_directory(os.path.join(os.getcwd(), '../frontend/build'), 'index.html')
+    frontend_build_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../frontend/build')
+    index_path = os.path.join(frontend_build_dir, 'index.html')
+    
+    # Check if React build exists
+    if os.path.exists(index_path):
+        return send_from_directory(frontend_build_dir, 'index.html')
+    else:
+        # Fallback: show API info if React build not found
+        return jsonify({
+            'message': 'builders+ Dashboard API',
+            'status': 'Frontend build not found - serving API only',
+            'available_endpoints': {
+                'health': '/api/health',
+                'discord_auth': '/auth/discord',
+                'analytics': '/api/analytics/orders',
+                'user': '/api/user',
+                'settings': '/api/user/settings'
+            },
+            'note': 'Frontend is building or build failed. Check Railway deployment logs.',
+            'build_path_checked': frontend_build_dir,
+            'index_exists': os.path.exists(index_path)
+        })
 
 @app.route('/<path:path>')
 def serve_react_files(path):
     """Serve React static files"""
-    frontend_build_dir = os.path.join(os.getcwd(), '../frontend/build')
+    # Skip API routes
+    if path.startswith('api/') or path.startswith('auth/'):
+        return jsonify({'error': 'Not Found'}), 404
+        
+    frontend_build_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../frontend/build')
+    
     if os.path.exists(os.path.join(frontend_build_dir, path)):
         return send_from_directory(frontend_build_dir, path)
     else:
         # For React Router - serve index.html for any unknown routes
-        return send_from_directory(frontend_build_dir, 'index.html')
+        index_path = os.path.join(frontend_build_dir, 'index.html')
+        if os.path.exists(index_path):
+            return send_from_directory(frontend_build_dir, 'index.html')
+        else:
+            return jsonify({'error': 'Frontend build not found', 'path_requested': path}), 404
 
 @app.route('/api/health')
 def health_check():

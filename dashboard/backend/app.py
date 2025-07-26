@@ -214,8 +214,9 @@ def discord_callback():
     session['discord_username'] = user_data['username']
     session['discord_avatar'] = user_data.get('avatar')
     
-    # Force redirect to Vercel frontend (temporary fix)
+    # FORCE redirect to Vercel frontend - UPDATED
     frontend_url = "https://internet-money-tools.vercel.app/dashboard"
+    print(f"[DEBUG] Discord callback redirecting to: {frontend_url}")
     
     # Dynamic redirect based on environment (backup)
     # if os.environ.get('FRONTEND_URL'):
@@ -1024,6 +1025,22 @@ REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app npm sta
 def health_check():
     """Health check endpoint for Railway"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+@app.route('/debug/redirect')
+def debug_redirect():
+    """Debug endpoint to test redirect logic"""
+    # Same logic as Discord callback
+    if os.environ.get('FRONTEND_URL'):
+        frontend_url = f"{os.environ.get('FRONTEND_URL')}/dashboard"
+    else:
+        frontend_url = "https://internet-money-tools.vercel.app/dashboard"
+    
+    return jsonify({
+        'redirect_url': frontend_url,
+        'frontend_env': os.environ.get('FRONTEND_URL'),
+        'railway_env': os.environ.get('RAILWAY_STATIC_URL'),
+        'message': f'Would redirect to: {frontend_url}'
+    })
 
 if __name__ == '__main__':
     # Production configuration

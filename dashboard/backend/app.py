@@ -1,0 +1,916 @@
+from flask import Flask, request, jsonify, session, redirect, url_for
+from flask_cors import CORS
+import os
+import json
+import requests
+import boto3
+from datetime import datetime, timedelta, date
+import pandas as pd
+from io import StringIO, BytesIO
+import sqlite3
+from functools import wraps
+import urllib.parse
+from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
+
+load_dotenv()
+
+app = Flask(__name__)
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
+
+# Configure session for cookies to work properly
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+# Configure file uploads
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['UPLOAD_FOLDER'] = '/tmp'
+
+# CORS configuration for development and production
+allowed_origins = ["http://localhost:3000"]
+if os.environ.get('FRONTEND_URL'):
+    allowed_origins.append(os.environ.get('FRONTEND_URL'))
+if os.environ.get('RAILWAY_STATIC_URL'):
+    allowed_origins.append(f"https://{os.environ.get('RAILWAY_STATIC_URL')}")
+
+CORS(app, supports_credentials=True, origins=allowed_origins)
+
+# Discord OAuth Configuration
+DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
+DISCORD_CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET')
+# Dynamic Discord redirect URI for development and production
+if os.environ.get('RAILWAY_STATIC_URL'):
+    default_redirect = f"https://{os.environ.get('RAILWAY_STATIC_URL')}/auth/discord/callback"
+else:
+    default_redirect = 'http://localhost:5000/auth/discord/callback'
+    
+DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', default_redirect)
+
+# AWS Configuration
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
+USERS_CONFIG_KEY = "users.json"
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+
+def get_s3_client():
+    return boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
+def get_users_config():
+    s3_client = get_s3_client()
+    try:
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        return config_data.get("users", [])
+    except Exception as e:
+        print(f"Error fetching users config: {e}")
+        return []
+
+def update_users_config(users):
+    s3_client = get_s3_client()
+    config_data = json.dumps({"users": users})
+    try:
+        s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY, Body=config_data)
+        print("Users configuration updated successfully.")
+        return True
+    except Exception as e:
+        print(f"Error updating users config: {e}")
+        return False
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        print(f"[Auth Check] Session data: {dict(session)}")
+        print(f"[Auth Check] Discord ID in session: {'discord_id' in session}")
+        if 'discord_id' not in session:
+            print(f"[Auth Check] Authentication failed - no discord_id in session")
+            return jsonify({'error': 'Authentication required'}), 401
+        print(f"[Auth Check] Authentication successful for user: {session['discord_id']}")
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'discord_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Check if user is admin (your Discord ID)
+        if session['discord_id'] != '1278565917206249503':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+def get_user_record(discord_id):
+    users = get_users_config()
+    # Handle both string and integer discord_ids for compatibility
+    discord_id_str = str(discord_id)
+    
+    try:
+        discord_id_int = int(discord_id)
+    except (ValueError, TypeError):
+        discord_id_int = None
+    
+    # Try to find user with either string or integer ID
+    user = next((u for u in users if str(u.get("discord_id")) == discord_id_str), None)
+    if not user and discord_id_int is not None:
+        user = next((u for u in users if u.get("discord_id") == discord_id_int), None)
+    
+    # If found, normalize the discord_id to string in the record
+    if user and str(user.get("discord_id")) != discord_id_str:
+        user["discord_id"] = discord_id_str
+    
+    return user
+
+def refresh_google_token(user_record):
+    refresh_token = user_record["google_tokens"].get("refresh_token")
+    if not refresh_token:
+        raise Exception("No refresh_token found. User must re-link Google account.")
+
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+    resp = requests.post(token_url, data=payload)
+    resp.raise_for_status()
+    new_tokens = resp.json()
+    
+    if "refresh_token" not in new_tokens:
+        new_tokens["refresh_token"] = refresh_token
+
+    user_record["google_tokens"].update(new_tokens)
+    users = get_users_config()
+    update_users_config(users)
+    return new_tokens["access_token"]
+
+def safe_google_api_call(user_record, api_call_func):
+    access_token = user_record["google_tokens"]["access_token"]
+    try:
+        return api_call_func(access_token)
+    except Exception as e:
+        if "401" in str(e) or "Invalid Credentials" in str(e):
+            new_access = refresh_google_token(user_record)
+            return api_call_func(new_access)
+        else:
+            raise
+
+@app.route('/auth/discord')
+def discord_login():
+    discord_auth_url = (
+        f"https://discord.com/api/oauth2/authorize"
+        f"?client_id={DISCORD_CLIENT_ID}"
+        f"&redirect_uri={urllib.parse.quote(DISCORD_REDIRECT_URI)}"
+        f"&response_type=code"
+        f"&scope=identify"
+    )
+    return redirect(discord_auth_url)
+
+@app.route('/auth/discord/callback')
+def discord_callback():
+    code = request.args.get('code')
+    if not code:
+        return jsonify({'error': 'No authorization code provided'}), 400
+
+    # Exchange code for access token
+    token_data = {
+        'client_id': DISCORD_CLIENT_ID,
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': DISCORD_REDIRECT_URI,
+    }
+    
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    token_response = requests.post('https://discord.com/api/oauth2/token', data=token_data, headers=headers)
+    
+    if token_response.status_code != 200:
+        return jsonify({'error': 'Failed to get access token'}), 400
+    
+    token_json = token_response.json()
+    access_token = token_json['access_token']
+    
+    # Get user info
+    user_response = requests.get('https://discord.com/api/users/@me', 
+                                headers={'Authorization': f'Bearer {access_token}'})
+    
+    if user_response.status_code != 200:
+        return jsonify({'error': 'Failed to get user info'}), 400
+    
+    user_data = user_response.json()
+    session['discord_id'] = user_data['id']  # Keep as string to avoid precision loss
+    session['discord_username'] = user_data['username']
+    session['discord_avatar'] = user_data.get('avatar')
+    
+    return redirect('http://localhost:3000/dashboard')
+
+@app.route('/auth/logout')
+def logout():
+    session.clear()
+    return jsonify({'message': 'Logged out successfully'})
+
+@app.route('/api/debug/auth')
+def debug_auth():
+    """Debug endpoint to check authentication status"""
+    return jsonify({
+        'session_keys': list(session.keys()),
+        'discord_id': session.get('discord_id'),
+        'discord_username': session.get('discord_username'),
+        'has_auth': 'discord_id' in session
+    })
+
+@app.route('/api/user')
+@login_required
+def get_user():
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    return jsonify({
+        'discord_id': discord_id,
+        'discord_username': session.get('discord_username'),
+        'discord_avatar': session.get('discord_avatar'),
+        'profile_configured': user_record is not None,
+        'google_linked': user_record and user_record.get('google_tokens') is not None,
+        'sheet_configured': user_record and user_record.get('sheet_id') is not None,
+        'user_record': user_record if user_record else None
+    })
+
+@app.route('/api/user/profile', methods=['POST'])
+@login_required
+def update_profile():
+    discord_id = session['discord_id']
+    data = request.json
+    
+    users = get_users_config()
+    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    
+    if user_record is None:
+        user_record = {"discord_id": discord_id}
+        users.append(user_record)
+    
+    # Update user profile fields
+    if 'email' in data:
+        user_record['email'] = data['email']
+    if 'run_scripts' in data:
+        user_record['run_scripts'] = data['run_scripts']
+    if 'listing_loader_key' in data:
+        user_record['listing_loader_key'] = data['listing_loader_key']
+    if 'sb_file_key' in data:
+        user_record['sb_file_key'] = data['sb_file_key']
+    if 'sellerboard_orders_url' in data:
+        user_record['sellerboard_orders_url'] = data['sellerboard_orders_url']
+    if 'sellerboard_stock_url' in data:
+        user_record['sellerboard_stock_url'] = data['sellerboard_stock_url']
+    
+    if update_users_config(users):
+        return jsonify({'message': 'Profile updated successfully'})
+    else:
+        return jsonify({'error': 'Failed to update profile'}), 500
+
+@app.route('/api/google/auth-url')
+@login_required
+def get_google_auth_url():
+    discord_id = session['discord_id']
+    base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": str(discord_id)
+    }
+    oauth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    return jsonify({'auth_url': oauth_url})
+
+@app.route('/api/google/complete-auth', methods=['POST'])
+@login_required
+def complete_google_auth():
+    data = request.json
+    code = data.get('code')
+    
+    if not code:
+        return jsonify({'error': 'Authorization code required'}), 400
+    
+    try:
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+        token_response = requests.post(token_url, data=payload)
+        token_response.raise_for_status()
+        tokens = token_response.json()
+        
+        discord_id = session['discord_id']
+        users = get_users_config()
+        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        
+        if user_record is None:
+            user_record = {"discord_id": discord_id, "google_tokens": {}}
+            users.append(user_record)
+        
+        old_tokens = user_record.get("google_tokens", {})
+        if "refresh_token" not in tokens and "refresh_token" in old_tokens:
+            tokens["refresh_token"] = old_tokens["refresh_token"]
+        
+        user_record["google_tokens"] = tokens
+        
+        if update_users_config(users):
+            return jsonify({'message': 'Google account linked successfully'})
+        else:
+            return jsonify({'error': 'Failed to save Google tokens'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Error completing Google OAuth: {str(e)}'}), 500
+
+@app.route('/api/google/spreadsheets')
+@login_required
+def list_spreadsheets():
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    if not user_record or not user_record.get('google_tokens'):
+        return jsonify({'error': 'Google account not linked'}), 400
+    
+    try:
+        def api_call(access_token):
+            url = "https://www.googleapis.com/drive/v3/files"
+            query = "mimeType='application/vnd.google-apps.spreadsheet'"
+            params = {"q": query, "fields": "files(id, name)"}
+            headers = {"Authorization": f"Bearer {access_token}"}
+            response = requests.get(url, params=params, headers=headers)
+            if response.ok:
+                data = response.json()
+                return data.get("files", [])
+            else:
+                raise Exception(f"Error listing spreadsheets: {response.text}")
+        
+        files = safe_google_api_call(user_record, api_call)
+        return jsonify({'spreadsheets': files})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/google/worksheets/<spreadsheet_id>')
+@login_required
+def list_worksheets(spreadsheet_id):
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    if not user_record or not user_record.get('google_tokens'):
+        return jsonify({'error': 'Google account not linked'}), 400
+    
+    try:
+        def api_call(access_token):
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}"
+            params = {"fields": "sheets(properties(sheetId,title))"}
+            headers = {"Authorization": f"Bearer {access_token}"}
+            r = requests.get(url, params=params, headers=headers)
+            r.raise_for_status()
+            sheets = r.json().get("sheets", [])
+            return [s["properties"] for s in sheets]
+        
+        worksheets = safe_google_api_call(user_record, api_call)
+        return jsonify({'worksheets': worksheets})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sheet/configure', methods=['POST'])
+@login_required
+def configure_sheet():
+    discord_id = session['discord_id']
+    data = request.json
+    
+    spreadsheet_id = data.get('spreadsheet_id')
+    worksheet_title = data.get('worksheet_title')
+    column_mapping = data.get('column_mapping')
+    
+    if not all([spreadsheet_id, worksheet_title, column_mapping]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    users = get_users_config()
+    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    
+    if not user_record:
+        return jsonify({'error': 'User profile not found'}), 404
+    
+    user_record['sheet_id'] = spreadsheet_id
+    user_record['worksheet_title'] = worksheet_title
+    user_record['column_mapping'] = column_mapping
+    
+    if update_users_config(users):
+        return jsonify({'message': 'Sheet configuration saved successfully'})
+    else:
+        return jsonify({'error': 'Failed to save sheet configuration'}), 500
+
+@app.route('/api/sheet/headers/<spreadsheet_id>/<worksheet_title>')
+@login_required
+def get_sheet_headers(spreadsheet_id, worksheet_title):
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    if not user_record or not user_record.get('google_tokens'):
+        return jsonify({'error': 'Google account not linked'}), 400
+    
+    try:
+        def api_call(access_token):
+            range_ = f"'{worksheet_title}'!A1:Z1"
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_}"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            values = response.json().get("values", [])
+            return values[0] if values else []
+        
+        headers = safe_google_api_call(user_record, api_call)
+        return jsonify({'headers': headers})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/stock-columns')
+@login_required
+def debug_stock_columns():
+    """Debug endpoint to check stock data columns"""
+    try:
+        print("[DEBUG] Testing stock columns endpoint")
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+        
+        stock_url = user_record.get('sellerboard_stock_url')
+        if not stock_url:
+            return jsonify({'error': 'Stock URL not configured'}), 400
+        
+        from orders_analysis import EnhancedOrdersAnalysis
+        analyzer = EnhancedOrdersAnalysis(orders_url="dummy", stock_url=stock_url)
+        stock_df = analyzer.download_csv(stock_url)
+        
+        columns = list(stock_df.columns)
+        print(f"[DEBUG] Stock columns: {columns}")
+        
+        # Get sample data from first row
+        if len(stock_df) > 0:
+            sample_row = stock_df.iloc[0].to_dict()
+            print(f"[DEBUG] Sample row data: {sample_row}")
+            
+            # Look for source-like columns
+            source_columns = [col for col in columns if 'source' in col.lower() or 'link' in col.lower() or 'url' in col.lower()]
+            print(f"[DEBUG] Potential source columns: {source_columns}")
+            
+            return jsonify({
+                'columns': columns,
+                'sample_data': sample_row,
+                'potential_source_columns': source_columns,
+                'total_rows': len(stock_df)
+            })
+        else:
+            return jsonify({
+                'columns': columns,
+                'total_rows': 0,
+                'message': 'No data in stock sheet'
+            })
+            
+    except Exception as e:
+        print(f"[DEBUG] Error in stock columns debug: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/orders')
+@login_required
+def get_orders_analytics():
+    try:
+        print(f"[Dashboard Analytics] User session: {session.get('discord_id', 'Not logged in')}")
+        print(f"[Dashboard Analytics] Request headers: {dict(request.headers)}")
+        print(f"[Dashboard Analytics] Session keys: {list(session.keys())}")
+        
+        # Import the orders analysis class (copied to backend directory)
+        from orders_analysis import OrdersAnalysis
+        
+        # Get query parameter for date, default to yesterday
+        target_date_str = request.args.get('date')
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        else:
+            # Default to yesterday's data for dashboard
+            target_date = date.today() - timedelta(days=1)
+        
+        print(f"[Dashboard Analytics] Fetching data for date: {target_date}")
+        print(f"[Dashboard Analytics] About to call OrdersAnalysis")
+        
+        # Get user's custom URLs if configured
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        orders_url = None
+        stock_url = None
+        if user_record:
+            orders_url = user_record.get('sellerboard_orders_url')
+            stock_url = user_record.get('sellerboard_stock_url')
+        
+        # Require user to have configured their own URLs
+        if not orders_url or not stock_url:
+            return jsonify({
+                'error': 'Report URLs not configured',
+                'message': 'Please configure your Sellerboard report URLs in Settings before accessing analytics.',
+                'requires_setup': True,
+                'report_date': target_date.isoformat(),
+                'is_yesterday': target_date == (date.today() - timedelta(days=1))
+            }), 400
+        
+        print(f"[Dashboard Analytics] Using user-configured URLs")
+        print(f"[Dashboard Analytics] Orders URL: {orders_url[:50]}..." if orders_url else "No orders URL")
+        print(f"[Dashboard Analytics] Stock URL: {stock_url[:50]}..." if stock_url else "No stock URL")
+        
+        try:
+            analysis = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url).analyze(target_date)
+            print(f"[Dashboard Analytics] Analysis completed successfully")
+        except Exception as analysis_error:
+            print(f"[Dashboard Analytics] Enhanced analysis failed: {analysis_error}")
+            print(f"[Dashboard Analytics] Falling back to basic analytics...")
+            
+            # Fallback to basic analytics structure
+            analysis = {
+                'today_sales': {},
+                'velocity': {},
+                'low_stock': {},
+                'restock_priority': {},
+                'stockout_30d': {},
+                'enhanced_analytics': {},
+                'restock_alerts': {},
+                'critical_alerts': [],
+                'total_products_analyzed': 0,
+                'high_priority_count': 0,
+                'error': f'Enhanced analytics failed: {str(analysis_error)}',
+                'fallback_mode': True
+            }
+        
+        # Ensure all expected keys exist with default values
+        analysis.setdefault('today_sales', {})
+        analysis.setdefault('velocity', {})
+        analysis.setdefault('low_stock', {})
+        analysis.setdefault('restock_priority', {})
+        analysis.setdefault('stockout_30d', {})
+        # Enhanced analytics defaults
+        analysis.setdefault('enhanced_analytics', {})
+        analysis.setdefault('restock_alerts', {})
+        analysis.setdefault('critical_alerts', [])
+        analysis.setdefault('total_products_analyzed', 0)
+        analysis.setdefault('high_priority_count', 0)
+        
+        # Remove non-JSON serializable data (DataFrames)
+        if 'orders_df' in analysis:
+            del analysis['orders_df']
+            
+        # Clean all data to ensure JSON serialization
+        def clean_for_json(obj):
+            """Recursively clean object to ensure JSON serialization"""
+            import math
+            
+            if isinstance(obj, dict):
+                return {k: clean_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_for_json(item) for item in obj]
+            elif isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return None  # Convert NaN/Inf to null
+                return obj
+            elif obj is None or isinstance(obj, (int, str, bool)):
+                return obj
+            else:
+                # Convert other types to string
+                return str(obj)
+        
+        # Clean the entire analysis object
+        analysis = clean_for_json(analysis)
+        
+        # Add metadata about the date being analyzed
+        analysis['report_date'] = target_date.isoformat()
+        analysis['is_yesterday'] = target_date == (date.today() - timedelta(days=1))
+        
+        print(f"[Dashboard Analytics] Successfully fetched data with {len(analysis.get('today_sales', {}))} products")
+        print(f"[Dashboard Analytics] Final analysis keys: {list(analysis.keys())}")
+        print(f"[Dashboard Analytics] today_sales in analysis: {'today_sales' in analysis}")
+        print(f"[Dashboard Analytics] today_sales value: {analysis.get('today_sales')}")
+        
+        response = jsonify(analysis)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+        
+    except Exception as e:
+        print(f"[Dashboard Analytics] Error getting analytics data: {e}")
+        import traceback
+        print(f"[Dashboard Analytics] Full traceback: {traceback.format_exc()}")
+        
+        # Return error with more details for debugging
+        return jsonify({
+            'error': f'Failed to fetch analytics data: {str(e)}',
+            'report_date': (date.today() - timedelta(days=1)).isoformat(),
+            'is_yesterday': True,
+            'debug_info': {
+                'error_type': type(e).__name__,
+                'traceback': traceback.format_exc()
+            }
+        }), 500
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xlsm', 'xls'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/upload/sellerboard', methods=['POST'])
+@login_required
+def upload_sellerboard_file():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file type. Allowed: CSV, XLSX, XLSM, XLS'}), 400
+        
+        discord_id = session['discord_id']
+        filename = secure_filename(file.filename)
+        
+        # Create user-specific filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        user_filename = f"{discord_id}_{timestamp}_{filename}"
+        
+        # Upload to S3
+        s3_client = get_s3_client()
+        file_content = file.read()
+        
+        # Upload to S3 with user-specific key
+        s3_key = f"sellerboard_files/{user_filename}"
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=s3_key,
+            Body=file_content,
+            ContentType=file.content_type
+        )
+        
+        # Update user record with uploaded file info
+        users = get_users_config()
+        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        
+        if user_record is None:
+            user_record = {"discord_id": discord_id}
+            users.append(user_record)
+        
+        # Store file information
+        if 'uploaded_files' not in user_record:
+            user_record['uploaded_files'] = []
+        
+        file_info = {
+            'filename': filename,
+            's3_key': s3_key,
+            'upload_date': datetime.now().isoformat(),
+            'file_size': len(file_content),
+            'file_type': file.content_type
+        }
+        
+        user_record['uploaded_files'].append(file_info)
+        
+        # Keep only last 10 files per user
+        if len(user_record['uploaded_files']) > 10:
+            old_files = user_record['uploaded_files'][:-10]
+            user_record['uploaded_files'] = user_record['uploaded_files'][-10:]
+            
+            # Delete old files from S3
+            for old_file in old_files:
+                try:
+                    s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=old_file['s3_key'])
+                except Exception as e:
+                    print(f"Error deleting old file {old_file['s3_key']}: {e}")
+        
+        if update_users_config(users):
+            return jsonify({
+                'message': 'File uploaded successfully',
+                'file_info': file_info
+            })
+        else:
+            return jsonify({'error': 'Failed to update user configuration'}), 500
+            
+    except Exception as e:
+        print(f"Upload error: {e}")
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@app.route('/api/files/sellerboard', methods=['GET'])
+@login_required
+def list_sellerboard_files():
+    """List user's uploaded Sellerboard files"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record or 'uploaded_files' not in user_record:
+            return jsonify({'files': []})
+        
+        return jsonify({'files': user_record['uploaded_files']})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/files/sellerboard/<file_key>', methods=['DELETE'])
+@login_required
+def delete_sellerboard_file(file_key):
+    """Delete a specific Sellerboard file"""
+    try:
+        discord_id = session['discord_id']
+        users = get_users_config()
+        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        
+        if not user_record or 'uploaded_files' not in user_record:
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Find and remove the file
+        file_to_delete = None
+        for i, file_info in enumerate(user_record['uploaded_files']):
+            if file_info['s3_key'] == file_key:
+                file_to_delete = user_record['uploaded_files'].pop(i)
+                break
+        
+        if not file_to_delete:
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Delete from S3
+        s3_client = get_s3_client()
+        s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
+        
+        # Update user config
+        if update_users_config(users):
+            return jsonify({'message': 'File deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to update configuration'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Admin API endpoints
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def admin_get_users():
+    """Get all users for admin panel"""
+    try:
+        users = get_users_config()
+        
+        # Add derived status fields for each user
+        for user in users:
+            user['profile_configured'] = bool(user.get('email'))
+            user['google_linked'] = bool(user.get('google_tokens'))
+            user['sheet_configured'] = bool(user.get('sheet_id'))
+            
+        return jsonify({'users': users})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/stats', methods=['GET'])
+@admin_required
+def admin_get_stats():
+    """Get system statistics for admin dashboard"""
+    try:
+        users = get_users_config()
+        
+        total_users = len(users)
+        active_users = sum(1 for u in users if 
+                          u.get('email') and 
+                          u.get('google_tokens') and 
+                          u.get('sheet_id'))
+        pending_users = total_users - active_users
+        
+        return jsonify({
+            'total_users': total_users,
+            'active_users': active_users,
+            'pending_users': pending_users,
+            'system_status': 'operational'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<user_id>', methods=['PUT'])
+@admin_required
+def admin_update_user(user_id):
+    """Update a specific user's data"""
+    try:
+        data = request.json
+        users = get_users_config()
+        
+        # Find the user using the helper function
+        user_record = get_user_record(user_id)
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Update allowed fields
+        allowed_fields = [
+            'email', 'run_scripts', 'listing_loader_key', 'sb_file_key',
+            'sellerboard_orders_url', 'sellerboard_stock_url'
+        ]
+        
+        for field in allowed_fields:
+            if field in data:
+                user_record[field] = data[field]
+        
+        # Save changes
+        if update_users_config(users):
+            return jsonify({'message': 'User updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update user'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<user_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_user(user_id):
+    """Delete a user completely"""
+    try:
+        users = get_users_config()
+        
+        # Find and remove the user
+        user_index = None
+        user_id_str = str(user_id)
+        for i, user in enumerate(users):
+            if str(user.get("discord_id")) == user_id_str:
+                user_index = i
+                break
+        
+        if user_index is None:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Remove user from list
+        deleted_user = users.pop(user_index)
+        
+        # TODO: Clean up user's S3 files if needed
+        # This could be added later for complete cleanup
+        
+        # Save changes
+        if update_users_config(users):
+            return jsonify({'message': f'User {deleted_user.get("discord_username", user_id)} deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to delete user'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/bulk', methods=['PUT'])
+@admin_required
+def admin_bulk_update():
+    """Bulk update users data (dangerous operation)"""
+    try:
+        data = request.json
+        new_users = data.get('users', [])
+        
+        # Validate that it's a list
+        if not isinstance(new_users, list):
+            return jsonify({'error': 'Users data must be an array'}), 400
+        
+        # Basic validation - ensure each user has a discord_id
+        for user in new_users:
+            if not user.get('discord_id'):
+                return jsonify({'error': 'Each user must have a discord_id'}), 400
+        
+        # Replace the entire users array
+        if update_users_config(new_users):
+            return jsonify({'message': f'Bulk update completed - {len(new_users)} users updated'})
+        else:
+            return jsonify({'error': 'Failed to perform bulk update'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint for Railway"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+if __name__ == '__main__':
+    # Production configuration
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)

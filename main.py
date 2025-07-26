@@ -1629,9 +1629,12 @@ SCHEDULED_REPORT_CHANNEL_ID = 1394474427667972229
 
 async def send_orders_report_to_channel():
     try:
+        print(f"[OrdersReport Scheduler] Starting scheduled report at {datetime.now()}")
         est = pytz.timezone('US/Eastern')
         now_est = datetime.now(est)
         yesterday_est = now_est.date() - timedelta(days=1)
+        print(f"[OrdersReport Scheduler] Generating report for {yesterday_est}")
+        
         analysis = OrdersAnalysis().analyze(yesterday_est)
         # Generate Excel file for stockout risk
         stockout_30d = analysis["stockout_30d"]
@@ -1647,17 +1650,21 @@ async def send_orders_report_to_channel():
         embeds = build_orders_embeds(analysis, yesterday_est, stockout_excel_path=excel_path)
         channel = bot.get_channel(SCHEDULED_REPORT_CHANNEL_ID)
         if channel is not None:
+            print(f"[OrdersReport Scheduler] Sending report to channel {SCHEDULED_REPORT_CHANNEL_ID}")
             await channel.send(embed=embeds[0])
             if excel_path:
                 await channel.send(embed=embeds[1], file=discord.File(excel_path, filename=f"stockout_risk_{yesterday_est}.xlsx"))
                 os.remove(excel_path)
             else:
                 await channel.send(embed=embeds[1])
+            print(f"[OrdersReport Scheduler] Report sent successfully")
         else:
             print(f"[OrdersReport Scheduler] Error: Channel ID {SCHEDULED_REPORT_CHANNEL_ID} not found.")
         OrdersAnalysis().save_today_sales_as_yesterday(analysis["today_sales"])
     except Exception as e:
         print(f"[OrdersReport Scheduler] Error: {e}")
+        import traceback
+        print(f"[OrdersReport Scheduler] Traceback: {traceback.format_exc()}")
 
 ###########################################
 # on_ready Event                          #
@@ -1682,9 +1689,10 @@ async def on_ready():
 
         # Start the scheduler only once
         if not scheduler_started:
-            scheduler.add_job(lambda: asyncio.create_task(send_orders_report_to_channel()), 'cron', hour=0, minute=0, timezone='US/Eastern')
+            scheduler.add_job(send_orders_report_to_channel, 'cron', hour=0, minute=0, timezone='US/Eastern')
             scheduler.start()
             scheduler_started = True
+            print("[OrdersReport Scheduler] Scheduler started successfully")
 
     except Exception as e:
         print(e)

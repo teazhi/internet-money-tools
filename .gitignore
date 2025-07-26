@@ -1,2 +1,214 @@
+# Security & Credentials
 *.pem
 .env
+.env.local
+.env.production
+.env.staging
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.virtualenv/
+dashboard/backend/venv/
+
+# Flask
+instance/
+.webassets-cache
+.flask_session/
+
+# Node.js & React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+.pnp
+.pnp.js
+
+# React Build
+dashboard/frontend/build/
+dashboard/frontend/dist/
+dashboard/frontend/.env.local
+dashboard/frontend/.env.development.local
+dashboard/frontend/.env.test.local
+dashboard/frontend/.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime & Temp Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+*.temp
+.cache/
+.temp/
+temp/
+tmp/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.metadata
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+yesterday_sales.json
+
+# AWS & Cloud
+.aws/
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# MacOS
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Testing
+coverage/
+.nyc_output/
+.jest/
+jest_results/
+test-results/
+.coverage
+htmlcov/
+
+# Deployment
+.vercel
+.netlify
+.next/
+.nuxt/
+.output/
+.cache/
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Data files (be careful with these)
+*.csv
+*.xlsx
+*.xls
+*.json.bak
+
+# Selenium & Browser automation
+geckodriver.log
+chromedriver.log
+*.png
+*.jpg
+*.jpeg
+*.gif
+screenshots/
+
+# Railway specific
+.railway/
+
+# Jupyter Notebooks (if any)
+.ipynb_checkpoints/
+*.ipynb
+
+# Large files that shouldn't be in git
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.dmg
+*.iso

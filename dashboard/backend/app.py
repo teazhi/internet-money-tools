@@ -215,15 +215,14 @@ def discord_callback():
     session['discord_avatar'] = user_data.get('avatar')
     
     # Dynamic redirect based on environment
-    if os.environ.get('RAILWAY_STATIC_URL'):
-        frontend_url = f"https://{os.environ.get('RAILWAY_STATIC_URL')}/dashboard"
-    elif os.environ.get('FRONTEND_URL'):
+    # Check for Vercel frontend first
+    if os.environ.get('FRONTEND_URL'):
         frontend_url = f"{os.environ.get('FRONTEND_URL')}/dashboard"
+    elif os.environ.get('RAILWAY_STATIC_URL'):
+        frontend_url = f"https://{os.environ.get('RAILWAY_STATIC_URL')}/dashboard"
     else:
-        # For Railway deployment, use the same domain
-        host = request.headers.get('Host', 'localhost:3000')
-        protocol = 'https' if 'railway.app' in host else 'http'
-        frontend_url = f"{protocol}://{host}/dashboard"
+        # Default to Vercel deployment
+        frontend_url = "https://internet-money-tools.vercel.app/dashboard"
     
     return redirect(frontend_url)
 

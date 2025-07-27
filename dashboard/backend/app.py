@@ -754,10 +754,20 @@ def get_orders_analytics():
         print(f"[Dashboard Analytics] Stock URL: {stock_url[:50]}..." if stock_url else "No stock URL")
         
         try:
-            analysis = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url).analyze(target_date)
+            print(f"[Dashboard Analytics] Initializing OrdersAnalysis...")
+            analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+            print(f"[Dashboard Analytics] OrdersAnalysis initialized, starting analysis...")
+            analysis = analyzer.analyze(target_date)
             print(f"[Dashboard Analytics] Analysis completed successfully")
+            print(f"[Dashboard Analytics] Low stock items found: {len(analysis.get('low_stock', {}))}")
+            print(f"[Dashboard Analytics] Restock priority items: {len(analysis.get('restock_priority', {}))}")
+            print(f"[Dashboard Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
         except Exception as analysis_error:
             print(f"[Dashboard Analytics] Enhanced analysis failed: {analysis_error}")
+            print(f"[Dashboard Analytics] Error type: {type(analysis_error).__name__}")
+            import traceback
+            print(f"[Dashboard Analytics] Full traceback:")
+            traceback.print_exc()
             print(f"[Dashboard Analytics] Falling back to basic analytics...")
             
             # Fallback to basic analytics structure

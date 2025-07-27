@@ -9,7 +9,9 @@ import {
   AlertCircle,
   Target,
   BarChart3,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -38,6 +40,9 @@ const Analytics = () => {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState('');
   const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalData, setModalData] = useState(null);
+  const [modalTitle, setModalTitle] = useState('');
 
   useEffect(() => {
     fetchAnalytics();
@@ -489,6 +494,78 @@ const Analytics = () => {
     return { critical, warning, healthy };
   };
 
+  const openModal = (title, data) => {
+    setModalTitle(title);
+    setModalData(data);
+    setShowModal(true);
+  };
+
+  const getProductsByCategory = (category) => {
+    if (!analytics?.enhanced_analytics) return [];
+    
+    const products = Object.entries(analytics.enhanced_analytics)
+      .filter(([_, data]) => {
+        if (category === 'critical') {
+          return data.priority?.category?.includes('critical');
+        } else if (category === 'warning') {
+          return data.priority?.category?.includes('warning');
+        } else if (category === 'healthy') {
+          return !data.priority?.category?.includes('critical') && !data.priority?.category?.includes('warning');
+        }
+        return false;
+      })
+      .map(([asin, data]) => ({
+        asin: asin,
+        productName: data.product_name || asin,
+        velocity: data.velocity?.weighted_velocity || 0,
+        daysLeft: data.stock_info?.['Days left'] || data.stock_info?.['Days of stock left'] || 'Unknown',
+        currentStock: data.stock_info?.['FBA/FBM Stock'] || 0,
+        category: data.priority?.category || 'unknown',
+        reasoning: data.priority?.reasoning || '',
+        suggestedQty: data.restock?.suggested_quantity || 0,
+        roi: data.stock_info?.['ROI %'] || data.stock_info?.['ROI'] || 0
+      }))
+      .sort((a, b) => b.velocity - a.velocity);
+    
+    return products;
+  };
+
+  const getCriticalAlerts = () => {
+    return analytics?.critical_alerts || [];
+  };
+
+  const getGrowthOpportunities = () => {
+    if (!analytics?.enhanced_analytics) return [];
+    
+    return Object.entries(analytics.enhanced_analytics)
+      .filter(([_, data]) => data.priority?.category === 'opportunity_high_velocity')
+      .map(([asin, data]) => ({
+        asin: asin,
+        productName: data.product_name || asin,
+        velocity: data.velocity?.weighted_velocity || 0,
+        roi: data.stock_info?.['ROI %'] || data.stock_info?.['ROI'] || 0,
+        opportunity: data.priority?.opportunity || 0,
+        reasoning: data.priority?.reasoning || ''
+      }))
+      .sort((a, b) => b.opportunity - a.opportunity);
+  };
+
+  const getMonitorProducts = () => {
+    if (!analytics?.enhanced_analytics) return [];
+    
+    return Object.entries(analytics.enhanced_analytics)
+      .filter(([_, data]) => data.priority?.category === 'monitor')
+      .map(([asin, data]) => ({
+        asin: asin,
+        productName: data.product_name || asin,
+        velocity: data.velocity?.weighted_velocity || 0,
+        daysLeft: data.stock_info?.['Days left'] || data.stock_info?.['Days of stock left'] || 'Unknown',
+        trend: data.velocity?.trend_direction || 'stable',
+        reasoning: data.priority?.reasoning || ''
+      }))
+      .sort((a, b) => b.velocity - a.velocity);
+  };
+
   const { overall, salesMomentum, inventoryRisk, profitHealth } = getHealthScores();
   const todoList = getTodoList();
   const topMovers = getTopMovers();
@@ -581,7 +658,7 @@ const Analytics = () => {
             <h3 className="text-lg font-semibold text-gray-900">📋 Today's Action Items</h3>
             <span className="text-sm text-gray-500">{todoList.length} tasks</span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-80 overflow-y-auto">
             {todoList.length > 0 ? todoList.map((todo, index) => (
               <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${
                 todo.type === 'critical' ? 'bg-red-50 border-red-200' :
@@ -611,9 +688,9 @@ const Analytics = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Quick Stats</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
-              <span className="text-gray-600">Units Sold Today</span>
+              <span className="text-gray-600">Units Sold Yesterday</span>
               <span className="font-semibold text-gray-900">
-                {analytics?.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0}
+                {analytics?.yesterday_sales ? Object.values(analytics.yesterday_sales).reduce((a, b) => a + b, 0) : 0}
               </span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -624,15 +701,30 @@ const Analytics = () => {
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">Critical Stock Alerts</span>
-              <span className="font-semibold text-red-600">{stockStatus.critical}</span>
+              <button 
+                onClick={() => openModal('Critical Stock Alerts', getCriticalAlerts())}
+                className="font-semibold text-red-600 hover:text-red-800 hover:underline transition-colors"
+              >
+                {stockStatus.critical}
+              </button>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">Growth Opportunities</span>
-              <span className="font-semibold text-green-600">{stockStatus.healthy}</span>
+              <button 
+                onClick={() => openModal('Growth Opportunities', getGrowthOpportunities())}
+                className="font-semibold text-green-600 hover:text-green-800 hover:underline transition-colors"
+              >
+                {getGrowthOpportunities().length}
+              </button>
             </div>
             <div className="flex justify-between items-center py-2">
               <span className="text-gray-600">Products to Monitor</span>
-              <span className="font-semibold text-yellow-600">{stockStatus.warning}</span>
+              <button 
+                onClick={() => openModal('Products to Monitor', getMonitorProducts())}
+                className="font-semibold text-yellow-600 hover:text-yellow-800 hover:underline transition-colors"
+              >
+                {getMonitorProducts().length}
+              </button>
             </div>
           </div>
         </div>
@@ -649,7 +741,20 @@ const Analytics = () => {
               <YAxis />
               <Tooltip 
                 formatter={(value, name) => [value, name === 'sales' ? 'Units Sold' : 'Trend %']}
-                labelFormatter={(label) => `ASIN: ${label}`}
+                labelFormatter={(label) => (
+                  <div className="flex items-center gap-2">
+                    <span>ASIN: {label}</span>
+                    <a 
+                      href={`https://www.amazon.com/dp/${topMovers.find(m => m.asin === label)?.asin || label}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
               />
               <Bar dataKey="sales" fill="#3b82f6" name="Units Sold" />
             </BarChart>
@@ -661,23 +766,118 @@ const Analytics = () => {
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📦 Inventory Status</h3>
         <div className="grid grid-cols-3 gap-4">
-          <div className="text-center p-4 bg-red-50 rounded-lg">
+          <button 
+            onClick={() => openModal('Critical Products', getProductsByCategory('critical'))}
+            className="text-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+          >
             <div className="text-2xl font-bold text-red-600">{stockStatus.critical}</div>
             <div className="text-sm text-red-700">Critical</div>
             <div className="text-xs text-gray-500">Need immediate action</div>
-          </div>
-          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+          </button>
+          <button 
+            onClick={() => openModal('Warning Products', getProductsByCategory('warning'))}
+            className="text-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
+          >
             <div className="text-2xl font-bold text-yellow-600">{stockStatus.warning}</div>
             <div className="text-sm text-yellow-700">Watch Closely</div>
             <div className="text-xs text-gray-500">Monitor for changes</div>
-          </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
+          </button>
+          <button 
+            onClick={() => openModal('Healthy Products', getProductsByCategory('healthy'))}
+            className="text-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+          >
             <div className="text-2xl font-bold text-green-600">{stockStatus.healthy}</div>
             <div className="text-sm text-green-700">Healthy</div>
             <div className="text-xs text-gray-500">No action needed</div>
-          </div>
+          </button>
         </div>
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">{modalTitle}</h2>
+              <button 
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {modalData && modalData.length > 0 ? (
+                <div className="space-y-4">
+                  {modalData.map((item, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">
+                            {item.asin || item.asin}
+                          </h3>
+                          <a 
+                            href={`https://www.amazon.com/dp/${item.asin}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                        {item.velocity !== undefined && (
+                          <span className="text-sm font-medium text-gray-600">
+                            {item.velocity.toFixed(1)} units/day
+                          </span>
+                        )}
+                      </div>
+                      
+                      <p className="text-sm text-gray-700 mb-2">
+                        {item.productName || item.product_name || 'Unknown Product'}
+                      </p>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                        {item.daysLeft !== undefined && (
+                          <div>
+                            <span className="font-medium">Days Left:</span> {item.daysLeft}
+                          </div>
+                        )}
+                        {item.currentStock !== undefined && (
+                          <div>
+                            <span className="font-medium">Stock:</span> {item.currentStock}
+                          </div>
+                        )}
+                        {item.roi !== undefined && (
+                          <div>
+                            <span className="font-medium">ROI:</span> {item.roi}%
+                          </div>
+                        )}
+                        {item.suggestedQty !== undefined && (
+                          <div>
+                            <span className="font-medium">Suggested:</span> {item.suggestedQty}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {item.reasoning && (
+                        <p className="text-sm text-gray-600 mt-2 italic">
+                          {item.reasoning}
+                        </p>
+                      )}
+                    </div>
+                  )))
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No products found in this category.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

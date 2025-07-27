@@ -101,6 +101,15 @@ class EnhancedOrdersAnalysis:
         # Ensure no NaN/Inf values
         if not isinstance(weighted_velocity, (int, float)) or weighted_velocity != weighted_velocity:  # NaN check
             weighted_velocity = 0.0
+            
+        # If all historical periods are zero but we have sales today, use today's sales as baseline velocity
+        if weighted_velocity == 0 and all(v == 0 for v in velocity_data.values()):
+            today_orders = self.get_orders_for_date(orders_df, target_date)
+            today_sales_for_asin = self.asin_sales_count(today_orders).get(asin, 0)
+            if today_sales_for_asin > 0:
+                weighted_velocity = today_sales_for_asin  # Use today's sales as velocity
+                velocity_data['current_velocity'] = today_sales_for_asin
+                print(f"[DEBUG] Using today's sales as velocity for {asin}: {today_sales_for_asin}")
         
         # Trend analysis with safety checks
         recent_velocity = (velocity_data['7d'] + velocity_data['14d']) / 2
@@ -446,12 +455,30 @@ class EnhancedOrdersAnalysis:
         restock_alerts = {}
         critical_alerts = []
         
-        for asin in set(list(today_sales.keys()) + list(stock_info.keys())):
+        # Only analyze products that have either sales today OR historical sales
+        products_to_analyze = set()
+        products_to_analyze.update(today_sales.keys())  # Products with sales today
+        products_to_analyze.update(yesterday_sales.keys())  # Products with historical sales
+        
+        # Also include products from stock info that have sales in the past 7 days
+        for asin in stock_info.keys():
+            if asin in today_sales or asin in yesterday_sales:
+                products_to_analyze.add(asin)
+        
+        print(f"[DEBUG] Total products to analyze: {len(products_to_analyze)} (today_sales: {len(today_sales)}, yesterday_sales: {len(yesterday_sales)}, stock_info: {len(stock_info)})")
+        
+        for asin in products_to_analyze:
             if asin not in stock_info:
+                print(f"[DEBUG] Skipping {asin} - no stock info")
                 continue
                 
             # Calculate enhanced velocity
             velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date)
+            
+            # Skip products with zero velocity across all periods
+            if velocity_data.get('weighted_velocity', 0) == 0 and today_sales.get(asin, 0) == 0:
+                print(f"[DEBUG] Skipping {asin} - zero velocity and no current sales")
+                continue
             
             # Get priority score
             current_sales = today_sales.get(asin, 0)
@@ -498,6 +525,11 @@ class EnhancedOrdersAnalysis:
                 
                 if priority_data['category'].startswith('critical'):
                     critical_alerts.append(alert)
+                    
+        print(f"[DEBUG] Final enhanced analytics count: {len(enhanced_analytics)}")
+        print(f"[DEBUG] Products with non-zero velocity: {len([a for a in enhanced_analytics.values() if a['velocity']['weighted_velocity'] > 0])}")
+        print(f"[DEBUG] Restock alerts generated: {len(restock_alerts)}")
+        print(f"[DEBUG] Critical alerts generated: {len(critical_alerts)}")
 
         # Legacy velocity calculation for backward compatibility
         velocity = {}

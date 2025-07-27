@@ -518,13 +518,30 @@ class EnhancedOrdersAnalysis:
                 continue
                 
             try:
-                days_left = float(stock.get('Days of stock left', 9999))
+                # Try multiple possible column names for days left
+                days_left = None
+                for col in ['Days of stock left', 'Days left', 'Days of stock left (By Amazon)', 'Days of Stock Left']:
+                    if col in stock and stock[col] not in [None, '', 'N/A']:
+                        days_left = float(stock[col])
+                        break
+                if days_left is None:
+                    days_left = 9999
             except:
                 days_left = 9999
                 
-            running_out = str(stock.get('Running out of stock', '')).strip().upper()
+            # Try multiple possible column names for running out status
+            running_out = ''
+            for col in ['Running out of stock', 'Running out', 'Out of stock', 'Stock status']:
+                if col in stock and stock[col] not in [None, '']:
+                    running_out = str(stock[col]).strip().upper()
+                    break
             
+            # Debug: Print the first few items to see what values we're getting
+            if len(low_stock) < 3:  # Only log first 3 to avoid spam
+                print(f"[DEBUG] ASIN {asin}: days_left={days_left}, running_out='{running_out}', sales={sales}")
+                
             if days_left < 7 or running_out in ("SOON", "YES"):
+                print(f"[DEBUG] Found low stock item: {asin} - days_left={days_left}, running_out='{running_out}'")
                 low_stock[asin] = {
                     "days_left": days_left,
                     "running_out": running_out,

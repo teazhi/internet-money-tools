@@ -796,7 +796,6 @@ const Analytics = () => {
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
@@ -818,7 +817,7 @@ const Analytics = () => {
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-gray-900">
-                            {item.asin || item.asin}
+                            {item.asin}
                           </h3>
                           <a 
                             href={`https://www.amazon.com/dp/${item.asin}`}
@@ -869,7 +868,7 @@ const Analytics = () => {
                         </p>
                       )}
                     </div>
-                  ))
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">

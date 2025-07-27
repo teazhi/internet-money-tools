@@ -433,6 +433,10 @@ def update_profile():
         user_record['email'] = data['email']
     if 'run_scripts' in data:
         user_record['run_scripts'] = data['run_scripts']
+    if 'run_listing_loader' in data:
+        user_record['run_listing_loader'] = data['run_listing_loader']
+    if 'run_sellerboard' in data:
+        user_record['run_sellerboard'] = data['run_sellerboard']
     if 'listing_loader_key' in data:
         user_record['listing_loader_key'] = data['listing_loader_key']
     if 'sb_file_key' in data:
@@ -1048,8 +1052,8 @@ def admin_update_user(user_id):
         
         # Update allowed fields
         allowed_fields = [
-            'email', 'run_scripts', 'listing_loader_key', 'sb_file_key',
-            'sellerboard_orders_url', 'sellerboard_stock_url'
+            'email', 'run_scripts', 'run_listing_loader', 'run_sellerboard', 
+            'listing_loader_key', 'sb_file_key', 'sellerboard_orders_url', 'sellerboard_stock_url'
         ]
         
         for field in allowed_fields:

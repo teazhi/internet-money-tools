@@ -149,9 +149,49 @@ class EnhancedOrdersAnalysis:
 
     def get_days_left_value(self, stock_record: dict):
         """Helper function to get days left value handling column name variations"""
+        # Debug: print available columns (only once)
+        if not hasattr(self, '_debug_printed'):
+            print(f"[DEBUG] Available stock columns: {list(stock_record.keys())}")
+            self._debug_printed = True
+            
+        # List of possible column name patterns for days left
+        possible_patterns = [
+            'Days of stock left',
+            'Days Left',
+            'Days of Stock Left', 
+            'Days Of Stock Left',
+            'DaysLeft',
+            'Days_Left',
+            'Days Stock Left',
+            'Stock Days Left',
+            'Inventory Days Left',
+            'Days Until Out of Stock'
+        ]
+        
+        # First try exact matches (case insensitive)
+        for pattern in possible_patterns:
+            for key in stock_record.keys():
+                if key.lower() == pattern.lower():
+                    value = stock_record.get(key)
+                    if value is not None and str(value).strip() != '':
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return value
+        
+        # Then try partial matches
         for key in stock_record.keys():
-            if 'days' in key.lower() and 'stock' in key.lower() and 'left' in key.lower():
-                return stock_record.get(key, 'Unknown')
+            key_lower = key.lower().replace(' ', '').replace('_', '')
+            if ('days' in key_lower and 'stock' in key_lower and 'left' in key_lower) or \
+               ('days' in key_lower and 'left' in key_lower) or \
+               ('stock' in key_lower and 'days' in key_lower):
+                value = stock_record.get(key)
+                if value is not None and str(value).strip() != '':
+                    try:
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return value
+        
         return 'Unknown'
 
     def calculate_seasonality_factor(self, target_date: date) -> float:

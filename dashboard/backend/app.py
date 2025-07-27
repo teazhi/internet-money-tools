@@ -6,6 +6,10 @@ import requests
 import boto3
 from datetime import datetime, timedelta, date
 import pytz
+import uuid
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import pandas as pd
 from io import StringIO, BytesIO
 import sqlite3
@@ -57,6 +61,13 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
 USERS_CONFIG_KEY = "users.json"
+INVITATIONS_CONFIG_KEY = "invitations.json"
+
+# Email Configuration (for invitations)
+SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_EMAIL = os.getenv('SMTP_EMAIL')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -89,6 +100,82 @@ def update_users_config(users):
         return True
     except Exception as e:
         print(f"Error updating users config: {e}")
+        return False
+
+def get_invitations_config():
+    """Get invitations configuration from S3"""
+    try:
+        s3_client = get_s3_client()
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=INVITATIONS_CONFIG_KEY)
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except s3_client.exceptions.NoSuchKey:
+        return []
+    except Exception as e:
+        print(f"Error reading invitations config: {e}")
+        return []
+
+def update_invitations_config(invitations):
+    """Update invitations configuration in S3"""
+    try:
+        s3_client = get_s3_client()
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=INVITATIONS_CONFIG_KEY,
+            Body=json.dumps(invitations, indent=2),
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error updating invitations config: {e}")
+        return False
+
+def send_invitation_email(email, invitation_token, invited_by):
+    """Send invitation email to user"""
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        print("SMTP credentials not configured")
+        return False
+    
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_EMAIL
+        msg['To'] = email
+        msg['Subject'] = "You're invited to builders+ Dashboard"
+        
+        invitation_url = f"https://internet-money-tools.vercel.app/login?invitation={invitation_token}"
+        
+        body = f"""
+        <html>
+        <body>
+            <h2>You're invited to builders+ Dashboard!</h2>
+            <p>Hi there!</p>
+            <p>{invited_by} has invited you to join the builders+ Amazon Seller Dashboard.</p>
+            <p>This platform provides:</p>
+            <ul>
+                <li>Advanced analytics for your Amazon business</li>
+                <li>Smart restock recommendations</li>
+                <li>Inventory tracking and insights</li>
+            </ul>
+            <p><strong><a href="{invitation_url}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Accept Invitation</a></strong></p>
+            <p>Or copy and paste this link: {invitation_url}</p>
+            <p>This invitation will expire in 7 days.</p>
+            <br>
+            <p>Best regards,<br>builders+ Team</p>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(SMTP_EMAIL, email, text)
+        server.quit()
+        
+        return True
+    except Exception as e:
+        print(f"Error sending invitation email: {e}")
         return False
 
 def login_required(f):
@@ -175,12 +262,18 @@ def safe_google_api_call(user_record, api_call_func):
 @app.route('/auth/discord')
 def discord_login():
     print(f"[DEBUG] Discord OAuth redirect URI being used: {DISCORD_REDIRECT_URI}")
+    
+    # Get invitation token from query parameters
+    invitation_token = request.args.get('invitation')
+    state_param = f"&state={invitation_token}" if invitation_token else ""
+    
     discord_auth_url = (
         f"https://discord.com/api/oauth2/authorize"
         f"?client_id={DISCORD_CLIENT_ID}"
         f"&redirect_uri={urllib.parse.quote(DISCORD_REDIRECT_URI)}"
         f"&response_type=code"
         f"&scope=identify"
+        f"{state_param}"
     )
     print(f"[DEBUG] Full Discord auth URL: {discord_auth_url}")
     return redirect(discord_auth_url)
@@ -217,8 +310,42 @@ def discord_callback():
         return jsonify({'error': 'Failed to get user info'}), 400
     
     user_data = user_response.json()
-    session['discord_id'] = user_data['id']  # Keep as string to avoid precision loss
-    session['discord_username'] = user_data['username']
+    discord_id = user_data['id']
+    discord_username = user_data['username']
+    
+    # Check if user is already registered or has a valid invitation
+    users = get_users_config()
+    existing_user = next((u for u in users if u.get("discord_id") == discord_id), None)
+    
+    # If user doesn't exist, check for invitation
+    if not existing_user:
+        invitation_token = request.args.get('state')  # Discord passes our state parameter back
+        if not invitation_token:
+            return redirect("https://internet-money-tools.vercel.app/login?error=no_invitation")
+        
+        # Validate invitation token
+        invitations = get_invitations_config()
+        valid_invitation = None
+        for inv in invitations:
+            if inv['token'] == invitation_token and inv['status'] == 'pending':
+                # Check if invitation is not expired (7 days)
+                invitation_date = datetime.fromisoformat(inv['created_at'])
+                if datetime.now() - invitation_date < timedelta(days=7):
+                    valid_invitation = inv
+                    break
+        
+        if not valid_invitation:
+            return redirect("https://internet-money-tools.vercel.app/login?error=invalid_invitation")
+        
+        # Mark invitation as used
+        valid_invitation['status'] = 'accepted'
+        valid_invitation['discord_id'] = discord_id
+        valid_invitation['discord_username'] = discord_username
+        valid_invitation['accepted_at'] = datetime.now().isoformat()
+        update_invitations_config(invitations)
+    
+    session['discord_id'] = discord_id
+    session['discord_username'] = discord_username
     session['discord_avatar'] = user_data.get('avatar')
     
     print(f"[DEBUG] Session set with discord_id: {session['discord_id']}")
@@ -1121,6 +1248,90 @@ def debug_redirect():
 def test_redirect():
     """Test actual redirect behavior"""
     return redirect("https://internet-money-tools.vercel.app/dashboard")
+
+@app.route('/api/admin/invitations', methods=['GET'])
+@admin_required
+def admin_get_invitations():
+    """Get all invitations for admin panel"""
+    try:
+        invitations = get_invitations_config()
+        return jsonify({'invitations': invitations})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/invitations', methods=['POST'])
+@admin_required
+def admin_create_invitation():
+    """Create a new invitation"""
+    try:
+        data = request.json
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        # Check if email already has a pending invitation
+        invitations = get_invitations_config()
+        existing_invitation = next((inv for inv in invitations if inv['email'] == email and inv['status'] == 'pending'), None)
+        
+        if existing_invitation:
+            return jsonify({'error': 'Email already has a pending invitation'}), 400
+        
+        # Check if user already exists
+        users = get_users_config()
+        existing_user = next((u for u in users if u.get('email') == email), None)
+        
+        if existing_user:
+            return jsonify({'error': 'User with this email already exists'}), 400
+        
+        # Create new invitation
+        invitation_token = str(uuid.uuid4())
+        invitation = {
+            'token': invitation_token,
+            'email': email,
+            'status': 'pending',
+            'created_at': datetime.now().isoformat(),
+            'invited_by': session.get('discord_username', 'Admin'),
+            'expires_at': (datetime.now() + timedelta(days=7)).isoformat()
+        }
+        
+        invitations.append(invitation)
+        
+        if update_invitations_config(invitations):
+            # Send invitation email
+            if send_invitation_email(email, invitation_token, session.get('discord_username', 'Admin')):
+                return jsonify({'message': 'Invitation sent successfully', 'invitation': invitation})
+            else:
+                return jsonify({'message': 'Invitation created but email failed to send', 'invitation': invitation})
+        else:
+            return jsonify({'error': 'Failed to create invitation'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/invitations/<invitation_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_invitation(invitation_id):
+    """Delete an invitation"""
+    try:
+        invitations = get_invitations_config()
+        invitation_to_delete = None
+        
+        for i, inv in enumerate(invitations):
+            if inv['token'] == invitation_id:
+                invitation_to_delete = invitations.pop(i)
+                break
+        
+        if not invitation_to_delete:
+            return jsonify({'error': 'Invitation not found'}), 404
+        
+        if update_invitations_config(invitations):
+            return jsonify({'message': 'Invitation deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to delete invitation'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # Production configuration

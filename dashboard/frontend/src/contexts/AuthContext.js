@@ -36,11 +36,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = () => {
+  const login = (invitationToken = null) => {
     const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
     console.log('Environment REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     console.log('Using API URL for Discord auth:', apiBaseUrl);
-    window.location.href = `${apiBaseUrl}/auth/discord`;
+    
+    let authUrl = `${apiBaseUrl}/auth/discord`;
+    if (invitationToken) {
+      authUrl += `?invitation=${invitationToken}`;
+    }
+    
+    window.location.href = authUrl;
   };
 
   const logout = async () => {

@@ -1,9 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
 const Login = () => {
   const { login, isAuthenticated, loading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [error, setError] = useState('');
+  const [invitationToken, setInvitationToken] = useState('');
+
+  useEffect(() => {
+    // Check for error parameters
+    const errorParam = searchParams.get('error');
+    const invitationParam = searchParams.get('invitation');
+    
+    if (errorParam === 'no_invitation') {
+      setError('This platform is invitation-only. Please contact an admin for access.');
+    } else if (errorParam === 'invalid_invitation') {
+      setError('Invalid or expired invitation. Please contact an admin for a new invitation.');
+    }
+    
+    if (invitationParam) {
+      setInvitationToken(invitationParam);
+    }
+  }, [searchParams]);
+
+  const handleLogin = () => {
+    login(invitationToken);
+  };
 
   if (loading) {
     return (
@@ -47,8 +70,14 @@ const Login = () => {
             </p>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
           <button
-            onClick={login}
+            onClick={handleLogin}
             className="w-full flex items-center justify-center px-4 py-3 bg-builders-500 hover:bg-builders-600 text-white font-medium rounded-lg transition-colors duration-200"
           >
             <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">

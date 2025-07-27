@@ -38,6 +38,9 @@ const Admin = () => {
   const [showRawData, setShowRawData] = useState(false);
   const [rawUserData, setRawUserData] = useState('');
   const [systemStats, setSystemStats] = useState(null);
+  const [invitations, setInvitations] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
 
   const getRelativeTime = (dateString) => {
     if (!dateString) return 'Never';
@@ -64,6 +67,7 @@ const Admin = () => {
     if (isAdmin) {
       fetchUsers();
       fetchSystemStats();
+      fetchInvitations();
     }
   }, [isAdmin]);
 
@@ -98,6 +102,50 @@ const Admin = () => {
       setSystemStats(response.data);
     } catch (error) {
       console.error('Failed to fetch system stats:', error);
+    }
+  };
+
+  const fetchInvitations = async () => {
+    try {
+      const response = await axios.get('/api/admin/invitations', { withCredentials: true });
+      setInvitations(response.data.invitations);
+    } catch (error) {
+      console.error('Failed to fetch invitations:', error);
+    }
+  };
+
+  const handleSendInvitation = async () => {
+    if (!inviteEmail) {
+      setError('Please enter an email address');
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      await axios.post('/api/admin/invitations', { email: inviteEmail }, { withCredentials: true });
+      setSuccess('Invitation sent successfully!');
+      setInviteEmail('');
+      setShowInviteModal(false);
+      fetchInvitations();
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to send invitation');
+    }
+  };
+
+  const handleDeleteInvitation = async (token) => {
+    if (!window.confirm('Are you sure you want to delete this invitation?')) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
+      setSuccess('Invitation deleted successfully');
+      fetchInvitations();
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to delete invitation');
     }
   };
 
@@ -190,6 +238,64 @@ const Admin = () => {
     });
 
     return filtered;
+  };
+
+  const InviteModal = ({ onSave, onCancel }) => {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Send Invitation
+              </h3>
+              <button
+                onClick={onCancel}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-700">
+                  The user will receive an email with a link to join the platform. 
+                  The invitation link will expire in 7 days.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onSave}
+                className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700"
+              >
+                Send Invitation
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const UserEditModal = ({ user, onSave, onCancel }) => {
@@ -337,6 +443,13 @@ const Admin = () => {
               <Download className="h-4 w-4 mr-2" />
               Export
             </button>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Invite User
+            </button>
           </div>
         </div>
       </div>
@@ -382,6 +495,83 @@ const Admin = () => {
           </div>
         </div>
       )}
+
+      {/* Invitations Section */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Pending Invitations ({invitations.length})
+          </h3>
+        </div>
+        
+        {invitations.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Sent
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Expires
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {invitations.map((invitation) => (
+                  <tr key={invitation.token} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {invitation.email}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {getRelativeTime(invitation.created_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {getRelativeTime(invitation.expires_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {new Date(invitation.expires_at) > new Date() ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">
+                          Expired
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleDeleteInvitation(invitation.token)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-sm font-medium text-gray-900 mb-1">No pending invitations</h3>
+            <p className="text-sm text-gray-500">
+              Send your first invitation to get started.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Error/Success Messages */}
       {error && (
@@ -601,6 +791,14 @@ const Admin = () => {
           user={editingUser}
           onSave={handleUpdateUser}
           onCancel={() => setEditingUser(null)}
+        />
+      )}
+
+      {/* Invite User Modal */}
+      {showInviteModal && (
+        <InviteModal
+          onSave={handleSendInvitation}
+          onCancel={() => setShowInviteModal(false)}
         />
       )}
     </div>

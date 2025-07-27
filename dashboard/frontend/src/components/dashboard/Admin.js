@@ -325,8 +325,7 @@ const Admin = () => {
     const [editData, setEditData] = useState({
       email: user.email || '',
       run_scripts: user.run_scripts || false,
-      run_listing_loader: user.run_listing_loader || false,
-      run_sellerboard: user.run_sellerboard || false,
+      run_prep_center: user.run_prep_center || false,
       listing_loader_key: user.listing_loader_key || '',
       sb_file_key: user.sb_file_key || '',
       sellerboard_orders_url: user.sellerboard_orders_url || '',
@@ -409,33 +408,20 @@ const Admin = () => {
                   className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
                 />
                 <label htmlFor="run_scripts" className="ml-2 block text-sm text-gray-700">
-                  Enable automated scripts (legacy)
+                  Amazon Listing Loader & Sellerboard automation
                 </label>
               </div>
 
               <div className="flex items-center">
                 <input
-                  id="run_listing_loader"
+                  id="run_prep_center"
                   type="checkbox"
-                  checked={editData.run_listing_loader}
-                  onChange={(e) => setEditData({...editData, run_listing_loader: e.target.checked})}
+                  checked={editData.run_prep_center}
+                  onChange={(e) => setEditData({...editData, run_prep_center: e.target.checked})}
                   className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
                 />
-                <label htmlFor="run_listing_loader" className="ml-2 block text-sm text-gray-700">
-                  Amazon Listing Loader automation
-                </label>
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  id="run_sellerboard"
-                  type="checkbox"
-                  checked={editData.run_sellerboard}
-                  onChange={(e) => setEditData({...editData, run_sellerboard: e.target.checked})}
-                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
-                />
-                <label htmlFor="run_sellerboard" className="ml-2 block text-sm text-gray-700">
-                  Sellerboard analytics automation
+                <label htmlFor="run_prep_center" className="ml-2 block text-sm text-gray-700">
+                  Prep center sheet automation
                 </label>
               </div>
             </div>

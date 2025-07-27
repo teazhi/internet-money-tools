@@ -41,8 +41,8 @@ const Settings = () => {
     email: '',
     listing_loader_key: '',
     sb_file_key: '',
-    run_listing_loader: false,
-    run_sellerboard: false,
+    run_scripts: true,
+    run_prep_center: false,
     sellerboard_orders_url: '',
     sellerboard_stock_url: '',
     timezone: ''
@@ -56,8 +56,8 @@ const Settings = () => {
         email: user.user_record.email || '',
         listing_loader_key: user.user_record.listing_loader_key || '',
         sb_file_key: user.user_record.sb_file_key || '',
-        run_listing_loader: user.user_record.run_listing_loader !== false,
-        run_sellerboard: user.user_record.run_sellerboard !== false,
+        run_scripts: user.user_record.run_scripts !== false,
+        run_prep_center: user.user_record.run_prep_center !== false,
         sellerboard_orders_url: user.user_record.sellerboard_orders_url || '',
         sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
         timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -255,51 +255,51 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Amazon Listing Loader Toggle */}
+          {/* Amazon Listing Loader & Sellerboard Toggle */}
           <div>
             <label className="flex items-center justify-between cursor-pointer">
               <div className="flex items-center space-x-2">
-                {formData.run_listing_loader ? (
+                {formData.run_scripts ? (
                   <ToggleRight className="h-6 w-6 text-green-500" />
                 ) : (
                   <ToggleLeft className="h-6 w-6 text-gray-400" />
                 )}
-                <span className="text-sm font-medium text-gray-700">Amazon Listing Loader Automation</span>
+                <span className="text-sm font-medium text-gray-700">Amazon Listing Loader & Sellerboard Automation</span>
               </div>
               <input
                 type="checkbox"
-                name="run_listing_loader"
-                checked={formData.run_listing_loader}
+                name="run_scripts"
+                checked={formData.run_scripts}
                 onChange={handleChange}
                 className="sr-only"
               />
             </label>
             <p className="text-xs text-gray-500 mt-1">
-              Automatically run Amazon listing loader scripts for product updates and management
+              Automatically run Amazon listing loader scripts and Sellerboard analytics
             </p>
           </div>
 
-          {/* Sellerboard Automation Toggle */}
+          {/* Prep Center Sheet Toggle */}
           <div>
             <label className="flex items-center justify-between cursor-pointer">
               <div className="flex items-center space-x-2">
-                {formData.run_sellerboard ? (
+                {formData.run_prep_center ? (
                   <ToggleRight className="h-6 w-6 text-green-500" />
                 ) : (
                   <ToggleLeft className="h-6 w-6 text-gray-400" />
                 )}
-                <span className="text-sm font-medium text-gray-700">Sellerboard Analytics Automation</span>
+                <span className="text-sm font-medium text-gray-700">Prep Center Sheet Automation</span>
               </div>
               <input
                 type="checkbox"
-                name="run_sellerboard"
-                checked={formData.run_sellerboard}
+                name="run_prep_center"
+                checked={formData.run_prep_center}
                 onChange={handleChange}
                 className="sr-only"
               />
             </label>
             <p className="text-xs text-gray-500 mt-1">
-              Automatically run Sellerboard analysis, reporting, and prep center sheet updates
+              Automatically update and upload prep center sheets
             </p>
           </div>
 

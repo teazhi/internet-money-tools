@@ -1290,9 +1290,9 @@ def admin_create_invitation():
             'token': invitation_token,
             'email': email,
             'status': 'pending',
-            'created_at': datetime.now().isoformat(),
+            'created_at': datetime.utcnow().isoformat() + 'Z',
             'invited_by': session.get('discord_username', 'Admin'),
-            'expires_at': (datetime.now() + timedelta(days=7)).isoformat()
+            'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat() + 'Z'
         }
         
         invitations.append(invitation)

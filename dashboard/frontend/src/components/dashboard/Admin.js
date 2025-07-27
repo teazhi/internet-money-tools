@@ -105,16 +105,17 @@ const Admin = () => {
     if (!dateString) return 'Never';
     
     const now = new Date();
-    const date = new Date(dateString);
+    // Ensure we're parsing UTC time correctly
+    const date = new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z');
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     
-    if (Math.abs(diffMins) < 1) return 'Just now';
-    if (Math.abs(diffMins) < 60) return `${Math.abs(diffMins)}m ago`;
-    if (Math.abs(diffHours) < 24) return `${Math.abs(diffHours)}h ago`;
-    if (Math.abs(diffDays) < 7) return `${Math.abs(diffDays)}d ago`;
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
     
     return date.toLocaleDateString();
   };
@@ -123,7 +124,8 @@ const Admin = () => {
     if (!dateString) return 'Never';
     
     const now = new Date();
-    const date = new Date(dateString);
+    // Ensure we're parsing UTC time correctly
+    const date = new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z');
     const diffMs = date - now;
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));

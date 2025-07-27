@@ -38,6 +38,24 @@ const Admin = () => {
   const [showRawData, setShowRawData] = useState(false);
   const [rawUserData, setRawUserData] = useState('');
   const [systemStats, setSystemStats] = useState(null);
+
+  const getRelativeTime = (dateString) => {
+    if (!dateString) return 'Never';
+    
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString();
+  };
   
   // Check if current user is admin
   const isAdmin = user?.discord_id === '1278565917206249503';
@@ -531,7 +549,16 @@ const Admin = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.last_activity ? new Date(user.last_activity).toLocaleDateString() : 'Never'}
+                    {user.last_activity ? (
+                      <div>
+                        <div className="font-medium">{getRelativeTime(user.last_activity)}</div>
+                        <div className="text-xs text-gray-400">
+                          {new Date(user.last_activity).toLocaleDateString()} {new Date(user.last_activity).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">Never</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">

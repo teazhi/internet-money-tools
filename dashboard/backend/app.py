@@ -234,8 +234,9 @@ def discord_callback():
             user_record = {"discord_id": discord_id}
             users.append(user_record)
         
-        # Update Discord username in permanent record
+        # Update Discord username and last activity in permanent record
         user_record['discord_username'] = user_data['username']
+        user_record['last_activity'] = datetime.now().isoformat()
         update_users_config(users)
         print(f"[DEBUG] Updated user record with Discord username: {user_data['username']}")
     except Exception as e:
@@ -295,9 +296,10 @@ def update_profile():
         user_record = {"discord_id": discord_id}
         users.append(user_record)
     
-    # Always update Discord username from session when available
+    # Always update Discord username and last activity from session when available
     if 'discord_username' in session:
         user_record['discord_username'] = session['discord_username']
+    user_record['last_activity'] = datetime.now().isoformat()
     
     # Update user profile fields
     if 'email' in data:
@@ -547,10 +549,24 @@ def get_orders_analytics():
         # Import the orders analysis class (copied to backend directory)
         from orders_analysis import OrdersAnalysis
         
-        # Get user's timezone preference first
+        # Get user's timezone preference first and update last activity
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         user_timezone = user_record.get('timezone') if user_record else None
+        
+        # Update last activity for analytics access
+        if user_record:
+            try:
+                users = get_users_config()
+                for user in users:
+                    if user.get("discord_id") == discord_id:
+                        user['last_activity'] = datetime.now().isoformat()
+                        if 'discord_username' in session:
+                            user['discord_username'] = session['discord_username']
+                        break
+                update_users_config(users)
+            except Exception as e:
+                print(f"[DEBUG] Failed to update last activity: {e}")
         
         # Get query parameter for date, default to yesterday until 11:59 PM
         target_date_str = request.args.get('date')

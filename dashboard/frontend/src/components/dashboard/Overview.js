@@ -137,11 +137,36 @@ const Overview = () => {
     });
     
     if (isYesterday) {
+      // Use user's timezone if available
+      const userTimezone = analytics?.user_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      
       const now = new Date();
       const switchTime = new Date();
       switchTime.setHours(23, 59, 0, 0);
-      const timeUntilSwitch = switchTime - now;
       
+      // If user has a different timezone, adjust the calculation
+      if (userTimezone && userTimezone !== Intl.DateTimeFormat().resolvedOptions().timeZone) {
+        try {
+          const nowInUserTz = new Date(now.toLocaleString("en-US", {timeZone: userTimezone}));
+          const switchTimeInUserTz = new Date();
+          switchTimeInUserTz.setHours(23, 59, 0, 0);
+          const timeUntilSwitch = switchTimeInUserTz - nowInUserTz;
+          
+          if (timeUntilSwitch > 0) {
+            const hours = Math.floor(timeUntilSwitch / (1000 * 60 * 60));
+            const minutes = Math.floor((timeUntilSwitch % (1000 * 60 * 60)) / (1000 * 60));
+            return {
+              text: `${formatted} (Yesterday's Complete Data)`,
+              subtitle: `Will switch to today's data in ${hours}h ${minutes}m (${userTimezone})`
+            };
+          }
+        } catch (e) {
+          console.warn('Error calculating timezone difference:', e);
+        }
+      }
+      
+      // Fallback to local time calculation
+      const timeUntilSwitch = switchTime - now;
       if (timeUntilSwitch > 0) {
         const hours = Math.floor(timeUntilSwitch / (1000 * 60 * 60));
         const minutes = Math.floor((timeUntilSwitch % (1000 * 60 * 60)) / (1000 * 60));

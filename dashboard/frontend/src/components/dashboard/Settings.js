@@ -1,7 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock } from 'lucide-react';
 import axios from 'axios';
+
+// Common timezones for the selector
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (ET)' },
+  { value: 'America/Chicago', label: 'Central Time (CT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)' },
+  { value: 'Europe/London', label: 'Greenwich Mean Time (GMT)' },
+  { value: 'Europe/Paris', label: 'Central European Time (CET)' },
+  { value: 'Europe/Berlin', label: 'Central European Time (CET)' },
+  { value: 'Europe/Rome', label: 'Central European Time (CET)' },
+  { value: 'Europe/Madrid', label: 'Central European Time (CET)' },
+  { value: 'Europe/Moscow', label: 'Moscow Time (MSK)' },
+  { value: 'Asia/Tokyo', label: 'Japan Standard Time (JST)' },
+  { value: 'Asia/Shanghai', label: 'China Standard Time (CST)' },
+  { value: 'Asia/Hong_Kong', label: 'Hong Kong Time (HKT)' },
+  { value: 'Asia/Singapore', label: 'Singapore Time (SGT)' },
+  { value: 'Asia/Dubai', label: 'Gulf Standard Time (GST)' },
+  { value: 'Asia/Kolkata', label: 'India Standard Time (IST)' },
+  { value: 'Australia/Sydney', label: 'Australian Eastern Time (AET)' },
+  { value: 'Australia/Melbourne', label: 'Australian Eastern Time (AET)' },
+  { value: 'Australia/Perth', label: 'Australian Western Time (AWT)' },
+  { value: 'Pacific/Auckland', label: 'New Zealand Time (NZST)' },
+  { value: 'America/Toronto', label: 'Eastern Time (Canada)' },
+  { value: 'America/Vancouver', label: 'Pacific Time (Canada)' },
+  { value: 'America/Sao_Paulo', label: 'Brasília Time (BRT)' },
+  { value: 'America/Mexico_City', label: 'Central Time (Mexico)' },
+  { value: 'Africa/Cairo', label: 'Eastern European Time (EET)' },
+  { value: 'Africa/Johannesburg', label: 'South Africa Standard Time (SAST)' }
+];
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
@@ -11,7 +43,8 @@ const Settings = () => {
     sb_file_key: '',
     run_scripts: true,
     sellerboard_orders_url: '',
-    sellerboard_stock_url: ''
+    sellerboard_stock_url: '',
+    timezone: ''
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -24,7 +57,8 @@ const Settings = () => {
         sb_file_key: user.user_record.sb_file_key || '',
         run_scripts: user.user_record.run_scripts !== false,
         sellerboard_orders_url: user.user_record.sellerboard_orders_url || '',
-        sellerboard_stock_url: user.user_record.sellerboard_stock_url || ''
+        sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
+        timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
       });
     }
   }, [user]);
@@ -191,6 +225,31 @@ const Settings = () => {
             />
             <p className="text-xs text-gray-500 mt-1">
               The automation URL for your Sellerboard stock report (includes inventory and stock data)
+            </p>
+          </div>
+
+          {/* Timezone Selector */}
+          <div>
+            <label htmlFor="timezone" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+              <Clock className="h-4 w-4" />
+              <span>Timezone</span>
+            </label>
+            <select
+              id="timezone"
+              name="timezone"
+              value={formData.timezone}
+              onChange={handleChange}
+              className="input-field"
+            >
+              <option value="">Select your timezone...</option>
+              {COMMON_TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Your timezone affects when the Overview switches from yesterday's to today's data (switches at 11:59 PM in your timezone)
             </p>
           </div>
 

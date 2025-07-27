@@ -5,6 +5,7 @@ import json
 import requests
 import boto3
 from datetime import datetime, timedelta, date
+import pytz
 import pandas as pd
 from io import StringIO, BytesIO
 import sqlite3
@@ -290,6 +291,8 @@ def update_profile():
         user_record['sellerboard_orders_url'] = data['sellerboard_orders_url']
     if 'sellerboard_stock_url' in data:
         user_record['sellerboard_stock_url'] = data['sellerboard_stock_url']
+    if 'timezone' in data:
+        user_record['timezone'] = data['timezone']
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})
@@ -523,6 +526,11 @@ def get_orders_analytics():
         # Import the orders analysis class (copied to backend directory)
         from orders_analysis import OrdersAnalysis
         
+        # Get user's timezone preference first
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        user_timezone = user_record.get('timezone') if user_record else None
+        
         # Get query parameter for date, default to yesterday until 11:59 PM
         target_date_str = request.args.get('date')
         if target_date_str:
@@ -531,16 +539,28 @@ def get_orders_analytics():
             except ValueError:
                 return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
         else:
+            # Default to UTC if no timezone set
+            if user_timezone:
+                try:
+                    tz = pytz.timezone(user_timezone)
+                    now = datetime.now(tz)
+                    print(f"[Dashboard Analytics] Using user timezone: {user_timezone}")
+                except pytz.UnknownTimeZoneError:
+                    now = datetime.now()
+                    print(f"[Dashboard Analytics] Invalid timezone {user_timezone}, using system time")
+            else:
+                now = datetime.now()
+                print(f"[Dashboard Analytics] No timezone set, using system time")
+            
             # Show yesterday's data until 11:59 PM today, then show today's data
-            now = datetime.now()
             if now.hour == 23 and now.minute == 59:
                 # At 11:59 PM, switch to today's data
-                target_date = date.today()
-                print(f"[Dashboard Analytics] Switching to today's data at 11:59 PM")
+                target_date = now.date()
+                print(f"[Dashboard Analytics] Switching to today's data at 11:59 PM {user_timezone or 'system timezone'}")
             else:
                 # Show yesterday's complete data throughout the day
-                target_date = date.today() - timedelta(days=1)
-                print(f"[Dashboard Analytics] Showing yesterday's data (will switch at 11:59 PM)")
+                target_date = now.date() - timedelta(days=1)
+                print(f"[Dashboard Analytics] Showing yesterday's data (will switch at 11:59 PM {user_timezone or 'system timezone'})")
         
         print(f"[Dashboard Analytics] Fetching data for date: {target_date}")
         print(f"[Dashboard Analytics] About to call OrdersAnalysis")
@@ -634,6 +654,7 @@ def get_orders_analytics():
         # Add metadata about the date being analyzed
         analysis['report_date'] = target_date.isoformat()
         analysis['is_yesterday'] = target_date == (date.today() - timedelta(days=1))
+        analysis['user_timezone'] = user_timezone
         
         print(f"[Dashboard Analytics] Successfully fetched data with {len(analysis.get('today_sales', {}))} products")
         print(f"[Dashboard Analytics] Final analysis keys: {list(analysis.keys())}")

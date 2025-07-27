@@ -379,27 +379,139 @@ const Analytics = () => {
     );
   }
 
+  // Calculate health scores
+  const getHealthScores = () => {
+    if (!analytics) return { overall: 0, salesMomentum: 0, inventoryRisk: 0, profitHealth: 0 };
+    
+    const totalProducts = analytics.enhanced_analytics ? Object.keys(analytics.enhanced_analytics).length : 0;
+    const criticalItems = analytics.critical_alerts?.length || 0;
+    const highPriorityItems = analytics.high_priority_count || 0;
+    const todaySales = analytics.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0;
+    
+    // Sales Momentum Score (0-5 stars)
+    const salesMomentum = Math.min(5, Math.floor(todaySales / 5)); // 1 star per 5 units sold
+    
+    // Inventory Risk Score (0-5 stars, inverse of risk)
+    const inventoryRisk = Math.max(0, 5 - Math.floor(criticalItems * 2)); // -2 stars per critical item
+    
+    // Profit Health Score (0-5 stars)
+    const profitHealth = Math.max(0, 5 - Math.floor(highPriorityItems / 2)); // -1 star per 2 high priority items
+    
+    // Overall Score (0-100)
+    const overall = Math.round(((salesMomentum + inventoryRisk + profitHealth) / 15) * 100);
+    
+    return { overall, salesMomentum, inventoryRisk, profitHealth };
+  };
+
+  const renderStars = (count) => {
+    return Array.from({ length: 5 }, (_, i) => (
+      <span key={i} className={i < count ? 'text-yellow-500' : 'text-gray-300'}>⭐</span>
+    ));
+  };
+
+  const getTodoList = () => {
+    const todos = [];
+    
+    // Critical restock items
+    if (analytics?.critical_alerts) {
+      analytics.critical_alerts.slice(0, 3).forEach(alert => {
+        const stockData = analytics.low_stock?.[alert.asin];
+        todos.push({
+          type: 'critical',
+          asin: alert.asin,
+          action: `Reorder ${alert.asin}`,
+          detail: `${alert.velocity.toFixed(0)} units/day, ${stockData?.days_left || 'few'} days left`,
+          icon: '🚨'
+        });
+      });
+    }
+    
+    // High velocity monitoring
+    if (analytics?.enhanced_analytics) {
+      Object.entries(analytics.enhanced_analytics)
+        .filter(([_, data]) => data.velocity?.weighted_velocity > 5)
+        .slice(0, 2)
+        .forEach(([asin, data]) => {
+          todos.push({
+            type: 'monitor',
+            asin: asin,
+            action: `Monitor ${asin.substring(0, 8)}`,
+            detail: `Trending up +${((data.velocity?.trend_factor - 1) * 100).toFixed(0)}%`,
+            icon: '📈'
+          });
+        });
+    }
+    
+    // Profit optimization opportunities
+    if (analytics?.enhanced_analytics) {
+      Object.entries(analytics.enhanced_analytics)
+        .filter(([_, data]) => data.priority?.category === 'opportunity_high_velocity')
+        .slice(0, 2)
+        .forEach(([asin, data]) => {
+          todos.push({
+            type: 'opportunity',
+            asin: asin,
+            action: `Scale ${asin.substring(0, 8)}`,
+            detail: `High velocity + good ROI opportunity`,
+            icon: '💰'
+          });
+        });
+    }
+    
+    return todos.slice(0, 6); // Limit to 6 items
+  };
+
+  const getTopMovers = () => {
+    if (!analytics?.today_sales) return [];
+    
+    return Object.entries(analytics.today_sales)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([asin, sales]) => ({
+        asin: asin.substring(0, 8),
+        sales,
+        trend: analytics.velocity?.[asin]?.pct || 0
+      }));
+  };
+
+  const getStockStatus = () => {
+    if (!analytics?.enhanced_analytics) return { critical: 0, warning: 0, healthy: 0 };
+    
+    let critical = 0, warning = 0, healthy = 0;
+    
+    Object.values(analytics.enhanced_analytics).forEach(data => {
+      const category = data.priority?.category || 'monitor';
+      if (category.includes('critical')) critical++;
+      else if (category.includes('warning')) warning++;
+      else healthy++;
+    });
+    
+    return { critical, warning, healthy };
+  };
+
+  const { overall, salesMomentum, inventoryRisk, profitHealth } = getHealthScores();
+  const todoList = getTodoList();
+  const topMovers = getTopMovers();
+  const stockStatus = getStockStatus();
+
   return (
     <div className="space-y-6">
-      {/* Header with Date Selector */}
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Business Intelligence Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Business Health Scorecard</h1>
           <p className="text-gray-600">
-            Comprehensive analytics for {getReportDate()} {analytics?.is_yesterday && '(Yesterday)'}
+            Your Amazon business snapshot for {getReportDate()} {analytics?.is_yesterday && '(Yesterday)'}
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <label htmlFor="date-select" className="text-sm font-medium text-gray-700">
-            Select Date:
-          </label>
           <input
             id="date-select"
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             max={new Date(Date.now() - 86400000).toISOString().split('T')[0]}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
           />
           <button
             onClick={fetchAnalytics}
@@ -418,263 +530,154 @@ const Analytics = () => {
         </div>
       )}
 
-      {/* Executive Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm">Total Products</p>
-              <p className="text-2xl font-bold">{analytics?.total_products_analyzed || 0}</p>
-            </div>
-            <Package className="h-8 w-8 text-blue-200" />
+      {/* Health Score Card */}
+      <div className="card bg-gradient-to-br from-blue-50 to-indigo-100 border-2 border-blue-200">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-full shadow-lg mb-4">
+            <span className="text-3xl font-bold text-blue-600">{overall}</span>
+            <span className="text-sm text-gray-500 ml-1">/100</span>
           </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Business Health Score</h2>
+          <p className="text-gray-600">
+            {overall >= 80 ? 'Excellent! Your business is performing well.' :
+             overall >= 60 ? 'Good! Some areas need attention.' :
+             overall >= 40 ? 'Fair. Focus on critical issues.' :
+             'Needs immediate attention!'}
+          </p>
         </div>
         
-        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-100 text-sm">Critical Actions</p>
-              <p className="text-2xl font-bold">{analytics?.critical_alerts?.length || 0}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="text-center">
+            <div className="flex justify-center items-center mb-2">
+              {renderStars(salesMomentum)}
             </div>
-            <AlertTriangle className="h-8 w-8 text-red-200" />
+            <h3 className="font-semibold text-gray-900">Sales Momentum</h3>
+            <p className="text-sm text-gray-600">{topMovers.length} active products</p>
           </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-sm">High Priority</p>
-              <p className="text-2xl font-bold">{analytics?.high_priority_count || 0}</p>
+          
+          <div className="text-center">
+            <div className="flex justify-center items-center mb-2">
+              {renderStars(inventoryRisk)}
             </div>
-            <Zap className="h-8 w-8 text-green-200" />
+            <h3 className="font-semibold text-gray-900">Inventory Health</h3>
+            <p className="text-sm text-gray-600">{stockStatus.critical} critical items</p>
           </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-100 text-sm">Active Alerts</p>
-              <p className="text-2xl font-bold">{analytics?.restock_alerts ? Object.keys(analytics.restock_alerts).length : 0}</p>
+          
+          <div className="text-center">
+            <div className="flex justify-center items-center mb-2">
+              {renderStars(profitHealth)}
             </div>
-            <Target className="h-8 w-8 text-purple-200" />
+            <h3 className="font-semibold text-gray-900">Profit Health</h3>
+            <p className="text-sm text-gray-600">Strong margins</p>
           </div>
         </div>
       </div>
 
-      {/* Stock Risk Dashboard - Scatter Plot */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Stock Risk Analysis</h3>
-            <p className="text-sm text-gray-600">Velocity vs Days Remaining (bubble size = revenue impact)</p>
-          </div>
-          <BarChart3 className="h-5 w-5 text-gray-400" />
-        </div>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart data={getStockRiskData()}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="velocity" 
-              name="Daily Velocity" 
-              label={{ value: 'Daily Sales Velocity', position: 'insideBottom', offset: -10 }}
-            />
-            <YAxis 
-              dataKey="daysLeft" 
-              name="Days Remaining" 
-              label={{ value: 'Days of Stock Remaining', angle: -90, position: 'insideLeft' }}
-            />
-            <Tooltip 
-              formatter={(value, name, props) => {
-                if (name === 'Daily Velocity') return [value.toFixed(2), 'Velocity'];
-                if (name === 'Days Remaining') return [value.toFixed(0), 'Days Left'];
-                return [value, name];
-              }}
-              labelFormatter={(label, payload) => {
-                if (payload && payload[0]) {
-                  return `${payload[0].payload.fullAsin}: ${payload[0].payload.productName}`;
-                }
-                return label;
-              }}
-            />
-            <Scatter 
-              dataKey="revenueImpact" 
-              fill={(entry) => {
-                const category = entry?.category;
-                if (category?.includes('critical')) return '#dc2626';
-                if (category?.includes('warning')) return '#d97706'; 
-                if (category?.includes('opportunity')) return '#16a34a';
-                return '#6b7280';
-              }}
-            />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Revenue Opportunity vs Priority Distribution */}
+      {/* Action Items */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Opportunity Analysis */}
+        {/* Today's Todo List */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Revenue Opportunity Matrix</h3>
-              <p className="text-sm text-gray-600">ROI vs Velocity performance</p>
-            </div>
-            <DollarSign className="h-5 w-5 text-gray-400" />
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <ScatterChart data={getRevenueOpportunityData().slice(0, 15)}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="velocity" 
-                name="Velocity"
-                label={{ value: 'Daily Velocity', position: 'insideBottom', offset: -10 }}
-              />
-              <YAxis 
-                dataKey="roi" 
-                name="ROI"
-                label={{ value: 'ROI %', angle: -90, position: 'insideLeft' }}
-              />
-              <Tooltip 
-                formatter={(value, name, props) => {
-                  if (name === 'Velocity') return [value.toFixed(2), 'Daily Velocity'];
-                  if (name === 'ROI') return [value.toFixed(1) + '%', 'ROI'];
-                  return [value, name];
-                }}
-                labelFormatter={(label, payload) => {
-                  if (payload && payload[0]) {
-                    return `${payload[0].payload.fullAsin}`;
-                  }
-                  return label;
-                }}
-              />
-              <Scatter dataKey="opportunity" fill="#8884d8" />
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Priority Action Distribution */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Action Priority Distribution</h3>
-              <p className="text-sm text-gray-600">Products by urgency category</p>
-            </div>
-            <PieChartIcon className="h-5 w-5 text-gray-400" />
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={getPriorityDistribution()}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={120}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {getPriorityDistribution().map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Velocity Trend Analysis */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Multi-Period Velocity Analysis</h3>
-            <p className="text-sm text-gray-600">Top performers across different time periods</p>
-          </div>
-          <TrendingUp className="h-5 w-5 text-gray-400" />
-        </div>
-        <ResponsiveContainer width="100%" height={350}>
-          <ComposedChart data={getVelocityTrendData()}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="asin" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="7d" fill="#ef4444" name="7 Day Avg" />
-            <Bar dataKey="14d" fill="#f97316" name="14 Day Avg" />
-            <Bar dataKey="30d" fill="#eab308" name="30 Day Avg" />
-            <Line type="monotone" dataKey="weighted" stroke="#16a34a" strokeWidth={3} name="Weighted Average" />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Financial Impact Analysis */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Restock Investment Analysis</h3>
-            <p className="text-sm text-gray-600">Required investment vs potential returns</p>
-          </div>
-          <DollarSign className="h-5 w-5 text-gray-400" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ASIN</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Suggested Qty</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Investment</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Potential Return</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ROI %</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payback (Days)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {getRestockImpactData().slice(0, 10).map((item) => (
-                <tr key={item.fullAsin} className="hover:bg-gray-50">
-                  <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.asin}</td>
-                  <td className="px-4 py-4 text-sm text-gray-900">{item.suggestedQty}</td>
-                  <td className="px-4 py-4 text-sm text-gray-900">${item.investment.toFixed(0)}</td>
-                  <td className="px-4 py-4 text-sm text-green-600">${item.potentialReturn.toFixed(0)}</td>
-                  <td className="px-4 py-4 text-sm text-blue-600">{item.roi.toFixed(1)}%</td>
-                  <td className="px-4 py-4 text-sm text-gray-600">
-                    {item.paybackDays < 999 ? Math.round(item.paybackDays) : '∞'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Critical Alerts Table */}
-      {analytics?.critical_alerts && analytics.critical_alerts.length > 0 && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">🚨 Critical Actions Required</h3>
-              <p className="text-sm text-gray-600">Immediate attention needed</p>
-            </div>
-            <AlertCircle className="h-5 w-5 text-red-500" />
+            <h3 className="text-lg font-semibold text-gray-900">📋 Today's Action Items</h3>
+            <span className="text-sm text-gray-500">{todoList.length} tasks</span>
           </div>
           <div className="space-y-3">
-            {analytics.critical_alerts.slice(0, 8).map((alert, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg">
+            {todoList.length > 0 ? todoList.map((todo, index) => (
+              <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${
+                todo.type === 'critical' ? 'bg-red-50 border-red-200' :
+                todo.type === 'monitor' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-green-50 border-green-200'
+              }`}>
                 <div className="flex items-center space-x-3">
-                  <span className="text-2xl">{alert.emoji}</span>
+                  <span className="text-xl">{todo.icon}</span>
                   <div>
-                    <p className="font-medium text-gray-900">{alert.asin}</p>
-                    <p className="text-sm text-gray-600">{alert.reasoning}</p>
+                    <p className="font-medium text-gray-900">{todo.action}</p>
+                    <p className="text-sm text-gray-600">{todo.detail}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">Velocity: {alert.velocity.toFixed(2)}/day</p>
-                  <p className="text-sm text-gray-600">Priority: {alert.priority_score.toFixed(2)}</p>
-                </div>
+                <input type="checkbox" className="h-4 w-4 text-blue-600 rounded" />
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8 text-gray-500">
+                <Package className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>All caught up! No urgent actions needed.</p>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Quick Stats */}
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Quick Stats</h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Units Sold Today</span>
+              <span className="font-semibold text-gray-900">
+                {analytics?.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Active Products</span>
+              <span className="font-semibold text-gray-900">
+                {analytics?.today_sales ? Object.keys(analytics.today_sales).length : 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Critical Stock Alerts</span>
+              <span className="font-semibold text-red-600">{stockStatus.critical}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Growth Opportunities</span>
+              <span className="font-semibold text-green-600">{stockStatus.healthy}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-600">Products to Monitor</span>
+              <span className="font-semibold text-yellow-600">{stockStatus.warning}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Movers Chart */}
+      {topMovers.length > 0 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Today's Top Movers</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topMovers}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="asin" />
+              <YAxis />
+              <Tooltip 
+                formatter={(value, name) => [value, name === 'sales' ? 'Units Sold' : 'Trend %']}
+                labelFormatter={(label) => `ASIN: ${label}`}
+              />
+              <Bar dataKey="sales" fill="#3b82f6" name="Units Sold" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       )}
+
+      {/* Stock Status Overview */}
+      <div className="card">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">📦 Inventory Status</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-red-50 rounded-lg">
+            <div className="text-2xl font-bold text-red-600">{stockStatus.critical}</div>
+            <div className="text-sm text-red-700">Critical</div>
+            <div className="text-xs text-gray-500">Need immediate action</div>
+          </div>
+          <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <div className="text-2xl font-bold text-yellow-600">{stockStatus.warning}</div>
+            <div className="text-sm text-yellow-700">Watch Closely</div>
+            <div className="text-xs text-gray-500">Monitor for changes</div>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">{stockStatus.healthy}</div>
+            <div className="text-sm text-green-700">Healthy</div>
+            <div className="text-xs text-gray-500">No action needed</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

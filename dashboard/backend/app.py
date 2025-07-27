@@ -224,6 +224,23 @@ def discord_callback():
     print(f"[DEBUG] Session set with discord_id: {session['discord_id']}")
     print(f"[DEBUG] Full session data: {dict(session)}")
     
+    # Save Discord username to user record for admin panel
+    try:
+        users = get_users_config()
+        discord_id = session['discord_id']
+        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        
+        if user_record is None:
+            user_record = {"discord_id": discord_id}
+            users.append(user_record)
+        
+        # Update Discord username in permanent record
+        user_record['discord_username'] = user_data['username']
+        update_users_config(users)
+        print(f"[DEBUG] Updated user record with Discord username: {user_data['username']}")
+    except Exception as e:
+        print(f"[DEBUG] Failed to update user record: {e}")
+    
     # FORCE redirect to Vercel frontend - UPDATED
     frontend_url = "https://internet-money-tools.vercel.app/dashboard"
     print(f"[DEBUG] Discord callback redirecting to: {frontend_url}")
@@ -277,6 +294,10 @@ def update_profile():
     if user_record is None:
         user_record = {"discord_id": discord_id}
         users.append(user_record)
+    
+    # Always update Discord username from session when available
+    if 'discord_username' in session:
+        user_record['discord_username'] = session['discord_username']
     
     # Update user profile fields
     if 'email' in data:

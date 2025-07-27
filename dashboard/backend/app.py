@@ -764,6 +764,18 @@ def get_orders_analytics():
             print(f"[Dashboard Analytics] Low stock items found: {len(analysis.get('low_stock', {}))}")
             print(f"[Dashboard Analytics] Restock priority items: {len(analysis.get('restock_priority', {}))}")
             print(f"[Dashboard Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
+            print(f"[Dashboard Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
+            print(f"[Dashboard Analytics] Restock alerts: {len(analysis.get('restock_alerts', {}))}")
+            print(f"[Dashboard Analytics] Critical alerts: {len(analysis.get('critical_alerts', []))}")
+            
+            # Debug: Show sample enhanced analytics data
+            if analysis.get('enhanced_analytics'):
+                sample_asin = list(analysis['enhanced_analytics'].keys())[0]
+                sample_data = analysis['enhanced_analytics'][sample_asin]
+                print(f"[DEBUG] Sample enhanced analytics for {sample_asin}:")
+                print(f"[DEBUG]   velocity: {sample_data.get('velocity', {})}")
+                print(f"[DEBUG]   priority: {sample_data.get('priority', {})}")
+                print(f"[DEBUG]   restock: {sample_data.get('restock', {})}")
         except Exception as analysis_error:
             print(f"[Dashboard Analytics] Enhanced analysis failed: {analysis_error}")
             print(f"[Dashboard Analytics] Error type: {type(analysis_error).__name__}")

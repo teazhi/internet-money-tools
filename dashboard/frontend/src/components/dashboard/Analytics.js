@@ -52,6 +52,10 @@ const Analytics = () => {
         '/api/analytics/orders';
       
       const response = await axios.get(url, { withCredentials: true });
+      console.log('Analytics data received:', response.data);
+      console.log('Enhanced analytics count:', Object.keys(response.data?.enhanced_analytics || {}).length);
+      console.log('Today sales count:', Object.keys(response.data?.today_sales || {}).length);
+      console.log('Available data keys:', Object.keys(response.data || {}));
       setAnalytics(response.data);
       
       if (response.data.error) {
@@ -100,7 +104,32 @@ const Analytics = () => {
 
   // 1. Stock Risk Dashboard - Velocity vs Days Remaining
   const getStockRiskData = () => {
-    if (!analytics?.enhanced_analytics) return [];
+    // Fallback to basic analytics if enhanced analytics is empty
+    if (!analytics?.enhanced_analytics || Object.keys(analytics.enhanced_analytics).length === 0) {
+      console.log('Using fallback basic analytics for stock risk data');
+      if (!analytics?.today_sales || !analytics?.velocity) return [];
+      
+      return Object.entries(analytics.today_sales)
+        .map(([asin, sales]) => {
+          const velocityData = analytics.velocity[asin];
+          const stockData = analytics.stockout_30d?.[asin];
+          
+          if (!velocityData || !stockData) return null;
+          
+          return {
+            asin: asin.substring(0, 8),
+            velocity: sales, // Use daily sales as velocity
+            daysLeft: Math.min(stockData.days_left || 999, 60),
+            revenueImpact: sales * 10, // Rough estimate
+            category: stockData.days_left < 7 ? 'critical' : stockData.days_left < 14 ? 'warning' : 'monitor',
+            fullAsin: asin,
+            productName: stockData.title || asin,
+            priority: stockData.days_left < 7 ? 1.0 : 0.5
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.revenueImpact - a.revenueImpact);
+    }
     
     return Object.entries(analytics.enhanced_analytics)
       .map(([asin, data]) => {

@@ -111,10 +111,29 @@ const Admin = () => {
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
+    if (Math.abs(diffMins) < 1) return 'Just now';
+    if (Math.abs(diffMins) < 60) return `${Math.abs(diffMins)}m ago`;
+    if (Math.abs(diffHours) < 24) return `${Math.abs(diffHours)}h ago`;
+    if (Math.abs(diffDays) < 7) return `${Math.abs(diffDays)}d ago`;
+    
+    return date.toLocaleDateString();
+  };
+
+  const getExpirationTime = (dateString) => {
+    if (!dateString) return 'Never';
+    
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = date - now;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMs < 0) return 'Expired';
+    if (diffMins < 1) return 'Soon';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
     
     return date.toLocaleDateString();
   };
@@ -538,7 +557,7 @@ const Admin = () => {
                       {getRelativeTime(invitation.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getRelativeTime(invitation.expires_at)}
+                      {getExpirationTime(invitation.expires_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {new Date(invitation.expires_at) > new Date() ? (

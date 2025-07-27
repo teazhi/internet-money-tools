@@ -734,6 +734,22 @@ const Analytics = () => {
       {topMovers.length > 0 && (
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Today's Top Movers</h3>
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              {topMovers.map((mover, index) => (
+                <a 
+                  key={index}
+                  href={`https://www.amazon.com/dp/${mover.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm hover:bg-blue-100 transition-colors"
+                >
+                  {mover.asin} ({mover.sales} units)
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ))}
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topMovers}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -741,20 +757,7 @@ const Analytics = () => {
               <YAxis />
               <Tooltip 
                 formatter={(value, name) => [value, name === 'sales' ? 'Units Sold' : 'Trend %']}
-                labelFormatter={(label) => (
-                  <div className="flex items-center gap-2">
-                    <span>ASIN: {label}</span>
-                    <a 
-                      href={`https://www.amazon.com/dp/${topMovers.find(m => m.asin === label)?.asin || label}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
+                labelFormatter={(label) => `ASIN: ${label}`}
               />
               <Bar dataKey="sales" fill="#3b82f6" name="Units Sold" />
             </BarChart>
@@ -866,7 +869,7 @@ const Analytics = () => {
                         </p>
                       )}
                     </div>
-                  )))
+                  ))
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">

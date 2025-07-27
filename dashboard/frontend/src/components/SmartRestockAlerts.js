@@ -90,6 +90,60 @@ const SmartRestockAlerts = ({ analytics }) => {
     return daysLeft || 'Unknown';
   };
 
+  // Helper function to get days left value from stock_info (matching backend logic)
+  const getDaysLeftFromStock = (stockInfo) => {
+    if (!stockInfo) return 'Unknown';
+    
+    // List of possible column name patterns for days left
+    const possiblePatterns = [
+      'Days of stock left',
+      'Days Left',
+      'Days of Stock Left', 
+      'Days Of Stock Left',
+      'DaysLeft',
+      'Days_Left',
+      'Days Stock Left',
+      'Stock Days Left',
+      'Inventory Days Left',
+      'Days Until Out of Stock'
+    ];
+    
+    // First try exact matches (case insensitive)
+    for (const pattern of possiblePatterns) {
+      for (const key of Object.keys(stockInfo)) {
+        if (key.toLowerCase() === pattern.toLowerCase()) {
+          const value = stockInfo[key];
+          if (value !== null && value !== undefined && String(value).trim() !== '') {
+            try {
+              return parseFloat(value);
+            } catch {
+              return value;
+            }
+          }
+        }
+      }
+    }
+    
+    // Then try partial matches
+    for (const key of Object.keys(stockInfo)) {
+      const keyLower = key.toLowerCase().replace(/\s+/g, '').replace(/_/g, '');
+      if ((keyLower.includes('days') && keyLower.includes('stock') && keyLower.includes('left')) ||
+          (keyLower.includes('days') && keyLower.includes('left')) ||
+          (keyLower.includes('stock') && keyLower.includes('days'))) {
+        const value = stockInfo[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '') {
+          try {
+            return parseFloat(value);
+          } catch {
+            return value;
+          }
+        }
+      }
+    }
+    
+    return 'Unknown';
+  };
+
   try {
     return (
       <div className="space-y-6">
@@ -317,7 +371,7 @@ const SmartRestockAlerts = ({ analytics }) => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDaysLeft(data.stock_info['Days of stock left'])}
+                        {formatDaysLeft(getDaysLeftFromStock(data.stock_info))}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-builders-600">
                         {data.restock.suggested_quantity}

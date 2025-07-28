@@ -1004,10 +1004,13 @@ def delete_sellerboard_file(file_key):
     """Delete a specific Sellerboard file"""
     try:
         discord_id = session['discord_id']
+        print(f"[DEBUG] Delete request from user {discord_id} for file: {file_key}")
+        
         users = get_users_config()
         user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
         
         if not user_record or 'uploaded_files' not in user_record:
+            print(f"[DEBUG] No user record or uploaded_files for {discord_id}")
             return jsonify({'error': 'File not found'}), 404
         
         # Find and remove the file
@@ -1015,22 +1018,29 @@ def delete_sellerboard_file(file_key):
         for i, file_info in enumerate(user_record['uploaded_files']):
             if file_info['s3_key'] == file_key:
                 file_to_delete = user_record['uploaded_files'].pop(i)
+                print(f"[DEBUG] Found file to delete: {file_info}")
                 break
         
         if not file_to_delete:
+            print(f"[DEBUG] File not found in user's uploaded_files. Available keys: {[f['s3_key'] for f in user_record['uploaded_files']]}")
             return jsonify({'error': 'File not found'}), 404
         
         # Delete from S3
         s3_client = get_s3_client()
+        print(f"[DEBUG] Deleting from S3: bucket={CONFIG_S3_BUCKET}, key={file_key}")
         s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
+        print(f"[DEBUG] S3 deletion successful")
         
         # Update user config
         if update_users_config(users):
+            print(f"[DEBUG] User config updated successfully")
             return jsonify({'message': 'File deleted successfully'})
         else:
+            print(f"[DEBUG] Failed to update user config")
             return jsonify({'error': 'Failed to update configuration'}), 500
             
     except Exception as e:
+        print(f"[DEBUG] Delete error: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Admin API endpoints

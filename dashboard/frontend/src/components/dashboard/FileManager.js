@@ -118,12 +118,16 @@ const FileManager = () => {
     }
 
     try {
-      await axios.delete(`/api/files/sellerboard/${encodeURIComponent(fileKey)}`, { 
+      console.log('Deleting file with key:', fileKey);
+      const response = await axios.delete(`/api/files/sellerboard/${encodeURIComponent(fileKey)}`, { 
         withCredentials: true 
       });
+      console.log('Delete response:', response.data);
       setMessage({ type: 'success', text: 'File deleted successfully' });
       fetchFiles(); // Refresh file list
     } catch (error) {
+      console.error('Delete error:', error);
+      console.error('Error response:', error.response?.data);
       setMessage({ 
         type: 'error', 
         text: error.response?.data?.error || 'Failed to delete file' 
@@ -266,6 +270,11 @@ const FileManager = () => {
                       </span>
                       <span>{formatFileSize(file.file_size)}</span>
                     </div>
+                    {file.s3_key && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        <span title={file.s3_key}>User-specific storage: {file.s3_key.split('/')[1]?.substring(0, 20)}...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -291,11 +300,12 @@ const FileManager = () => {
           <div>
             <h4 className="text-sm font-medium text-blue-900">How to use uploaded files</h4>
             <div className="text-sm text-blue-700 mt-1 space-y-1">
-              <p>• Files are automatically processed and stored securely in your account</p>
+              <p>• Files are automatically processed and stored securely with user-specific naming</p>
+              <p>• Each uploaded file gets a unique identifier tied to your Discord account</p>
               <p>• You can upload CSV files exported from Sellerboard reports</p>
               <p>• Excel files (.xlsx, .xlsm, .xls) are also supported for compatibility</p>
               <p>• Only the 10 most recent files are kept per user</p>
-              <p>• Files are used for analytics and reporting in your dashboard</p>
+              <p>• Files are used for analytics and automated script processing</p>
             </div>
           </div>
         </div>

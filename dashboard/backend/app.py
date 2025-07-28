@@ -265,7 +265,9 @@ def discord_login():
     
     # Get invitation token from query parameters
     invitation_token = request.args.get('invitation')
+    print(f"[Discord Auth] Invitation token received: {invitation_token}")
     state_param = f"&state={invitation_token}" if invitation_token else ""
+    print(f"[Discord Auth] State parameter: {state_param}")
     
     discord_auth_url = (
         f"https://discord.com/api/oauth2/authorize"
@@ -320,21 +322,35 @@ def discord_callback():
     # If user doesn't exist, check for invitation
     if not existing_user:
         invitation_token = request.args.get('state')  # Discord passes our state parameter back
+        print(f"[Discord Callback] Invitation token from state: {invitation_token}")
+        print(f"[Discord Callback] Full callback args: {dict(request.args)}")
+        
         if not invitation_token:
+            print(f"[Discord Callback] No invitation token found, redirecting to no_invitation error")
             return redirect("https://internet-money-tools.vercel.app/login?error=no_invitation")
         
         # Validate invitation token
         invitations = get_invitations_config()
+        print(f"[Discord Callback] Checking {len(invitations)} invitations for token: {invitation_token}")
         valid_invitation = None
         for inv in invitations:
+            print(f"[Discord Callback] Checking invitation: token={inv['token']}, status={inv['status']}, created={inv['created_at']}")
             if inv['token'] == invitation_token and inv['status'] == 'pending':
                 # Check if invitation is not expired (7 days)
                 invitation_date = datetime.fromisoformat(inv['created_at'])
-                if datetime.now() - invitation_date < timedelta(days=7):
+                time_diff = datetime.now() - invitation_date
+                print(f"[Discord Callback] Invitation age: {time_diff}, expires after 7 days")
+                if time_diff < timedelta(days=7):
                     valid_invitation = inv
+                    print(f"[Discord Callback] Found valid invitation for email: {inv['email']}")
                     break
+                else:
+                    print(f"[Discord Callback] Invitation expired ({time_diff} old)")
+            else:
+                print(f"[Discord Callback] Invitation mismatch: token={inv['token'] == invitation_token}, status={inv['status'] == 'pending'}")
         
         if not valid_invitation:
+            print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
             return redirect("https://internet-money-tools.vercel.app/login?error=invalid_invitation")
         
         # Mark invitation as used

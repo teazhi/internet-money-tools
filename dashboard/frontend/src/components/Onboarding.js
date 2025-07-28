@@ -11,7 +11,10 @@ import {
   ExternalLink,
   AlertTriangle,
   Check,
-  Settings
+  Settings,
+  Upload,
+  File,
+  FileSpreadsheet
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -52,18 +55,24 @@ const Onboarding = () => {
   // Step 1: Profile Data
   const [profileData, setProfileData] = useState({
     email: '',
-    listing_loader_key: '',
-    sb_file_key: '',
     sellerboard_orders_url: '',
     sellerboard_stock_url: '',
     run_scripts: false
   });
 
-  // Step 2: Google Auth
+  // Step 2: File Upload Status
+  const [fileStatus, setFileStatus] = useState({
+    has_sellerboard: false,
+    has_listing_loader: false,
+    files_complete: false
+  });
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+
+  // Step 3: Google Auth
   const [googleAuthUrl, setGoogleAuthUrl] = useState('');
   const [authCode, setAuthCode] = useState('');
 
-  // Step 3: Sheet Configuration
+  // Step 4: Sheet Configuration
   const [spreadsheets, setSpreadsheets] = useState([]);
   const [selectedSpreadsheet, setSelectedSpreadsheet] = useState('');
   const [worksheets, setWorksheets] = useState([]);
@@ -94,13 +103,20 @@ const Onboarding = () => {
       },
       {
         number: 2,
+        title: "Upload Required Files",
+        description: "Upload your Sellerboard file and Listing Loader template",
+        completed: fileStatus.files_complete,
+        isValid: fileStatus.files_complete
+      },
+      {
+        number: 3,
         title: "Connect Google Account",
         description: "Link your Google account for spreadsheet access",
         completed: user?.google_linked || false,
         isValid: user?.google_linked || false
       },
       {
-        number: 3,
+        number: 4,
         title: "Configure Spreadsheet",
         description: "Set up your inventory tracking spreadsheet",
         completed: user?.sheet_configured || false,
@@ -138,6 +154,7 @@ const Onboarding = () => {
       setTimeout(() => {
         setCurrentStep(2);
         setSuccess('');
+        fetchFileStatus(); // Load file status for step 2
       }, 1000);
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to update profile');
@@ -146,7 +163,51 @@ const Onboarding = () => {
     }
   };
 
-  // Step 2: Google Authentication
+  // Step 2: File Upload Functions
+  const fetchFileStatus = async () => {
+    try {
+      const response = await axios.get('/api/files/status', { withCredentials: true });
+      setFileStatus(response.data);
+    } catch (error) {
+      setError('Failed to check file upload status');
+    }
+  };
+
+  const handleFileUpload = async (file, fileType) => {
+    if (!file) return;
+
+    setUploadingFiles(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      await axios.post('/api/upload/sellerboard', formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setSuccess(`${fileType} uploaded successfully!`);
+      fetchFileStatus(); // Refresh status
+      
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.error || `Failed to upload ${fileType}`);
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
+
+  const proceedFromFileUpload = () => {
+    if (fileStatus.files_complete) {
+      setCurrentStep(3);
+    } else {
+      setError('Please upload both required files before proceeding');
+    }
+  };
+
+  // Step 3: Google Authentication
   const getGoogleAuthUrl = async () => {
     try {
       const response = await axios.get('/api/google/auth-url', { withCredentials: true });
@@ -169,7 +230,7 @@ const Onboarding = () => {
       setSuccess('Google account linked successfully!');
       await refreshUser();
       setTimeout(() => {
-        setCurrentStep(3);
+        setCurrentStep(4);
         setSuccess('');
         fetchSpreadsheets();
       }, 1000);
@@ -239,6 +300,8 @@ const Onboarding = () => {
 
   useEffect(() => {
     if (currentStep === 2) {
+      fetchFileStatus();
+    } else if (currentStep === 3) {
       getGoogleAuthUrl();
     }
   }, [currentStep]);
@@ -368,32 +431,6 @@ const Onboarding = () => {
                 <p className="text-xs text-gray-500 mt-1">The automation URL for your Sellerboard stock report</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Listing Loader Key (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={profileData.listing_loader_key}
-                  onChange={(e) => setProfileData({...profileData, listing_loader_key: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
-                  placeholder="listing-loader-key"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sellerboard File Key (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={profileData.sb_file_key}
-                  onChange={(e) => setProfileData({...profileData, sb_file_key: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
-                  placeholder="sellerboard-file-key"
-                />
-              </div>
-
               <div className="flex items-center">
                 <input
                   id="run_scripts"
@@ -417,15 +454,121 @@ const Onboarding = () => {
             </div>
           </OnboardingStep>
 
-          {/* Step 2: Google Authentication */}
+          {/* Step 2: File Upload */}
           <OnboardingStep
             number={2}
-            title="Connect Google Account"
-            description="Link your Google account for spreadsheet access"
+            title="Upload Required Files"
+            description="Upload your Sellerboard file and Listing Loader template"
             completed={isStepComplete(2)}
             active={currentStep === 2}
           >
-            {!isStepComplete(2) && (
+            <div className="mt-4 space-y-6">
+              {/* Sellerboard File Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <div className="text-center">
+                  <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                    Sellerboard File {fileStatus.has_sellerboard && <Check className="inline w-4 h-4 text-green-500 ml-1" />}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Upload your exported Sellerboard file (.xlsx, .csv)
+                  </p>
+                  <div className="mt-4">
+                    <input
+                      type="file"
+                      accept=".xlsx,.csv,.xls"
+                      onChange={(e) => handleFileUpload(e.target.files[0], 'Sellerboard file')}
+                      className="hidden"
+                      id="sellerboard-upload"
+                      disabled={uploadingFiles}
+                    />
+                    <label
+                      htmlFor="sellerboard-upload"
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-builders-600 hover:bg-builders-700 cursor-pointer disabled:opacity-50"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {fileStatus.has_sellerboard ? 'Replace File' : 'Upload Sellerboard File'}
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Listing Loader Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <div className="text-center">
+                  <File className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                    Listing Loader Template {fileStatus.has_listing_loader && <Check className="inline w-4 h-4 text-green-500 ml-1" />}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Upload your Amazon Listing Loader template (.xlsm)
+                  </p>
+                  <div className="mt-4">
+                    <input
+                      type="file"
+                      accept=".xlsm"
+                      onChange={(e) => handleFileUpload(e.target.files[0], 'Listing Loader template')}
+                      className="hidden"
+                      id="listing-loader-upload"
+                      disabled={uploadingFiles}
+                    />
+                    <label
+                      htmlFor="listing-loader-upload"
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-builders-600 hover:bg-builders-700 cursor-pointer disabled:opacity-50"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {fileStatus.has_listing_loader ? 'Replace Template' : 'Upload Listing Loader'}
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Status */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Upload Progress:</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    {fileStatus.has_sellerboard ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-gray-300 mr-2" />
+                    )}
+                    <span className={`text-sm ${fileStatus.has_sellerboard ? 'text-green-700' : 'text-gray-500'}`}>
+                      Sellerboard file uploaded
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    {fileStatus.has_listing_loader ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-gray-300 mr-2" />
+                    )}
+                    <span className={`text-sm ${fileStatus.has_listing_loader ? 'text-green-700' : 'text-gray-500'}`}>
+                      Listing Loader template uploaded
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={proceedFromFileUpload}
+                disabled={!fileStatus.files_complete || uploadingFiles}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-builders-600 hover:bg-builders-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingFiles ? 'Uploading...' : 'Continue to Google Authentication'}
+              </button>
+            </div>
+          </OnboardingStep>
+
+          {/* Step 3: Google Authentication */}
+          <OnboardingStep
+            number={3}
+            title="Connect Google Account"
+            description="Link your Google account for spreadsheet access"
+            completed={isStepComplete(3)}
+            active={currentStep === 3}
+          >
+            {!isStepComplete(3) && (
               <div className="mt-4 space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex">
@@ -482,15 +625,15 @@ const Onboarding = () => {
             )}
           </OnboardingStep>
 
-          {/* Step 3: Sheet Configuration */}
+          {/* Step 4: Spreadsheet Configuration */}
           <OnboardingStep
-            number={3}
+            number={4}
             title="Configure Spreadsheet"
             description="Set up your inventory tracking spreadsheet"
-            completed={isStepComplete(3)}
-            active={currentStep === 3}
+            completed={isStepComplete(4)}
+            active={currentStep === 4}
           >
-            {!isStepComplete(3) && (
+            {!isStepComplete(4) && (
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

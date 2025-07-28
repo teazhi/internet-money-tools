@@ -19,6 +19,7 @@ const FileManager = () => {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [dragOver, setDragOver] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   useEffect(() => {
     fetchFiles();
@@ -135,6 +136,32 @@ const FileManager = () => {
     }
   };
 
+  const migrateExistingFiles = async () => {
+    setMigrating(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/files/migrate', {}, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message}. Refreshing file list...` 
+      });
+      
+      // Refresh file list after migration
+      setTimeout(() => {
+        fetchFiles();
+        setMessage({ type: '', text: '' });
+      }, 2000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to migrate existing files' 
+      });
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -164,12 +191,26 @@ const FileManager = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center space-x-3">
-        <FileText className="h-8 w-8 text-builders-500" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">File Manager</h1>
-          <p className="text-gray-600">Upload and manage your Sellerboard files</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <FileText className="h-8 w-8 text-builders-500" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">File Manager</h1>
+            <p className="text-gray-600">Upload and manage your Sellerboard files</p>
+          </div>
         </div>
+        
+        {/* Migration Button */}
+        {files.length === 0 && (
+          <button
+            onClick={migrateExistingFiles}
+            disabled={migrating}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {migrating ? 'Finding Files...' : 'Find Existing Files'}
+          </button>
+        )}
       </div>
 
       {/* Message Display */}
@@ -190,7 +231,7 @@ const FileManager = () => {
 
       {/* Upload Area */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Sellerboard File</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Files</h3>
         
         <div
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
@@ -205,13 +246,13 @@ const FileManager = () => {
           <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <div className="space-y-2">
             <p className="text-lg font-medium text-gray-900">
-              {dragOver ? 'Drop file here' : 'Upload your Sellerboard file'}
+              {dragOver ? 'Drop file here' : 'Upload your files'}
             </p>
             <p className="text-sm text-gray-500">
-              Drag and drop your file here, or click to browse
+              Drag and drop your Sellerboard file (.xlsx/.csv) or Listing Loader template (.xlsm) here
             </p>
             <p className="text-xs text-gray-400">
-              Supports CSV, XLSX, XLSM, XLS files up to 16MB
+              Files are automatically categorized by type • Max 16MB each
             </p>
           </div>
           
@@ -262,7 +303,18 @@ const FileManager = () => {
                     <File className="h-8 w-8 text-gray-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{file.filename}</p>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900">{file.filename}</p>
+                      {file.file_type_category && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          file.file_type_category === 'listing_loader' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {file.file_type_category === 'listing_loader' ? 'Listing Loader' : 'Sellerboard'}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
                       <span className="flex items-center space-x-1">
                         <Calendar className="h-3 w-3" />
@@ -304,7 +356,8 @@ const FileManager = () => {
               <p>• Each uploaded file gets a unique identifier tied to your Discord account</p>
               <p>• You can upload CSV files exported from Sellerboard reports</p>
               <p>• Excel files (.xlsx, .xlsm, .xls) are also supported for compatibility</p>
-              <p>• Only the most recent file is kept per user (previous files are auto-deleted)</p>
+              <p>• Only one file of each type is kept (Sellerboard + Listing Loader)</p>
+              <p>• When you upload a new file of the same type, the old one is automatically replaced</p>
               <p>• Files are used for analytics and automated script processing</p>
             </div>
           </div>

@@ -946,28 +946,49 @@ def upload_sellerboard_file():
         if 'uploaded_files' not in user_record:
             user_record['uploaded_files'] = []
         
+        # File type management: Keep one of each type (sellerboard and listing loader)
+        # Determine file type based on filename and extension
+        filename_lower = filename.lower()
+        
+        if '.xlsm' in filename_lower or 'listing' in filename_lower or 'loader' in filename_lower:
+            file_type_category = 'listing_loader'
+        elif '.xlsx' in filename_lower or 'sellerboard' in filename_lower or 'sb' in filename_lower:
+            file_type_category = 'sellerboard'
+        else:
+            # Default to sellerboard for .csv and unrecognized files
+            file_type_category = 'sellerboard'
+        
         file_info = {
             'filename': filename,
             's3_key': s3_key,
             'upload_date': datetime.now().isoformat(),
             'file_size': len(file_content),
-            'file_type': file.content_type
+            'file_type': file.content_type,
+            'file_type_category': file_type_category
         }
         
-        user_record['uploaded_files'].append(file_info)
+        # Remove any existing files of the same type
+        files_to_delete = []
+        remaining_files = []
         
-        # Keep only the latest file - delete all previous files
-        if len(user_record['uploaded_files']) > 1:
-            old_files = user_record['uploaded_files'][:-1]  # All except the newest
-            user_record['uploaded_files'] = user_record['uploaded_files'][-1:]  # Keep only newest
-            
-            # Delete old files from S3
-            for old_file in old_files:
-                try:
-                    s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=old_file['s3_key'])
-                    print(f"Deleted old file: {old_file['filename']}")
-                except Exception as e:
-                    print(f"Error deleting old file {old_file['s3_key']}: {e}")
+        for existing_file in user_record['uploaded_files']:
+            existing_type = existing_file.get('file_type_category', 'sellerboard')
+            if existing_type == file_type_category:
+                files_to_delete.append(existing_file)
+            else:
+                remaining_files.append(existing_file)
+        
+        # Delete old files of same type from S3
+        for old_file in files_to_delete:
+            try:
+                s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=old_file['s3_key'])
+                print(f"Deleted old {file_type_category} file: {old_file['filename']}")
+            except Exception as e:
+                print(f"Error deleting old file {old_file['s3_key']}: {e}")
+        
+        # Update the files list (keep other type + new file)
+        user_record['uploaded_files'] = remaining_files
+        user_record['uploaded_files'].append(file_info)
         
         if update_users_config(users):
             return jsonify({
@@ -984,7 +1005,7 @@ def upload_sellerboard_file():
 @app.route('/api/files/sellerboard', methods=['GET'])
 @login_required
 def list_sellerboard_files():
-    """List user's uploaded Sellerboard files"""
+    """List user's uploaded files"""
     try:
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
@@ -993,6 +1014,165 @@ def list_sellerboard_files():
             return jsonify({'files': []})
         
         return jsonify({'files': user_record['uploaded_files']})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/files/migrate', methods=['POST'])
+@login_required
+def migrate_existing_files():
+    """Migrate existing S3 files to user records"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Initialize uploaded_files if it doesn't exist
+        if 'uploaded_files' not in user_record:
+            user_record['uploaded_files'] = []
+        
+        # Scan S3 for existing files for this user
+        s3_client = get_s3_client()
+        
+        try:
+            # List all files in sellerboard_files/ folder that start with user's discord_id
+            prefix = f"sellerboard_files/{discord_id}_"
+            response = s3_client.list_objects_v2(Bucket=CONFIG_S3_BUCKET, Prefix=prefix)
+            
+            # Also check for direct files (legacy listing loaders)
+            direct_response = s3_client.list_objects_v2(Bucket=CONFIG_S3_BUCKET)
+            
+            # Combine both responses
+            all_objects = []
+            if 'Contents' in response:
+                all_objects.extend(response['Contents'])
+            
+            # For direct files, check if they belong to this user (by name pattern)
+            if 'Contents' in direct_response:
+                for obj in direct_response['Contents']:
+                    key = obj['Key']
+                    # Skip files already in sellerboard_files/
+                    if key.startswith('sellerboard_files/'):
+                        continue
+                    
+                    # Check if filename contains user identifier or matches known patterns
+                    filename = key.lower()
+                    user_record_info = user_record
+                    
+                    # Try to match by email username or listing_loader_key
+                    if user_record_info.get('email'):
+                        email_username = user_record_info['email'].split('@')[0].lower()
+                        if email_username in filename:
+                            all_objects.append(obj)
+                    
+                    # Also check deprecated listing_loader_key field
+                    if user_record_info.get('listing_loader_key'):
+                        if user_record_info['listing_loader_key'].lower() in filename:
+                            all_objects.append(obj)
+            
+            migrated_files = []
+            
+            for obj in all_objects:
+                s3_key = obj['Key']
+                filename = s3_key.split('/')[-1]  # Get filename from S3 key
+                
+                # Handle different file naming patterns
+                if s3_key.startswith('sellerboard_files/'):
+                    # New format: sellerboard_files/discord_id_timestamp_original_filename
+                    parts = filename.split('_', 3)  # discord_id, date, time, original_filename
+                    if len(parts) >= 4:
+                        original_filename = parts[3]
+                    else:
+                        original_filename = filename
+                else:
+                    # Legacy format: direct file in bucket root
+                    original_filename = filename
+                
+                # Check if this file is already in uploaded_files
+                already_exists = any(f['s3_key'] == s3_key for f in user_record['uploaded_files'])
+                
+                if not already_exists:
+                    # Determine file type category
+                    filename_lower = original_filename.lower()
+                    if '.xlsm' in filename_lower or 'listing' in filename_lower or 'loader' in filename_lower:
+                        file_type_category = 'listing_loader'
+                    else:
+                        file_type_category = 'sellerboard'
+                    
+                    # Get file size
+                    file_size = obj.get('Size', 0)
+                    
+                    # Use LastModified as upload date
+                    upload_date = obj.get('LastModified', datetime.now()).isoformat()
+                    
+                    # Determine content type
+                    if s3_key.endswith('.xlsx'):
+                        content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    elif s3_key.endswith('.xlsm'):
+                        content_type = 'application/vnd.ms-excel.sheet.macroEnabled.12'
+                    elif s3_key.endswith('.csv'):
+                        content_type = 'text/csv'
+                    else:
+                        content_type = 'application/octet-stream'
+                    
+                    file_info = {
+                        'filename': original_filename,
+                        's3_key': s3_key,
+                        'upload_date': upload_date,
+                        'file_size': file_size,
+                        'file_type': content_type,
+                        'file_type_category': file_type_category
+                    }
+                    
+                    user_record['uploaded_files'].append(file_info)
+                    migrated_files.append(file_info)
+            
+            # Update users config
+            users = get_users_config()
+            for i, user in enumerate(users):
+                if user.get('discord_id') == discord_id:
+                    users[i] = user_record
+                    break
+            
+            update_users_config(users)
+            
+            return jsonify({
+                'message': f'Successfully migrated {len(migrated_files)} files',
+                'migrated_files': migrated_files
+            })
+            
+        except Exception as e:
+            return jsonify({'error': f'S3 error: {str(e)}'}), 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/files/status', methods=['GET'])
+@login_required
+def files_upload_status():
+    """Check if user has uploaded both required file types"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record or 'uploaded_files' not in user_record:
+            return jsonify({
+                'has_sellerboard': False,
+                'has_listing_loader': False,
+                'files_complete': False
+            })
+        
+        uploaded_files = user_record['uploaded_files']
+        has_sellerboard = any(f.get('file_type_category') == 'sellerboard' for f in uploaded_files)
+        has_listing_loader = any(f.get('file_type_category') == 'listing_loader' for f in uploaded_files)
+        
+        return jsonify({
+            'has_sellerboard': has_sellerboard,
+            'has_listing_loader': has_listing_loader,
+            'files_complete': has_sellerboard and has_listing_loader
+        })
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -665,8 +665,8 @@ class OrdersAnalysis(EnhancedOrdersAnalysis):
             self.stock_url = stock_url
             self.is_fallback = True
     
-    def analyze(self, for_date: date) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None) -> dict:
         if hasattr(self, 'is_fallback') and self.is_fallback:
             return BasicOrdersAnalysis(self.orders_url, self.stock_url).analyze(for_date)
         else:
-            return super().analyze(for_date)
+            return super().analyze(for_date, prev_date, user_timezone)

@@ -516,13 +516,20 @@ class EnhancedOrdersAnalysis:
                 cogs_value = latest_row[cogs_field]
                 source_value = latest_row[source_field] if source_field else None
                 
+                print(f"[DEBUG] ASIN {asin} - source_value: '{source_value}' (type: {type(source_value)})")
+                
                 if not pd.isna(cogs_value) and cogs_value > 0:
+                    # Clean source value and check if it's a valid URL
+                    cleaned_source = str(source_value).strip() if source_value and not pd.isna(source_value) else None
+                    print(f"[DEBUG] ASIN {asin} - cleaned_source: '{cleaned_source}'")
+                    
                     cogs_data[asin] = {
                         'cogs': float(cogs_value),
-                        'source_link': source_value if source_value and str(source_value).strip() != '' else None,
+                        'source_link': cleaned_source if cleaned_source and cleaned_source != '' and cleaned_source.lower() != 'nan' else None,
                         'last_purchase_date': latest_row[date_field] if date_field in latest_row and not pd.isna(latest_row[date_field]) else None,
                         'source_column': source_field
                     }
+                    print(f"[DEBUG] ASIN {asin} - final COGS data: {cogs_data[asin]}")
             
             print(f"[DEBUG] Fetched COGS data for {len(cogs_data)} ASINs from Google Sheet")
             if len(cogs_data) > 0:

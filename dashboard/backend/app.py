@@ -472,6 +472,8 @@ def update_profile():
         user_record['timezone'] = data['timezone']
     if 'enable_source_links' in data:
         user_record['enable_source_links'] = data['enable_source_links']
+    if 'search_all_worksheets' in data:
+        user_record['search_all_worksheets'] = data['search_all_worksheets']
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})
@@ -820,6 +822,7 @@ def get_orders_analytics():
             # Prepare user settings for COGS data fetching
             user_settings = {
                 'enable_source_links': user_record.get('enable_source_links', False),
+                'search_all_worksheets': user_record.get('search_all_worksheets', False),
                 'sheet_id': user_record.get('sheet_id'),
                 'worksheet_title': user_record.get('worksheet_title'),
                 'google_tokens': user_record.get('google_tokens', {}),

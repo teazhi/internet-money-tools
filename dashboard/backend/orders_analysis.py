@@ -567,6 +567,177 @@ class EnhancedOrdersAnalysis:
             print(f"[ERROR] Failed to fetch COGS data from Google Sheet: {e}")
             return {}
 
+    def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str) -> Dict[str, dict]:
+        """Fetch COGS and Source links from ALL worksheets in the Google Sheet"""
+        try:
+            import requests
+            
+            # First, get list of all worksheets
+            metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            r = requests.get(metadata_url, headers=headers)
+            r.raise_for_status()
+            
+            sheets_info = r.json().get("sheets", [])
+            worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
+            print(f"[DEBUG] Found {len(worksheet_names)} worksheets: {worksheet_names}")
+            
+            # Expected column structure (exact names)
+            expected_columns = {"Date", "Store and Source Link", "ASIN", "COGS"}
+            
+            combined_cogs_data = {}
+            successful_sheets = []
+            
+            for worksheet_name in worksheet_names:
+                try:
+                    print(f"[DEBUG] Processing worksheet: '{worksheet_name}'")
+                    
+                    # Fetch worksheet data
+                    range_ = f"'{worksheet_name}'!A1:Z"
+                    url = (
+                        f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+                        f"/values/{requests.utils.quote(range_, safe='')}?majorDimension=ROWS"
+                    )
+                    r = requests.get(url, headers=headers)
+                    r.raise_for_status()
+                    values = r.json().get("values", [])
+                    
+                    if not values or len(values) < 2:
+                        print(f"[DEBUG] Skipping '{worksheet_name}' - insufficient data")
+                        continue
+                    
+                    # Check if column structure matches expected format
+                    cols = values[0]
+                    available_columns = set(cols)
+                    
+                    if not expected_columns.issubset(available_columns):
+                        missing = expected_columns - available_columns
+                        print(f"[DEBUG] Skipping '{worksheet_name}' - missing columns: {missing}")
+                        continue
+                    
+                    print(f"[DEBUG] '{worksheet_name}' has correct column structure, processing...")
+                    
+                    # Create DataFrame
+                    rows = []
+                    for row in values[1:]:
+                        # pad/truncate to match header length
+                        if len(row) < len(cols):
+                            row += [""] * (len(cols) - len(row))
+                        elif len(row) > len(cols):
+                            row = row[:len(cols)]
+                        rows.append(row)
+                    
+                    df = pd.DataFrame(rows, columns=cols)
+                    
+                    # Use exact column names (no mapping needed)
+                    asin_field = "ASIN"
+                    cogs_field = "COGS"
+                    date_field = "Date"
+                    source_field = "Store and Source Link"
+                    
+                    print(f"[DEBUG] '{worksheet_name}' - processing {len(df)} rows")
+                    
+                    # Clean and process data
+                    df[asin_field] = df[asin_field].astype(str).str.strip()
+                    df[cogs_field] = pd.to_numeric(
+                        df[cogs_field].astype(str).replace(r"[\$,]", "", regex=True), errors="coerce"
+                    )
+                    
+                    # Convert date column for sorting
+                    try:
+                        df[date_field] = pd.to_datetime(df[date_field], errors="coerce")
+                    except:
+                        df['_row_order'] = range(len(df))
+                    
+                    # Process each ASIN in this worksheet
+                    worksheet_cogs = self.process_asin_cogs_data(df, asin_field, cogs_field, date_field, source_field)
+                    
+                    # Merge with combined data (later sheets override earlier ones for same ASIN)
+                    for asin, data in worksheet_cogs.items():
+                        if asin in combined_cogs_data:
+                            # Combine sources from multiple sheets
+                            existing_sources = combined_cogs_data[asin].get('all_sources', [])
+                            new_sources = data.get('all_sources', [])
+                            all_sources = existing_sources + [s for s in new_sources if s not in existing_sources]
+                            
+                            # Use the more recent data (assume later sheets are more recent)
+                            combined_cogs_data[asin] = data
+                            combined_cogs_data[asin]['all_sources'] = all_sources
+                            combined_cogs_data[asin]['source_sheets'] = combined_cogs_data[asin].get('source_sheets', []) + [worksheet_name]
+                        else:
+                            combined_cogs_data[asin] = data
+                            combined_cogs_data[asin]['source_sheets'] = [worksheet_name]
+                    
+                    successful_sheets.append(worksheet_name)
+                    print(f"[DEBUG] '{worksheet_name}' processed successfully - found {len(worksheet_cogs)} products")
+                    
+                except Exception as e:
+                    print(f"[DEBUG] Error processing worksheet '{worksheet_name}': {e}")
+                    continue
+            
+            print(f"[DEBUG] Successfully processed {len(successful_sheets)} worksheets: {successful_sheets}")
+            print(f"[DEBUG] Combined COGS data for {len(combined_cogs_data)} unique ASINs")
+            
+            return combined_cogs_data
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch COGS data from all worksheets: {e}")
+            return {}
+
+    def process_asin_cogs_data(self, df, asin_field, cogs_field, date_field, source_field):
+        """Extract COGS data for each ASIN from a worksheet DataFrame"""
+        cogs_data = {}
+        
+        for asin in df[asin_field].unique():
+            if pd.isna(asin) or asin == '' or asin == 'nan':
+                continue
+                
+            asin_rows = df[df[asin_field] == asin].copy()
+            
+            # Sort by date (or row order if date is unavailable) to get chronological order
+            if date_field in asin_rows.columns and not asin_rows[date_field].isna().all():
+                asin_rows = asin_rows.sort_values(date_field, na_position='first')
+            elif '_row_order' in asin_rows.columns:
+                asin_rows = asin_rows.sort_values('_row_order')
+            
+            # Get latest COGS (for the main COGS display)
+            latest_row = asin_rows.iloc[-1]
+            latest_cogs = latest_row[cogs_field]
+            
+            if pd.isna(latest_cogs) or latest_cogs <= 0:
+                continue
+            
+            # Collect all unique source links from purchase history
+            all_sources = []
+            last_known_source = None
+            
+            for _, row in asin_rows.iterrows():
+                source_value = row[source_field] if source_field else None
+                if source_value and not pd.isna(source_value):
+                    cleaned_source = str(source_value).strip()
+                    if cleaned_source and cleaned_source != '' and cleaned_source.lower() != 'nan':
+                        # This row has a source, remember it
+                        last_known_source = cleaned_source
+                        if cleaned_source not in all_sources:
+                            all_sources.append(cleaned_source)
+                # If this row has empty source but we have a last known source, use that
+                elif last_known_source and last_known_source not in all_sources:
+                    all_sources.append(last_known_source)
+            
+            # Use the most recent valid source as the primary source
+            primary_source = all_sources[-1] if all_sources else None
+            
+            cogs_data[asin] = {
+                'cogs': float(latest_cogs),
+                'source_link': primary_source,
+                'all_sources': all_sources,
+                'last_purchase_date': latest_row[date_field] if date_field in latest_row and not pd.isna(latest_row[date_field]) else None,
+                'source_column': source_field,
+                'total_purchases': len(asin_rows)
+            }
+        
+        return cogs_data
+
     def load_yesterday_sales(self) -> Dict[str, int]:
         """Load previous sales data for comparison"""
         if os.path.exists(YESTERDAY_SALES_FILE):
@@ -611,13 +782,25 @@ class EnhancedOrdersAnalysis:
                 google_tokens = user_settings.get('google_tokens', {})
                 column_mapping = user_settings.get('column_mapping', {})
                 
-                if sheet_id and worksheet_title and google_tokens:
+                if sheet_id and google_tokens:
                     # Create a temporary user_record for the refresh function
                     temp_user_record = {'google_tokens': google_tokens}
                     access_token = refresh_google_token(temp_user_record)
-                    cogs_data = self.fetch_google_sheet_cogs_data(
-                        access_token, sheet_id, worksheet_title, column_mapping
-                    )
+                    
+                    # Check if we should search all worksheets or just the mapped one
+                    if user_settings.get('search_all_worksheets', False):
+                        print(f"[DEBUG] Searching all worksheets in Google Sheet...")
+                        cogs_data = self.fetch_google_sheet_cogs_data_all_worksheets(
+                            access_token, sheet_id
+                        )
+                    elif worksheet_title:
+                        print(f"[DEBUG] Searching specific worksheet: {worksheet_title}")
+                        cogs_data = self.fetch_google_sheet_cogs_data(
+                            access_token, sheet_id, worksheet_title, column_mapping
+                        )
+                    else:
+                        print(f"[DEBUG] No worksheet specified and search all worksheets disabled")
+                        cogs_data = {}
                     print(f"[DEBUG] Successfully fetched COGS data for {len(cogs_data)} products")
                 else:
                     print("[DEBUG] Missing Google Sheet settings for COGS data")

@@ -46,7 +46,8 @@ const Settings = () => {
     sellerboard_orders_url: '',
     sellerboard_stock_url: '',
     timezone: '',
-    enable_source_links: false
+    enable_source_links: false,
+    search_all_worksheets: false
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -62,7 +63,8 @@ const Settings = () => {
         sellerboard_orders_url: user.user_record.sellerboard_orders_url || '',
         sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
         timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-        enable_source_links: user.user_record.enable_source_links || false
+        enable_source_links: user.user_record.enable_source_links || false,
+        search_all_worksheets: user.user_record.search_all_worksheets || false
       });
     }
   }, [user]);
@@ -328,6 +330,32 @@ const Settings = () => {
               Pull COGS and Source links from your Google Sheet for restock recommendations (disabled by default for privacy)
             </p>
           </div>
+
+          {/* Search All Worksheets Toggle - only show when source links are enabled */}
+          {formData.enable_source_links && (
+            <div>
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="flex items-center space-x-2">
+                  {formData.search_all_worksheets ? (
+                    <ToggleRight className="h-6 w-6 text-green-500" />
+                  ) : (
+                    <ToggleLeft className="h-6 w-6 text-gray-400" />
+                  )}
+                  <span className="text-sm font-medium text-gray-700">Search All Worksheets</span>
+                </div>
+                <input
+                  type="checkbox"
+                  name="search_all_worksheets"
+                  checked={formData.search_all_worksheets}
+                  onChange={handleChange}
+                  className="sr-only"
+                />
+              </label>
+              <p className="text-xs text-gray-500 mt-1">
+                Search through all worksheets in your Google Sheet for COGS data (instead of just the mapped worksheet). All worksheets must have the same column structure: Date, Store and Source Link, ASIN, COGS.
+              </p>
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="flex justify-end">

@@ -76,7 +76,21 @@ class EnhancedOrdersAnalysis:
 
     def get_orders_for_date(self, df: pd.DataFrame, for_date: date, user_timezone: str = None) -> pd.DataFrame:
         """Get orders for a specific date"""
-        return self.get_orders_for_date_range(df, for_date, for_date, user_timezone)
+        try:
+            return self.get_orders_for_date_range(df, for_date, for_date, user_timezone)
+        except Exception as e:
+            if "Invalid comparison between dtype=datetime64[ns] and date" in str(e):
+                print(f"[ERROR] Pandas datetime comparison error in get_orders_for_date")
+                print(f"[ERROR] for_date: {for_date} (type: {type(for_date)})")
+                print(f"[ERROR] DataFrame shape: {df.shape}")
+                print(f"[ERROR] DataFrame columns: {list(df.columns)}")
+                # Try to find date columns
+                date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
+                if date_columns:
+                    print(f"[ERROR] Date columns found: {date_columns}")
+                    print(f"[ERROR] First date column dtype: {df[date_columns[0]].dtype}")
+                    print(f"[ERROR] Sample values: {df[date_columns[0]].head().tolist()}")
+            raise
 
     def asin_sales_count(self, orders_df: pd.DataFrame) -> Dict[str, int]:
         """Count sales by ASIN"""
@@ -94,12 +108,21 @@ class EnhancedOrdersAnalysis:
         periods = [7, 14, 30, 60, 90]
         velocity_data = {}
         
-        for period in periods:
-            start_date = target_date - timedelta(days=period-1)
-            period_orders = self.get_orders_for_date_range(orders_df, start_date, target_date, user_timezone)
-            period_sales = self.asin_sales_count(period_orders)
-            daily_avg = period_sales.get(asin, 0) / period
-            velocity_data[f'{period}d'] = daily_avg
+        try:
+            for period in periods:
+                start_date = target_date - timedelta(days=period-1)
+                period_orders = self.get_orders_for_date_range(orders_df, start_date, target_date, user_timezone)
+                period_sales = self.asin_sales_count(period_orders)
+                daily_avg = period_sales.get(asin, 0) / period
+                velocity_data[f'{period}d'] = daily_avg
+        except Exception as e:
+            if "Invalid comparison between dtype=datetime64[ns] and date" in str(e):
+                print(f"[ERROR] Pandas datetime comparison error in calculate_enhanced_velocity")
+                print(f"[ERROR] ASIN: {asin}")
+                print(f"[ERROR] target_date: {target_date} (type: {type(target_date)})")
+                print(f"[ERROR] Failed on period: {period}")
+                print(f"[ERROR] start_date: {start_date} (type: {type(start_date)})")
+            raise
         
         # Calculate weighted velocity (recent performance weighted higher)
         weighted_velocity = (

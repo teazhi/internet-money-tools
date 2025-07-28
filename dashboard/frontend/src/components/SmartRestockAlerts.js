@@ -30,11 +30,42 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     );
   }
 
-  if (!analytics.enhanced_analytics) {
+  // Show fallback mode message if present
+  if (analytics.fallback_mode) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
-        <p className="text-gray-500">No enhanced analytics data available</p>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+          <p className="text-yellow-800">⚠️ {analytics.message || 'Analytics running in basic mode. Enhanced restock features unavailable.'}</p>
+          <p className="text-yellow-700 text-sm mt-2">Please check your report URLs in Settings to enable enhanced analytics.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show basic mode message if present
+  if (analytics.basic_mode) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <p className="text-blue-800">📊 {analytics.message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics.enhanced_analytics || Object.keys(analytics.enhanced_analytics).length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <div className="text-center py-8">
+          <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 mb-2">No enhanced analytics data available</p>
+          <p className="text-gray-400 text-sm">
+            {analytics.error ? `Error: ${analytics.error}` : 'Check your report URLs in Settings and ensure you have recent sales data.'}
+          </p>
+        </div>
       </div>
     );
   }

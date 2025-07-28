@@ -14,7 +14,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import axios from 'axios';
-import SmartRestockAlerts from '../SmartRestockAlerts';
 
 const Overview = () => {
   const { user } = useAuth();
@@ -690,8 +689,6 @@ const Overview = () => {
         </div>
       )}
 
-      {/* Smart Restock Alerts */}
-      <SmartRestockAlerts analytics={analytics} />
     </div>
   );
 };

@@ -998,12 +998,26 @@ def list_sellerboard_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/files/sellerboard/<file_key>', methods=['DELETE'])
-@login_required
+@app.route('/api/files/sellerboard/<path:file_key>', methods=['DELETE', 'OPTIONS'])
 def delete_sellerboard_file(file_key):
     """Delete a specific Sellerboard file"""
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+    
+    # Apply login check only for non-OPTIONS requests
+    if not session.get('discord_id'):
+        return jsonify({'error': 'Authentication required'}), 401
+    
     try:
+        from urllib.parse import unquote
         discord_id = session['discord_id']
+        file_key = unquote(file_key)  # Decode URL encoding
         print(f"[DEBUG] Delete request from user {discord_id} for file: {file_key}")
         
         users = get_users_config()
@@ -1034,7 +1048,10 @@ def delete_sellerboard_file(file_key):
         # Update user config
         if update_users_config(users):
             print(f"[DEBUG] User config updated successfully")
-            return jsonify({'message': 'File deleted successfully'})
+            response = jsonify({'message': 'File deleted successfully'})
+            response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            return response
         else:
             print(f"[DEBUG] Failed to update user config")
             return jsonify({'error': 'Failed to update configuration'}), 500

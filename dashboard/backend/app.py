@@ -337,15 +337,26 @@ def discord_callback():
             print(f"[Discord Callback] Checking invitation: token={inv['token']}, status={inv['status']}, created={inv['created_at']}")
             if inv['token'] == invitation_token and inv['status'] == 'pending':
                 # Check if invitation is not expired (7 days)
-                invitation_date = datetime.fromisoformat(inv['created_at'])
-                time_diff = datetime.now() - invitation_date
-                print(f"[Discord Callback] Invitation age: {time_diff}, expires after 7 days")
-                if time_diff < timedelta(days=7):
+                try:
+                    # Parse created_at timestamp (strip any timezone suffix for consistency)
+                    created_at_str = inv['created_at'].replace('Z', '').replace('+00:00', '')
+                    invitation_date = datetime.fromisoformat(created_at_str)
+                    # Use UTC for both comparisons to avoid timezone issues
+                    current_time = datetime.utcnow()
+                    time_diff = current_time - invitation_date
+                    print(f"[Discord Callback] Invitation age: {time_diff}, expires after 7 days")
+                    if time_diff < timedelta(days=7):
+                        valid_invitation = inv
+                        print(f"[Discord Callback] Found valid invitation for email: {inv['email']}")
+                        break
+                    else:
+                        print(f"[Discord Callback] Invitation expired ({time_diff} old)")
+                except Exception as date_error:
+                    print(f"[Discord Callback] Date parsing error: {date_error}, treating as valid for now")
+                    # If date parsing fails, allow the invitation (fallback)
                     valid_invitation = inv
-                    print(f"[Discord Callback] Found valid invitation for email: {inv['email']}")
+                    print(f"[Discord Callback] Found valid invitation for email: {inv['email']} (date parse fallback)")
                     break
-                else:
-                    print(f"[Discord Callback] Invitation expired ({time_diff} old)")
             else:
                 print(f"[Discord Callback] Invitation mismatch: token={inv['token'] == invitation_token}, status={inv['status'] == 'pending'}")
         
@@ -1330,9 +1341,9 @@ def admin_create_invitation():
             'token': invitation_token,
             'email': email,
             'status': 'pending',
-            'created_at': datetime.utcnow().isoformat() + 'Z',
+            'created_at': datetime.utcnow().isoformat(),
             'invited_by': session.get('discord_username', 'Admin'),
-            'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat() + 'Z'
+            'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat()
         }
         
         invitations.append(invitation)

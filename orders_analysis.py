@@ -20,15 +20,24 @@ class OrdersAnalysis:
         print(f"[DEBUG] Parsing datetime column '{column_name}' with {len(series)} values")
         
         # Common datetime formats from Sellerboard and other sources
+        # PRIORITY ORDER: Most common Sellerboard formats first
         formats_to_try = [
-            "%m/%d/%Y %I:%M:%S %p",  # 07/28/2025 02:30:45 PM (current format)
-            "%m/%d/%Y %H:%M:%S",     # 07/28/2025 14:30:45 (24-hour)
+            # Sellerboard specific formats (most common first)
+            "%m/%d/%y %H:%M",        # 7/26/25 6:05 (US Sellerboard format)
+            "%d/%m/%Y %H:%M:%S",     # 28/07/2025 06:21:44 (EU/International Sellerboard format)
+            "%m/%d/%Y %H:%M:%S",     # 07/28/2025 14:30:45 (US with seconds)
+            "%d/%m/%Y %H:%M",        # 28/07/2025 06:21 (EU without seconds)
+            "%m/%d/%y %H:%M:%S",     # 7/26/25 6:05:00 (US with seconds)
+            "%d/%m/%y %H:%M:%S",     # 28/07/25 06:21:44 (EU with 2-digit year)
+            
+            # Legacy formats for backward compatibility
+            "%m/%d/%Y %I:%M:%S %p",  # 07/28/2025 02:30:45 PM (12-hour with AM/PM)
+            "%d/%m/%Y %I:%M:%S %p",  # 28/07/2025 02:30:45 PM (EU with AM/PM)
             "%Y-%m-%d %H:%M:%S",     # 2025-07-28 14:30:45 (ISO-like)
             "%Y-%m-%d %I:%M:%S %p",  # 2025-07-28 02:30:45 PM
             "%m/%d/%Y",              # 07/28/2025 (date only)  
             "%Y-%m-%d",              # 2025-07-28 (ISO date)
-            "%d/%m/%Y %I:%M:%S %p",  # 28/07/2025 02:30:45 PM (EU format)
-            "%d/%m/%Y %H:%M:%S",     # 28/07/2025 14:30:45 (EU 24-hour)
+            "%d/%m/%Y",              # 28/07/2025 (EU date only)
         ]
         
         parsed_series = None

@@ -251,10 +251,84 @@ const Overview = () => {
     );
   }
 
-  if (loading) {
+  // Skeleton loading component
+  const SkeletonCard = () => (
+    <div className="card animate-pulse">
+      <div className="flex items-center">
+        <div className="flex-shrink-0">
+          <div className="h-8 w-8 bg-gray-300 rounded"></div>
+        </div>
+        <div className="ml-4 flex-1">
+          <div className="h-4 bg-gray-300 rounded w-24 mb-2"></div>
+          <div className="h-8 bg-gray-300 rounded w-16"></div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (loading && !analytics) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-builders-500"></div>
+      <div className="space-y-6">
+        {/* Welcome Header Skeleton */}
+        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="h-8 bg-white/20 rounded w-64 mb-2"></div>
+              <div className="h-4 bg-white/20 rounded w-96 mb-2"></div>
+              <div className="h-3 bg-white/20 rounded w-48"></div>
+            </div>
+            <div className="h-10 w-10 bg-white/20 rounded-lg"></div>
+          </div>
+        </div>
+
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card animate-pulse">
+            <div className="h-6 bg-gray-300 rounded w-40 mb-4"></div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-6 w-6 bg-gray-300 rounded-full"></div>
+                    <div className="h-4 bg-gray-300 rounded w-20"></div>
+                  </div>
+                  <div className="h-4 bg-gray-300 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card animate-pulse">
+            <div className="h-6 bg-gray-300 rounded w-32 mb-4"></div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-300 rounded w-24 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-32"></div>
+                  </div>
+                  <div className="text-right">
+                    <div className="h-4 bg-gray-300 rounded w-16 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-12"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading your business analytics...</p>
+        </div>
       </div>
     );
   }
@@ -395,7 +469,7 @@ const Overview = () => {
             onClick={fetchAnalytics}
             disabled={loading}
             className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
-            title="Refresh Data"
+            title={loading ? "Loading..." : "Refresh Data"}
           >
             <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -413,6 +487,14 @@ const Overview = () => {
         {analytics?.basic_mode && (
           <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-md">
             <p className="text-blue-100 text-sm">📊 {analytics.message}</p>
+          </div>
+        )}
+        {loading && analytics && (
+          <div className="mt-3 p-3 bg-white/20 border border-white/30 rounded-md">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <p className="text-white text-sm">Refreshing analytics data...</p>
+            </div>
           </div>
         )}
       </div>

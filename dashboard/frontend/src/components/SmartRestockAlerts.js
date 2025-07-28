@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -11,7 +11,7 @@ import {
   Target
 } from 'lucide-react';
 
-const SmartRestockAlerts = ({ analytics }) => {
+const SmartRestockAlerts = React.memo(({ analytics }) => {
   // Add error handling for null/undefined analytics
   if (!analytics) {
     return (
@@ -34,7 +34,9 @@ const SmartRestockAlerts = ({ analytics }) => {
   const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
 
   // Sort alerts by priority score - handle null/undefined restock_alerts
-  const sortedAlerts = restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
+  const sortedAlerts = useMemo(() => {
+    return restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
+  }, [restock_alerts]);
 
   const getCategoryStyle = (category) => {
     switch (category) {
@@ -411,6 +413,6 @@ const SmartRestockAlerts = ({ analytics }) => {
       </div>
     );
   }
-};
+});
 
 export default SmartRestockAlerts;

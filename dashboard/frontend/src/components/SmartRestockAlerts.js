@@ -8,7 +8,10 @@ import {
   Clock,
   BarChart3,
   Zap,
-  Target
+  Target,
+  ShoppingCart,
+  ExternalLink,
+  DollarSign
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
@@ -122,6 +125,26 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       return `${Math.round(daysLeft)} days`;
     }
     return daysLeft || 'Unknown';
+  };
+
+  const formatCurrency = (amount) => {
+    if (typeof amount === 'number') {
+      return `$${amount.toFixed(2)}`;
+    }
+    return 'N/A';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Unknown';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Unknown';
+    }
   };
 
   // Helper function to get days left value from stock_info (matching backend logic)
@@ -283,7 +306,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       {alert.reasoning}
                     </p>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
                       <div className="flex items-center space-x-1">
                         <Package className="h-4 w-4 text-gray-400" />
                         <span className="text-gray-600">Current:</span>
@@ -308,6 +331,45 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                         <span className="font-medium capitalize">{alert.trend}</span>
                       </div>
                     </div>
+
+                    {/* COGS and Restock Information */}
+                    {enhanced_analytics?.[alert.asin]?.cogs_data && Object.keys(enhanced_analytics[alert.asin].cogs_data).length > 0 && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4 text-sm">
+                            <div className="flex items-center space-x-1">
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                              <span className="text-gray-600">Last COGS:</span>
+                              <span className="font-medium text-green-700">
+                                {formatCurrency(enhanced_analytics[alert.asin].cogs_data.cogs)}
+                              </span>
+                            </div>
+                            {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
+                              <div className="flex items-center space-x-1">
+                                <Clock className="h-4 w-4 text-gray-400" />
+                                <span className="text-gray-600">Last purchased:</span>
+                                <span className="font-medium">
+                                  {formatDate(enhanced_analytics[alert.asin].cogs_data.last_purchase_date)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {enhanced_analytics[alert.asin].cogs_data.source_link && (
+                            <a
+                              href={enhanced_analytics[alert.asin].cogs_data.source_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-1" />
+                              Restock Here
+                              <ExternalLink className="h-3 w-3 ml-1" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="ml-6 text-right">
@@ -366,6 +428,9 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     Days Left
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Last COGS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Suggested Order
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -406,6 +471,28 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {formatDaysLeft(getDaysLeftFromStock(data.stock_info))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {data.cogs_data?.cogs ? (
+                          <div className="flex items-center space-x-1">
+                            <span className="text-green-700 font-medium">
+                              {formatCurrency(data.cogs_data.cogs)}
+                            </span>
+                            {data.cogs_data.source_link && (
+                              <a
+                                href={data.cogs_data.source_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Restock here"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">N/A</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-builders-600">
                         {data.restock.suggested_quantity}

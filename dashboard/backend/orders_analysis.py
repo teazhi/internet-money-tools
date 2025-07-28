@@ -432,6 +432,98 @@ class EnhancedOrdersAnalysis:
             stock_info[asin] = row.to_dict()
         return stock_info
 
+    def fetch_google_sheet_cogs_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Dict[str, dict]:
+        """Fetch COGS and Source links from Google Sheet for each ASIN"""
+        try:
+            # Fetch the sheet data using existing function
+            import requests
+            range_ = f"'{worksheet_title}'!A1:Z"
+            url = (
+                f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+                f"/values/{requests.utils.quote(range_, safe='')}?majorDimension=ROWS"
+            )
+            headers = {"Authorization": f"Bearer {access_token}"}
+            r = requests.get(url, headers=headers)
+            r.raise_for_status()
+            values = r.json().get("values", [])
+            
+            if not values or len(values) < 2:
+                return {}
+            
+            # Create DataFrame
+            cols = values[0]
+            rows = []
+            for row in values[1:]:
+                # pad/truncate to match header length
+                if len(row) < len(cols):
+                    row += [""] * (len(cols) - len(row))
+                elif len(row) > len(cols):
+                    row = row[: len(cols)]
+                rows.append(row)
+            
+            df = pd.DataFrame(rows, columns=cols)
+            
+            # Get column mappings
+            asin_field = column_mapping.get("ASIN", "ASIN")
+            cogs_field = column_mapping.get("COGS", "COGS")
+            date_field = column_mapping.get("Date", "Date")
+            
+            # Look for Source/Link columns
+            source_field = None
+            for col in df.columns:
+                col_lower = col.lower()
+                if any(keyword in col_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor']):
+                    source_field = col
+                    break
+            
+            # Clean and process data
+            df[asin_field] = df[asin_field].astype(str).str.strip()
+            df[cogs_field] = pd.to_numeric(
+                df[cogs_field].replace(r"[\$,]", "", regex=True), errors="coerce"
+            )
+            
+            # Convert date column for sorting
+            try:
+                df[date_field] = pd.to_datetime(df[date_field], errors="coerce")
+            except:
+                # If date conversion fails, use row order as proxy for chronological order
+                df['_row_order'] = range(len(df))
+            
+            # Group by ASIN and get latest entry for each
+            cogs_data = {}
+            for asin in df[asin_field].unique():
+                if pd.isna(asin) or asin == '' or asin == 'nan':
+                    continue
+                    
+                asin_rows = df[df[asin_field] == asin].copy()
+                
+                # Sort by date (or row order if date is unavailable) to get latest entry
+                if date_field in asin_rows.columns and not asin_rows[date_field].isna().all():
+                    latest_row = asin_rows.sort_values(date_field, na_position='first').iloc[-1]
+                elif '_row_order' in asin_rows.columns:
+                    latest_row = asin_rows.sort_values('_row_order').iloc[-1]
+                else:
+                    latest_row = asin_rows.iloc[-1]
+                
+                # Extract COGS and Source data
+                cogs_value = latest_row[cogs_field]
+                source_value = latest_row[source_field] if source_field else None
+                
+                if not pd.isna(cogs_value) and cogs_value > 0:
+                    cogs_data[asin] = {
+                        'cogs': float(cogs_value),
+                        'source_link': source_value if source_value and str(source_value).strip() != '' else None,
+                        'last_purchase_date': latest_row[date_field] if date_field in latest_row and not pd.isna(latest_row[date_field]) else None,
+                        'source_column': source_field
+                    }
+            
+            print(f"[DEBUG] Fetched COGS data for {len(cogs_data)} ASINs from Google Sheet")
+            return cogs_data
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch COGS data from Google Sheet: {e}")
+            return {}
+
     def load_yesterday_sales(self) -> Dict[str, int]:
         """Load previous sales data for comparison"""
         if os.path.exists(YESTERDAY_SALES_FILE):
@@ -444,7 +536,7 @@ class EnhancedOrdersAnalysis:
         with open(YESTERDAY_SALES_FILE, 'w') as f:
             json.dump(today_sales, f)
 
-    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None) -> dict:
         """Main analysis function with enhanced logic"""
         # Download and process orders data
         orders_df = self.download_csv(self.orders_url)
@@ -454,6 +546,37 @@ class EnhancedOrdersAnalysis:
         # Download stock report
         stock_df = self.download_csv(self.stock_url)
         stock_info = self.get_stock_info(stock_df)
+
+        # Fetch COGS data from Google Sheet if enabled
+        cogs_data = {}
+        if user_settings and user_settings.get('enable_source_links'):
+            try:
+                # Import here to avoid circular imports
+                import sys
+                import os
+                parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                if parent_dir not in sys.path:
+                    sys.path.append(parent_dir)
+                
+                from app import refresh_access_token
+                
+                # Get user's Google Sheet settings
+                sheet_id = user_settings.get('sheet_id')
+                worksheet_title = user_settings.get('worksheet_title')
+                refresh_token = user_settings.get('google_tokens', {}).get('refresh_token')
+                column_mapping = user_settings.get('column_mapping', {})
+                
+                if sheet_id and worksheet_title and refresh_token:
+                    access_token = refresh_access_token(refresh_token)
+                    cogs_data = self.fetch_google_sheet_cogs_data(
+                        access_token, sheet_id, worksheet_title, column_mapping
+                    )
+                    print(f"[DEBUG] Successfully fetched COGS data for {len(cogs_data)} products")
+                else:
+                    print("[DEBUG] Missing Google Sheet settings for COGS data")
+            except Exception as e:
+                print(f"[ERROR] Failed to fetch COGS data: {e}")
+                cogs_data = {}
 
         # Load historical sales for comparison
         if prev_date is None:
@@ -497,14 +620,15 @@ class EnhancedOrdersAnalysis:
             # Calculate optimal restock quantity
             restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin])
             
-            # Combine all data
+            # Combine all data including COGS data if available
             enhanced_analytics[asin] = {
                 'current_sales': current_sales,
                 'velocity': velocity_data,
                 'priority': priority_data,
                 'restock': restock_data,
                 'stock_info': stock_info[asin],
-                'product_name': stock_info[asin].get('Title', f'Product {asin}')
+                'product_name': stock_info[asin].get('Title', f'Product {asin}'),
+                'cogs_data': cogs_data.get(asin, {})  # Include COGS and source link data
             }
             
             # Generate alerts for high priority items (only products with velocity > 0)
@@ -665,8 +789,8 @@ class OrdersAnalysis(EnhancedOrdersAnalysis):
             self.stock_url = stock_url
             self.is_fallback = True
     
-    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None) -> dict:
         if hasattr(self, 'is_fallback') and self.is_fallback:
             return BasicOrdersAnalysis(self.orders_url, self.stock_url).analyze(for_date)
         else:
-            return super().analyze(for_date, prev_date, user_timezone)
+            return super().analyze(for_date, prev_date, user_timezone, user_settings)

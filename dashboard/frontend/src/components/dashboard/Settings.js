@@ -45,7 +45,8 @@ const Settings = () => {
     run_prep_center: false,
     sellerboard_orders_url: '',
     sellerboard_stock_url: '',
-    timezone: ''
+    timezone: '',
+    enable_source_links: false
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -60,7 +61,8 @@ const Settings = () => {
         run_prep_center: user.user_record.run_prep_center !== false,
         sellerboard_orders_url: user.user_record.sellerboard_orders_url || '',
         sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
-        timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+        timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        enable_source_links: user.user_record.enable_source_links || false
       });
     }
   }, [user]);
@@ -300,6 +302,30 @@ const Settings = () => {
             </label>
             <p className="text-xs text-gray-500 mt-1">
               Automatically update and upload prep center sheets
+            </p>
+          </div>
+
+          {/* Source Links Toggle */}
+          <div>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center space-x-2">
+                {formData.enable_source_links ? (
+                  <ToggleRight className="h-6 w-6 text-green-500" />
+                ) : (
+                  <ToggleLeft className="h-6 w-6 text-gray-400" />
+                )}
+                <span className="text-sm font-medium text-gray-700">Source Links from Google Sheet</span>
+              </div>
+              <input
+                type="checkbox"
+                name="enable_source_links"
+                checked={formData.enable_source_links}
+                onChange={handleChange}
+                className="sr-only"
+              />
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Pull COGS and Source links from your Google Sheet for restock recommendations (disabled by default for privacy)
             </p>
           </div>
 

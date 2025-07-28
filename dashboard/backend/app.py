@@ -93,13 +93,36 @@ def get_users_config():
 
 def update_users_config(users):
     s3_client = get_s3_client()
-    config_data = json.dumps({"users": users})
+    config_data = json.dumps({"users": users}, indent=2)
+    
+    print(f"[UPDATE CONFIG] About to save {len(users)} users to S3")
+    print(f"[UPDATE CONFIG] S3 Bucket: {CONFIG_S3_BUCKET}")
+    print(f"[UPDATE CONFIG] S3 Key: {USERS_CONFIG_KEY}")
+    print(f"[UPDATE CONFIG] Config data preview: {config_data[:500]}...")
+    
     try:
-        s3_client.put_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY, Body=config_data)
+        result = s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET, 
+            Key=USERS_CONFIG_KEY, 
+            Body=config_data,
+            ContentType='application/json'
+        )
+        print(f"[UPDATE CONFIG] S3 put_object result: {result}")
         print("Users configuration updated successfully.")
+        
+        # Verify the save by reading it back immediately
+        try:
+            verify_response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
+            verify_data = json.loads(verify_response['Body'].read().decode('utf-8'))
+            print(f"[UPDATE CONFIG] Verification: read back {len(verify_data.get('users', []))} users")
+        except Exception as verify_error:
+            print(f"[UPDATE CONFIG] Verification failed: {verify_error}")
+        
         return True
     except Exception as e:
-        print(f"Error updating users config: {e}")
+        print(f"[UPDATE CONFIG] Error updating users config: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def get_invitations_config():
@@ -1484,17 +1507,23 @@ def admin_update_user(user_id):
         
         users = get_users_config()
         
-        # Find the user using the helper function
-        user_record = get_user_record(user_id)
-        if not user_record:
-            print(f"[ADMIN UPDATE] User not found: {user_id}")
+        # Find user in the users list (not just get a reference)
+        user_index = None
+        for i, u in enumerate(users):
+            if str(u.get("discord_id")) == str(user_id):
+                user_index = i
+                break
+        
+        if user_index is None:
+            print(f"[ADMIN UPDATE] User not found in users list: {user_id}")
             return jsonify({'error': 'User not found'}), 404
         
-        print(f"[ADMIN UPDATE] Found user record: {user_record.get('discord_username', 'Unknown')}")
+        user_record = users[user_index]
+        print(f"[ADMIN UPDATE] Found user record at index {user_index}: {user_record.get('discord_username', 'Unknown')}")
         print(f"[ADMIN UPDATE] Before update - enable_source_links: {user_record.get('enable_source_links')}")
         print(f"[ADMIN UPDATE] Before update - search_all_worksheets: {user_record.get('search_all_worksheets')}")
         
-        # Update allowed fields
+        # Update allowed fields directly in the users list
         allowed_fields = [
             'email', 'run_scripts', 'run_prep_center', 
             'sellerboard_orders_url', 'sellerboard_stock_url',
@@ -1504,11 +1533,12 @@ def admin_update_user(user_id):
         for field in allowed_fields:
             if field in data:
                 old_value = user_record.get(field)
-                user_record[field] = data[field]
+                users[user_index][field] = data[field]
                 print(f"[ADMIN UPDATE] Updated {field}: {old_value} -> {data[field]}")
         
-        print(f"[ADMIN UPDATE] After update - enable_source_links: {user_record.get('enable_source_links')}")
-        print(f"[ADMIN UPDATE] After update - search_all_worksheets: {user_record.get('search_all_worksheets')}")
+        print(f"[ADMIN UPDATE] After update - enable_source_links: {users[user_index].get('enable_source_links')}")
+        print(f"[ADMIN UPDATE] After update - search_all_worksheets: {users[user_index].get('search_all_worksheets')}")
+        print(f"[ADMIN UPDATE] About to save users list with {len(users)} users")
         
         # Save changes
         if update_users_config(users):

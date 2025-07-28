@@ -1914,10 +1914,23 @@ def get_script_configs():
         
         # Get amznUploadConfig (listing loader and sellerboard script)
         try:
-            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='amznUploadConfig')
+            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='amznUploadConfig.json')
             amzn_config = json.loads(response['Body'].read().decode('utf-8'))
+            # Extract date only (no time) from the stored date
+            last_date = amzn_config.get('last_processed_date', '')
+            if last_date:
+                try:
+                    # Parse the date and extract just the date part
+                    parsed_date = datetime.fromisoformat(last_date.replace('Z', '+00:00'))
+                    date_only = parsed_date.strftime('%Y-%m-%d')
+                except:
+                    # If parsing fails, use as-is
+                    date_only = last_date
+            else:
+                date_only = ''
+            
             configs['amznUploadConfig'] = {
-                'last_processed_date': amzn_config.get('last_processed_date', ''),
+                'last_processed_date': date_only,
                 'status': 'found'
             }
         except Exception as e:
@@ -1932,13 +1945,26 @@ def get_script_configs():
         try:
             response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='config.json')
             prep_config = json.loads(response['Body'].read().decode('utf-8'))
-            configs['prepUploaderConfig'] = {
-                'last_processed_date': prep_config.get('last_processed_date', ''),
+            # Extract date only (no time) from the stored date
+            last_date = prep_config.get('last_processed_date', '')
+            if last_date:
+                try:
+                    # Parse the date and extract just the date part
+                    parsed_date = datetime.fromisoformat(last_date.replace('Z', '+00:00'))
+                    date_only = parsed_date.strftime('%Y-%m-%d')
+                except:
+                    # If parsing fails, use as-is
+                    date_only = last_date
+            else:
+                date_only = ''
+            
+            configs['config'] = {
+                'last_processed_date': date_only,
                 'status': 'found'
             }
         except Exception as e:
             print(f"[SCRIPT CONFIG] Error reading config.json: {e}")
-            configs['prepUploaderConfig'] = {
+            configs['config'] = {
                 'last_processed_date': '',
                 'status': 'not_found',
                 'error': str(e)
@@ -1964,13 +1990,22 @@ def update_script_configs():
         # Update amznUploadConfig if provided
         if 'amznUploadConfig' in data:
             try:
+                # Convert date to datetime with time set to start of day
+                date_str = data['amznUploadConfig']['last_processed_date']
+                if date_str:
+                    # Parse date and set time to 00:00:00
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    iso_datetime = date_obj.strftime('%Y-%m-%dT00:00:00Z')
+                else:
+                    iso_datetime = ''
+                
                 new_config = {
-                    'last_processed_date': data['amznUploadConfig']['last_processed_date']
+                    'last_processed_date': iso_datetime
                 }
                 
                 s3_client.put_object(
                     Bucket=CONFIG_S3_BUCKET,
-                    Key='amznUploadConfig',
+                    Key='amznUploadConfig.json',
                     Body=json.dumps(new_config, indent=2),
                     ContentType='application/json'
                 )
@@ -1989,10 +2024,19 @@ def update_script_configs():
                 }
         
         # Update config.json if provided
-        if 'prepUploaderConfig' in data:
+        if 'config' in data:
             try:
+                # Convert date to datetime with time set to start of day
+                date_str = data['config']['last_processed_date']
+                if date_str:
+                    # Parse date and set time to 00:00:00
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    iso_datetime = date_obj.strftime('%Y-%m-%dT00:00:00Z')
+                else:
+                    iso_datetime = ''
+                
                 new_config = {
-                    'last_processed_date': data['prepUploaderConfig']['last_processed_date']
+                    'last_processed_date': iso_datetime
                 }
                 
                 s3_client.put_object(
@@ -2002,7 +2046,7 @@ def update_script_configs():
                     ContentType='application/json'
                 )
                 
-                results['prepUploaderConfig'] = {
+                results['config'] = {
                     'status': 'updated',  
                     'last_processed_date': new_config['last_processed_date']
                 }
@@ -2010,7 +2054,7 @@ def update_script_configs():
                 
             except Exception as e:
                 print(f"[SCRIPT CONFIG] Error updating config.json: {e}")
-                results['prepUploaderConfig'] = {
+                results['config'] = {
                     'status': 'error',
                     'error': str(e)
                 }

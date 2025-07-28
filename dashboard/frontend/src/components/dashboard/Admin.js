@@ -101,15 +101,18 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
 
   const formatDateForInput = (dateString) => {
     if (!dateString) return '';
-    // Convert ISO string to local datetime input format
-    const date = new Date(dateString);
-    return date.toISOString().slice(0, 16);
+    // For date-only inputs, just return YYYY-MM-DD format
+    if (dateString.includes('T')) {
+      // If it's an ISO datetime, extract just the date part
+      return dateString.split('T')[0];
+    }
+    return dateString; // Assume it's already in YYYY-MM-DD format
   };
 
   const formatDateForAPI = (dateString) => {
     if (!dateString) return '';
-    // Convert local datetime input to ISO string
-    return new Date(dateString).toISOString();
+    // For date-only inputs, just return the date string as-is
+    return dateString;
   };
 
   useEffect(() => {
@@ -176,7 +179,7 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   Last Processed Date
                 </label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={editData.amznUploadConfig.last_processed_date}
                   onChange={(e) => setEditData({
                     ...editData,
@@ -188,9 +191,7 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Current: {configs?.amznUploadConfig?.last_processed_date ? 
-                    new Date(configs.amznUploadConfig.last_processed_date).toLocaleString() : 
-                    'Not set'}
+                  Current: {configs?.amznUploadConfig?.last_processed_date || 'Not set'}
                 </p>
               </div>
             </div>
@@ -217,7 +218,7 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   Last Processed Date
                 </label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={editData.config.last_processed_date}
                   onChange={(e) => setEditData({
                     ...editData,
@@ -229,9 +230,7 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Current: {configs?.config?.last_processed_date ? 
-                    new Date(configs.config.last_processed_date).toLocaleString() : 
-                    'Not set'}
+                  Current: {configs?.config?.last_processed_date || 'Not set'}
                 </p>
               </div>
             </div>
@@ -831,7 +830,10 @@ const Admin = () => {
               Invite User
             </button>
             <button
-              onClick={() => setShowScriptModal(true)}
+              onClick={() => {
+                fetchScriptConfigs();
+                setShowScriptModal(true);
+              }}
               className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
             >
               <Cog className="h-4 w-4 mr-2" />
@@ -891,7 +893,10 @@ const Admin = () => {
               Script Management
             </h3>
             <button
-              onClick={() => setShowScriptModal(true)}
+              onClick={() => {
+                fetchScriptConfigs();
+                setShowScriptModal(true);
+              }}
               className="flex items-center px-3 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700"
             >
               <Cog className="h-4 w-4 mr-2" />

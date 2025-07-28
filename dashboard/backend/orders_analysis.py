@@ -496,7 +496,7 @@ class EnhancedOrdersAnalysis:
                 # If date conversion fails, use row order as proxy for chronological order
                 df['_row_order'] = range(len(df))
             
-            # Group by ASIN and get latest entry for each
+            # Group by ASIN and get comprehensive purchase history
             cogs_data = {}
             for asin in df[asin_field].unique():
                 if pd.isna(asin) or asin == '' or asin == 'nan':
@@ -504,32 +504,50 @@ class EnhancedOrdersAnalysis:
                     
                 asin_rows = df[df[asin_field] == asin].copy()
                 
-                # Sort by date (or row order if date is unavailable) to get latest entry
+                # Sort by date (or row order if date is unavailable) to get chronological order
                 if date_field in asin_rows.columns and not asin_rows[date_field].isna().all():
-                    latest_row = asin_rows.sort_values(date_field, na_position='first').iloc[-1]
+                    asin_rows = asin_rows.sort_values(date_field, na_position='first')
                 elif '_row_order' in asin_rows.columns:
-                    latest_row = asin_rows.sort_values('_row_order').iloc[-1]
-                else:
-                    latest_row = asin_rows.iloc[-1]
+                    asin_rows = asin_rows.sort_values('_row_order')
                 
-                # Extract COGS and Source data
-                cogs_value = latest_row[cogs_field]
-                source_value = latest_row[source_field] if source_field else None
+                # Get latest COGS (for the main COGS display)
+                latest_row = asin_rows.iloc[-1]
+                latest_cogs = latest_row[cogs_field]
                 
-                print(f"[DEBUG] ASIN {asin} - source_value: '{source_value}' (type: {type(source_value)})")
+                if pd.isna(latest_cogs) or latest_cogs <= 0:
+                    continue
                 
-                if not pd.isna(cogs_value) and cogs_value > 0:
-                    # Clean source value and check if it's a valid URL
-                    cleaned_source = str(source_value).strip() if source_value and not pd.isna(source_value) else None
-                    print(f"[DEBUG] ASIN {asin} - cleaned_source: '{cleaned_source}'")
-                    
-                    cogs_data[asin] = {
-                        'cogs': float(cogs_value),
-                        'source_link': cleaned_source if cleaned_source and cleaned_source != '' and cleaned_source.lower() != 'nan' else None,
-                        'last_purchase_date': latest_row[date_field] if date_field in latest_row and not pd.isna(latest_row[date_field]) else None,
-                        'source_column': source_field
-                    }
-                    print(f"[DEBUG] ASIN {asin} - final COGS data: {cogs_data[asin]}")
+                # Collect all unique source links from purchase history
+                all_sources = []
+                last_known_source = None
+                
+                for _, row in asin_rows.iterrows():
+                    source_value = row[source_field] if source_field else None
+                    if source_value and not pd.isna(source_value):
+                        cleaned_source = str(source_value).strip()
+                        if cleaned_source and cleaned_source != '' and cleaned_source.lower() != 'nan':
+                            # This row has a source, remember it
+                            last_known_source = cleaned_source
+                            if cleaned_source not in all_sources:
+                                all_sources.append(cleaned_source)
+                    # If this row has empty source but we have a last known source, use that
+                    elif last_known_source and last_known_source not in all_sources:
+                        all_sources.append(last_known_source)
+                
+                print(f"[DEBUG] ASIN {asin} - found {len(all_sources)} unique sources: {all_sources}")
+                
+                # Use the most recent valid source as the primary source
+                primary_source = all_sources[-1] if all_sources else None
+                
+                cogs_data[asin] = {
+                    'cogs': float(latest_cogs),
+                    'source_link': primary_source,
+                    'all_sources': all_sources,  # Keep all sources for potential future use
+                    'last_purchase_date': latest_row[date_field] if date_field in latest_row and not pd.isna(latest_row[date_field]) else None,
+                    'source_column': source_field,
+                    'total_purchases': len(asin_rows)
+                }
+                print(f"[DEBUG] ASIN {asin} - final COGS data: {cogs_data[asin]}")
             
             print(f"[DEBUG] Fetched COGS data for {len(cogs_data)} ASINs from Google Sheet")
             if len(cogs_data) > 0:

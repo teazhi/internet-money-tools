@@ -23,7 +23,10 @@ import {
   UserPlus,
   Settings,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  Play,
+  Calendar,
+  Cog
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -86,6 +89,187 @@ const InviteModal = ({ inviteEmail, setInviteEmail, onSave, onCancel }) => {
   );
 };
 
+const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) => {
+  const [editData, setEditData] = useState({
+    amznUploadConfig: {
+      last_processed_date: configs?.amznUploadConfig?.last_processed_date || ''
+    },
+    config: {
+      last_processed_date: configs?.config?.last_processed_date || ''
+    }
+  });
+
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    // Convert ISO string to local datetime input format
+    const date = new Date(dateString);
+    return date.toISOString().slice(0, 16);
+  };
+
+  const formatDateForAPI = (dateString) => {
+    if (!dateString) return '';
+    // Convert local datetime input to ISO string
+    return new Date(dateString).toISOString();
+  };
+
+  useEffect(() => {
+    if (configs) {
+      setEditData({
+        amznUploadConfig: {
+          last_processed_date: formatDateForInput(configs.amznUploadConfig?.last_processed_date)
+        },
+        config: {
+          last_processed_date: formatDateForInput(configs.config?.last_processed_date)
+        }
+      });
+    }
+  }, [configs]);
+
+  const handleSave = () => {
+    const saveData = {
+      amznUploadConfig: {
+        last_processed_date: formatDateForAPI(editData.amznUploadConfig.last_processed_date)
+      },
+      config: {
+        last_processed_date: formatDateForAPI(editData.config.last_processed_date)
+      }
+    };
+    onSave(saveData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">
+              Manual Script Control
+            </h3>
+            <button
+              onClick={onCancel}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {/* Listing Loader & Sellerboard Script */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-md font-medium text-gray-900">Listing Loader & Sellerboard Script</h4>
+                  <p className="text-sm text-gray-500">Controls amznUploadConfig file</p>
+                </div>
+                <button
+                  onClick={() => onTrigger('listing_loader')}
+                  disabled={loading}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  {loading ? 'Processing...' : 'Trigger Now'}
+                </button>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Processed Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editData.amznUploadConfig.last_processed_date}
+                  onChange={(e) => setEditData({
+                    ...editData,
+                    amznUploadConfig: {
+                      ...editData.amznUploadConfig,
+                      last_processed_date: e.target.value
+                    }
+                  })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Current: {configs?.amznUploadConfig?.last_processed_date ? 
+                    new Date(configs.amznUploadConfig.last_processed_date).toLocaleString() : 
+                    'Not set'}
+                </p>
+              </div>
+            </div>
+
+            {/* Prep Uploader Script */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-md font-medium text-gray-900">Prep Uploader Script</h4>
+                  <p className="text-sm text-gray-500">Controls config.json file</p>
+                </div>
+                <button
+                  onClick={() => onTrigger('prep_uploader')}
+                  disabled={loading}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  {loading ? 'Processing...' : 'Trigger Now'}
+                </button>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Processed Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editData.config.last_processed_date}
+                  onChange={(e) => setEditData({
+                    ...editData,
+                    config: {
+                      ...editData.config,
+                      last_processed_date: e.target.value
+                    }
+                  })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Current: {configs?.config?.last_processed_date ? 
+                    new Date(configs.config.last_processed_date).toLocaleString() : 
+                    'Not set'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex">
+                <AlertTriangle className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700">
+                    <strong>Warning:</strong> Manually triggering scripts or changing dates will affect automated processing. 
+                    Setting dates to the past will cause scripts to reprocess old data.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Admin = () => {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -101,6 +285,12 @@ const Admin = () => {
   const [invitations, setInvitations] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [scriptConfigs, setScriptConfigs] = useState({
+    amznUploadConfig: null,
+    config: null
+  });
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [showScriptModal, setShowScriptModal] = useState(false);
 
   const getRelativeTime = (dateString) => {
     if (!dateString) return 'Never';
@@ -149,6 +339,7 @@ const Admin = () => {
       fetchUsers();
       fetchSystemStats();
       fetchInvitations();
+      fetchScriptConfigs();
     }
   }, [isAdmin]);
 
@@ -205,6 +396,19 @@ const Admin = () => {
     }
   };
 
+  const fetchScriptConfigs = async () => {
+    try {
+      setScriptLoading(true);
+      const response = await axios.get('/api/admin/script-configs', { withCredentials: true });
+      setScriptConfigs(response.data);
+    } catch (error) {
+      console.error('Failed to fetch script configs:', error);
+      setError('Failed to fetch script configurations');
+    } finally {
+      setScriptLoading(false);
+    }
+  };
+
   const handleSendInvitation = async () => {
     if (!inviteEmail) {
       setError('Please enter an email address');
@@ -237,6 +441,42 @@ const Admin = () => {
       fetchInvitations();
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to delete invitation');
+    }
+  };
+
+  const handleUpdateScriptConfigs = async (configData) => {
+    try {
+      setError('');
+      setSuccess('');
+      setScriptLoading(true);
+      
+      await axios.post('/api/admin/script-configs', configData, { withCredentials: true });
+      setSuccess('Script configurations updated successfully');
+      await fetchScriptConfigs();
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to update script configurations');
+    } finally {
+      setScriptLoading(false);
+    }
+  };
+
+  const handleTriggerScript = async (scriptType) => {
+    if (!window.confirm(`Are you sure you want to manually trigger the ${scriptType} script?`)) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      setScriptLoading(true);
+      
+      await axios.post('/api/admin/trigger-script', { script_type: scriptType }, { withCredentials: true });
+      setSuccess(`${scriptType} script triggered successfully`);
+      await fetchScriptConfigs();
+    } catch (error) {
+      setError(error.response?.data?.error || `Failed to trigger ${scriptType} script`);
+    } finally {
+      setScriptLoading(false);
     }
   };
 
@@ -590,6 +830,13 @@ const Admin = () => {
               <UserPlus className="h-4 w-4 mr-2" />
               Invite User
             </button>
+            <button
+              onClick={() => setShowScriptModal(true)}
+              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
+            >
+              <Cog className="h-4 w-4 mr-2" />
+              Script Control
+            </button>
           </div>
         </div>
       </div>
@@ -635,6 +882,89 @@ const Admin = () => {
           </div>
         </div>
       )}
+
+      {/* Script Management Section */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">
+              Script Management
+            </h3>
+            <button
+              onClick={() => setShowScriptModal(true)}
+              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700"
+            >
+              <Cog className="h-4 w-4 mr-2" />
+              Manage Scripts
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          {scriptLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-2"></div>
+              <p className="text-gray-600 text-sm">Loading script configurations...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Listing Loader & Sellerboard */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                    <Database className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">Listing Loader & Sellerboard</h4>
+                    <p className="text-xs text-gray-500">amznUploadConfig</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Last Processed:</span>
+                    <span className="font-medium">
+                      {scriptConfigs?.amznUploadConfig?.last_processed_date ? 
+                        new Date(scriptConfigs.amznUploadConfig.last_processed_date).toLocaleDateString() : 
+                        'Not set'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span className="text-green-600 font-medium">Ready</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Prep Uploader */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                    <Upload className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">Prep Uploader</h4>
+                    <p className="text-xs text-gray-500">config.json</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Last Processed:</span>
+                    <span className="font-medium">
+                      {scriptConfigs?.config?.last_processed_date ? 
+                        new Date(scriptConfigs.config.last_processed_date).toLocaleDateString() : 
+                        'Not set'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span className="text-blue-600 font-medium">Ready</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Invitations Section */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -964,6 +1294,17 @@ const Admin = () => {
           setInviteEmail={setInviteEmail}
           onSave={handleSendInvitation}
           onCancel={() => setShowInviteModal(false)}
+        />
+      )}
+
+      {/* Script Config Modal */}
+      {showScriptModal && (
+        <ScriptConfigModal
+          configs={scriptConfigs}
+          onSave={handleUpdateScriptConfigs}
+          onTrigger={handleTriggerScript}
+          onCancel={() => setShowScriptModal(false)}
+          loading={scriptLoading}
         />
       )}
     </div>

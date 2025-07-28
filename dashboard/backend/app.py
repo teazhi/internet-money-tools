@@ -1903,6 +1903,183 @@ def admin_delete_invitation(invitation_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Manual Script Control Endpoints
+@app.route('/api/admin/script-configs', methods=['GET'])
+@admin_required
+def get_script_configs():
+    """Get current script configuration from S3"""
+    try:
+        s3_client = get_s3_client()
+        configs = {}
+        
+        # Get amznUploadConfig (listing loader and sellerboard script)
+        try:
+            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='amznUploadConfig')
+            amzn_config = json.loads(response['Body'].read().decode('utf-8'))
+            configs['amznUploadConfig'] = {
+                'last_processed_date': amzn_config.get('last_processed_date', ''),
+                'status': 'found'
+            }
+        except Exception as e:
+            print(f"[SCRIPT CONFIG] Error reading amznUploadConfig: {e}")
+            configs['amznUploadConfig'] = {
+                'last_processed_date': '',
+                'status': 'not_found',
+                'error': str(e)
+            }
+        
+        # Get config.json (prepuploader script)
+        try:
+            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='config.json')
+            prep_config = json.loads(response['Body'].read().decode('utf-8'))
+            configs['prepUploaderConfig'] = {
+                'last_processed_date': prep_config.get('last_processed_date', ''),
+                'status': 'found'
+            }
+        except Exception as e:
+            print(f"[SCRIPT CONFIG] Error reading config.json: {e}")
+            configs['prepUploaderConfig'] = {
+                'last_processed_date': '',
+                'status': 'not_found',
+                'error': str(e)
+            }
+        
+        return jsonify(configs)
+        
+    except Exception as e:
+        print(f"[SCRIPT CONFIG] Error fetching script configs: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/script-configs', methods=['POST'])
+@admin_required
+def update_script_configs():
+    """Update script configuration in S3"""
+    try:
+        data = request.json
+        s3_client = get_s3_client()
+        results = {}
+        
+        print(f"[SCRIPT CONFIG] Updating configs: {data}")
+        
+        # Update amznUploadConfig if provided
+        if 'amznUploadConfig' in data:
+            try:
+                new_config = {
+                    'last_processed_date': data['amznUploadConfig']['last_processed_date']
+                }
+                
+                s3_client.put_object(
+                    Bucket=CONFIG_S3_BUCKET,
+                    Key='amznUploadConfig',
+                    Body=json.dumps(new_config, indent=2),
+                    ContentType='application/json'
+                )
+                
+                results['amznUploadConfig'] = {
+                    'status': 'updated',
+                    'last_processed_date': new_config['last_processed_date']
+                }
+                print(f"[SCRIPT CONFIG] Updated amznUploadConfig: {new_config}")
+                
+            except Exception as e:
+                print(f"[SCRIPT CONFIG] Error updating amznUploadConfig: {e}")
+                results['amznUploadConfig'] = {
+                    'status': 'error',
+                    'error': str(e)
+                }
+        
+        # Update config.json if provided
+        if 'prepUploaderConfig' in data:
+            try:
+                new_config = {
+                    'last_processed_date': data['prepUploaderConfig']['last_processed_date']
+                }
+                
+                s3_client.put_object(
+                    Bucket=CONFIG_S3_BUCKET,
+                    Key='config.json',
+                    Body=json.dumps(new_config, indent=2),
+                    ContentType='application/json'
+                )
+                
+                results['prepUploaderConfig'] = {
+                    'status': 'updated',  
+                    'last_processed_date': new_config['last_processed_date']
+                }
+                print(f"[SCRIPT CONFIG] Updated config.json: {new_config}")
+                
+            except Exception as e:
+                print(f"[SCRIPT CONFIG] Error updating config.json: {e}")
+                results['prepUploaderConfig'] = {
+                    'status': 'error',
+                    'error': str(e)
+                }
+        
+        return jsonify({
+            'message': 'Script configurations updated',
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"[SCRIPT CONFIG] Error updating script configs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/trigger-script', methods=['POST'])
+@admin_required
+def trigger_script():
+    """Trigger manual script execution by resetting last_processed_date"""
+    try:
+        data = request.json
+        script_type = data.get('script_type')  # 'listing_loader' or 'prep_uploader'
+        reset_date = data.get('reset_date', '')  # Date to reset to
+        
+        print(f"[SCRIPT TRIGGER] Triggering {script_type} with reset date: {reset_date}")
+        
+        s3_client = get_s3_client()
+        
+        if script_type == 'listing_loader':
+            # Update amznUploadConfig
+            config = {'last_processed_date': reset_date}
+            s3_client.put_object(
+                Bucket=CONFIG_S3_BUCKET,
+                Key='amznUploadConfig',
+                Body=json.dumps(config, indent=2),
+                ContentType='application/json'
+            )
+            
+            return jsonify({
+                'message': f'Listing Loader script triggered. Reset date to {reset_date}',
+                'script_type': script_type,
+                'reset_date': reset_date
+            })
+            
+        elif script_type == 'prep_uploader':
+            # Update config.json
+            config = {'last_processed_date': reset_date}
+            s3_client.put_object(
+                Bucket=CONFIG_S3_BUCKET,
+                Key='config.json',
+                Body=json.dumps(config, indent=2),
+                ContentType='application/json'
+            )
+            
+            return jsonify({
+                'message': f'Prep Uploader script triggered. Reset date to {reset_date}',
+                'script_type': script_type,
+                'reset_date': reset_date
+            })
+        
+        else:
+            return jsonify({'error': 'Invalid script_type. Use "listing_loader" or "prep_uploader"'}), 400
+            
+    except Exception as e:
+        print(f"[SCRIPT TRIGGER] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Production configuration
     port = int(os.environ.get('PORT', 5000))

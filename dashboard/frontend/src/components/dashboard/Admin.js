@@ -167,10 +167,20 @@ const Admin = () => {
   const fetchUsers = async () => {
     try {
       setError('');
-      const response = await axios.get('/api/admin/users', { withCredentials: true });
+      // Add cache-busting timestamp to ensure fresh data
+      const timestamp = Date.now();
+      const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
+        withCredentials: true,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      console.log('[FETCH USERS] Received fresh user data:', response.data.users);
       setUsers(response.data.users);
       setRawUserData(JSON.stringify(response.data.users, null, 2));
     } catch (error) {
+      console.error('[FETCH USERS] Error:', error);
       setError(error.response?.data?.error || 'Failed to fetch users');
     } finally {
       setLoading(false);
@@ -245,7 +255,27 @@ const Admin = () => {
       
       setSuccess('User updated successfully');
       setEditingUser(null);
-      fetchUsers();
+      
+      // Small delay to ensure backend has persisted the changes
+      console.log('[ADMIN UPDATE] Waiting for backend to persist changes...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      console.log('[ADMIN UPDATE] Refreshing user list...');
+      try {
+        await fetchUsers();
+        console.log('[ADMIN UPDATE] User list refreshed successfully');
+      } catch (fetchError) {
+        console.error('[ADMIN UPDATE] fetchUsers failed:', fetchError);
+        // Manual state update as fallback
+        setUsers(prevUsers => 
+          prevUsers.map(u => 
+            u.discord_id === userId 
+              ? { ...u, ...userData }
+              : u
+          )
+        );
+        console.log('[ADMIN UPDATE] Used manual state update as fallback');
+      }
     } catch (error) {
       console.error('[ADMIN UPDATE] Error:', error);
       console.error('[ADMIN UPDATE] Error response:', error.response?.data);

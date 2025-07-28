@@ -15,6 +15,11 @@ import {
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
+  // Debug: Check if source links are enabled
+  console.log('[DEBUG] SmartRestockAlerts - Analytics object:', analytics);
+  console.log('[DEBUG] SmartRestockAlerts - Enhanced analytics present:', !!analytics?.enhanced_analytics);
+  console.log('[DEBUG] SmartRestockAlerts - Enhanced analytics keys:', analytics?.enhanced_analytics ? Object.keys(analytics.enhanced_analytics) : 'none');
+  
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
 
@@ -333,6 +338,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     </div>
 
                     {/* COGS and Restock Information */}
+                    {console.log(`[DEBUG] ASIN ${alert.asin} COGS data:`, enhanced_analytics?.[alert.asin]?.cogs_data)}
                     {enhanced_analytics?.[alert.asin]?.cogs_data && Object.keys(enhanced_analytics[alert.asin].cogs_data).length > 0 && (
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
                         <div className="flex items-center justify-between">

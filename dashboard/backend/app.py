@@ -692,6 +692,37 @@ def debug_stock_columns():
         print(f"[DEBUG] Error in stock columns debug: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/cogs-status', methods=['GET'])
+@login_required
+def debug_cogs_status():
+    """Debug endpoint to check COGS configuration status"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+        
+        debug_info = {
+            'enable_source_links': user_record.get('enable_source_links', False),
+            'sheet_id': bool(user_record.get('sheet_id')),
+            'worksheet_title': bool(user_record.get('worksheet_title')),
+            'google_tokens': bool(user_record.get('google_tokens', {}).get('refresh_token')),
+            'column_mapping': user_record.get('column_mapping', {}),
+            'sellerboard_orders_url': bool(user_record.get('sellerboard_orders_url')),
+            'sellerboard_stock_url': bool(user_record.get('sellerboard_stock_url')),
+            'user_configured': bool(user_record.get('sheet_id') and user_record.get('worksheet_title'))
+        }
+        
+        return jsonify({
+            'debug_info': debug_info,
+            'message': 'COGS configuration status retrieved successfully'
+        })
+    
+    except Exception as e:
+        print(f"[DEBUG COGS] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/analytics/orders')
 @login_required
 def get_orders_analytics():

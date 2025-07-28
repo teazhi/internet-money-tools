@@ -304,7 +304,7 @@ const FileManager = () => {
               <p>• Each uploaded file gets a unique identifier tied to your Discord account</p>
               <p>• You can upload CSV files exported from Sellerboard reports</p>
               <p>• Excel files (.xlsx, .xlsm, .xls) are also supported for compatibility</p>
-              <p>• Only the 10 most recent files are kept per user</p>
+              <p>• Only the most recent file is kept per user (previous files are auto-deleted)</p>
               <p>• Files are used for analytics and automated script processing</p>
             </div>
           </div>

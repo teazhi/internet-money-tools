@@ -462,10 +462,8 @@ def update_profile():
         user_record['run_scripts'] = data['run_scripts']
     if 'run_prep_center' in data:
         user_record['run_prep_center'] = data['run_prep_center']
-    if 'listing_loader_key' in data:
-        user_record['listing_loader_key'] = data['listing_loader_key']
-    if 'sb_file_key' in data:
-        user_record['sb_file_key'] = data['sb_file_key']
+    # Note: listing_loader_key and sb_file_key are now deprecated
+    # Files are automatically detected from uploaded_files array
     if 'sellerboard_orders_url' in data:
         user_record['sellerboard_orders_url'] = data['sellerboard_orders_url']
     if 'sellerboard_stock_url' in data:
@@ -958,15 +956,16 @@ def upload_sellerboard_file():
         
         user_record['uploaded_files'].append(file_info)
         
-        # Keep only last 10 files per user
-        if len(user_record['uploaded_files']) > 10:
-            old_files = user_record['uploaded_files'][:-10]
-            user_record['uploaded_files'] = user_record['uploaded_files'][-10:]
+        # Keep only the latest file - delete all previous files
+        if len(user_record['uploaded_files']) > 1:
+            old_files = user_record['uploaded_files'][:-1]  # All except the newest
+            user_record['uploaded_files'] = user_record['uploaded_files'][-1:]  # Keep only newest
             
             # Delete old files from S3
             for old_file in old_files:
                 try:
                     s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=old_file['s3_key'])
+                    print(f"Deleted old file: {old_file['filename']}")
                 except Exception as e:
                     print(f"Error deleting old file {old_file['s3_key']}: {e}")
         
@@ -1117,7 +1116,7 @@ def admin_update_user(user_id):
         # Update allowed fields
         allowed_fields = [
             'email', 'run_scripts', 'run_prep_center', 
-            'listing_loader_key', 'sb_file_key', 'sellerboard_orders_url', 'sellerboard_stock_url'
+            'sellerboard_orders_url', 'sellerboard_stock_url'
         ]
         
         for field in allowed_fields:

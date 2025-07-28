@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   TrendingUp, 
@@ -28,11 +28,10 @@ const Overview = () => {
     // Auto-refresh every 5 minutes
     const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchAnalytics]);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
-      console.log('Fetching analytics data...');
       setError(null);
       const response = await axios.get('/api/analytics/orders', { 
         withCredentials: true,
@@ -45,34 +44,17 @@ const Overview = () => {
       // Ensure proper JSON parsing
       let data = response.data;
       if (typeof data === 'string') {
-        console.log('Response received as string, parsing JSON...');
         data = JSON.parse(data);
       }
       
-      console.log('Analytics response:', data);
-      console.log('Response type:', typeof data);
-      console.log('Response keys:', Object.keys(data || {}));
-      console.log('Today sales data:', data?.today_sales);
-      console.log('Today sales type:', typeof data?.today_sales);
-      console.log('Today sales keys count:', Object.keys(data?.today_sales || {}).length);
-      console.log('Report date:', data?.report_date);
       setAnalytics(data);
       setLastUpdated(new Date());
       
       if (response.data.error) {
-        console.error('Analytics API returned error:', response.data.error);
         setError(response.data.error);
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
-      console.error('Full error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        hasResponse: !!error.response,
-        errorType: typeof error
-      });
       
       // Check if this is a setup requirement error
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {
@@ -97,39 +79,34 @@ const Overview = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const getReportDate = () => {
-    console.log('Getting report date, analytics:', analytics);
-    console.log('Report date value:', analytics?.report_date);
+  const reportDate = useMemo(() => {
     if (analytics?.report_date) {
       const date = new Date(analytics.report_date);
-      console.log('Parsed date:', date);
-      const formatted = date.toLocaleDateString('en-US', { 
+      return date.toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
         day: 'numeric' 
       });
-      console.log('Formatted date:', formatted);
-      return formatted;
     }
     return 'Unknown Date';
-  };
+  }, [analytics?.report_date]);
 
-  const getDateDisplayInfo = () => {
+  const dateDisplayInfo = useMemo(() => {
     if (!analytics?.report_date) return { text: 'Unknown Date', subtitle: null };
     
-    const reportDate = new Date(analytics.report_date);
+    const reportDateObj = new Date(analytics.report_date);
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
     
     // Check if report date is yesterday
-    const isYesterday = reportDate.toDateString() === yesterday.toDateString();
-    const isToday = reportDate.toDateString() === today.toDateString();
+    const isYesterday = reportDateObj.toDateString() === yesterday.toDateString();
+    const isToday = reportDateObj.toDateString() === today.toDateString();
     
-    const formatted = reportDate.toLocaleDateString('en-US', { 
+    const formatted = reportDateObj.toLocaleDateString('en-US', { 
       weekday: 'long', 
       year: 'numeric', 
       month: 'long', 
@@ -161,7 +138,7 @@ const Overview = () => {
             };
           }
         } catch (e) {
-          console.warn('Error calculating timezone difference:', e);
+          // Silently handle timezone errors
         }
       }
       
@@ -185,9 +162,9 @@ const Overview = () => {
     }
     
     return { text: formatted, subtitle: null };
-  };
+  }, [analytics?.report_date, analytics?.user_timezone]);
 
-  const getSetupProgress = () => {
+  const setupProgress = useMemo(() => {
     let progress = 0;
     let steps = [];
     
@@ -220,21 +197,39 @@ const Overview = () => {
     }
     
     return { progress, steps };
-  };
+  }, [user?.profile_configured, user?.google_linked, user?.sheet_configured, user?.user_record?.run_scripts]);
 
-  const { progress, steps } = getSetupProgress();
-
-  const formatTrendIcon = (pct) => {
+  const formatTrendIcon = useCallback((pct) => {
     if (pct > 0) return <ArrowUp className="h-4 w-4 text-green-500" />;
     if (pct < 0) return <ArrowDown className="h-4 w-4 text-red-500" />;
     return <Minus className="h-4 w-4 text-gray-400" />;
-  };
+  }, []);
 
-  const formatTrendColor = (pct) => {
+  const formatTrendColor = useCallback((pct) => {
     if (pct > 0) return 'text-green-600';
     if (pct < 0) return 'text-red-600';
     return 'text-gray-500';
-  };
+  }, []);
+
+  // Memoized analytics calculations
+  const analyticsStats = useMemo(() => {
+    if (!analytics) return { todayOrders: 0, activeProducts: 0, lowStockCount: 0, restockPriorityCount: 0 };
+    
+    const todayOrders = analytics.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0;
+    const activeProducts = analytics.today_sales ? Object.keys(analytics.today_sales).length : 0;
+    const lowStockCount = analytics.low_stock ? Object.keys(analytics.low_stock).length : 0;
+    const restockPriorityCount = analytics.restock_priority ? Object.keys(analytics.restock_priority).length : 0;
+    
+    return { todayOrders, activeProducts, lowStockCount, restockPriorityCount };
+  }, [analytics?.today_sales, analytics?.low_stock, analytics?.restock_priority]);
+
+  const topProducts = useMemo(() => {
+    if (!analytics?.today_sales) return [];
+    
+    return Object.entries(analytics.today_sales)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5);
+  }, [analytics?.today_sales]);
 
   // Check if user is authenticated (after all hooks)
   if (user === null) {
@@ -394,11 +389,11 @@ const Overview = () => {
               Welcome back, {user?.discord_username}!
             </h1>
             <p className="text-builders-100">
-              Here's your business overview for {getDateDisplayInfo().text}
+              Here's your business overview for {dateDisplayInfo.text}
             </p>
-            {getDateDisplayInfo().subtitle && (
+            {dateDisplayInfo.subtitle && (
               <p className="text-builders-200 text-sm mt-1">
-                📅 {getDateDisplayInfo().subtitle}
+                📅 {dateDisplayInfo.subtitle}
               </p>
             )}
             {lastUpdated && (
@@ -434,22 +429,22 @@ const Overview = () => {
       </div>
 
       {/* Setup Progress Card (only show if not fully configured) */}
-      {progress < 100 && (
+      {setupProgress.progress < 100 && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Setup Progress</h2>
-            <span className="text-sm text-gray-500">{progress}% Complete</span>
+            <span className="text-sm text-gray-500">{setupProgress.progress}% Complete</span>
           </div>
           <div className="mb-4">
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
                 className="bg-builders-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${setupProgress.progress}%` }}
               ></div>
             </div>
           </div>
           <div className="space-y-2">
-            {steps.map((step, index) => (
+            {setupProgress.steps.map((step, index) => (
               <div key={index} className="flex items-center space-x-2">
                 <div className={`w-4 h-4 rounded-full ${step.completed ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                 <span className={`text-sm ${step.completed ? 'text-gray-700' : 'text-gray-500'}`}>
@@ -473,10 +468,7 @@ const Overview = () => {
                 {analytics?.is_yesterday ? "Yesterday's Orders" : "Today's Orders"}
               </p>
               <p className="text-2xl font-semibold text-gray-900">
-                {analytics && analytics.today_sales ? 
-                  Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 
-                  '—'
-                }
+                {analyticsStats.todayOrders || '—'}
               </p>
             </div>
           </div>
@@ -490,7 +482,7 @@ const Overview = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Active Products</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {analytics && analytics.today_sales ? Object.keys(analytics.today_sales).length : '—'}
+                {analyticsStats.activeProducts || '—'}
               </p>
             </div>
           </div>
@@ -504,7 +496,7 @@ const Overview = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Low Stock Alerts</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {analytics && analytics.low_stock ? Object.keys(analytics.low_stock).length : '—'}
+                {analyticsStats.lowStockCount || '—'}
               </p>
             </div>
           </div>
@@ -518,7 +510,7 @@ const Overview = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Restock Priority</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {analytics && analytics.restock_priority ? Object.keys(analytics.restock_priority).length : '—'}
+                {analyticsStats.restockPriorityCount || '—'}
               </p>
             </div>
           </div>
@@ -530,11 +522,8 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Yesterday's Top Products</h3>
           <div className="space-y-3">
-            {analytics && analytics.today_sales && Object.keys(analytics.today_sales).length > 0 ? 
-              Object.entries(analytics.today_sales)
-                .sort(([,a], [,b]) => b - a)
-                .slice(0, 5)
-                .map(([asin, count], index) => (
+            {topProducts.length > 0 ? 
+              topProducts.map(([asin, count], index) => (
                   <div key={asin} className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
@@ -562,9 +551,9 @@ const Overview = () => {
                 </p>
                 {analytics?.report_date && (
                   <div className="text-gray-400 text-xs mt-1">
-                    <p>Showing data for {getDateDisplayInfo().text}</p>
-                    {getDateDisplayInfo().subtitle && (
-                      <p className="mt-1">📅 {getDateDisplayInfo().subtitle}</p>
+                    <p>Showing data for {dateDisplayInfo.text}</p>
+                    {dateDisplayInfo.subtitle && (
+                      <p className="mt-1">📅 {dateDisplayInfo.subtitle}</p>
                     )}
                   </div>
                 )}

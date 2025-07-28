@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   BarChart3, 
@@ -12,7 +13,9 @@ import {
   Home,
   Database,
   Link as LinkIcon,
-  Shield
+  Shield,
+  Eye,
+  ArrowLeft
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -22,16 +25,36 @@ import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 import FileManager from './dashboard/FileManager';
 import Admin from './dashboard/Admin';
-import AdminUserDashboard from './AdminUserDashboard';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Check if current user is admin
   const isAdmin = user?.discord_id === '1278565917206249503';
+
+  // Handle returning from impersonation
+  const handleReturnFromImpersonation = async () => {
+    try {
+      await axios.post('/api/admin/stop-impersonate', {}, { 
+        withCredentials: true 
+      });
+      
+      // Refresh user data to restore admin session
+      await refreshUser();
+      
+      // Navigate back to admin panel
+      navigate('/dashboard/admin');
+      
+    } catch (error) {
+      console.error('Failed to stop impersonation:', error);
+      // Force navigate back even if API call fails
+      navigate('/dashboard/admin');
+    }
+  };
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
@@ -65,7 +88,34 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50">
+      {/* Admin Impersonation Banner */}
+      {user?.admin_impersonating && (
+        <div className="bg-yellow-100 border-b border-yellow-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Eye className="h-5 w-5 text-yellow-600" />
+              <div>
+                <p className="text-sm font-medium text-yellow-800">
+                  Admin View: Viewing as {user?.discord_username || 'Unknown User'}
+                </p>
+                <p className="text-xs text-yellow-700">
+                  You are seeing this user's dashboard exactly as they would see it
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleReturnFromImpersonation}
+              className="inline-flex items-center px-3 py-1 border border-yellow-300 rounded-md text-sm font-medium text-yellow-800 bg-yellow-50 hover:bg-yellow-100 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Return to Admin
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex min-h-screen">
       {/* Sidebar */}
       <div className="hidden md:flex md:w-64 md:flex-col">
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
@@ -170,10 +220,10 @@ const Dashboard = () => {
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
               {isAdmin && <Route path="/admin" element={<Admin />} />}
-              {isAdmin && <Route path="/admin/view-user-dashboard/:userId" element={<AdminUserDashboard />} />}
             </Routes>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

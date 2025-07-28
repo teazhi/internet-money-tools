@@ -42,6 +42,12 @@ const AdminUserDashboard = () => {
       try {
         await refreshUser();
         console.log('Successfully refreshed user data after impersonation');
+        
+        // Automatically navigate to Overview so the user sees content immediately
+        setTimeout(() => {
+          navigate(`/dashboard/overview`, { replace: true });
+        }, 100);
+        
       } catch (refreshError) {
         console.error('Failed to refresh user data after impersonation:', refreshError);
         // Continue anyway - the impersonation session should still work
@@ -65,6 +71,14 @@ const AdminUserDashboard = () => {
       
       setImpersonating(false);
       setTargetUser(null);
+      
+      // Refresh auth context to restore admin user data
+      try {
+        await refreshUser();
+        console.log('Successfully restored admin user data');
+      } catch (refreshError) {
+        console.error('Failed to refresh admin user data:', refreshError);
+      }
       
       // Navigate back to admin panel
       navigate('/dashboard/admin');

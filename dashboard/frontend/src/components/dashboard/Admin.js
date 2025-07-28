@@ -262,11 +262,18 @@ const Admin = () => {
   const handleViewUserDashboard = async (userId) => {
     try {
       setError('');
-      // Create a new window/tab to view the user's dashboard
-      const dashboardUrl = `/dashboard/admin/view-user-dashboard/${userId}`;
-      window.open(dashboardUrl, '_blank');
+      
+      // Start impersonation and then navigate to Overview
+      const response = await axios.post(`/api/admin/impersonate/${userId}`, {}, { 
+        withCredentials: true 
+      });
+      
+      // Navigate to dashboard overview - impersonation will show in banner
+      window.location.href = '/dashboard/overview';
+      
     } catch (error) {
-      setError('Failed to open user dashboard');
+      console.error('Failed to start impersonation:', error);
+      setError(`Failed to start impersonation: ${error.response?.data?.error || error.message}`);
     }
   };
 

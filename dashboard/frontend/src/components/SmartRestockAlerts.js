@@ -12,6 +12,14 @@ import {
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
+  // Extract data first (before any conditional returns to avoid hook order issues)
+  const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
+
+  // Sort alerts by priority score - handle null/undefined restock_alerts
+  const sortedAlerts = useMemo(() => {
+    return restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
+  }, [restock_alerts]);
+
   // Add error handling for null/undefined analytics
   if (!analytics) {
     return (
@@ -30,13 +38,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       </div>
     );
   }
-
-  const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
-
-  // Sort alerts by priority score - handle null/undefined restock_alerts
-  const sortedAlerts = useMemo(() => {
-    return restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
-  }, [restock_alerts]);
 
   const getCategoryStyle = (category) => {
     switch (category) {

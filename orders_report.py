@@ -10,6 +10,59 @@ class OrdersReport:
     def __init__(self, report_url: Optional[str] = None):
         self.report_url = report_url or REPORT_URL
 
+    def _parse_datetime_robust(self, series: pd.Series, column_name: str) -> pd.Series:
+        """Robust datetime parsing that tries multiple formats"""
+        print(f"[DEBUG] Parsing datetime column '{column_name}' with {len(series)} values")
+        
+        # Common datetime formats from Sellerboard and other sources
+        formats_to_try = [
+            "%m/%d/%Y %I:%M:%S %p",  # 07/28/2025 02:30:45 PM (current format)
+            "%m/%d/%Y %H:%M:%S",     # 07/28/2025 14:30:45 (24-hour)
+            "%Y-%m-%d %H:%M:%S",     # 2025-07-28 14:30:45 (ISO-like)
+            "%Y-%m-%d %I:%M:%S %p",  # 2025-07-28 02:30:45 PM
+            "%m/%d/%Y",              # 07/28/2025 (date only)  
+            "%Y-%m-%d",              # 2025-07-28 (ISO date)
+            "%d/%m/%Y %I:%M:%S %p",  # 28/07/2025 02:30:45 PM (EU format)
+            "%d/%m/%Y %H:%M:%S",     # 28/07/2025 14:30:45 (EU 24-hour)
+        ]
+        
+        parsed_series = None
+        successful_format = None
+        
+        for fmt in formats_to_try:
+            try:
+                parsed_series = pd.to_datetime(series, format=fmt, errors='coerce')
+                # Count how many values were successfully parsed
+                valid_count = parsed_series.notna().sum()
+                if valid_count > 0:
+                    print(f"[DEBUG] Format '{fmt}' parsed {valid_count}/{len(series)} values successfully")
+                    successful_format = fmt
+                    break
+            except Exception as e:
+                continue
+        
+        # If no specific format worked, try pandas' flexible parsing as fallback
+        if parsed_series is None or parsed_series.notna().sum() == 0:
+            print(f"[DEBUG] All specific formats failed, trying flexible parsing")
+            parsed_series = pd.to_datetime(series, errors='coerce')
+        
+        # Log results
+        final_valid_count = parsed_series.notna().sum()
+        nat_count = parsed_series.isna().sum()
+        
+        print(f"[DEBUG] Final parsing results: {final_valid_count} valid, {nat_count} NaT values")
+        if successful_format:
+            print(f"[DEBUG] Best format was: '{successful_format}'")
+        
+        # Show sample of unparseable values for debugging
+        if nat_count > 0:
+            invalid_mask = parsed_series.isna() & series.notna()
+            if invalid_mask.any():
+                sample_invalid = series[invalid_mask].head(3).tolist()
+                print(f"[DEBUG] Sample unparseable values: {sample_invalid}")
+        
+        return parsed_series
+
     def download_csv_report(self) -> pd.DataFrame:
         response = requests.get(self.report_url, timeout=30)
         response.raise_for_status()
@@ -26,12 +79,15 @@ class OrdersReport:
             date_col = date_columns[0]
             # Specify format for PurchaseDate(UTC)
             if date_col == 'PurchaseDate(UTC)':
-                df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
+                # Try multiple datetime formats for PurchaseDate(UTC)
+                df[date_col] = self._parse_datetime_robust(df[date_col], date_col)
             else:
                 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
             # Convert for_date to pandas datetime for comparison
             for_date_pd = pd.to_datetime(for_date)
-            filtered_df = df[df[date_col].dt.date == for_date_pd.date()]
+            # Filter out NaT values before comparison to avoid TypeError
+            valid_dates_mask = df[date_col].notna()
+            filtered_df = df[valid_dates_mask & (df[date_col].dt.date == for_date_pd.date())]
         status_col = None
         for col in df.columns:
             if col.lower().replace(' ', '') == 'orderstatus':

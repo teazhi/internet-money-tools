@@ -560,7 +560,9 @@ class EnhancedOrdersAnalysis:
 
         # Fetch COGS data from Google Sheet if enabled
         cogs_data = {}
+        print(f"[DEBUG] Checking COGS settings - user_settings: {user_settings}")
         if user_settings and user_settings.get('enable_source_links'):
+            print(f"[DEBUG] Source links enabled, attempting to fetch COGS data...")
             try:
                 # Import here to avoid circular imports
                 import sys

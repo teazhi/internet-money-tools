@@ -470,6 +470,8 @@ def update_profile():
         user_record['sellerboard_stock_url'] = data['sellerboard_stock_url']
     if 'timezone' in data:
         user_record['timezone'] = data['timezone']
+    if 'enable_source_links' in data:
+        user_record['enable_source_links'] = data['enable_source_links']
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})

@@ -234,11 +234,21 @@ const Admin = () => {
     try {
       setError('');
       setSuccess('');
-      await axios.put(`/api/admin/users/${userId}`, userData, { withCredentials: true });
+      
+      console.log('[ADMIN UPDATE] Updating user:', userId);
+      console.log('[ADMIN UPDATE] User data:', userData);
+      console.log('[ADMIN UPDATE] Source Links:', userData.enable_source_links);
+      console.log('[ADMIN UPDATE] Search All Worksheets:', userData.search_all_worksheets);
+      
+      const response = await axios.put(`/api/admin/users/${userId}`, userData, { withCredentials: true });
+      console.log('[ADMIN UPDATE] Response:', response.data);
+      
       setSuccess('User updated successfully');
       setEditingUser(null);
       fetchUsers();
     } catch (error) {
+      console.error('[ADMIN UPDATE] Error:', error);
+      console.error('[ADMIN UPDATE] Error response:', error.response?.data);
       setError(error.response?.data?.error || 'Failed to update user');
     }
   };
@@ -487,7 +497,17 @@ const Admin = () => {
                 Cancel
               </button>
               <button
-                onClick={() => onSave(user.discord_id, editData)}
+                onClick={async () => {
+                  console.log('[MODAL] Save button clicked');
+                  console.log('[MODAL] User ID:', user.discord_id);
+                  console.log('[MODAL] Edit data:', editData);
+                  try {
+                    await onSave(user.discord_id, editData);
+                    console.log('[MODAL] Save completed successfully');
+                  } catch (error) {
+                    console.error('[MODAL] Save failed:', error);
+                  }
+                }}
                 className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700"
               >
                 Save Changes

@@ -1479,12 +1479,20 @@ def admin_update_user(user_id):
     """Update a specific user's data"""
     try:
         data = request.json
+        print(f"[ADMIN UPDATE] Received request for user_id: {user_id}")
+        print(f"[ADMIN UPDATE] Request data: {data}")
+        
         users = get_users_config()
         
         # Find the user using the helper function
         user_record = get_user_record(user_id)
         if not user_record:
+            print(f"[ADMIN UPDATE] User not found: {user_id}")
             return jsonify({'error': 'User not found'}), 404
+        
+        print(f"[ADMIN UPDATE] Found user record: {user_record.get('discord_username', 'Unknown')}")
+        print(f"[ADMIN UPDATE] Before update - enable_source_links: {user_record.get('enable_source_links')}")
+        print(f"[ADMIN UPDATE] Before update - search_all_worksheets: {user_record.get('search_all_worksheets')}")
         
         # Update allowed fields
         allowed_fields = [
@@ -1495,15 +1503,25 @@ def admin_update_user(user_id):
         
         for field in allowed_fields:
             if field in data:
+                old_value = user_record.get(field)
                 user_record[field] = data[field]
+                print(f"[ADMIN UPDATE] Updated {field}: {old_value} -> {data[field]}")
+        
+        print(f"[ADMIN UPDATE] After update - enable_source_links: {user_record.get('enable_source_links')}")
+        print(f"[ADMIN UPDATE] After update - search_all_worksheets: {user_record.get('search_all_worksheets')}")
         
         # Save changes
         if update_users_config(users):
+            print(f"[ADMIN UPDATE] Successfully saved user config")
             return jsonify({'message': 'User updated successfully'})
         else:
+            print(f"[ADMIN UPDATE] Failed to save user config")
             return jsonify({'error': 'Failed to update user'}), 500
             
     except Exception as e:
+        print(f"[ADMIN UPDATE] Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users/<user_id>', methods=['DELETE'])

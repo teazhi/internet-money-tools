@@ -23,13 +23,6 @@ const Overview = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchAnalytics();
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [fetchAnalytics]);
-
   const fetchAnalytics = useCallback(async () => {
     try {
       setError(null);
@@ -81,18 +74,14 @@ const Overview = () => {
     }
   }, []);
 
-  const reportDate = useMemo(() => {
-    if (analytics?.report_date) {
-      const date = new Date(analytics.report_date);
-      return date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-    }
-    return 'Unknown Date';
-  }, [analytics?.report_date]);
+  useEffect(() => {
+    fetchAnalytics();
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchAnalytics]);
+
+  // Remove unused reportDate variable as dateDisplayInfo covers this functionality
 
   const dateDisplayInfo = useMemo(() => {
     if (!analytics?.report_date) return { text: 'Unknown Date', subtitle: null };
@@ -221,7 +210,7 @@ const Overview = () => {
     const restockPriorityCount = analytics.restock_priority ? Object.keys(analytics.restock_priority).length : 0;
     
     return { todayOrders, activeProducts, lowStockCount, restockPriorityCount };
-  }, [analytics?.today_sales, analytics?.low_stock, analytics?.restock_priority]);
+  }, [analytics]);
 
   const topProducts = useMemo(() => {
     if (!analytics?.today_sales) return [];

@@ -8,7 +8,8 @@ import {
   FileText,
   AlertCircle,
   CheckCircle,
-  Download
+  Download,
+  Settings
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -20,6 +21,7 @@ const FileManager = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [dragOver, setDragOver] = useState(false);
   const [migrating, setMigrating] = useState(false);
+  const [adminMigrating, setAdminMigrating] = useState(false);
 
   useEffect(() => {
     fetchFiles();
@@ -162,6 +164,36 @@ const FileManager = () => {
     }
   };
 
+  const migrateAllUserFiles = async () => {
+    if (!window.confirm('This will reorganize ALL user files in S3. Continue?')) {
+      return;
+    }
+
+    setAdminMigrating(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/admin/migrate-all-files', {}, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message} Check console for details.` 
+      });
+      console.log('Migration results:', response.data.results);
+      
+      // Refresh file list after migration
+      setTimeout(() => {
+        fetchFiles();
+      }, 2000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to migrate all user files' 
+      });
+    } finally {
+      setAdminMigrating(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -200,17 +232,31 @@ const FileManager = () => {
           </div>
         </div>
         
-        {/* Migration Button */}
-        {files.length === 0 && (
-          <button
-            onClick={migrateExistingFiles}
-            disabled={migrating}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {migrating ? 'Finding Files...' : 'Find Existing Files'}
-          </button>
-        )}
+        {/* Migration Buttons */}
+        <div className="flex space-x-2">
+          {files.length === 0 && (
+            <button
+              onClick={migrateExistingFiles}
+              disabled={migrating || adminMigrating}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {migrating ? 'Finding Files...' : 'Find Existing Files'}
+            </button>
+          )}
+          
+          {/* Admin Migration Button - only show for admin users */}
+          {user?.discord_id === '1278565917206249503' && (
+            <button
+              onClick={migrateAllUserFiles}
+              disabled={migrating || adminMigrating}
+              className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              {adminMigrating ? 'Migrating All...' : 'Admin: Migrate All Users'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Message Display */}

@@ -1018,6 +1018,129 @@ def list_sellerboard_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/migrate-all-files', methods=['POST'])
+@login_required
+def migrate_all_user_files():
+    """Admin endpoint to migrate all existing files to proper directory structure"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Check if user has admin permissions (you can adjust this logic)
+        if discord_id != '1278565917206249503':  # Your Discord ID
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        s3_client = get_s3_client()
+        users = get_users_config()
+        
+        # Known user mappings
+        user_mappings = {
+            'oscar': '1208551911976861737',
+            'tevin': '1278565917206249503', 
+            'david': '1189800870125256810'
+        }
+        
+        migration_results = []
+        
+        # List all objects in the bucket
+        response = s3_client.list_objects_v2(Bucket=CONFIG_S3_BUCKET)
+        
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                s3_key = obj['Key']
+                
+                # Skip files already in sellerboard_files/
+                if s3_key.startswith('sellerboard_files/'):
+                    continue
+                
+                # Skip system files
+                if s3_key in ['users.json', 'command_permissions.json', 'amznUploadConfig.json', 'config.json']:
+                    continue
+                
+                filename = s3_key.lower()
+                matched_user = None
+                
+                # Try to match file to user
+                for username, discord_id in user_mappings.items():
+                    if username in filename:
+                        matched_user = discord_id
+                        break
+                
+                if matched_user:
+                    # Create new S3 key in proper directory
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    original_filename = s3_key  # Keep original filename
+                    new_s3_key = f"sellerboard_files/{matched_user}_{timestamp}_{original_filename}"
+                    
+                    try:
+                        # Copy file to new location
+                        copy_source = {'Bucket': CONFIG_S3_BUCKET, 'Key': s3_key}
+                        s3_client.copy_object(
+                            CopySource=copy_source,
+                            Bucket=CONFIG_S3_BUCKET,
+                            Key=new_s3_key
+                        )
+                        
+                        # Delete original file
+                        s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=s3_key)
+                        
+                        # Add to user's uploaded_files
+                        for i, user in enumerate(users):
+                            if user.get('discord_id') == matched_user:
+                                if 'uploaded_files' not in user:
+                                    user['uploaded_files'] = []
+                                
+                                # Determine file type
+                                if '.xlsm' in filename or 'listing' in filename or 'loader' in filename:
+                                    file_type_category = 'listing_loader'
+                                    content_type = 'application/vnd.ms-excel.sheet.macroEnabled.12'
+                                else:
+                                    file_type_category = 'sellerboard'
+                                    content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                                
+                                file_info = {
+                                    'filename': original_filename,
+                                    's3_key': new_s3_key,
+                                    'upload_date': obj.get('LastModified', datetime.now()).isoformat(),
+                                    'file_size': obj.get('Size', 0),
+                                    'file_type': content_type,
+                                    'file_type_category': file_type_category
+                                }
+                                
+                                # Remove any existing files of the same type
+                                user['uploaded_files'] = [
+                                    f for f in user['uploaded_files'] 
+                                    if f.get('file_type_category') != file_type_category
+                                ]
+                                
+                                user['uploaded_files'].append(file_info)
+                                users[i] = user
+                                break
+                        
+                        migration_results.append({
+                            'original_key': s3_key,
+                            'new_key': new_s3_key,
+                            'user': matched_user,
+                            'status': 'migrated'
+                        })
+                        
+                    except Exception as e:
+                        migration_results.append({
+                            'original_key': s3_key,
+                            'error': str(e),
+                            'status': 'failed'
+                        })
+        
+        # Update users config
+        update_users_config(users)
+        
+        return jsonify({
+            'message': f'Migration completed. Processed {len(migration_results)} files.',
+            'results': migration_results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/files/migrate', methods=['POST'])
 @login_required
 def migrate_existing_files():

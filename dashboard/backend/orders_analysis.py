@@ -472,15 +472,22 @@ class EnhancedOrdersAnalysis:
             source_field = None
             for col in df.columns:
                 col_lower = col.lower()
-                if any(keyword in col_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor']):
+                if any(keyword in col_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor', 'store']):
                     source_field = col
+                    print(f"[DEBUG] Found source field: '{col}'")
                     break
+            
+            if not source_field:
+                print(f"[DEBUG] No source field found. Available columns: {list(df.columns)}")
             
             # Clean and process data
             df[asin_field] = df[asin_field].astype(str).str.strip()
+            print(f"[DEBUG] Processing COGS field '{cogs_field}' - sample values: {df[cogs_field].head().tolist()}")
             df[cogs_field] = pd.to_numeric(
-                df[cogs_field].replace(r"[\$,]", "", regex=True), errors="coerce"
+                df[cogs_field].astype(str).replace(r"[\$,]", "", regex=True), errors="coerce"
             )
+            print(f"[DEBUG] After COGS cleaning - sample values: {df[cogs_field].head().tolist()}")
+            print(f"[DEBUG] Valid COGS values: {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
             
             # Convert date column for sorting
             try:
@@ -571,16 +578,18 @@ class EnhancedOrdersAnalysis:
                 if parent_dir not in sys.path:
                     sys.path.append(parent_dir)
                 
-                from app import refresh_access_token
+                from app import refresh_google_token
                 
                 # Get user's Google Sheet settings
                 sheet_id = user_settings.get('sheet_id')
                 worksheet_title = user_settings.get('worksheet_title')
-                refresh_token = user_settings.get('google_tokens', {}).get('refresh_token')
+                google_tokens = user_settings.get('google_tokens', {})
                 column_mapping = user_settings.get('column_mapping', {})
                 
-                if sheet_id and worksheet_title and refresh_token:
-                    access_token = refresh_access_token(refresh_token)
+                if sheet_id and worksheet_title and google_tokens:
+                    # Create a temporary user_record for the refresh function
+                    temp_user_record = {'google_tokens': google_tokens}
+                    access_token = refresh_google_token(temp_user_record)
                     cogs_data = self.fetch_google_sheet_cogs_data(
                         access_token, sheet_id, worksheet_title, column_mapping
                     )

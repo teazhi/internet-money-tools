@@ -21,7 +21,7 @@ class OrdersAnalysis:
         df = pd.read_csv(StringIO(response.text))
         return df
 
-    def get_orders_for_date(self, df: pd.DataFrame, for_date: date) -> pd.DataFrame:
+    def get_orders_for_date(self, df: pd.DataFrame, for_date: date, user_timezone: str = None) -> pd.DataFrame:
         date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
         if not date_columns:
             filtered_df = df
@@ -31,7 +31,20 @@ class OrdersAnalysis:
                 df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
             else:
                 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-            filtered_df = df[df[date_col].dt.date == for_date]
+            
+            # Convert timestamps to user timezone if provided
+            if user_timezone and not df[date_col].empty:
+                try:
+                    # Assume UTC if no timezone info present, then convert to user timezone
+                    if df[date_col].dt.tz is None:
+                        df[date_col] = df[date_col].dt.tz_localize('UTC')
+                    df[date_col] = df[date_col].dt.tz_convert(user_timezone)
+                except Exception as e:
+                    print(f"Warning: Could not convert to timezone {user_timezone}: {e}")
+            
+            # Convert for_date to pandas datetime for comparison
+            for_date_pd = pd.to_datetime(for_date)
+            filtered_df = df[df[date_col].dt.date == for_date_pd.date()]
         status_col = None
         for col in df.columns:
             if col.lower().replace(' ', '') == 'orderstatus':
@@ -76,10 +89,10 @@ class OrdersAnalysis:
             stock_info[asin] = row.to_dict()
         return stock_info
 
-    def analyze(self, for_date: date, prev_date: Optional[date] = None) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None) -> dict:
         # Download and filter orders
         orders_df = self.download_csv(self.orders_url)
-        today_orders = self.get_orders_for_date(orders_df, for_date)
+        today_orders = self.get_orders_for_date(orders_df, for_date, user_timezone)
         today_sales = self.asin_sales_count(today_orders)
 
         # Download stock report

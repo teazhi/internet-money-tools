@@ -784,7 +784,7 @@ def get_orders_analytics():
             print(f"[Dashboard Analytics] Initializing OrdersAnalysis...")
             analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
             print(f"[Dashboard Analytics] OrdersAnalysis initialized, starting analysis...")
-            analysis = analyzer.analyze(target_date)
+            analysis = analyzer.analyze(target_date, user_timezone=user_timezone)
             print(f"[Dashboard Analytics] Analysis completed successfully")
             print(f"[Dashboard Analytics] Low stock items found: {len(analysis.get('low_stock', {}))}")
             print(f"[Dashboard Analytics] Restock priority items: {len(analysis.get('restock_priority', {}))}")

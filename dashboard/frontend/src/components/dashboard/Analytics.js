@@ -587,8 +587,26 @@ const Analytics = () => {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            max={new Date(Date.now() - 86400000).toISOString().split('T')[0]}
+            max={(() => {
+              // Get maximum date based on user's timezone
+              const userTimezone = analytics?.user_timezone;
+              if (userTimezone) {
+                try {
+                  const now = new Date();
+                  const userNow = new Date(now.toLocaleString("en-US", {timeZone: userTimezone}));
+                  // Allow up to yesterday in user's timezone
+                  const yesterday = new Date(userNow);
+                  yesterday.setDate(userNow.getDate() - 1);
+                  return yesterday.toISOString().split('T')[0];
+                } catch (e) {
+                  // Fallback to system timezone
+                  return new Date(Date.now() - 86400000).toISOString().split('T')[0];
+                }
+              }
+              return new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            })()}
             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+            title={analytics?.user_timezone ? `Dates shown in ${analytics.user_timezone}` : 'Dates shown in system timezone'}
           />
           <button
             onClick={fetchAnalytics}

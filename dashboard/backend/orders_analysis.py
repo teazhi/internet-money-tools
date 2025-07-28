@@ -34,7 +34,7 @@ class EnhancedOrdersAnalysis:
         df = pd.read_csv(StringIO(response.text))
         return df
 
-    def get_orders_for_date_range(self, df: pd.DataFrame, start_date: date, end_date: date) -> pd.DataFrame:
+    def get_orders_for_date_range(self, df: pd.DataFrame, start_date: date, end_date: date, user_timezone: str = None) -> pd.DataFrame:
         """Get orders for a date range instead of just single date"""
         date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
         if not date_columns:
@@ -45,6 +45,16 @@ class EnhancedOrdersAnalysis:
             df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
         else:
             df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        
+        # Convert timestamps to user timezone if provided
+        if user_timezone and not df[date_col].empty:
+            try:
+                # Assume UTC if no timezone info present, then convert to user timezone
+                if df[date_col].dt.tz is None:
+                    df[date_col] = df[date_col].dt.tz_localize('UTC')
+                df[date_col] = df[date_col].dt.tz_convert(user_timezone)
+            except Exception as e:
+                print(f"Warning: Could not convert to timezone {user_timezone}: {e}")
         
         # Filter by date range
         mask = (df[date_col].dt.date >= start_date) & (df[date_col].dt.date <= end_date)
@@ -62,9 +72,9 @@ class EnhancedOrdersAnalysis:
         
         return filtered_df
 
-    def get_orders_for_date(self, df: pd.DataFrame, for_date: date) -> pd.DataFrame:
+    def get_orders_for_date(self, df: pd.DataFrame, for_date: date, user_timezone: str = None) -> pd.DataFrame:
         """Get orders for a specific date"""
-        return self.get_orders_for_date_range(df, for_date, for_date)
+        return self.get_orders_for_date_range(df, for_date, for_date, user_timezone)
 
     def asin_sales_count(self, orders_df: pd.DataFrame) -> Dict[str, int]:
         """Count sales by ASIN"""
@@ -77,14 +87,14 @@ class EnhancedOrdersAnalysis:
             raise ValueError("Products column not found in CSV.")
         return orders_df[product_col].value_counts().to_dict()
 
-    def calculate_enhanced_velocity(self, asin: str, orders_df: pd.DataFrame, target_date: date) -> Dict:
+    def calculate_enhanced_velocity(self, asin: str, orders_df: pd.DataFrame, target_date: date, user_timezone: str = None) -> Dict:
         """Calculate enhanced multi-period velocity with trend analysis"""
         periods = [7, 14, 30, 60, 90]
         velocity_data = {}
         
         for period in periods:
             start_date = target_date - timedelta(days=period-1)
-            period_orders = self.get_orders_for_date_range(orders_df, start_date, target_date)
+            period_orders = self.get_orders_for_date_range(orders_df, start_date, target_date, user_timezone)
             period_sales = self.asin_sales_count(period_orders)
             daily_avg = period_sales.get(asin, 0) / period
             velocity_data[f'{period}d'] = daily_avg
@@ -104,7 +114,7 @@ class EnhancedOrdersAnalysis:
             
         # If all historical periods are zero but we have sales today, use today's sales as baseline velocity
         if weighted_velocity == 0 and all(v == 0 for v in velocity_data.values()):
-            today_orders = self.get_orders_for_date(orders_df, target_date)
+            today_orders = self.get_orders_for_date(orders_df, target_date, user_timezone)
             today_sales_for_asin = self.asin_sales_count(today_orders).get(asin, 0)
             if today_sales_for_asin > 0:
                 weighted_velocity = today_sales_for_asin  # Use today's sales as velocity
@@ -434,11 +444,11 @@ class EnhancedOrdersAnalysis:
         with open(YESTERDAY_SALES_FILE, 'w') as f:
             json.dump(today_sales, f)
 
-    def analyze(self, for_date: date, prev_date: Optional[date] = None) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None) -> dict:
         """Main analysis function with enhanced logic"""
         # Download and process orders data
         orders_df = self.download_csv(self.orders_url)
-        today_orders = self.get_orders_for_date(orders_df, for_date)
+        today_orders = self.get_orders_for_date(orders_df, for_date, user_timezone)
         today_sales = self.asin_sales_count(today_orders)
 
         # Download stock report
@@ -473,7 +483,7 @@ class EnhancedOrdersAnalysis:
                 continue
                 
             # Calculate enhanced velocity
-            velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date)
+            velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date, user_timezone)
             
             # Skip products with zero velocity across all periods
             if velocity_data.get('weighted_velocity', 0) == 0 and today_sales.get(asin, 0) == 0:

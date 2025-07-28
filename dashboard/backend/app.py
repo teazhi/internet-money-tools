@@ -190,14 +190,18 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def is_admin_user(discord_id):
+    """Check if a Discord ID is an admin"""
+    return discord_id == '1278565917206249503'
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'discord_id' not in session:
             return jsonify({'error': 'Authentication required'}), 401
         
-        # Check if user is admin (your Discord ID)
-        if session['discord_id'] != '1278565917206249503':
+        # Check if user is admin
+        if not is_admin_user(session['discord_id']):
             return jsonify({'error': 'Admin access required'}), 403
         
         return f(*args, **kwargs)
@@ -427,15 +431,27 @@ def get_user():
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
-    return jsonify({
+    # Check if we're in admin impersonation mode
+    admin_impersonating = session.get('admin_impersonating')
+    
+    response_data = {
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
         'discord_avatar': session.get('discord_avatar'),
+        'is_admin': is_admin_user(discord_id),
         'profile_configured': user_record is not None,
         'google_linked': user_record and user_record.get('google_tokens') is not None,
         'sheet_configured': user_record and user_record.get('sheet_id') is not None,
         'user_record': user_record if user_record else None
-    })
+    }
+    
+    # Add impersonation info if applicable
+    if admin_impersonating:
+        response_data['admin_impersonating'] = True
+        response_data['original_admin_id'] = admin_impersonating['original_discord_id']
+        response_data['original_admin_username'] = admin_impersonating['original_discord_username']
+    
+    return jsonify(response_data)
 
 @app.route('/api/user/profile', methods=['POST'])
 @login_required
@@ -1464,7 +1480,8 @@ def admin_update_user(user_id):
         # Update allowed fields
         allowed_fields = [
             'email', 'run_scripts', 'run_prep_center', 
-            'sellerboard_orders_url', 'sellerboard_stock_url'
+            'sellerboard_orders_url', 'sellerboard_stock_url',
+            'enable_source_links', 'search_all_worksheets'
         ]
         
         for field in allowed_fields:
@@ -1511,6 +1528,65 @@ def admin_delete_user(user_id):
             return jsonify({'error': 'Failed to delete user'}), 500
             
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/impersonate/<user_id>', methods=['POST'])
+@admin_required  
+def admin_impersonate_user(user_id):
+    """Temporarily impersonate a user for dashboard viewing"""
+    try:
+        # Find the user
+        user_record = get_user_record(user_id)
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Store original admin session
+        session['admin_impersonating'] = {
+            'original_discord_id': session['discord_id'],
+            'original_discord_username': session['discord_username'],
+            'target_user_id': user_id
+        }
+        
+        # Temporarily switch session to target user
+        session['discord_id'] = user_record['discord_id']
+        session['discord_username'] = user_record.get('discord_username', 'Unknown User')
+        
+        return jsonify({
+            'message': f'Now viewing as {user_record.get("discord_username", "Unknown User")}',
+            'impersonating': True,
+            'target_user': {
+                'discord_id': user_record['discord_id'],
+                'discord_username': user_record.get('discord_username', 'Unknown User')
+            }
+        })
+        
+    except Exception as e:
+        print(f"[ADMIN IMPERSONATE] Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/stop-impersonate', methods=['POST'])
+@login_required
+def admin_stop_impersonate():
+    """Stop impersonating a user and return to admin session"""
+    try:
+        if 'admin_impersonating' not in session:
+            return jsonify({'error': 'Not currently impersonating'}), 400
+        
+        # Restore original admin session
+        original_data = session['admin_impersonating']
+        session['discord_id'] = original_data['original_discord_id']
+        session['discord_username'] = original_data['original_discord_username']
+        
+        # Remove impersonation data
+        del session['admin_impersonating']
+        
+        return jsonify({
+            'message': 'Stopped impersonating, returned to admin session',
+            'impersonating': False
+        })
+        
+    except Exception as e:
+        print(f"[ADMIN STOP IMPERSONATE] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users/bulk', methods=['PUT'])

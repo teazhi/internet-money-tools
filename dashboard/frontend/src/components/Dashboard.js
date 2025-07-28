@@ -22,6 +22,7 @@ import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 import FileManager from './dashboard/FileManager';
 import Admin from './dashboard/Admin';
+import AdminUserDashboard from './AdminUserDashboard';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
@@ -169,6 +170,7 @@ const Dashboard = () => {
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
               {isAdmin && <Route path="/admin" element={<Admin />} />}
+              {isAdmin && <Route path="/admin/view-user-dashboard/:userId" element={<AdminUserDashboard />} />}
             </Routes>
           </div>
         </main>

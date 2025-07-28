@@ -22,7 +22,8 @@ import {
   RefreshCw,
   UserPlus,
   Settings,
-  BarChart3
+  BarChart3,
+  ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -258,6 +259,17 @@ const Admin = () => {
     }
   };
 
+  const handleViewUserDashboard = async (userId) => {
+    try {
+      setError('');
+      // Create a new window/tab to view the user's dashboard
+      const dashboardUrl = `/dashboard/admin/view-user-dashboard/${userId}`;
+      window.open(dashboardUrl, '_blank');
+    } catch (error) {
+      setError('Failed to open user dashboard');
+    }
+  };
+
   const handleBulkUpdate = async () => {
     try {
       setError('');
@@ -326,6 +338,8 @@ const Admin = () => {
       email: user.email || '',
       run_scripts: user.run_scripts || false,
       run_prep_center: user.run_prep_center || false,
+      enable_source_links: user.enable_source_links || false,
+      search_all_worksheets: user.search_all_worksheets || false,
       listing_loader_key: user.listing_loader_key || '',
       sb_file_key: user.sb_file_key || '',
       sellerboard_orders_url: user.sellerboard_orders_url || '',
@@ -423,6 +437,38 @@ const Admin = () => {
                 <label htmlFor="run_prep_center" className="ml-2 block text-sm text-gray-700">
                   Prep center sheet automation
                 </label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="enable_source_links"
+                  type="checkbox"
+                  checked={editData.enable_source_links}
+                  onChange={(e) => setEditData({...editData, enable_source_links: e.target.checked})}
+                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
+                />
+                <div>
+                  <label htmlFor="enable_source_links" className="ml-2 block text-sm text-gray-700">
+                    Source Links from Google Sheet
+                  </label>
+                  <p className="ml-6 text-xs text-gray-500">Enable COGS and restock buttons from user's Google Sheet data</p>
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="search_all_worksheets"
+                  type="checkbox"
+                  checked={editData.search_all_worksheets}
+                  onChange={(e) => setEditData({...editData, search_all_worksheets: e.target.checked})}
+                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
+                />
+                <div>
+                  <label htmlFor="search_all_worksheets" className="ml-2 block text-sm text-gray-700">
+                    Search All Worksheets
+                  </label>
+                  <p className="ml-6 text-xs text-gray-500">Search all worksheets instead of just the mapped one</p>
+                </div>
               </div>
             </div>
 
@@ -773,6 +819,20 @@ const Admin = () => {
                         }
                         Sheets
                       </div>
+                      <div className="flex items-center">
+                        {user.enable_source_links ? 
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                          <X className="h-4 w-4 text-red-500 mr-1" />
+                        }
+                        COGS
+                      </div>
+                      <div className="flex items-center">
+                        {user.search_all_worksheets ? 
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                          <X className="h-4 w-4 text-red-500 mr-1" />
+                        }
+                        All Sheets
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -790,14 +850,23 @@ const Admin = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
                       <button
+                        onClick={() => handleViewUserDashboard(user.discord_id)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="View User's Dashboard"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => setEditingUser(user)}
                         className="text-builders-600 hover:text-builders-900"
+                        title="Edit User"
                       >
                         <Edit3 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteUser(user.discord_id)}
                         className="text-red-600 hover:text-red-900"
+                        title="Delete User"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

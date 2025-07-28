@@ -434,6 +434,14 @@ def get_user():
     # Check if we're in admin impersonation mode
     admin_impersonating = session.get('admin_impersonating')
     
+    # Debug logging
+    if admin_impersonating:
+        print(f"[API USER] Impersonation mode - returning data for: {discord_id}")
+        print(f"[API USER] User record found: {user_record is not None}")
+        if user_record:
+            print(f"[API USER] User has google_tokens: {user_record.get('google_tokens') is not None}")
+            print(f"[API USER] User has sheet_id: {user_record.get('sheet_id') is not None}")
+    
     response_data = {
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
@@ -450,6 +458,7 @@ def get_user():
         response_data['admin_impersonating'] = True
         response_data['original_admin_id'] = admin_impersonating['original_discord_id']
         response_data['original_admin_username'] = admin_impersonating['original_discord_username']
+        print(f"[API USER] Returning impersonated user data: {response_data['discord_username']}")
     
     return jsonify(response_data)
 
@@ -1535,10 +1544,18 @@ def admin_delete_user(user_id):
 def admin_impersonate_user(user_id):
     """Temporarily impersonate a user for dashboard viewing"""
     try:
+        print(f"[ADMIN IMPERSONATE] Starting impersonation for user_id: {user_id}")
+        
         # Find the user
         user_record = get_user_record(user_id)
         if not user_record:
+            print(f"[ADMIN IMPERSONATE] User not found: {user_id}")
             return jsonify({'error': 'User not found'}), 404
+        
+        print(f"[ADMIN IMPERSONATE] Found user record: {user_record.get('discord_username', 'Unknown')}")
+        print(f"[ADMIN IMPERSONATE] User has profile: {user_record is not None}")
+        print(f"[ADMIN IMPERSONATE] User has google_tokens: {user_record.get('google_tokens') is not None}")
+        print(f"[ADMIN IMPERSONATE] User has sheet_id: {user_record.get('sheet_id') is not None}")
         
         # Store original admin session
         session['admin_impersonating'] = {
@@ -1551,6 +1568,8 @@ def admin_impersonate_user(user_id):
         session['discord_id'] = user_record['discord_id']
         session['discord_username'] = user_record.get('discord_username', 'Unknown User')
         
+        print(f"[ADMIN IMPERSONATE] Session updated - now impersonating: {session['discord_id']}")
+        
         return jsonify({
             'message': f'Now viewing as {user_record.get("discord_username", "Unknown User")}',
             'impersonating': True,
@@ -1562,6 +1581,8 @@ def admin_impersonate_user(user_id):
         
     except Exception as e:
         print(f"[ADMIN IMPERSONATE] Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/stop-impersonate', methods=['POST'])

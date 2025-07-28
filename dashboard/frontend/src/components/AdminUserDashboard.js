@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 const AdminUserDashboard = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { updateUser } = useAuth();
+  const { updateUser, refreshUser } = useAuth();
   const [impersonating, setImpersonating] = useState(false);
   const [targetUser, setTargetUser] = useState(null);
   const [error, setError] = useState('');
@@ -37,12 +37,15 @@ const AdminUserDashboard = () => {
       setImpersonating(true);
       setTargetUser(response.data.target_user);
       
-      // Update the auth context to reflect the impersonated user
-      updateUser({
-        discord_id: response.data.target_user.discord_id,
-        discord_username: response.data.target_user.discord_username,
-        admin_impersonating: true
-      });
+      // Force refresh of user data in AuthContext after impersonation starts
+      // This ensures the Dashboard component gets the impersonated user's data
+      try {
+        await refreshUser();
+        console.log('Successfully refreshed user data after impersonation');
+      } catch (refreshError) {
+        console.error('Failed to refresh user data after impersonation:', refreshError);
+        // Continue anyway - the impersonation session should still work
+      }
       
     } catch (error) {
       console.error('Impersonation failed:', error);

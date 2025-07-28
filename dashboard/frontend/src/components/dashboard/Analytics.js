@@ -122,7 +122,8 @@ const Analytics = () => {
           if (!velocityData || !stockData) return null;
           
           return {
-            asin: asin.substring(0, 8),
+            asin: asin, // Keep full ASIN
+            asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin,
             velocity: sales, // Use daily sales as velocity
             daysLeft: Math.min(stockData.days_left || 999, 60),
             revenueImpact: sales * 10, // Rough estimate
@@ -147,7 +148,8 @@ const Analytics = () => {
         const revenueImpact = velocity * roi * Math.min(daysLeft, 30);
         
         return {
-          asin: asin.substring(0, 8),
+          asin: asin, // Keep full ASIN
+          asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin,
           velocity: velocity,
           daysLeft: Math.min(daysLeft, 60), // Cap for chart visibility
           revenueImpact: revenueImpact,
@@ -173,7 +175,8 @@ const Analytics = () => {
         const revenueOpportunity = velocity * roi;
         
         return {
-          asin: asin.substring(0, 8),
+          asin: asin, // Keep full ASIN
+          asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin,
           velocity: velocity,
           roi: roi,
           margin: margin,
@@ -194,7 +197,8 @@ const Analytics = () => {
     return Object.entries(analytics.enhanced_analytics)
       .slice(0, 12) // Top 12 products
       .map(([asin, data]) => ({
-        asin: asin.substring(0, 8),
+        asin: asin, // Keep full ASIN
+        asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin,
         '7d': data.velocity?.['7d'] || 0,
         '14d': data.velocity?.['14d'] || 0,
         '30d': data.velocity?.['30d'] || 0,
@@ -248,7 +252,8 @@ const Analytics = () => {
         const potentialReturn = suggestedQty * roi;
         
         return {
-          asin: asin.substring(0, 8),
+          asin: asin, // Keep full ASIN
+          asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin,
           investment: investment,
           potentialReturn: potentialReturn,
           suggestedQty: suggestedQty,
@@ -440,7 +445,7 @@ const Analytics = () => {
           todos.push({
             type: 'monitor',
             asin: asin,
-            action: `Monitor ${asin.substring(0, 8)}`,
+            action: `Monitor ${asin.length > 10 ? `${asin.substring(0, 8)}...` : asin}`,
             detail: `Trending up +${((data.velocity?.trend_factor - 1) * 100).toFixed(0)}%`,
             icon: '📈'
           });
@@ -456,7 +461,7 @@ const Analytics = () => {
           todos.push({
             type: 'opportunity',
             asin: asin,
-            action: `Scale ${asin.substring(0, 8)}`,
+            action: `Scale ${asin.length > 10 ? `${asin.substring(0, 8)}...` : asin}`,
             detail: `High velocity + good ROI opportunity`,
             icon: '💰'
           });
@@ -473,7 +478,8 @@ const Analytics = () => {
       .sort(([,a], [,b]) => b - a)
       .slice(0, 5)
       .map(([asin, sales]) => ({
-        asin: asin.substring(0, 8),
+        asin: asin, // Keep full ASIN for links
+        asinDisplay: asin.length > 10 ? `${asin.substring(0, 8)}...` : asin, // Truncate only for display
         sales,
         trend: analytics.velocity?.[asin]?.pct || 0
       }));
@@ -751,7 +757,7 @@ const Analytics = () => {
       {/* Top Movers Chart */}
       {topMovers.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Today's Top Movers</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Yesterday's Top Movers</h3>
           <div className="mb-4">
             <div className="flex flex-wrap gap-2">
               {topMovers.map((mover, index) => (
@@ -762,7 +768,7 @@ const Analytics = () => {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm hover:bg-blue-100 transition-colors"
                 >
-                  {mover.asin} ({mover.sales} units)
+                  {mover.asinDisplay} ({mover.sales} units)
                   <ExternalLink className="h-3 w-3" />
                 </a>
               ))}
@@ -771,11 +777,15 @@ const Analytics = () => {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topMovers}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="asin" />
+              <XAxis dataKey="asinDisplay" />
               <YAxis />
               <Tooltip 
                 formatter={(value, name) => [value, name === 'sales' ? 'Units Sold' : 'Trend %']}
-                labelFormatter={(label) => `ASIN: ${label}`}
+                labelFormatter={(label, payload) => {
+                  // Show full ASIN in tooltip
+                  const fullAsin = payload?.[0]?.payload?.asin || label;
+                  return `ASIN: ${fullAsin}`;
+                }}
               />
               <Bar dataKey="sales" fill="#3b82f6" name="Units Sold" />
             </BarChart>

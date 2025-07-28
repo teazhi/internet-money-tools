@@ -11,7 +11,8 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
-  RefreshCw
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -599,7 +600,18 @@ const Overview = () => {
                       <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
                         {index + 1}
                       </span>
-                      <span className="text-sm font-medium text-gray-900">{asin}</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-gray-900">{asin}</span>
+                        <a
+                          href={`https://amazon.com/dp/${asin}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                          title="View on Amazon"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-gray-600">{count} units</span>

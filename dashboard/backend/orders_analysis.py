@@ -56,8 +56,10 @@ class EnhancedOrdersAnalysis:
             except Exception as e:
                 print(f"Warning: Could not convert to timezone {user_timezone}: {e}")
         
-        # Filter by date range
-        mask = (df[date_col].dt.date >= start_date) & (df[date_col].dt.date <= end_date)
+        # Filter by date range - convert dates to pandas datetime for comparison
+        start_date_pd = pd.to_datetime(start_date)
+        end_date_pd = pd.to_datetime(end_date)
+        mask = (df[date_col].dt.date >= start_date_pd.date()) & (df[date_col].dt.date <= end_date_pd.date())
         filtered_df = df[mask]
         
         # Filter by order status

@@ -32,7 +32,9 @@ class OrdersReport:
                 df[date_col] = pd.to_datetime(df[date_col], format="%m/%d/%Y %I:%M:%S %p", errors='coerce')
             else:
                 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-            filtered_df = df[df[date_col].dt.date == for_date]
+            # Convert for_date to pandas datetime for comparison
+            for_date_pd = pd.to_datetime(for_date)
+            filtered_df = df[df[date_col].dt.date == for_date_pd.date()]
         status_col = None
         for col in df.columns:
             if col.lower().replace(' ', '') == 'orderstatus':

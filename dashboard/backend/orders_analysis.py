@@ -518,6 +518,17 @@ class EnhancedOrdersAnalysis:
                     }
             
             print(f"[DEBUG] Fetched COGS data for {len(cogs_data)} ASINs from Google Sheet")
+            if len(cogs_data) > 0:
+                # Show sample COGS data
+                sample_asin = list(cogs_data.keys())[0]
+                print(f"[DEBUG] Sample COGS data for {sample_asin}: {cogs_data[sample_asin]}")
+            else:
+                print(f"[DEBUG] No COGS data found. Sheet columns: {list(df.columns)}")
+                print(f"[DEBUG] Looking for ASIN field: '{asin_field}', COGS field: '{cogs_field}', Date field: '{date_field}'")
+                print(f"[DEBUG] Source field found: '{source_field}'")
+                print(f"[DEBUG] Total rows in sheet: {len(df)}")
+                print(f"[DEBUG] Non-empty ASIN values: {len(df[df[asin_field].notna() & (df[asin_field] != '') & (df[asin_field] != 'nan')])}")
+                print(f"[DEBUG] Non-empty COGS values: {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
             return cogs_data
             
         except Exception as e:

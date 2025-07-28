@@ -2124,6 +2124,82 @@ def trigger_script():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/lambda-logs', methods=['GET'])
+@admin_required
+def get_lambda_logs():
+    """Get Lambda function logs from CloudWatch"""
+    try:
+        lambda_function = request.args.get('function')  # 'cost_updater' or 'prep_uploader'
+        hours = int(request.args.get('hours', 24))  # Default to last 24 hours
+        
+        # Map function names to actual Lambda function names
+        lambda_functions = {
+            'cost_updater': 'cost-updater-lambda',  # Adjust to your actual function name
+            'prep_uploader': 'prep-uploader-lambda'  # Adjust to your actual function name
+        }
+        
+        if lambda_function not in lambda_functions:
+            return jsonify({'error': 'Invalid lambda function specified'}), 400
+        
+        function_name = lambda_functions[lambda_function]
+        log_group_name = f'/aws/lambda/{function_name}'
+        
+        # Create CloudWatch Logs client
+        logs_client = boto3.client(
+            'logs',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name='us-east-1'  # Adjust to your Lambda region
+        )
+        
+        # Calculate time range
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=hours)
+        
+        start_timestamp = int(start_time.timestamp() * 1000)
+        end_timestamp = int(end_time.timestamp() * 1000)
+        
+        print(f"[LAMBDA LOGS] Fetching logs for {function_name} from {start_time} to {end_time}")
+        
+        # Get log events
+        response = logs_client.filter_log_events(
+            logGroupName=log_group_name,
+            startTime=start_timestamp,
+            endTime=end_timestamp,
+            limit=1000  # Limit to prevent overwhelming response
+        )
+        
+        # Format log events
+        logs = []
+        for event in response.get('events', []):
+            logs.append({
+                'timestamp': datetime.fromtimestamp(event['timestamp'] / 1000).isoformat(),
+                'message': event['message'].strip(),
+                'ingestionTime': datetime.fromtimestamp(event['ingestionTime'] / 1000).isoformat()
+            })
+        
+        # Sort by timestamp (most recent first)
+        logs.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return jsonify({
+            'function': lambda_function,
+            'function_name': function_name,
+            'log_group': log_group_name,
+            'logs': logs,
+            'count': len(logs),
+            'time_range': {
+                'start': start_time.isoformat(),
+                'end': end_time.isoformat(),
+                'hours': hours
+            }
+        })
+        
+    except Exception as e:
+        print(f"[LAMBDA LOGS] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     # Production configuration
     port = int(os.environ.get('PORT', 5000))

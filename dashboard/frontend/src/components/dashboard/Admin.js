@@ -26,7 +26,10 @@ import {
   ExternalLink,
   Play,
   Calendar,
-  Cog
+  Cog,
+  FileText,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -89,7 +92,7 @@ const InviteModal = ({ inviteEmail, setInviteEmail, onSave, onCancel }) => {
   );
 };
 
-const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) => {
+const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading, lambdaLogs, logsLoading, showLogs, onToggleLogs, onFetchLogs, formatLogTimestamp, getLogLevel, getLogLevelColor }) => {
   const [editData, setEditData] = useState({
     amznUploadConfig: {
       last_processed_date: configs?.amznUploadConfig?.last_processed_date || ''
@@ -194,6 +197,61 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   Current: {configs?.amznUploadConfig?.last_processed_date || 'Not set'}
                 </p>
               </div>
+              
+              {/* View Logs Button */}
+              <div className="mt-3">
+                <button
+                  onClick={() => onToggleLogs('cost_updater')}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {showLogs.cost_updater ? 'Hide Logs' : 'View Logs'}
+                  {showLogs.cost_updater ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+                </button>
+              </div>
+              
+              {/* Logs Display */}
+              {showLogs.cost_updater && (
+                <div className="mt-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-sm font-medium text-gray-900">Recent Logs</h5>
+                    <button
+                      onClick={() => onFetchLogs('cost_updater')}
+                      disabled={logsLoading}
+                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                    >
+                      {logsLoading ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {lambdaLogs.cost_updater?.logs?.length > 0 ? (
+                      lambdaLogs.cost_updater.logs.map((log, index) => {
+                        const level = getLogLevel(log.message);
+                        return (
+                          <div key={index} className={`text-xs p-2 rounded border ${getLogLevelColor(level)}`}>
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="font-mono text-xs text-gray-500">
+                                {formatLogTimestamp(log.timestamp)}
+                              </span>
+                              <span className={`px-1 py-0.5 rounded text-xs font-medium ${getLogLevelColor(level)}`}>
+                                {level.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="font-mono text-xs whitespace-pre-wrap break-all">
+                              {log.message}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-gray-500 text-center py-4">
+                        {logsLoading ? 'Loading logs...' : 'No logs available'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Prep Uploader Script */}
@@ -233,6 +291,61 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading }) =>
                   Current: {configs?.config?.last_processed_date || 'Not set'}
                 </p>
               </div>
+              
+              {/* View Logs Button */}
+              <div className="mt-3">
+                <button
+                  onClick={() => onToggleLogs('prep_uploader')}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {showLogs.prep_uploader ? 'Hide Logs' : 'View Logs'}
+                  {showLogs.prep_uploader ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+                </button>
+              </div>
+              
+              {/* Logs Display */}
+              {showLogs.prep_uploader && (
+                <div className="mt-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-sm font-medium text-gray-900">Recent Logs</h5>
+                    <button
+                      onClick={() => onFetchLogs('prep_uploader')}
+                      disabled={logsLoading}
+                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                    >
+                      {logsLoading ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {lambdaLogs.prep_uploader?.logs?.length > 0 ? (
+                      lambdaLogs.prep_uploader.logs.map((log, index) => {
+                        const level = getLogLevel(log.message);
+                        return (
+                          <div key={index} className={`text-xs p-2 rounded border ${getLogLevelColor(level)}`}>
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="font-mono text-xs text-gray-500">
+                                {formatLogTimestamp(log.timestamp)}
+                              </span>
+                              <span className={`px-1 py-0.5 rounded text-xs font-medium ${getLogLevelColor(level)}`}>
+                                {level.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="font-mono text-xs whitespace-pre-wrap break-all">
+                              {log.message}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-gray-500 text-center py-4">
+                        {logsLoading ? 'Loading logs...' : 'No logs available'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -290,6 +403,9 @@ const Admin = () => {
   });
   const [scriptLoading, setScriptLoading] = useState(false);
   const [showScriptModal, setShowScriptModal] = useState(false);
+  const [lambdaLogs, setLambdaLogs] = useState({});
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [showLogs, setShowLogs] = useState({});
 
   const getRelativeTime = (dateString) => {
     if (!dateString) return 'Never';
@@ -618,6 +734,62 @@ const Admin = () => {
     return filtered;
   };
 
+  const fetchLambdaLogs = async (functionName, hours = 24) => {
+    try {
+      setLogsLoading(true);
+      const response = await axios.get('/api/admin/lambda-logs', {
+        params: { function: functionName, hours },
+        withCredentials: true
+      });
+      setLambdaLogs(prev => ({
+        ...prev,
+        [functionName]: response.data
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch ${functionName} logs:`, error);
+      setError(`Failed to fetch ${functionName} logs`);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const toggleLogs = (functionName) => {
+    setShowLogs(prev => ({
+      ...prev,
+      [functionName]: !prev[functionName]
+    }));
+    
+    // Fetch logs if showing and not already loaded
+    if (!showLogs[functionName] && !lambdaLogs[functionName]) {
+      fetchLambdaLogs(functionName);
+    }
+  };
+
+  const formatLogTimestamp = (timestamp) => {
+    return new Date(timestamp).toLocaleString();
+  };
+
+  const getLogLevel = (message) => {
+    if (message.includes('[ERROR]') || message.includes('ERROR') || message.includes('Exception')) {
+      return 'error';
+    }
+    if (message.includes('[WARN]') || message.includes('WARNING')) {
+      return 'warning';
+    }
+    if (message.includes('[DEBUG]') || message.includes('DEBUG')) {
+      return 'debug';
+    }
+    return 'info';
+  };
+
+  const getLogLevelColor = (level) => {
+    switch (level) {
+      case 'error': return 'text-red-600 bg-red-50';
+      case 'warning': return 'text-yellow-600 bg-yellow-50';
+      case 'debug': return 'text-gray-600 bg-gray-50';
+      default: return 'text-blue-600 bg-blue-50';
+    }
+  };
 
   const UserEditModal = ({ user, onSave, onCancel }) => {
     const [editData, setEditData] = useState({
@@ -1310,6 +1482,14 @@ const Admin = () => {
           onTrigger={handleTriggerScript}
           onCancel={() => setShowScriptModal(false)}
           loading={scriptLoading}
+          lambdaLogs={lambdaLogs}
+          logsLoading={logsLoading}
+          showLogs={showLogs}
+          onToggleLogs={toggleLogs}
+          onFetchLogs={fetchLambdaLogs}
+          formatLogTimestamp={formatLogTimestamp}
+          getLogLevel={getLogLevel}
+          getLogLevelColor={getLogLevelColor}
         />
       )}
     </div>

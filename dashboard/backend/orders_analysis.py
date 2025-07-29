@@ -1056,6 +1056,18 @@ class EnhancedOrdersAnalysis:
             except:
                 pass
 
+        # Convert orders DataFrame to dict for revenue calculation
+        sellerboard_orders = []
+        if not today_orders.empty:
+            # Convert DataFrame to dict format for frontend
+            sellerboard_orders = today_orders.to_dict('records')
+            print(f"[DEBUG] Revenue data: {len(sellerboard_orders)} orders for revenue calculation")
+            if sellerboard_orders:
+                # Check what revenue fields are available
+                sample_order = sellerboard_orders[0]
+                revenue_fields = [k for k in sample_order.keys() if 'total' in k.lower() or 'amount' in k.lower() or 'revenue' in k.lower()]
+                print(f"[DEBUG] Available revenue fields: {revenue_fields}")
+
         return {
             # Enhanced analytics (new)
             "enhanced_analytics": enhanced_analytics,
@@ -1072,6 +1084,9 @@ class EnhancedOrdersAnalysis:
             "stock_info": stock_info,
             "orders_df": today_orders,
             "stockout_30d": stockout_30d,
+            
+            # Revenue data for frontend
+            "sellerboard_orders": sellerboard_orders,
         }
 
 class BasicOrdersAnalysis:
@@ -1093,6 +1108,7 @@ class BasicOrdersAnalysis:
             'critical_alerts': [],
             'total_products_analyzed': 0,
             'high_priority_count': 0,
+            'sellerboard_orders': [],  # Empty revenue data for fallback
             'basic_mode': True,
             'message': 'Analytics data could not be loaded. Please check your report URLs in Settings.'
         }

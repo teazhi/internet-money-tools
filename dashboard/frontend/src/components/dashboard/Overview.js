@@ -209,9 +209,21 @@ const Overview = () => {
     
     // Calculate yesterday's revenue from sellerboard_orders data
     let yesterdayRevenue = 0;
-    if (analytics.sellerboard_orders) {
+    if (analytics.sellerboard_orders && analytics.sellerboard_orders.length > 0) {
       yesterdayRevenue = analytics.sellerboard_orders.reduce((total, order) => {
-        const amount = parseFloat(order.OrderTotalAmount || order.order_total_amount || 0);
+        // Try multiple possible field names for revenue amount
+        const amount = parseFloat(
+          order.OrderTotalAmount || 
+          order.order_total_amount || 
+          order['Order Total Amount'] ||
+          order.Revenue ||
+          order.revenue ||
+          order.Total ||
+          order.total ||
+          order.Amount ||
+          order.amount ||
+          0
+        );
         return total + amount;
       }, 0);
     }

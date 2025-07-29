@@ -559,41 +559,6 @@ const Admin = () => {
     }
   };
 
-  const handleUpdateScriptConfigs = async (configData) => {
-    try {
-      setError('');
-      setSuccess('');
-      setScriptLoading(true);
-      
-      await axios.post('/api/admin/script-configs', configData, { withCredentials: true });
-      setSuccess('Script configurations updated successfully');
-      await fetchScriptConfigs();
-    } catch (error) {
-      setError(error.response?.data?.error || 'Failed to update script configurations');
-    } finally {
-      setScriptLoading(false);
-    }
-  };
-
-  const handleTriggerScript = async (scriptType) => {
-    if (!window.confirm(`Are you sure you want to manually trigger the ${scriptType} script?`)) {
-      return;
-    }
-
-    try {
-      setError('');
-      setSuccess('');
-      setScriptLoading(true);
-      
-      await axios.post('/api/admin/trigger-script', { script_type: scriptType }, { withCredentials: true });
-      setSuccess(`${scriptType} script triggered successfully`);
-      await fetchScriptConfigs();
-    } catch (error) {
-      setError(error.response?.data?.error || `Failed to trigger ${scriptType} script`);
-    } finally {
-      setScriptLoading(false);
-    }
-  };
 
   const handleUpdateUser = async (userId, userData) => {
     try {

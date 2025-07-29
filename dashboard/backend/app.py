@@ -2305,8 +2305,96 @@ def get_lambda_logs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Railway and other monitoring services"""
+    try:
+        # Basic health checks
+        status = 'healthy'
+        checks = {
+            'flask': True,
+            'environment': {
+                'port': os.environ.get('PORT', 'default:5000'),
+                'flask_env': os.environ.get('FLASK_ENV', 'not_set')
+            }
+        }
+        
+        # Check if critical environment variables are set
+        required_env_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'CONFIG_S3_BUCKET']
+        missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
+        
+        if missing_vars:
+            checks['environment']['missing_vars'] = missing_vars
+            status = 'degraded'
+        else:
+            checks['environment']['aws_configured'] = True
+        
+        return jsonify({
+            'status': status,
+            'timestamp': datetime.utcnow().isoformat(),
+            'service': 'internet-money-tools-backend',
+            'checks': checks
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'service': 'internet-money-tools-backend',
+            'error': str(e)
+        }), 500
+
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint to confirm the service is running"""
+    return jsonify({
+        'message': 'Internet Money Tools Backend API',
+        'status': 'running',
+        'version': '2.0',
+        'timestamp': datetime.utcnow().isoformat(),
+        'endpoints': {
+            'health': '/health',
+            'api': '/api/*'
+        }
+    }), 200
+
+@app.route('/ping', methods=['GET'])
+def ping():
+    """Simple ping endpoint for quick health checks"""
+    return 'pong', 200
+
 if __name__ == '__main__':
-    # Production configuration
-    port = int(os.environ.get('PORT', 5000))
-    debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    try:
+        # Production configuration for Railway
+        port = int(os.environ.get('PORT', 5000))
+        debug_mode = os.environ.get('FLASK_ENV') == 'development'
+        
+        print(f"[STARTUP] Starting Flask app on port {port}, debug={debug_mode}")
+        print(f"[STARTUP] Environment variables: PORT={os.environ.get('PORT')}, FLASK_ENV={os.environ.get('FLASK_ENV')}")
+        print(f"[STARTUP] Host: 0.0.0.0, Port: {port}")
+        
+        # Check critical environment variables
+        critical_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'CONFIG_S3_BUCKET']
+        missing_vars = [var for var in critical_vars if not os.environ.get(var)]
+        
+        if missing_vars:
+            print(f"[STARTUP WARNING] Missing environment variables: {missing_vars}")
+            print(f"[STARTUP WARNING] Some features may not work properly")
+        else:
+            print(f"[STARTUP] All critical environment variables are set")
+        
+        # Railway expects the app to be available on 0.0.0.0 and the PORT env var
+        print(f"[STARTUP] Starting Flask server...")
+        app.run(
+            host='0.0.0.0', 
+            port=port, 
+            debug=debug_mode,
+            threaded=True,  # Enable threading for better concurrency
+            use_reloader=False  # Disable reloader in production
+        )
+        
+    except Exception as e:
+        print(f"[STARTUP ERROR] Failed to start Flask app: {e}")
+        import traceback
+        traceback.print_exc()
+        raise

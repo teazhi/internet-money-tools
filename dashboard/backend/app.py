@@ -1806,11 +1806,6 @@ REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app npm sta
     """
 
 
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Railway"""
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
-
 @app.route('/debug/redirect')
 def debug_redirect():
     """Debug endpoint to test redirect logic"""

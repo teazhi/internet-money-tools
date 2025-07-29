@@ -689,6 +689,35 @@ const Admin = () => {
     }
   };
 
+  const handleUpdateScriptConfigs = async (configData) => {
+    try {
+      setError('');
+      setSuccess('');
+      setScriptLoading(true);
+      
+      console.log('[SCRIPT CONFIG] Updating configs:', configData);
+      
+      const response = await axios.post('/api/admin/script-configs', configData, { withCredentials: true });
+      
+      setSuccess('Script configurations updated successfully');
+      
+      // Small delay to ensure backend has processed the update
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Refresh the configs to show the updated values
+      await fetchScriptConfigs();
+      
+      // Close the modal
+      setShowScriptModal(false);
+      
+    } catch (error) {
+      console.error('Script config update error:', error);
+      setError(error.response?.data?.error || 'Failed to update script configurations');
+    } finally {
+      setScriptLoading(false);
+    }
+  };
+
   const exportUserData = () => {
     const dataStr = JSON.stringify(users, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -732,6 +761,41 @@ const Admin = () => {
     });
 
     return filtered;
+  };
+
+  const handleTriggerScript = async (scriptType) => {
+    if (!window.confirm(`Are you sure you want to manually trigger the ${scriptType} script?`)) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      setScriptLoading(true);
+      
+      const response = await axios.post('/api/admin/trigger-script', 
+        { script_type: scriptType }, 
+        { withCredentials: true }
+      );
+      
+      setSuccess(`${scriptType} script triggered successfully`);
+      
+      // Refresh script configs to show updated dates
+      await fetchScriptConfigs();
+      
+      // Also refresh logs to see any new activity
+      if (scriptType === 'listing_loader') {
+        fetchLambdaLogs('cost_updater');
+      } else if (scriptType === 'prep_uploader') {
+        fetchLambdaLogs('prep_uploader');
+      }
+      
+    } catch (error) {
+      console.error('Script trigger error:', error);
+      setError(error.response?.data?.error || `Failed to trigger ${scriptType} script`);
+    } finally {
+      setScriptLoading(false);
+    }
   };
 
   const fetchLambdaLogs = async (functionName, hours = 24) => {

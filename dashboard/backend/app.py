@@ -1697,53 +1697,6 @@ def admin_bulk_update():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/')
-def root():
-    """Root endpoint - API backend is working"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>builders+ Dashboard API</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; background: #f8fafc; }
-            .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; }
-            .endpoint { background: #f1f5f9; padding: 10px; margin: 10px 0; border-radius: 6px; font-family: monospace; }
-            .success { color: #059669; }
-            .info { color: #0369a1; }
-            h1 { color: #1e293b; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 builders+ Dashboard API</h1>
-            <p class="success">✅ Backend is running successfully on Railway!</p>
-            
-            <h3>Available API Endpoints:</h3>
-            <div class="endpoint">GET /api/health - Health check</div>
-            <div class="endpoint">GET /auth/discord - Discord authentication</div>
-            <div class="endpoint">GET /api/analytics/orders - Analytics data</div>
-            <div class="endpoint">GET /api/user - User information</div>
-            <div class="endpoint">GET /api/user/settings - User settings</div>
-            
-            <h3>Next Steps:</h3>
-            <p class="info">📱 <strong>Frontend Options:</strong></p>
-            <ul>
-                <li><strong>Option 1:</strong> Deploy React frontend to <a href="https://vercel.com" target="_blank">Vercel</a> (recommended)</li>
-                <li><strong>Option 2:</strong> Run frontend locally and connect to this API</li>
-                <li><strong>Option 3:</strong> Use API endpoints directly for custom integrations</li>
-            </ul>
-            
-            <p class="info">🔧 <strong>For local development:</strong></p>
-            <div class="endpoint">npm start</div>
-            <p>Set REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app</p>
-            
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
-            <p><small>Railway Deployment: <strong>Success</strong> ✅ | API Version: 1.0.0</small></p>
-        </div>
-    </body>
-    </html>
-    """
 
 @app.route('/dashboard')
 @app.route('/dashboard/')
@@ -2078,59 +2031,6 @@ def update_script_configs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/admin/trigger-script', methods=['POST'])
-@admin_required
-def trigger_script():
-    """Trigger manual script execution by resetting last_processed_date"""
-    try:
-        data = request.json
-        script_type = data.get('script_type')  # 'listing_loader' or 'prep_uploader'
-        reset_date = data.get('reset_date', '')  # Date to reset to
-        
-        print(f"[SCRIPT TRIGGER] Triggering {script_type} with reset date: {reset_date}")
-        
-        s3_client = get_s3_client()
-        
-        if script_type == 'listing_loader':
-            # Update amznUploadConfig
-            config = {'last_processed_date': reset_date}
-            s3_client.put_object(
-                Bucket=CONFIG_S3_BUCKET,
-                Key='amznUploadConfig',
-                Body=json.dumps(config, indent=2),
-                ContentType='application/json'
-            )
-            
-            return jsonify({
-                'message': f'Listing Loader script triggered. Reset date to {reset_date}',
-                'script_type': script_type,
-                'reset_date': reset_date
-            })
-            
-        elif script_type == 'prep_uploader':
-            # Update config.json
-            config = {'last_processed_date': reset_date}
-            s3_client.put_object(
-                Bucket=CONFIG_S3_BUCKET,
-                Key='config.json',
-                Body=json.dumps(config, indent=2),
-                ContentType='application/json'
-            )
-            
-            return jsonify({
-                'message': f'Prep Uploader script triggered. Reset date to {reset_date}',
-                'script_type': script_type,
-                'reset_date': reset_date
-            })
-        
-        else:
-            return jsonify({'error': 'Invalid script_type. Use "listing_loader" or "prep_uploader"'}), 400
-            
-    except Exception as e:
-        print(f"[SCRIPT TRIGGER] Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/trigger-script', methods=['POST'])
 @admin_required

@@ -2035,101 +2035,48 @@ def update_script_configs():
 @app.route('/api/admin/trigger-script', methods=['POST'])
 @admin_required
 def trigger_script():
-    """Trigger manual script execution by resetting last_processed_date"""
+    """Trigger manual script execution by invoking Lambda functions (like Discord bot)"""
     try:
         data = request.json
         script_type = data.get('script_type')  # 'listing_loader' or 'prep_uploader'
         
-        print(f"[SCRIPT TRIGGER] Triggering {script_type}")
-        
-        s3_client = get_s3_client()
+        print(f"[SCRIPT TRIGGER] Triggering {script_type} Lambda function")
         
         if script_type == 'listing_loader':
-            # Reset amznUploadConfig to force reprocessing
-            # Set date to yesterday to ensure processing runs
-            yesterday = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%dT00:00:00Z')
-            config = {'last_processed_date': yesterday}
-            
-            s3_client.put_object(
-                Bucket=CONFIG_S3_BUCKET,
-                Key='amznUploadConfig.json',
-                Body=json.dumps(config, indent=2),
-                ContentType='application/json'
-            )
-            
-            print(f"[SCRIPT TRIGGER] Updated amznUploadConfig.json to {yesterday}")
-            
-            # Try to invoke the Lambda function if configured
             lambda_name = os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload')
-            if lambda_name:
-                try:
-                    lambda_client = boto3.client(
-                        'lambda',
-                        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                        region_name=os.getenv('AWS_REGION', 'us-east-1')
-                    )
-                    
-                    response = lambda_client.invoke(
-                        FunctionName=lambda_name,
-                        InvocationType='Event',  # Async invocation
-                        Payload=json.dumps({})
-                    )
-                    print(f"[SCRIPT TRIGGER] Invoked Lambda function {lambda_name}")
-                except Exception as lambda_error:
-                    print(f"[SCRIPT TRIGGER] Failed to invoke Lambda: {lambda_error}")
-            
-            return jsonify({
-                'message': f'Listing Loader script triggered. Reset date to {yesterday}. Lambda invoked: {bool(lambda_name)}',
-                'script_type': script_type,
-                'reset_date': yesterday,
-                'lambda_invoked': bool(lambda_name)
-            })
-            
         elif script_type == 'prep_uploader':
-            # Reset config.json to force reprocessing
-            # Set date to yesterday to ensure processing runs
-            yesterday = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%dT00:00:00Z')
-            config = {'last_processed_date': yesterday}
-            
-            s3_client.put_object(
-                Bucket=CONFIG_S3_BUCKET,
-                Key='config.json',
-                Body=json.dumps(config, indent=2),
-                ContentType='application/json'
-            )
-            
-            print(f"[SCRIPT TRIGGER] Updated config.json to {yesterday}")
-            
-            # Try to invoke the Lambda function if configured
             lambda_name = os.getenv('PREP_UPLOADER_LAMBDA_NAME', 'prepUploader')
-            if lambda_name:
-                try:
-                    lambda_client = boto3.client(
-                        'lambda',
-                        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-                        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                        region_name=os.getenv('AWS_REGION', 'us-east-1')
-                    )
-                    
-                    response = lambda_client.invoke(
-                        FunctionName=lambda_name,
-                        InvocationType='Event',  # Async invocation
-                        Payload=json.dumps({})
-                    )
-                    print(f"[SCRIPT TRIGGER] Invoked Lambda function {lambda_name}")
-                except Exception as lambda_error:
-                    print(f"[SCRIPT TRIGGER] Failed to invoke Lambda: {lambda_error}")
-            
-            return jsonify({
-                'message': f'Prep Uploader script triggered. Reset date to {yesterday}. Lambda invoked: {bool(lambda_name)}',
-                'script_type': script_type,
-                'reset_date': yesterday,
-                'lambda_invoked': bool(lambda_name)
-            })
-        
         else:
             return jsonify({'error': 'Invalid script_type. Use "listing_loader" or "prep_uploader"'}), 400
+        
+        # Simply invoke the Lambda function (like Discord bot does)
+        try:
+            lambda_client = boto3.client(
+                'lambda',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION', 'us-east-1')
+            )
+            
+            response = lambda_client.invoke(
+                FunctionName=lambda_name,
+                InvocationType='Event',  # Async invocation
+                Payload=json.dumps({})
+            )
+            print(f"[SCRIPT TRIGGER] Successfully invoked Lambda function {lambda_name}")
+            
+            return jsonify({
+                'message': f'{script_type} Lambda function ({lambda_name}) invoked successfully',
+                'script_type': script_type,
+                'lambda_name': lambda_name,
+                'lambda_invoked': True
+            })
+            
+        except Exception as lambda_error:
+            print(f"[SCRIPT TRIGGER] Failed to invoke Lambda {lambda_name}: {lambda_error}")
+            return jsonify({
+                'error': f'Failed to invoke Lambda function {lambda_name}: {str(lambda_error)}'
+            }), 500
             
     except Exception as e:
         print(f"[SCRIPT TRIGGER] Error: {e}")

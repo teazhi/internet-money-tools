@@ -2321,7 +2321,11 @@ def get_lambda_logs():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint for Railway"""
-    return {'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}, 200
+    try:
+        return {'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}, 200
+    except Exception as e:
+        # Fallback response that should always work
+        return 'OK', 200
 
 @app.route('/healthz', methods=['GET'])
 def health_check_detailed():

@@ -1806,7 +1806,7 @@ REACT_APP_API_URL=https://internet-money-tools-production.up.railway.app npm sta
     """
 
 
-@app.route('/api/health')
+@app.route('/health')
 def health_check():
     """Health check endpoint for Railway"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
@@ -2318,7 +2318,7 @@ def get_lambda_logs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint for Railway"""
     try:
@@ -2375,7 +2375,7 @@ def root():
         'version': '2.0',
         'timestamp': datetime.utcnow().isoformat(),
         'endpoints': {
-            'health': '/health',
+            'health': 'api/health',
             'api': '/api/*'
         }
     }), 200

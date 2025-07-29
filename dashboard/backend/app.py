@@ -2051,12 +2051,34 @@ def trigger_script():
         
         # Simply invoke the Lambda function (like Discord bot does)
         try:
+            # Debug AWS credentials and region
+            aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+            aws_region = os.getenv('AWS_REGION', 'us-east-1')
+            print(f"[SCRIPT TRIGGER] AWS Region: {aws_region}")
+            print(f"[SCRIPT TRIGGER] AWS Access Key configured: {'Yes' if aws_access_key else 'No'}")
+            print(f"[SCRIPT TRIGGER] Lambda function name: {lambda_name}")
+            
             lambda_client = boto3.client(
                 'lambda',
-                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_access_key_id=aws_access_key,
                 aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-                region_name=os.getenv('AWS_REGION', 'us-east-1')
+                region_name=aws_region
             )
+            
+            # Test if Lambda function exists first
+            try:
+                lambda_client.get_function(FunctionName=lambda_name)
+                print(f"[SCRIPT TRIGGER] Lambda function {lambda_name} exists")
+            except lambda_client.exceptions.ResourceNotFoundException:
+                print(f"[SCRIPT TRIGGER] ERROR: Lambda function {lambda_name} not found")
+                return jsonify({
+                    'error': f'Lambda function {lambda_name} not found. Please check the function name and region.'
+                }), 404
+            except Exception as get_error:
+                print(f"[SCRIPT TRIGGER] ERROR checking Lambda function existence: {get_error}")
+                return jsonify({
+                    'error': f'Failed to verify Lambda function {lambda_name}: {str(get_error)}'
+                }), 500
             
             response = lambda_client.invoke(
                 FunctionName=lambda_name,
@@ -2064,12 +2086,14 @@ def trigger_script():
                 Payload=json.dumps({})
             )
             print(f"[SCRIPT TRIGGER] Successfully invoked Lambda function {lambda_name}")
+            print(f"[SCRIPT TRIGGER] Lambda response StatusCode: {response.get('StatusCode')}")
             
             return jsonify({
                 'message': f'{script_type} Lambda function ({lambda_name}) invoked successfully',
                 'script_type': script_type,
                 'lambda_name': lambda_name,
-                'lambda_invoked': True
+                'lambda_invoked': True,
+                'status_code': response.get('StatusCode')
             })
             
         except Exception as lambda_error:
@@ -2082,6 +2106,49 @@ def trigger_script():
         print(f"[SCRIPT TRIGGER] Error: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/lambda-diagnostics', methods=['GET'])
+@admin_required
+def lambda_diagnostics():
+    """Check Lambda configuration and connectivity"""
+    try:
+        # Check environment variables
+        diagnostics = {
+            'aws_access_key_configured': bool(os.getenv('AWS_ACCESS_KEY_ID')),
+            'aws_secret_key_configured': bool(os.getenv('AWS_SECRET_ACCESS_KEY')),
+            'aws_region': os.getenv('AWS_REGION', 'us-east-1'),
+            'cost_updater_lambda_name': os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload'),
+            'prep_uploader_lambda_name': os.getenv('PREP_UPLOADER_LAMBDA_NAME', 'prepUploader'),
+        }
+        
+        # Test AWS connection
+        try:
+            lambda_client = boto3.client(
+                'lambda',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION', 'us-east-1')
+            )
+            
+            # Test connection by listing functions (limited to 10)
+            response = lambda_client.list_functions(MaxItems=10)
+            diagnostics['aws_connection'] = 'success'
+            diagnostics['lambda_functions_found'] = len(response.get('Functions', []))
+            
+            # Check if our specific functions exist
+            function_names = [f['FunctionName'] for f in response.get('Functions', [])]
+            diagnostics['cost_updater_exists'] = diagnostics['cost_updater_lambda_name'] in function_names
+            diagnostics['prep_uploader_exists'] = diagnostics['prep_uploader_lambda_name'] in function_names
+            diagnostics['available_functions'] = function_names[:10]  # Show first 10
+            
+        except Exception as aws_error:
+            diagnostics['aws_connection'] = 'failed'
+            diagnostics['aws_error'] = str(aws_error)
+        
+        return jsonify(diagnostics)
+        
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/lambda-logs', methods=['GET'])

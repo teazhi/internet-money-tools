@@ -2176,7 +2176,7 @@ def get_lambda_logs():
             'logs',
             aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
             aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name='us-east-1'  # Adjust to your Lambda region
+            region_name=os.getenv('AWS_REGION', 'us-east-1')  # Use same region as Lambda
         )
         
         # Calculate time range

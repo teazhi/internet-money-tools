@@ -18,10 +18,17 @@ import urllib.parse
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 
-load_dotenv()
+# Load environment variables
+try:
+    load_dotenv()
+    print("[INIT] Environment variables loaded")
+except Exception as e:
+    print(f"[INIT WARNING] Failed to load .env file: {e}")
 
+# Initialize Flask app
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
+print("[INIT] Flask app initialized")
 
 # Configure session for cookies to work properly with cross-domain
 app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS cross-domain
@@ -45,7 +52,13 @@ if os.environ.get('FRONTEND_URL'):
 if os.environ.get('RAILWAY_STATIC_URL'):
     allowed_origins.append(f"https://{os.environ.get('RAILWAY_STATIC_URL')}")
 
-CORS(app, supports_credentials=True, origins=allowed_origins)
+try:
+    CORS(app, supports_credentials=True, origins=allowed_origins)
+    print("[INIT] CORS configured")
+except Exception as e:
+    print(f"[INIT ERROR] CORS configuration failed: {e}")
+    # Try basic CORS as fallback
+    CORS(app)
 
 # Discord OAuth Configuration
 DISCORD_CLIENT_ID = os.getenv('DISCORD_CLIENT_ID')
@@ -2307,7 +2320,12 @@ def get_lambda_logs():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint for Railway and other monitoring services"""
+    """Simple health check endpoint for Railway"""
+    return {'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}, 200
+
+@app.route('/healthz', methods=['GET'])
+def health_check_detailed():
+    """Detailed health check endpoint"""
     try:
         # Basic health checks
         status = 'healthy'
@@ -2362,6 +2380,21 @@ def root():
 def ping():
     """Simple ping endpoint for quick health checks"""
     return 'pong', 200
+
+@app.route('/status', methods=['GET'])
+def status():
+    """Ultra-simple status check"""
+    return 'OK'
+
+@app.errorhandler(404)
+def not_found(error):
+    """Handle 404 errors"""
+    return jsonify({'error': 'Not found', 'path': request.path}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors"""
+    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     try:

@@ -200,16 +200,53 @@ const Overview = () => {
     return 'text-gray-500';
   }, []);
 
-  // Memoized analytics calculations
+  // Memoized analytics calculations with improved logic
   const analyticsStats = useMemo(() => {
-    if (!analytics) return { todayOrders: 0, activeProducts: 0, lowStockCount: 0, restockPriorityCount: 0 };
+    if (!analytics) return { todayOrders: 0, activeProducts: 0, lowStockCount: 0, restockPriorityCount: 0, yesterdayRevenue: 0 };
     
     const todayOrders = analytics.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0;
     const activeProducts = analytics.today_sales ? Object.keys(analytics.today_sales).length : 0;
-    const lowStockCount = analytics.low_stock ? Object.keys(analytics.low_stock).length : 0;
-    const restockPriorityCount = analytics.restock_priority ? Object.keys(analytics.restock_priority).length : 0;
     
-    return { todayOrders, activeProducts, lowStockCount, restockPriorityCount };
+    // Calculate yesterday's revenue from sellerboard_orders data
+    let yesterdayRevenue = 0;
+    if (analytics.sellerboard_orders) {
+      yesterdayRevenue = analytics.sellerboard_orders.reduce((total, order) => {
+        const amount = parseFloat(order.OrderTotalAmount || order.order_total_amount || 0);
+        return total + amount;
+      }, 0);
+    }
+    
+    // Improved low stock calculation using velocity data from enhanced analytics
+    let lowStockCount = 0;
+    let restockPriorityCount = 0;
+    
+    if (analytics.enhanced_analytics) {
+      Object.values(analytics.enhanced_analytics).forEach(data => {
+        if (data.velocity && data.restock) {
+          const velocity = data.velocity.weighted_velocity || 0;
+          const currentStock = data.restock.current_stock || 0;
+          const daysLeft = velocity > 0 ? currentStock / velocity : 999;
+          
+          // Low stock: less than 14 days of inventory
+          if (daysLeft < 14 && velocity > 0) {
+            lowStockCount++;
+          }
+          
+          // Restock priority: critical/warning categories or less than 30 days of inventory
+          if (data.priority?.category?.includes('critical') || 
+              data.priority?.category?.includes('warning') || 
+              (daysLeft < 30 && velocity > 0)) {
+            restockPriorityCount++;
+          }
+        }
+      });
+    } else {
+      // Fallback to old logic if enhanced analytics not available
+      lowStockCount = analytics.low_stock ? Object.keys(analytics.low_stock).length : 0;
+      restockPriorityCount = analytics.restock_priority ? Object.keys(analytics.restock_priority).length : 0;
+    }
+    
+    return { todayOrders, activeProducts, lowStockCount, restockPriorityCount, yesterdayRevenue };
   }, [analytics]);
 
   const topProducts = useMemo(() => {
@@ -528,7 +565,7 @@ const Overview = () => {
       )}
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <div className="card">
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -586,6 +623,23 @@ const Overview = () => {
             </div>
           </div>
         </div>
+
+        <div className="card">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <DollarSign className="h-8 w-8 text-green-500" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-500">
+                {analytics?.is_yesterday ? "Yesterday's Revenue" : "Today's Revenue"}
+              </p>
+              <p className="text-2xl font-semibold text-gray-900">
+                {analyticsStats.yesterdayRevenue ? 
+                  `$${analyticsStats.yesterdayRevenue.toFixed(2)}` : '—'}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Yesterday's Top Sellers */}
@@ -613,17 +667,7 @@ const Overview = () => {
                         </a>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">{count} units</span>
-                      {analytics?.velocity?.[asin] && (
-                        <div className="flex items-center space-x-1">
-                          {formatTrendIcon(analytics.velocity[asin].pct)}
-                          <span className={`text-xs ${formatTrendColor(analytics.velocity[asin].pct)}`}>
-                            {analytics.velocity[asin].pct > 0 ? '+' : ''}{analytics.velocity[asin].pct.toFixed(1)}%
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    <span className="text-sm text-gray-600">{count} units</span>
                   </div>
                 )) : (
               <div className="text-center py-8">
@@ -647,21 +691,66 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
           <div className="space-y-3">
-            {analytics && analytics.low_stock && Object.entries(analytics.low_stock)
-              .slice(0, 5)
-              .map(([asin, info]) => (
-                <div key={asin} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{asin}</p>
-                    <p className="text-xs text-gray-500 truncate max-w-xs">{info.title}</p>
+            {analytics?.enhanced_analytics ? (
+              Object.entries(analytics.enhanced_analytics)
+                .filter(([asin, data]) => {
+                  if (!data.velocity || !data.restock) return false;
+                  const velocity = data.velocity.weighted_velocity || 0;
+                  const currentStock = data.restock.current_stock || 0;
+                  const daysLeft = velocity > 0 ? currentStock / velocity : 999;
+                  return daysLeft < 14 && velocity > 0;
+                })
+                .sort(([,a], [,b]) => {
+                  const daysLeftA = a.velocity.weighted_velocity > 0 ? a.restock.current_stock / a.velocity.weighted_velocity : 999;
+                  const daysLeftB = b.velocity.weighted_velocity > 0 ? b.restock.current_stock / b.velocity.weighted_velocity : 999;
+                  return daysLeftA - daysLeftB;
+                })
+                .slice(0, 5)
+                .map(([asin, data]) => {
+                  const velocity = data.velocity.weighted_velocity || 0;
+                  const currentStock = data.restock.current_stock || 0;
+                  const daysLeft = velocity > 0 ? currentStock / velocity : 999;
+                  const suggestedQty = data.restock.suggested_quantity || 0;
+                  
+                  return (
+                    <div key={asin} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{asin}</p>
+                        <p className="text-xs text-gray-500 truncate max-w-xs">
+                          {data.product_name?.length > 40 
+                            ? data.product_name.substring(0, 40) + '...'
+                            : data.product_name
+                          }
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-red-600 font-medium">
+                          {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+            ) : analytics?.low_stock ? (
+              Object.entries(analytics.low_stock)
+                .slice(0, 5)
+                .map(([asin, info]) => (
+                  <div key={asin} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{asin}</p>
+                      <p className="text-xs text-gray-500 truncate max-w-xs">{info.title}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-red-600 font-medium">{info.days_left} days left</p>
+                      <p className="text-xs text-gray-500">Reorder: {info.reorder_qty}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-red-600 font-medium">{info.days_left} days left</p>
-                    <p className="text-xs text-gray-500">Reorder: {info.reorder_qty}</p>
-                  </div>
-                </div>
-              ))}
-            {(!analytics || !analytics.low_stock || Object.keys(analytics.low_stock).length === 0) && (
+                ))
+            ) : null}
+            {analyticsStats.lowStockCount === 0 && (
               <p className="text-gray-500 text-sm">No stock alerts</p>
             )}
           </div>

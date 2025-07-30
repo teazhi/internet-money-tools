@@ -105,6 +105,41 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         raise error
     
+def validate_and_fix_token_data(tokens):
+    """
+    Ensure token data has all required fields with proper types to prevent NoneType arithmetic errors.
+    """
+    import time
+    
+    if not tokens:
+        return tokens
+    
+    # Ensure expires_in is a valid integer
+    if tokens.get('expires_in') is None:
+        tokens['expires_in'] = 3599  # Default 1 hour
+    
+    # Ensure we have an issued_at timestamp
+    if tokens.get('issued_at') is None:
+        tokens['issued_at'] = int(time.time())
+    
+    # Ensure expires_at is calculated properly
+    issued_at = tokens.get('issued_at', int(time.time()))
+    expires_in = tokens.get('expires_in', 3599)
+    
+    # Defensive check to ensure both are integers
+    if not isinstance(issued_at, (int, float)):
+        issued_at = int(time.time())
+        tokens['issued_at'] = issued_at
+    
+    if not isinstance(expires_in, (int, float)):
+        expires_in = 3599
+        tokens['expires_in'] = expires_in
+    
+    tokens['expires_at'] = int(issued_at) + int(expires_in)
+    
+    return tokens
+
+
 def refresh_access_token(user_record):
     """
     Use the stored refresh_token to get a new access_token.
@@ -129,6 +164,9 @@ def refresh_access_token(user_record):
     # Keep the old refresh_token if Google didn't return a new one:
     if "refresh_token" not in new_tokens:
         new_tokens["refresh_token"] = refresh_token
+
+    # Validate and fix token data to prevent NoneType arithmetic errors
+    new_tokens = validate_and_fix_token_data(new_tokens)
 
     # Merge into existing tokens dict so we don't lose any fields
     user_record["google_tokens"].update(new_tokens)
@@ -250,7 +288,14 @@ def get_users_config():
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
         config_data = json.loads(response['Body'].read().decode('utf-8'))
-        return config_data.get("users", [])
+        users = config_data.get("users", [])
+        
+        # Validate and fix token data for all users to prevent NoneType arithmetic errors
+        for user in users:
+            if user.get("google_tokens"):
+                user["google_tokens"] = validate_and_fix_token_data(user["google_tokens"])
+        
+        return users
     except Exception as e:
         print(f"Error fetching users config: {e}")
         return []

@@ -1954,14 +1954,14 @@ def update_script_configs():
                 # Convert date to datetime with time set to start of day
                 date_str = data['amznUploadConfig']['last_processed_date']
                 if date_str:
-                    # Parse date and set time to 00:00:00
+                    # Use simple date format (YYYY-MM-DD)
                     date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                    iso_datetime = date_obj.strftime('%Y-%m-%dT00:00:00Z')
+                    simple_date = date_obj.strftime('%Y-%m-%d')
                 else:
-                    iso_datetime = ''
+                    simple_date = ''
                 
                 new_config = {
-                    'last_processed_date': iso_datetime
+                    'last_processed_date': simple_date
                 }
                 
                 s3_client.put_object(
@@ -1987,17 +1987,17 @@ def update_script_configs():
         # Update config.json if provided
         if 'config' in data:
             try:
-                # Convert date to datetime with time set to start of day
+                # Use simple date format
                 date_str = data['config']['last_processed_date']
                 if date_str:
-                    # Parse date and set time to 00:00:00
+                    # Use simple date format (YYYY-MM-DD)
                     date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                    iso_datetime = date_obj.strftime('%Y-%m-%dT00:00:00Z')
+                    simple_date = date_obj.strftime('%Y-%m-%d')
                 else:
-                    iso_datetime = ''
+                    simple_date = ''
                 
                 new_config = {
-                    'last_processed_date': iso_datetime
+                    'last_processed_date': simple_date
                 }
                 
                 s3_client.put_object(

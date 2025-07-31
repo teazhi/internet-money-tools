@@ -811,8 +811,7 @@ const Overview = () => {
                     </div>
                   </div>
                 ));
-            }, [analytics?.enhanced_analytics])
-            ) : analytics?.low_stock ? (
+            }, [analytics?.enhanced_analytics]) : analytics?.low_stock ? (
               Object.entries(analytics.low_stock)
                 .slice(0, 5)
                 .map(([asin, info]) => (

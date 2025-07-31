@@ -545,7 +545,7 @@ const Admin = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchSystemStats = useCallback(async () => {
     try {
@@ -558,7 +558,7 @@ const Admin = () => {
     } catch (error) {
       console.error('Failed to fetch system stats:', error);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchInvitations = useCallback(async () => {
     try {
@@ -573,7 +573,7 @@ const Admin = () => {
     } catch (error) {
       console.error('Failed to fetch invitations:', error);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchScriptConfigs = async () => {
     try {

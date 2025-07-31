@@ -225,6 +225,36 @@ const FileManager = () => {
     }
   };
 
+  const adminCleanupAllUpdated = async () => {
+    if (!window.confirm('This will remove ALL _updated files from ALL user records system-wide. These are script-generated files. Continue?')) {
+      return;
+    }
+
+    setCleaning(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/admin/cleanup-all-updated', {}, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message}. Refreshing file list...` 
+      });
+      
+      // Refresh file list after cleanup
+      setTimeout(() => {
+        fetchFiles();
+        setMessage({ type: '', text: '' });
+      }, 2000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to cleanup all updated files' 
+      });
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -355,16 +385,26 @@ const FileManager = () => {
             </button>
           )}
           
-          {/* Admin Migration Button - only show for admin users */}
+          {/* Admin Buttons - only show for admin users */}
           {user?.discord_id === '1278565917206249503' && (
-            <button
-              onClick={migrateAllUserFiles}
-              disabled={migrating || adminMigrating || cleaning}
-              className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              {adminMigrating ? 'Migrating All...' : 'Admin: Migrate All Users'}
-            </button>
+            <>
+              <button
+                onClick={migrateAllUserFiles}
+                disabled={migrating || adminMigrating || cleaning}
+                className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                {adminMigrating ? 'Migrating All...' : 'Admin: Migrate All Users'}
+              </button>
+              <button
+                onClick={adminCleanupAllUpdated}
+                disabled={migrating || adminMigrating || cleaning}
+                className="inline-flex items-center px-4 py-2 border border-orange-300 rounded-md shadow-sm text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {cleaning ? 'Cleaning...' : 'Admin: Clean All _updated'}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -449,10 +489,26 @@ const FileManager = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {files.map((file, index) => (
+            {files
+              .sort((a, b) => {
+                // Prioritize non-_updated files over _updated files
+                const aIsUpdated = a.filename?.includes('_updated') || a.s3_key?.includes('_updated');
+                const bIsUpdated = b.filename?.includes('_updated') || b.s3_key?.includes('_updated');
+                
+                if (aIsUpdated && !bIsUpdated) return 1;  // b comes first
+                if (!aIsUpdated && bIsUpdated) return -1; // a comes first
+                
+                // If both are same type, sort by upload date (most recent first)
+                return new Date(b.upload_date) - new Date(a.upload_date);
+              })
+              .map((file, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                className={`flex items-center justify-between p-4 border rounded-lg transition-colors duration-200 ${
+                  (file.filename?.includes('_updated') || file.s3_key?.includes('_updated'))
+                    ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100'
+                    : 'border-gray-200 hover:bg-gray-50'
+                }`}
               >
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
@@ -468,6 +524,11 @@ const FileManager = () => {
                             : 'bg-green-100 text-green-800'
                         }`}>
                           {file.file_type_category === 'listing_loader' ? 'Listing Loader' : 'Sellerboard'}
+                        </span>
+                      )}
+                      {(file.filename?.includes('_updated') || file.s3_key?.includes('_updated')) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                          Script Output
                         </span>
                       )}
                     </div>

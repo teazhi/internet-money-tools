@@ -1369,6 +1369,40 @@ def migrate_all_user_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/cleanup-all-updated', methods=['POST'])
+@admin_required
+def admin_cleanup_all_updated_files():
+    """Admin endpoint to remove all _updated files from all user records"""
+    try:
+        users = get_users_config()
+        total_removed = 0
+        
+        for user in users:
+            if 'uploaded_files' not in user:
+                continue
+                
+            original_count = len(user['uploaded_files'])
+            user['uploaded_files'] = [
+                f for f in user['uploaded_files'] 
+                if '_updated.' not in f.get('filename', '') and '_updated.' not in f.get('s3_key', '')
+            ]
+            removed_count = original_count - len(user['uploaded_files'])
+            total_removed += removed_count
+            
+            if removed_count > 0:
+                print(f"Cleaned {removed_count} _updated files from user {user.get('discord_username', user.get('discord_id'))}")
+        
+        if update_users_config(users):
+            return jsonify({
+                'message': f'Successfully cleaned {total_removed} _updated files from all users',
+                'total_removed': total_removed
+            })
+        else:
+            return jsonify({'error': 'Failed to update users config'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/files/cleanup-updated', methods=['POST'])
 @login_required
 def cleanup_updated_files():

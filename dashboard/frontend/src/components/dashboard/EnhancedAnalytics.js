@@ -27,10 +27,6 @@ const EnhancedAnalytics = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
-
   const fetchAnalytics = useCallback(async () => {
     try {
       setError(null);
@@ -99,6 +95,10 @@ const EnhancedAnalytics = () => {
       setLoading(false);
     }
   }, [selectedDate]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const getReportDate = () => {
     if (analytics?.report_date) {

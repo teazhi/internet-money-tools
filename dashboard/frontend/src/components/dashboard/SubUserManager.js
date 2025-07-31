@@ -14,10 +14,6 @@ const SubUserManager = () => {
     permissions: ['sellerboard_upload']
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -54,6 +50,10 @@ const SubUserManager = () => {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleInviteSubmit = async (e) => {
     e.preventDefault();

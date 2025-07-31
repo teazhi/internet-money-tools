@@ -75,13 +75,23 @@ const EnhancedAnalytics = () => {
 
   const getReportDate = () => {
     if (analytics?.report_date) {
-      const date = new Date(analytics.report_date);
-      return date.toLocaleDateString('en-US', { 
+      // Parse the date string as local time to avoid timezone issues
+      const reportDateStr = analytics.report_date; // YYYY-MM-DD format
+      const [year, month, day] = reportDateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day); // month is 0-based in JS
+      
+      // Use user's timezone from analytics if available
+      const userTimezone = analytics?.user_timezone;
+      
+      const options = {
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
-        day: 'numeric' 
-      });
+        day: 'numeric',
+        ...(userTimezone && { timeZone: userTimezone })
+      };
+      
+      return date.toLocaleDateString('en-US', options);
     }
     return 'Unknown Date';
   };

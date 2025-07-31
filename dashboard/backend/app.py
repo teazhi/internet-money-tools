@@ -2551,6 +2551,171 @@ def ping():
     """Simple ping endpoint for quick health checks"""
     return 'pong', 200
 
+@app.route('/api/asin/<asin>/purchase-sources', methods=['GET'])
+@login_required
+def get_asin_purchase_sources(asin):
+    """Get all purchase sources/websites for a specific ASIN from purchase history"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if source links are enabled
+        if not user_record.get('enable_source_links'):
+            return jsonify({
+                'sources': [],
+                'message': 'Source links are not enabled. Enable them in Settings to see purchase sources.'
+            })
+        
+        # Get user's Google Sheet settings
+        sheet_id = user_record.get('sheet_id')
+        worksheet_title = user_record.get('worksheet_title')
+        google_tokens = user_record.get('google_tokens', {})
+        column_mapping = user_record.get('column_mapping', {})
+        
+        if not all([sheet_id, google_tokens.get('access_token')]):
+            return jsonify({
+                'sources': [],
+                'message': 'Google Sheets not configured. Set up Google Sheets in Settings to see purchase sources.'
+            })
+        
+        # Import OrdersAnalysis to fetch COGS data
+        from orders_analysis import OrdersAnalysis
+        
+        # Create analyzer instance
+        analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+        
+        # Fetch COGS data (which includes all sources)
+        if user_record.get('search_all_worksheets'):
+            cogs_data = analyzer.fetch_all_worksheets_cogs_data(
+                google_tokens.get('access_token'),
+                sheet_id
+            )
+        else:
+            cogs_data = analyzer.fetch_google_sheet_cogs_data(
+                google_tokens.get('access_token'),
+                sheet_id,
+                worksheet_title,
+                column_mapping
+            )
+        
+        # Extract sources for the specific ASIN
+        asin_data = cogs_data.get(asin, {})
+        all_sources = asin_data.get('all_sources', [])
+        
+        if not all_sources:
+            return jsonify({
+                'sources': [],
+                'message': f'No purchase history found for ASIN {asin}'
+            })
+        
+        # Parse sources to extract unique websites
+        unique_websites = {}
+        for source in all_sources:
+            if not source:
+                continue
+                
+            # Extract domain/website name from URL or source string
+            website_name = extract_website_name(source)
+            if website_name not in unique_websites:
+                unique_websites[website_name] = {
+                    'website': website_name,
+                    'url': source,
+                    'display_name': format_website_display_name(website_name)
+                }
+        
+        # Convert to list and sort by website name
+        sources_list = list(unique_websites.values())
+        sources_list.sort(key=lambda x: x['display_name'])
+        
+        return jsonify({
+            'asin': asin,
+            'sources': sources_list,
+            'total_purchases': asin_data.get('total_purchases', 0),
+            'last_purchase_date': asin_data.get('last_purchase_date')
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get purchase sources for {asin}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def extract_website_name(source_url):
+    """Extract website name from URL or source string"""
+    if not source_url:
+        return "Unknown"
+    
+    import re
+    from urllib.parse import urlparse
+    
+    # If it's a URL, extract domain
+    if source_url.startswith(('http://', 'https://')):
+        try:
+            parsed = urlparse(source_url)
+            domain = parsed.netloc.lower()
+            # Remove www. prefix
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            return domain
+        except:
+            return source_url
+    
+    # If it's not a URL, try to extract website name from text
+    source_lower = source_url.lower().strip()
+    
+    # Common website patterns
+    website_patterns = {
+        'amazon': ['amazon', 'amzn'],
+        'walmart': ['walmart', 'wmart'],
+        'costco': ['costco'],
+        'target': ['target'],
+        'ebay': ['ebay'],
+        'alibaba': ['alibaba', '1688'],
+        'aliexpress': ['aliexpress'],
+        'dhgate': ['dhgate'],
+        'wholesale': ['wholesale'],
+        'supplier': ['supplier'],
+        'manufacturer': ['manufacturer', 'factory']
+    }
+    
+    for website, patterns in website_patterns.items():
+        if any(pattern in source_lower for pattern in patterns):
+            return website
+    
+    # If no pattern matches, return the original (truncated if too long)
+    return source_url[:20] + '...' if len(source_url) > 20 else source_url
+
+def format_website_display_name(website_name):
+    """Format website name for display"""
+    if not website_name:
+        return "Unknown"
+    
+    # Special formatting for known websites
+    formatting_map = {
+        'amazon.com': 'Amazon',
+        'walmart.com': 'Walmart', 
+        'costco.com': 'Costco',
+        'target.com': 'Target',
+        'ebay.com': 'eBay',
+        'alibaba.com': 'Alibaba',
+        'aliexpress.com': 'AliExpress',
+        'dhgate.com': 'DHgate',
+        'amazon': 'Amazon',
+        'walmart': 'Walmart',
+        'costco': 'Costco',
+        'target': 'Target',
+        'ebay': 'eBay',
+        'alibaba': 'Alibaba',
+        'aliexpress': 'AliExpress',
+        'dhgate': 'DHgate',
+        'wholesale': 'Wholesale',
+        'supplier': 'Supplier',
+        'manufacturer': 'Manufacturer'
+    }
+    
+    return formatting_map.get(website_name.lower(), website_name.title())
+
 @app.route('/status', methods=['GET'])
 def status():
     """Ultra-simple status check"""

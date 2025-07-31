@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import axios from 'axios';
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -11,10 +12,18 @@ import {
   Target,
   ShoppingCart,
   ExternalLink,
-  DollarSign
+  DollarSign,
+  X,
+  Globe
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
+  // State for restock sources modal
+  const [showSourcesModal, setShowSourcesModal] = useState(false);
+  const [modalAsin, setModalAsin] = useState('');
+  const [purchaseSources, setPurchaseSources] = useState([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  
   // Debug: Check if source links are enabled
   console.log('[DEBUG] SmartRestockAlerts - Analytics object:', analytics);
   console.log('[DEBUG] SmartRestockAlerts - Enhanced analytics present:', !!analytics?.enhanced_analytics);
@@ -27,6 +36,56 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const sortedAlerts = useMemo(() => {
     return restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
   }, [restock_alerts]);
+
+  // Function to fetch purchase sources for an ASIN
+  const fetchPurchaseSources = async (asin) => {
+    setSourcesLoading(true);
+    try {
+      const response = await axios.get(`/api/asin/${asin}/purchase-sources`, { withCredentials: true });
+      setPurchaseSources(response.data.sources || []);
+      setModalAsin(asin);
+      setShowSourcesModal(true);
+    } catch (error) {
+      console.error('Error fetching purchase sources:', error);
+      // Show a simple alert or could add error state
+      alert(error.response?.data?.message || 'Failed to fetch purchase sources');
+    } finally {
+      setSourcesLoading(false);
+    }
+  };
+
+  // Function to handle restock button click
+  const handleRestockClick = async (asin, existingSourceLink) => {
+    if (!existingSourceLink) {
+      alert('No purchase history found for this product');
+      return;
+    }
+
+    setSourcesLoading(true);
+    try {
+      const response = await axios.get(`/api/asin/${asin}/purchase-sources`, { withCredentials: true });
+      const sources = response.data.sources || [];
+      
+      if (sources.length === 0) {
+        // No sources found, use the existing source link
+        window.open(existingSourceLink, '_blank');
+      } else if (sources.length === 1) {
+        // Only one source found, go directly to it
+        window.open(sources[0].url, '_blank');
+      } else {
+        // Multiple sources found, show the modal
+        setPurchaseSources(sources);
+        setModalAsin(asin);
+        setShowSourcesModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching purchase sources:', error);
+      // Fallback to existing source link
+      window.open(existingSourceLink, '_blank');
+    } finally {
+      setSourcesLoading(false);
+    }
+  };
 
   // Add error handling for null/undefined analytics
   if (!analytics) {
@@ -142,11 +201,19 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown';
     try {
-      return new Date(dateString).toLocaleDateString('en-US', {
+      const date = new Date(dateString);
+      
+      // Use user's timezone from analytics if available
+      const userTimezone = analytics?.user_timezone;
+      
+      const options = {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
-      });
+        day: 'numeric',
+        ...(userTimezone && { timeZone: userTimezone })
+      };
+      
+      return date.toLocaleDateString('en-US', options);
     } catch {
       return 'Unknown';
     }
@@ -362,16 +429,15 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           </div>
                           
                           {enhanced_analytics[alert.asin].cogs_data.source_link && (
-                            <a
-                              href={enhanced_analytics[alert.asin].cogs_data.source_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                            <button
+                              onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
+                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                              disabled={sourcesLoading}
                             >
                               <ShoppingCart className="h-4 w-4 mr-1" />
-                              Restock Here
-                              <ExternalLink className="h-3 w-3 ml-1" />
-                            </a>
+                              {sourcesLoading ? 'Loading...' : 'Restock Here'}
+                              <Globe className="h-3 w-3 ml-1" />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -520,6 +586,76 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                   )) : []}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Sources Modal */}
+      {showSourcesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Choose Restock Source</h3>
+                <button
+                  onClick={() => setShowSourcesModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600">
+                  ASIN: <span className="font-mono">{modalAsin}</span>
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  You've purchased this product from {purchaseSources.length} different source{purchaseSources.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {purchaseSources.length > 0 ? (
+                  purchaseSources.map((source, index) => (
+                    <a
+                      key={index}
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors group"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Globe className="h-5 w-5 text-gray-400 group-hover:text-blue-500" />
+                        <div>
+                          <p className="font-medium text-gray-900">{source.display_name}</p>
+                          <p className="text-xs text-gray-500 truncate max-w-48">
+                            {source.url}
+                          </p>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-blue-500" />
+                    </a>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No purchase sources found</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      This product may not have purchase history with source links
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowSourcesModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

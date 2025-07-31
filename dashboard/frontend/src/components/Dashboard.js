@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
-import Analytics from './dashboard/Analytics';
 import EnhancedAnalytics from './dashboard/EnhancedAnalytics';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
@@ -63,7 +62,6 @@ const Dashboard = () => {
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, current: location.pathname === '/dashboard/analytics' },
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
@@ -220,7 +218,6 @@ const Dashboard = () => {
           <div className="px-4 sm:px-6 lg:px-8 py-8">
             <Routes>
               <Route path="/" element={<Overview />} />
-              <Route path="/analytics" element={<Analytics />} />
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />

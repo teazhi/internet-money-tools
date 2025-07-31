@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Upload, 
@@ -28,29 +28,9 @@ const FileManager = () => {
     fetchFiles();
   }, []);
 
-  const fetchFiles = useCallback(async () => {
+  const fetchFiles = async () => {
     try {
-      setLoading(true);
-      
-      // Add minimum loading time to ensure skeleton is visible
-      const startTime = Date.now();
-      const minLoadingTime = 700; // 700ms minimum loading time
-      
-      const response = await axios.get('/api/files/sellerboard', { 
-        withCredentials: true,
-        timeout: 10000,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      // Ensure minimum loading time
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime < minLoadingTime) {
-        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
-      }
-      
+      const response = await axios.get('/api/files/sellerboard', { withCredentials: true });
       setFiles(response.data.files || []);
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -58,7 +38,7 @@ const FileManager = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   const handleFileUpload = async (file) => {
     if (!file) return;

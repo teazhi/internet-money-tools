@@ -32,29 +32,11 @@ const EnhancedAnalytics = () => {
       setError(null);
       setLoading(true);
       
-      // Add minimum loading time to ensure skeleton is visible
-      const startTime = Date.now();
-      const minLoadingTime = 800; // 800ms minimum loading time
-      
       const url = selectedDate ? 
         `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
         API_ENDPOINTS.ANALYTICS_ORDERS;
       
-      const response = await axios.get(url, { 
-        withCredentials: true,
-        timeout: 20000, // 20 second timeout for enhanced analytics
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      // Ensure minimum loading time
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime < minLoadingTime) {
-        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
-      }
-      
+      const response = await axios.get(url, { withCredentials: true });
       setAnalytics(response.data);
       
       if (response.data.error) {
@@ -63,16 +45,8 @@ const EnhancedAnalytics = () => {
     } catch (error) {
       console.error('Error fetching analytics:', error);
       
-      // Check if this is a timeout error
-      if (error.code === 'ECONNABORTED') {
-        setError({
-          type: 'timeout',
-          message: 'Request timed out. Enhanced analytics may take longer to process. Please try again.',
-          title: 'Timeout Error'
-        });
-      }
       // Check if this is a setup requirement error
-      else if (error.response?.status === 400 && error.response?.data?.requires_setup) {
+      if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
           type: 'setup_required',
           message: error.response.data.message || 'Please configure your report URLs in Settings before accessing analytics.',
@@ -195,8 +169,7 @@ const EnhancedAnalytics = () => {
     linkElement.click();
   };
 
-  // Enhanced loading skeleton - show for initial load or when explicitly loading
-  if (loading) {
+  if (loading && !analytics) {
     return (
       <div className="space-y-6">
         {/* Header Skeleton */}

@@ -431,39 +431,12 @@ const Admin = () => {
     try {
       setError('');
       setLoading(true);
-      
-      // Add minimum loading time to ensure skeleton is visible
-      const startTime = Date.now();
-      const minLoadingTime = 700; // 700ms minimum loading time
-      
-      // Add cache-busting timestamp to ensure fresh data
-      const timestamp = Date.now();
-      const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
-        withCredentials: true,
-        timeout: 15000,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Accept': 'application/json'
-        }
-      });
-      
-      // Ensure minimum loading time
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime < minLoadingTime) {
-        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
-      }
-      
-      console.log('[FETCH USERS] Received fresh user data:', response.data.users);
+      const response = await axios.get('/api/admin/users', { withCredentials: true });
       setUsers(response.data.users);
       setRawUserData(JSON.stringify(response.data.users, null, 2));
     } catch (error) {
-      console.error('[FETCH USERS] Error:', error);
-      if (error.code === 'ECONNABORTED') {
-        setError('Request timed out. Please try again.');
-      } else {
-        setError(error.response?.data?.error || 'Failed to fetch users');
-      }
+      console.error('Failed to fetch users:', error);
+      setError(error.response?.data?.error || 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
@@ -471,11 +444,7 @@ const Admin = () => {
 
   const fetchSystemStats = useCallback(async () => {
     try {
-      const response = await axios.get('/api/admin/stats', { 
-        withCredentials: true,
-        timeout: 10000,
-        headers: { 'Accept': 'application/json' }
-      });
+      const response = await axios.get('/api/admin/stats', { withCredentials: true });
       setSystemStats(response.data);
     } catch (error) {
       console.error('Failed to fetch system stats:', error);
@@ -484,11 +453,7 @@ const Admin = () => {
 
   const fetchInvitations = useCallback(async () => {
     try {
-      const response = await axios.get('/api/admin/invitations', { 
-        withCredentials: true,
-        timeout: 10000,
-        headers: { 'Accept': 'application/json' }
-      });
+      const response = await axios.get('/api/admin/invitations', { withCredentials: true });
       // Filter to only show pending invitations
       const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
       setInvitations(pendingInvitations);

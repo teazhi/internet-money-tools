@@ -26,22 +26,8 @@ const Overview = () => {
   const fetchAnalytics = useCallback(async () => {
     try {
       setError(null);
-      const response = await axios.get('/api/analytics/orders', { 
-        withCredentials: true,
-        timeout: 15000, // 15 second timeout
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      // Ensure proper JSON parsing
-      let data = response.data;
-      if (typeof data === 'string') {
-        data = JSON.parse(data);
-      }
-      
-      setAnalytics(data);
+      const response = await axios.get('/api/analytics/orders', { withCredentials: true });
+      setAnalytics(response.data);
       setLastUpdated(new Date());
       
       if (response.data.error) {
@@ -50,16 +36,7 @@ const Overview = () => {
     } catch (error) {
       console.error('Error fetching analytics:', error);
       
-      // Check if this is a timeout error
-      if (error.code === 'ECONNABORTED') {
-        setError({
-          type: 'timeout',
-          message: 'Request timed out. The server may be processing data. Please try again.',
-          title: 'Timeout Error'
-        });
-      }
-      // Check if this is a setup requirement error
-      else if (error.response?.status === 400 && error.response?.data?.requires_setup) {
+      if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
           type: 'setup_required',
           message: error.response.data.message || 'Please configure your report URLs in Settings before accessing analytics.',

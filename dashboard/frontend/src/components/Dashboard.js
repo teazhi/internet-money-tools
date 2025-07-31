@@ -15,7 +15,8 @@ import {
   Link as LinkIcon,
   Shield,
   Eye,
-  ArrowLeft
+  ArrowLeft,
+  Users
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -25,6 +26,7 @@ import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 import FileManager from './dashboard/FileManager';
 import Admin from './dashboard/Admin';
+import SubUserManager from './dashboard/SubUserManager';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
@@ -56,6 +58,9 @@ const Dashboard = () => {
     }
   };
 
+  // Check if user is main user (not sub-user)
+  const isMainUser = !user?.user_type || user?.user_type === 'main';
+
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, current: location.pathname === '/dashboard/analytics' },
@@ -63,6 +68,7 @@ const Dashboard = () => {
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     { name: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, current: location.pathname === '/dashboard/settings' },
+    ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
     ...(isAdmin ? [{ name: 'Admin', href: '/dashboard/admin', icon: Shield, current: location.pathname === '/dashboard/admin' }] : []),
   ];
 
@@ -219,6 +225,7 @@ const Dashboard = () => {
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
+              {isMainUser && <Route path="/subusers" element={<SubUserManager />} />}
               {isAdmin && <Route path="/admin" element={<Admin />} />}
             </Routes>
           </div>

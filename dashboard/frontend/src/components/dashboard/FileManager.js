@@ -367,6 +367,11 @@ const FileManager = () => {
                         <span>{formatDate(file.upload_date)}</span>
                       </span>
                       <span>{formatFileSize(file.file_size)}</span>
+                      {file.uploaded_by && file.uploaded_by !== user?.discord_id && (
+                        <span className="text-blue-600 font-medium">
+                          Uploaded by VA
+                        </span>
+                      )}
                     </div>
                     {file.s3_key && (
                       <div className="text-xs text-gray-400 mt-1">

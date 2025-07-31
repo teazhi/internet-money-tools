@@ -237,6 +237,48 @@ def is_admin_user(discord_id):
     """Check if a Discord ID is an admin"""
     return discord_id == '1278565917206249503'
 
+def has_permission(discord_id, permission):
+    """Check if user has specific permission"""
+    user_record = get_user_record(discord_id)
+    if not user_record:
+        return False
+    
+    user_permissions = user_record.get('permissions', [])
+    
+    # Main users and admin have all permissions
+    if 'all' in user_permissions or is_admin_user(discord_id):
+        return True
+    
+    # Check specific permission
+    return permission in user_permissions
+
+def get_parent_user_record(sub_user_discord_id):
+    """Get parent user record for a sub-user"""
+    sub_user = get_user_record(sub_user_discord_id)
+    if not sub_user or sub_user.get('user_type') != 'subuser':
+        return None
+    
+    parent_id = sub_user.get('parent_user_id')
+    if not parent_id:
+        return None
+    
+    return get_user_record(parent_id)
+
+def permission_required(permission):
+    """Decorator to require specific permission"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'discord_id' not in session:
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            if not has_permission(session['discord_id'], permission):
+                return jsonify({'error': 'Insufficient permissions'}), 403
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -471,6 +513,22 @@ def discord_callback():
         
         if user_record is None:
             user_record = {"discord_id": discord_id}
+            
+            # Check if this is a sub-user invitation
+            if 'valid_invitation' in locals() and valid_invitation:
+                if valid_invitation.get('user_type') == 'subuser':
+                    user_record['user_type'] = 'subuser'
+                    user_record['parent_user_id'] = valid_invitation.get('parent_user_id')
+                    user_record['permissions'] = valid_invitation.get('permissions', ['sellerboard_upload'])
+                    user_record['va_name'] = valid_invitation.get('va_name', '')
+                    user_record['email'] = valid_invitation.get('email')
+                else:
+                    user_record['user_type'] = 'main'
+                    user_record['permissions'] = ['all']  # Main users have all permissions
+            else:
+                user_record['user_type'] = 'main'
+                user_record['permissions'] = ['all']  # Main users have all permissions
+                
             users.append(user_record)
         
         # Update Discord username and last activity in permanent record
@@ -527,6 +585,10 @@ def get_user():
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
         'discord_avatar': session.get('discord_avatar'),
+        'user_type': user_record.get('user_type', 'main') if user_record else 'main',
+        'permissions': user_record.get('permissions', ['all']) if user_record else ['all'],
+        'parent_user_id': user_record.get('parent_user_id') if user_record else None,
+        'va_name': user_record.get('va_name') if user_record else None,
         'is_admin': is_admin_user(discord_id),
         'profile_configured': user_record is not None,
         'google_linked': user_record and user_record.get('google_tokens') is not None,
@@ -1052,7 +1114,7 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/api/upload/sellerboard', methods=['POST'])
-@login_required
+@permission_required('sellerboard_upload')
 def upload_sellerboard_file():
     try:
         if 'file' not in request.files:
@@ -1068,9 +1130,18 @@ def upload_sellerboard_file():
         discord_id = session['discord_id']
         filename = secure_filename(file.filename)
         
+        # Determine target user (for sub-users, upload to parent's account)
+        current_user = get_user_record(discord_id)
+        if current_user and current_user.get('user_type') == 'subuser':
+            target_user_id = current_user.get('parent_user_id')
+            uploaded_by = discord_id  # Track who actually uploaded
+        else:
+            target_user_id = discord_id
+            uploaded_by = discord_id
+        
         # Create user-specific filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        user_filename = f"{discord_id}_{timestamp}_{filename}"
+        user_filename = f"{target_user_id}_{timestamp}_{filename}"
         
         # Upload to S3
         s3_client = get_s3_client()
@@ -1085,12 +1156,12 @@ def upload_sellerboard_file():
             ContentType=file.content_type
         )
         
-        # Update user record with uploaded file info
+        # Update target user record with uploaded file info
         users = get_users_config()
-        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        user_record = next((u for u in users if u.get("discord_id") == target_user_id), None)
         
         if user_record is None:
-            user_record = {"discord_id": discord_id}
+            user_record = {"discord_id": target_user_id}
             users.append(user_record)
         
         # Store file information
@@ -1115,7 +1186,8 @@ def upload_sellerboard_file():
             'upload_date': datetime.now().isoformat(),
             'file_size': len(file_content),
             'file_type': file.content_type,
-            'file_type_category': file_type_category
+            'file_type_category': file_type_category,
+            'uploaded_by': uploaded_by  # Track who uploaded the file
         }
         
         # Remove any existing files of the same type
@@ -1881,6 +1953,141 @@ def admin_create_invitation():
                 return jsonify({'message': 'Invitation created but email failed to send', 'invitation': invitation})
         else:
             return jsonify({'error': 'Failed to create invitation'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/invite-subuser', methods=['POST'])
+@login_required
+def invite_subuser():
+    """Invite a sub-user/VA with specific permissions"""
+    try:
+        data = request.json
+        email = data.get('email')
+        permissions = data.get('permissions', ['sellerboard_upload'])  # Default to sellerboard upload permission
+        va_name = data.get('va_name', '')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+            
+        # Get current user info
+        discord_id = session['discord_id']
+        users = get_users_config()
+        current_user = get_user_record(discord_id)
+        
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if email already has a pending invitation
+        invitations = get_invitations_config()
+        existing_invitation = next((inv for inv in invitations if inv['email'] == email and inv['status'] == 'pending'), None)
+        
+        if existing_invitation:
+            return jsonify({'error': 'Email already has a pending invitation'}), 400
+        
+        # Check if user already exists
+        existing_user = next((u for u in users if u.get('email') == email), None)
+        
+        if existing_user:
+            return jsonify({'error': 'User with this email already exists'}), 400
+        
+        # Create new sub-user invitation
+        invitation_token = str(uuid.uuid4())
+        invitation = {
+            'token': invitation_token,
+            'email': email,
+            'va_name': va_name,
+            'status': 'pending',
+            'created_at': datetime.utcnow().isoformat(),
+            'invited_by': session.get('discord_username', current_user.get('username', 'User')),
+            'invited_by_id': discord_id,
+            'expires_at': (datetime.utcnow() + timedelta(days=7)).isoformat(),
+            'user_type': 'subuser',
+            'parent_user_id': discord_id,
+            'permissions': permissions
+        }
+        
+        invitations.append(invitation)
+        
+        if update_invitations_config(invitations):
+            # Send invitation email
+            inviter_name = current_user.get('username', session.get('discord_username', 'User'))
+            if send_invitation_email(email, invitation_token, inviter_name):
+                return jsonify({'message': 'Sub-user invitation sent successfully', 'invitation': invitation})
+            else:
+                return jsonify({'message': 'Invitation created but email failed to send', 'invitation': invitation})
+        else:
+            return jsonify({'error': 'Failed to create invitation'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/my-subusers', methods=['GET'])
+@login_required
+def get_my_subusers():
+    """Get current user's sub-users"""
+    try:
+        discord_id = session['discord_id']
+        users = get_users_config()
+        
+        # Find all sub-users for this parent
+        subusers = [
+            {
+                'discord_id': user.get('discord_id'),
+                'discord_username': user.get('discord_username'),
+                'va_name': user.get('va_name'),
+                'email': user.get('email'),
+                'permissions': user.get('permissions', []),
+                'last_activity': user.get('last_activity'),
+                'user_type': user.get('user_type')
+            }
+            for user in users 
+            if user.get('user_type') == 'subuser' and user.get('parent_user_id') == discord_id
+        ]
+        
+        return jsonify({'subusers': subusers})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/my-invitations', methods=['GET'])
+@login_required
+def get_my_invitations():
+    """Get current user's pending invitations"""
+    try:
+        discord_id = session['discord_id']
+        invitations = get_invitations_config()
+        
+        # Find all invitations from this user
+        my_invitations = [
+            inv for inv in invitations 
+            if inv.get('invited_by_id') == discord_id
+        ]
+        
+        return jsonify({'invitations': my_invitations})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/revoke-subuser/<subuser_id>', methods=['DELETE'])
+@login_required
+def revoke_subuser_access(subuser_id):
+    """Revoke access for a sub-user"""
+    try:
+        discord_id = session['discord_id']
+        users = get_users_config()
+        
+        # Find the sub-user
+        subuser = next((u for u in users if u.get('discord_id') == subuser_id and u.get('parent_user_id') == discord_id), None)
+        
+        if not subuser:
+            return jsonify({'error': 'Sub-user not found or not authorized'}), 404
+        
+        # Remove the sub-user
+        users = [u for u in users if not (u.get('discord_id') == subuser_id and u.get('parent_user_id') == discord_id)]
+        
+        if update_users_config(users):
+            return jsonify({'message': 'Sub-user access revoked successfully'})
+        else:
+            return jsonify({'error': 'Failed to revoke access'}), 500
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500

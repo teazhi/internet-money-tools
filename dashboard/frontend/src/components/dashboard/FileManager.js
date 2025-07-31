@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Upload, 
@@ -27,9 +27,29 @@ const FileManager = () => {
     fetchFiles();
   }, []);
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
-      const response = await axios.get('/api/files/sellerboard', { withCredentials: true });
+      setLoading(true);
+      
+      // Add minimum loading time to ensure skeleton is visible
+      const startTime = Date.now();
+      const minLoadingTime = 700; // 700ms minimum loading time
+      
+      const response = await axios.get('/api/files/sellerboard', { 
+        withCredentials: true,
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Ensure minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
+      
       setFiles(response.data.files || []);
     } catch (error) {
       console.error('Error fetching files:', error);
@@ -37,7 +57,7 @@ const FileManager = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleFileUpload = async (file) => {
     if (!file) return;
@@ -222,8 +242,67 @@ const FileManager = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-builders-500"></div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-8 bg-white/20 rounded w-32 mb-2 animate-pulse"></div>
+              <div className="h-4 bg-white/20 rounded w-64 animate-pulse"></div>
+            </div>
+            <div className="h-10 bg-white/20 rounded w-24 animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Upload Area Skeleton */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-32 animate-pulse"></div>
+          </div>
+          <div className="p-6">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+              <div className="text-center">
+                <div className="h-12 w-12 bg-gray-300 rounded mx-auto mb-4 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-48 mx-auto mb-2 animate-pulse"></div>
+                <div className="h-3 bg-gray-300 rounded w-64 mx-auto mb-4 animate-pulse"></div>
+                <div className="h-10 bg-gray-300 rounded w-24 mx-auto animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* File List Skeleton */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-24 animate-pulse"></div>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="px-6 py-4 flex items-center justify-between animate-pulse">
+                <div className="flex items-center space-x-3">
+                  <div className="h-8 w-8 bg-gray-300 rounded"></div>
+                  <div>
+                    <div className="h-4 bg-gray-300 rounded w-48 mb-1"></div>
+                    <div className="flex items-center space-x-4 text-sm">
+                      <div className="h-3 bg-gray-300 rounded w-20"></div>
+                      <div className="h-3 bg-gray-300 rounded w-16"></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="h-8 bg-gray-300 rounded w-16"></div>
+                  <div className="h-8 bg-gray-300 rounded w-16"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="text-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading file manager...</p>
+        </div>
       </div>
     );
   }

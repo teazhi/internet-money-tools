@@ -508,6 +508,12 @@ const Admin = () => {
   const fetchUsers = useCallback(async () => {
     try {
       setError('');
+      setLoading(true);
+      
+      // Add minimum loading time to ensure skeleton is visible
+      const startTime = Date.now();
+      const minLoadingTime = 700; // 700ms minimum loading time
+      
       // Add cache-busting timestamp to ensure fresh data
       const timestamp = Date.now();
       const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
@@ -519,6 +525,13 @@ const Admin = () => {
           'Accept': 'application/json'
         }
       });
+      
+      // Ensure minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
+      
       console.log('[FETCH USERS] Received fresh user data:', response.data.users);
       setUsers(response.data.users);
       setRawUserData(JSON.stringify(response.data.users, null, 2));

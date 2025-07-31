@@ -21,6 +21,11 @@ const SubUserManager = () => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Add minimum loading time to ensure skeleton is visible
+      const startTime = Date.now();
+      const minLoadingTime = 600; // 600ms minimum loading time
+      
       const [subUsersResponse, invitationsResponse] = await Promise.all([
         axios.get('/api/my-subusers', { 
           withCredentials: true,
@@ -33,6 +38,12 @@ const SubUserManager = () => {
           headers: { 'Accept': 'application/json' }
         })
       ]);
+
+      // Ensure minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
 
       setSubUsers(subUsersResponse.data.subusers || []);
       setInvitations(invitationsResponse.data.invitations || []);

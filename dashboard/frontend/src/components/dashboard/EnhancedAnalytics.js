@@ -35,6 +35,11 @@ const EnhancedAnalytics = () => {
     try {
       setError(null);
       setLoading(true);
+      
+      // Add minimum loading time to ensure skeleton is visible
+      const startTime = Date.now();
+      const minLoadingTime = 800; // 800ms minimum loading time
+      
       const url = selectedDate ? 
         `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
         API_ENDPOINTS.ANALYTICS_ORDERS;
@@ -47,6 +52,12 @@ const EnhancedAnalytics = () => {
           'Content-Type': 'application/json'
         }
       });
+      
+      // Ensure minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
       
       setAnalytics(response.data);
       
@@ -184,8 +195,8 @@ const EnhancedAnalytics = () => {
     linkElement.click();
   };
 
-  // Enhanced loading skeleton
-  if (loading && !analytics) {
+  // Enhanced loading skeleton - show for initial load or when explicitly loading
+  if (loading) {
     return (
       <div className="space-y-6">
         {/* Header Skeleton */}

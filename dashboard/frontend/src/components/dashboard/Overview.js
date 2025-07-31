@@ -28,6 +28,7 @@ const Overview = () => {
       setError(null);
       const response = await axios.get('/api/analytics/orders', { 
         withCredentials: true,
+        timeout: 15000, // 15 second timeout
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
@@ -49,8 +50,16 @@ const Overview = () => {
     } catch (error) {
       console.error('Error fetching analytics:', error);
       
+      // Check if this is a timeout error
+      if (error.code === 'ECONNABORTED') {
+        setError({
+          type: 'timeout',
+          message: 'Request timed out. The server may be processing data. Please try again.',
+          title: 'Timeout Error'
+        });
+      }
       // Check if this is a setup requirement error
-      if (error.response?.status === 400 && error.response?.data?.requires_setup) {
+      else if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
           type: 'setup_required',
           message: error.response.data.message || 'Please configure your report URLs in Settings before accessing analytics.',
@@ -76,8 +85,8 @@ const Overview = () => {
 
   useEffect(() => {
     fetchAnalytics();
-    // Auto-refresh every 5 minutes
-    const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
+    // Auto-refresh every 10 minutes (reduced from 5 minutes)
+    const interval = setInterval(fetchAnalytics, 10 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAnalytics]);
 
@@ -211,18 +220,17 @@ const Overview = () => {
     return 'text-gray-500';
   }, []);
 
-  // Memoized analytics calculations with improved logic
+  // Memoized analytics calculations with improved logic and performance
   const analyticsStats = useMemo(() => {
     if (!analytics) return { todayOrders: 0, activeProducts: 0, lowStockCount: 0, restockPriorityCount: 0, yesterdayRevenue: 0 };
     
     const todayOrders = analytics.today_sales ? Object.values(analytics.today_sales).reduce((a, b) => a + b, 0) : 0;
     const activeProducts = analytics.today_sales ? Object.keys(analytics.today_sales).length : 0;
     
-    // Calculate yesterday's revenue from sellerboard_orders data
+    // Calculate yesterday's revenue - optimized with early return
     let yesterdayRevenue = 0;
-    if (analytics.sellerboard_orders && analytics.sellerboard_orders.length > 0) {
+    if (analytics.sellerboard_orders?.length > 0) {
       yesterdayRevenue = analytics.sellerboard_orders.reduce((total, order) => {
-        // Try multiple possible field names for revenue amount
         const amount = parseFloat(
           order.OrderTotalAmount || 
           order.order_total_amount || 
@@ -239,30 +247,33 @@ const Overview = () => {
       }, 0);
     }
     
-    // Improved low stock calculation using velocity data from enhanced analytics
+    // Optimized stock calculations with early returns
     let lowStockCount = 0;
     let restockPriorityCount = 0;
     
     if (analytics.enhanced_analytics) {
-      Object.values(analytics.enhanced_analytics).forEach(data => {
-        if (data.velocity && data.restock) {
-          const velocity = data.velocity.weighted_velocity || 0;
-          const currentStock = data.restock.current_stock || 0;
-          const daysLeft = velocity > 0 ? currentStock / velocity : 999;
-          
-          // Low stock: less than 14 days of inventory
-          if (daysLeft < 14 && velocity > 0) {
-            lowStockCount++;
-          }
-          
-          // Restock priority: critical/warning categories or less than 30 days of inventory
-          if (data.priority?.category?.includes('critical') || 
-              data.priority?.category?.includes('warning') || 
-              (daysLeft < 30 && velocity > 0)) {
-            restockPriorityCount++;
-          }
+      const enhancedData = Object.values(analytics.enhanced_analytics);
+      for (const data of enhancedData) {
+        if (!data.velocity || !data.restock) continue;
+        
+        const velocity = data.velocity.weighted_velocity || 0;
+        if (velocity <= 0) continue;
+        
+        const currentStock = data.restock.current_stock || 0;
+        const daysLeft = currentStock / velocity;
+        
+        // Low stock: less than 14 days of inventory
+        if (daysLeft < 14) {
+          lowStockCount++;
         }
-      });
+        
+        // Restock priority: critical/warning categories or less than 30 days of inventory
+        if (data.priority?.category?.includes('critical') || 
+            data.priority?.category?.includes('warning') || 
+            daysLeft < 30) {
+          restockPriorityCount++;
+        }
+      }
     } else {
       // Fallback to old logic if enhanced analytics not available
       lowStockCount = analytics.low_stock ? Object.keys(analytics.low_stock).length : 0;
@@ -471,6 +482,39 @@ const Overview = () => {
     );
   }
 
+  // Show timeout error
+  if (error?.type === 'timeout') {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                {error.title}
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>{error.message}</p>
+                <p className="mt-1">This usually happens when the server is processing large amounts of data.</p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={fetchAnalytics}
+                  disabled={loading}
+                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200 disabled:opacity-50"
+                >
+                  {loading ? 'Retrying...' : 'Try Again'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show general error
   if (error?.type === 'general') {
     return (
@@ -490,9 +534,10 @@ const Overview = () => {
               <div className="mt-4">
                 <button
                   onClick={fetchAnalytics}
-                  className="bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200"
+                  disabled={loading}
+                  className="bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200 disabled:opacity-50"
                 >
-                  Try Again
+                  {loading ? 'Retrying...' : 'Try Again'}
                 </button>
               </div>
             </div>
@@ -714,49 +759,59 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
           <div className="space-y-3">
-            {analytics?.enhanced_analytics ? (
-              Object.entries(analytics.enhanced_analytics)
-                .filter(([asin, data]) => {
-                  if (!data.velocity || !data.restock) return false;
-                  const velocity = data.velocity.weighted_velocity || 0;
-                  const currentStock = data.restock.current_stock || 0;
-                  const daysLeft = velocity > 0 ? currentStock / velocity : 999;
-                  return daysLeft < 14 && velocity > 0;
-                })
-                .sort(([,a], [,b]) => {
-                  const daysLeftA = a.velocity.weighted_velocity > 0 ? a.restock.current_stock / a.velocity.weighted_velocity : 999;
-                  const daysLeftB = b.velocity.weighted_velocity > 0 ? b.restock.current_stock / b.velocity.weighted_velocity : 999;
-                  return daysLeftA - daysLeftB;
-                })
+            {useMemo(() => {
+              if (!analytics?.enhanced_analytics) return null;
+              
+              const lowStockProducts = [];
+              
+              // Pre-filter and calculate days left in one pass
+              for (const [asin, data] of Object.entries(analytics.enhanced_analytics)) {
+                if (!data.velocity || !data.restock) continue;
+                
+                const velocity = data.velocity.weighted_velocity || 0;
+                if (velocity <= 0) continue;
+                
+                const currentStock = data.restock.current_stock || 0;
+                const daysLeft = currentStock / velocity;
+                
+                if (daysLeft < 14) {
+                  lowStockProducts.push({
+                    asin,
+                    data,
+                    daysLeft,
+                    velocity,
+                    currentStock,
+                    suggestedQty: data.restock.suggested_quantity || 0
+                  });
+                }
+              }
+              
+              // Sort by days left and take top 5
+              return lowStockProducts
+                .sort((a, b) => a.daysLeft - b.daysLeft)
                 .slice(0, 5)
-                .map(([asin, data]) => {
-                  const velocity = data.velocity.weighted_velocity || 0;
-                  const currentStock = data.restock.current_stock || 0;
-                  const daysLeft = velocity > 0 ? currentStock / velocity : 999;
-                  const suggestedQty = data.restock.suggested_quantity || 0;
-                  
-                  return (
-                    <div key={asin} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{asin}</p>
-                        <p className="text-xs text-gray-500 truncate max-w-xs">
-                          {data.product_name?.length > 40 
-                            ? data.product_name.substring(0, 40) + '...'
-                            : data.product_name
-                          }
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-red-600 font-medium">
-                          {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
-                        </p>
-                      </div>
+                .map(({ asin, data, daysLeft, currentStock, suggestedQty }) => (
+                  <div key={asin} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{asin}</p>
+                      <p className="text-xs text-gray-500 truncate max-w-xs">
+                        {data.product_name?.length > 40 
+                          ? data.product_name.substring(0, 40) + '...'
+                          : data.product_name
+                        }
+                      </p>
                     </div>
-                  );
-                })
+                    <div className="text-right">
+                      <p className="text-sm text-red-600 font-medium">
+                        {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
+                      </p>
+                    </div>
+                  </div>
+                ));
+            }, [analytics?.enhanced_analytics])
             ) : analytics?.low_stock ? (
               Object.entries(analytics.low_stock)
                 .slice(0, 5)

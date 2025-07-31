@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   TrendingUp, 
@@ -29,9 +29,9 @@ const EnhancedAnalytics = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [selectedDate]);
+  }, [fetchAnalytics]);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
@@ -39,7 +39,15 @@ const EnhancedAnalytics = () => {
         `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
         API_ENDPOINTS.ANALYTICS_ORDERS;
       
-      const response = await axios.get(url, { withCredentials: true });
+      const response = await axios.get(url, { 
+        withCredentials: true,
+        timeout: 20000, // 20 second timeout for enhanced analytics
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
       setAnalytics(response.data);
       
       if (response.data.error) {
@@ -48,8 +56,16 @@ const EnhancedAnalytics = () => {
     } catch (error) {
       console.error('Error fetching analytics:', error);
       
+      // Check if this is a timeout error
+      if (error.code === 'ECONNABORTED') {
+        setError({
+          type: 'timeout',
+          message: 'Request timed out. Enhanced analytics may take longer to process. Please try again.',
+          title: 'Timeout Error'
+        });
+      }
       // Check if this is a setup requirement error
-      if (error.response?.status === 400 && error.response?.data?.requires_setup) {
+      else if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
           type: 'setup_required',
           message: error.response.data.message || 'Please configure your report URLs in Settings before accessing analytics.',
@@ -71,7 +87,7 @@ const EnhancedAnalytics = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDate]);
 
   const getReportDate = () => {
     if (analytics?.report_date) {
@@ -96,7 +112,7 @@ const EnhancedAnalytics = () => {
     return 'Unknown Date';
   };
 
-  const getTrendIcon = (trend) => {
+  const getTrendIcon = useCallback((trend) => {
     switch (trend) {
       case 'accelerating':
         return <TrendingUp className="h-4 w-4 text-green-500" />;
@@ -105,14 +121,14 @@ const EnhancedAnalytics = () => {
       default:
         return <Minus className="h-4 w-4 text-gray-400" />;
     }
-  };
+  }, []);
 
-  const getFilteredProducts = () => {
+  const filteredProducts = useMemo(() => {
     if (!analytics?.enhanced_analytics || analytics.enhanced_analytics === null) return [];
     
     let products = Object.entries(analytics.enhanced_analytics);
     
-    // Filter by category
+    // Filter by category - optimized with early returns
     if (filterCategory !== 'all') {
       products = products.filter(([asin, data]) => {
         const category = data?.priority?.category || '';
@@ -129,24 +145,21 @@ const EnhancedAnalytics = () => {
       });
     }
     
-    // Sort products
-    products.sort(([,a], [,b]) => {
-      switch (sortBy) {
-        case 'priority':
-          return (b?.priority?.score || 0) - (a?.priority?.score || 0);
-        case 'velocity':
-          return (b?.velocity?.weighted_velocity || 0) - (a?.velocity?.weighted_velocity || 0);
-        case 'stock':
-          return (a?.restock?.current_stock || 0) - (b?.restock?.current_stock || 0);
-        case 'name':
-          return (a?.product_name || '').localeCompare(b?.product_name || '');
-        default:
-          return 0;
-      }
-    });
+    // Sort products - optimized comparison functions
+    const sortComparators = {
+      priority: ([,a], [,b]) => (b?.priority?.score || 0) - (a?.priority?.score || 0),
+      velocity: ([,a], [,b]) => (b?.velocity?.weighted_velocity || 0) - (a?.velocity?.weighted_velocity || 0),
+      stock: ([,a], [,b]) => (a?.restock?.current_stock || 0) - (b?.restock?.current_stock || 0),
+      name: ([,a], [,b]) => (a?.product_name || '').localeCompare(b?.product_name || '')
+    };
+    
+    const comparator = sortComparators[sortBy];
+    if (comparator) {
+      products.sort(comparator);
+    }
     
     return products;
-  };
+  }, [analytics?.enhanced_analytics, filterCategory, sortBy]);
 
   const exportAnalytics = () => {
     if (!analytics) return;
@@ -171,10 +184,75 @@ const EnhancedAnalytics = () => {
     linkElement.click();
   };
 
-  if (loading) {
+  // Enhanced loading skeleton
+  if (loading && !analytics) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-builders-500"></div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
+          <div>
+            <div className="h-8 bg-gray-300 rounded w-48 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-gray-300 rounded w-96 animate-pulse"></div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="h-10 bg-gray-300 rounded w-32 animate-pulse"></div>
+            <div className="h-10 bg-gray-300 rounded w-20 animate-pulse"></div>
+            <div className="h-10 bg-gray-300 rounded w-20 animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
+              <div className="flex items-center">
+                <div className="h-8 w-8 bg-gray-300 rounded"></div>
+                <div className="ml-4 flex-1">
+                  <div className="h-4 bg-gray-300 rounded w-20 mb-2"></div>
+                  <div className="h-8 bg-gray-300 rounded w-12"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Restock Alerts Skeleton */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-64 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-gray-300 rounded w-96 animate-pulse"></div>
+          </div>
+          <div className="p-6 space-y-4">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="border-l-4 border-gray-200 p-4 animate-pulse">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-300 rounded w-32 mb-2"></div>
+                    <div className="h-6 bg-gray-300 rounded w-80 mb-2"></div>
+                    <div className="h-4 bg-gray-300 rounded w-64 mb-3"></div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[1, 2, 3, 4].map(j => (
+                        <div key={j} className="h-4 bg-gray-300 rounded w-16"></div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="ml-6 text-right">
+                    <div className="h-8 bg-gray-300 rounded w-12 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-16 mb-2"></div>
+                    <div className="h-3 bg-gray-300 rounded w-12"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading enhanced analytics and restock recommendations...</p>
+          <p className="text-gray-500 text-xs mt-1">This may take a moment to process all your data</p>
+        </div>
       </div>
     );
   }
@@ -257,6 +335,39 @@ const EnhancedAnalytics = () => {
     );
   }
 
+  // Show timeout error
+  if (error?.type === 'timeout') {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                {error.title}
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>{error.message}</p>
+                <p className="mt-1">Enhanced analytics processes large amounts of data and may take longer than usual.</p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={fetchAnalytics}
+                  disabled={loading}
+                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200 disabled:opacity-50"
+                >
+                  {loading ? 'Retrying...' : 'Try Again'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show general error
   if (error?.type === 'general') {
     return (
@@ -276,9 +387,10 @@ const EnhancedAnalytics = () => {
               <div className="mt-4">
                 <button
                   onClick={fetchAnalytics}
-                  className="bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200"
+                  disabled={loading}
+                  className="bg-red-100 hover:bg-red-200 text-red-800 text-sm font-medium py-2 px-3 rounded-md transition-colors duration-200 disabled:opacity-50"
                 >
-                  Try Again
+                  {loading ? 'Retrying...' : 'Try Again'}
                 </button>
               </div>
             </div>
@@ -288,7 +400,6 @@ const EnhancedAnalytics = () => {
     );
   }
 
-  const filteredProducts = getFilteredProducts();
 
   return (
     <div className="space-y-6">

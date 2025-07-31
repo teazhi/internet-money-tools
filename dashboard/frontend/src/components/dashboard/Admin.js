@@ -426,6 +426,98 @@ const Admin = () => {
   const [logsLoading, setLogsLoading] = useState(false);
   const [showLogs, setShowLogs] = useState({});
 
+  // Hook definitions must come before any early returns
+  const fetchUsers = useCallback(async () => {
+    try {
+      setError('');
+      setLoading(true);
+      
+      // Add minimum loading time to ensure skeleton is visible
+      const startTime = Date.now();
+      const minLoadingTime = 700; // 700ms minimum loading time
+      
+      // Add cache-busting timestamp to ensure fresh data
+      const timestamp = Date.now();
+      const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
+        withCredentials: true,
+        timeout: 15000,
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Accept': 'application/json'
+        }
+      });
+      
+      // Ensure minimum loading time
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minLoadingTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+      }
+      
+      console.log('[FETCH USERS] Received fresh user data:', response.data.users);
+      setUsers(response.data.users);
+      setRawUserData(JSON.stringify(response.data.users, null, 2));
+    } catch (error) {
+      console.error('[FETCH USERS] Error:', error);
+      if (error.code === 'ECONNABORTED') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(error.response?.data?.error || 'Failed to fetch users');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchSystemStats = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/admin/stats', { 
+        withCredentials: true,
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      });
+      setSystemStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch system stats:', error);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchInvitations = useCallback(async () => {
+    try {
+      const response = await axios.get('/api/admin/invitations', { 
+        withCredentials: true,
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      });
+      // Filter to only show pending invitations
+      const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
+      setInvitations(pendingInvitations);
+    } catch (error) {
+      console.error('Failed to fetch invitations:', error);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredUsers = useMemo(() => {
+    let filtered = users.filter(user => {
+      const matchesSearch = 
+        user.discord_username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.discord_id?.toString().includes(searchTerm);
+
+      if (filterStatus === 'all') return matchesSearch;
+      
+      const isActive = user.profile_configured && user.google_linked && user.sheet_configured;
+      const isPending = !user.profile_configured || !user.google_linked || !user.sheet_configured;
+      
+      if (filterStatus === 'active') return matchesSearch && isActive;
+      if (filterStatus === 'pending') return matchesSearch && isPending;
+      
+      return matchesSearch;
+    });
+
+    return filtered;
+  }, [users, searchTerm, filterStatus]);
+
   const getRelativeTime = (dateString) => {
     if (!dateString) return 'Never';
     
@@ -504,76 +596,6 @@ const Admin = () => {
       </div>
     );
   }
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      setError('');
-      setLoading(true);
-      
-      // Add minimum loading time to ensure skeleton is visible
-      const startTime = Date.now();
-      const minLoadingTime = 700; // 700ms minimum loading time
-      
-      // Add cache-busting timestamp to ensure fresh data
-      const timestamp = Date.now();
-      const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
-        withCredentials: true,
-        timeout: 15000,
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          'Accept': 'application/json'
-        }
-      });
-      
-      // Ensure minimum loading time
-      const elapsedTime = Date.now() - startTime;
-      if (elapsedTime < minLoadingTime) {
-        await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
-      }
-      
-      console.log('[FETCH USERS] Received fresh user data:', response.data.users);
-      setUsers(response.data.users);
-      setRawUserData(JSON.stringify(response.data.users, null, 2));
-    } catch (error) {
-      console.error('[FETCH USERS] Error:', error);
-      if (error.code === 'ECONNABORTED') {
-        setError('Request timed out. Please try again.');
-      } else {
-        setError(error.response?.data?.error || 'Failed to fetch users');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const fetchSystemStats = useCallback(async () => {
-    try {
-      const response = await axios.get('/api/admin/stats', { 
-        withCredentials: true,
-        timeout: 10000,
-        headers: { 'Accept': 'application/json' }
-      });
-      setSystemStats(response.data);
-    } catch (error) {
-      console.error('Failed to fetch system stats:', error);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const fetchInvitations = useCallback(async () => {
-    try {
-      const response = await axios.get('/api/admin/invitations', { 
-        withCredentials: true,
-        timeout: 10000,
-        headers: { 'Accept': 'application/json' }
-      });
-      // Filter to only show pending invitations
-      const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
-      setInvitations(pendingInvitations);
-    } catch (error) {
-      console.error('Failed to fetch invitations:', error);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchScriptConfigs = async () => {
     try {
@@ -770,27 +792,6 @@ const Admin = () => {
     }
     return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>;
   };
-
-  const filteredUsers = useMemo(() => {
-    let filtered = users.filter(user => {
-      const matchesSearch = 
-        user.discord_username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.discord_id?.toString().includes(searchTerm);
-
-      if (filterStatus === 'all') return matchesSearch;
-      
-      const isActive = user.profile_configured && user.google_linked && user.sheet_configured;
-      const isPending = !user.profile_configured || !user.google_linked || !user.sheet_configured;
-      
-      if (filterStatus === 'active') return matchesSearch && isActive;
-      if (filterStatus === 'pending') return matchesSearch && isPending;
-      
-      return matchesSearch;
-    });
-
-    return filtered;
-  }, [users, searchTerm, filterStatus]);
 
   const handleTriggerScript = async (scriptType) => {
     if (!window.confirm(`Are you sure you want to run the ${scriptType} Lambda function? It will read the current saved date from S3.`)) {

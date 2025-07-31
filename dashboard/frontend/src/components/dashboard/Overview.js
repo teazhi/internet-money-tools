@@ -291,6 +291,76 @@ const Overview = () => {
       .slice(0, 5);
   }, [analytics?.today_sales]);
 
+  const stockAlerts = useMemo(() => {
+    if (analytics?.enhanced_analytics) {
+      const lowStockProducts = [];
+      
+      // Pre-filter and calculate days left in one pass
+      for (const [asin, data] of Object.entries(analytics.enhanced_analytics)) {
+        if (!data.velocity || !data.restock) continue;
+        
+        const velocity = data.velocity.weighted_velocity || 0;
+        if (velocity <= 0) continue;
+        
+        const currentStock = data.restock.current_stock || 0;
+        const daysLeft = currentStock / velocity;
+        
+        if (daysLeft < 14) {
+          lowStockProducts.push({
+            asin,
+            data,
+            daysLeft,
+            velocity,
+            currentStock,
+            suggestedQty: data.restock.suggested_quantity || 0
+          });
+        }
+      }
+      
+      // Sort by days left and take top 5
+      return lowStockProducts
+        .sort((a, b) => a.daysLeft - b.daysLeft)
+        .slice(0, 5)
+        .map(({ asin, data, daysLeft, currentStock, suggestedQty }) => (
+          <div key={asin} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{asin}</p>
+              <p className="text-xs text-gray-500 truncate max-w-xs">
+                {data.product_name?.length > 40 
+                  ? data.product_name.substring(0, 40) + '...'
+                  : data.product_name
+                }
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-red-600 font-medium">
+                {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
+              </p>
+              <p className="text-xs text-gray-500">
+                Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
+              </p>
+            </div>
+          </div>
+        ));
+    } else if (analytics?.low_stock) {
+      return Object.entries(analytics.low_stock)
+        .slice(0, 5)
+        .map(([asin, info]) => (
+          <div key={asin} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{asin}</p>
+              <p className="text-xs text-gray-500 truncate max-w-xs">{info.title}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-red-600 font-medium">{info.days_left} days left</p>
+              <p className="text-xs text-gray-500">Reorder: {info.reorder_qty}</p>
+            </div>
+          </div>
+        ));
+    }
+    return null;
+  }, [analytics?.enhanced_analytics, analytics?.low_stock]);
+
   // Check if user is authenticated (after all hooks)
   if (user === null) {
     return (
@@ -759,75 +829,7 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
           <div className="space-y-3">
-            {useMemo(() => {
-              if (analytics?.enhanced_analytics) {
-                const lowStockProducts = [];
-                
-                // Pre-filter and calculate days left in one pass
-                for (const [asin, data] of Object.entries(analytics.enhanced_analytics)) {
-                  if (!data.velocity || !data.restock) continue;
-                  
-                  const velocity = data.velocity.weighted_velocity || 0;
-                  if (velocity <= 0) continue;
-                  
-                  const currentStock = data.restock.current_stock || 0;
-                  const daysLeft = currentStock / velocity;
-                  
-                  if (daysLeft < 14) {
-                    lowStockProducts.push({
-                      asin,
-                      data,
-                      daysLeft,
-                      velocity,
-                      currentStock,
-                      suggestedQty: data.restock.suggested_quantity || 0
-                    });
-                  }
-                }
-                
-                // Sort by days left and take top 5
-                return lowStockProducts
-                  .sort((a, b) => a.daysLeft - b.daysLeft)
-                  .slice(0, 5)
-                  .map(({ asin, data, daysLeft, currentStock, suggestedQty }) => (
-                    <div key={asin} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{asin}</p>
-                        <p className="text-xs text-gray-500 truncate max-w-xs">
-                          {data.product_name?.length > 40 
-                            ? data.product_name.substring(0, 40) + '...'
-                            : data.product_name
-                          }
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-red-600 font-medium">
-                          {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
-                        </p>
-                      </div>
-                    </div>
-                  ));
-              } else if (analytics?.low_stock) {
-                return Object.entries(analytics.low_stock)
-                  .slice(0, 5)
-                  .map(([asin, info]) => (
-                    <div key={asin} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{asin}</p>
-                        <p className="text-xs text-gray-500 truncate max-w-xs">{info.title}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-red-600 font-medium">{info.days_left} days left</p>
-                        <p className="text-xs text-gray-500">Reorder: {info.reorder_qty}</p>
-                      </div>
-                    </div>
-                  ));
-              }
-              return null;
-            }, [analytics?.enhanced_analytics, analytics?.low_stock])}
+            {stockAlerts}
             {analyticsStats.lowStockCount === 0 && (
               <p className="text-gray-500 text-sm">No stock alerts</p>
             )}

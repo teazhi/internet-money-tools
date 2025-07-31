@@ -70,7 +70,7 @@ const SubUserManager = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500"></div>
       </div>
     );
   }
@@ -81,7 +81,7 @@ const SubUserManager = () => {
         <h2 className="text-2xl font-bold text-gray-900">VA & Sub-User Management</h2>
         <button
           onClick={() => setShowInviteForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+          className="btn-primary"
         >
           Invite VA
         </button>
@@ -90,7 +90,7 @@ const SubUserManager = () => {
       {/* Invite Form Modal */}
       {showInviteForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+          <div className="card max-w-md w-full mx-4">
             <h3 className="text-lg font-bold mb-4">Invite Virtual Assistant</h3>
             <form onSubmit={handleInviteSubmit}>
               <div className="space-y-4">
@@ -103,7 +103,7 @@ const SubUserManager = () => {
                     required
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input-field"
                     placeholder="va@example.com"
                   />
                 </div>
@@ -116,7 +116,7 @@ const SubUserManager = () => {
                     type="text"
                     value={inviteForm.va_name}
                     onChange={(e) => setInviteForm(prev => ({ ...prev, va_name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="input-field"
                     placeholder="Assistant Name"
                   />
                 </div>
@@ -158,7 +158,7 @@ const SubUserManager = () => {
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                  className="btn-primary"
                 >
                   Send Invitation
                 </button>
@@ -169,7 +169,7 @@ const SubUserManager = () => {
       )}
 
       {/* Active Sub-Users */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="card !p-0">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Active VAs ({subUsers.length})</h3>
         </div>
@@ -199,7 +199,7 @@ const SubUserManager = () => {
                 </div>
                 <button
                   onClick={() => handleRevokeAccess(subUser.discord_id)}
-                  className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  className="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
                 >
                   Revoke Access
                 </button>
@@ -210,7 +210,7 @@ const SubUserManager = () => {
       </div>
 
       {/* Pending Invitations */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="card !p-0">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Pending Invitations ({invitations.length})</h3>
         </div>
@@ -237,7 +237,7 @@ const SubUserManager = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
                     {invitation.status}
                   </span>
                 </div>

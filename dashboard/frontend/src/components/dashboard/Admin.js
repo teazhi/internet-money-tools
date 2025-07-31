@@ -524,7 +524,9 @@ const Admin = () => {
   const fetchInvitations = async () => {
     try {
       const response = await axios.get('/api/admin/invitations', { withCredentials: true });
-      setInvitations(response.data.invitations);
+      // Filter to only show pending invitations
+      const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
+      setInvitations(pendingInvitations);
     } catch (error) {
       console.error('Failed to fetch invitations:', error);
     }
@@ -1234,9 +1236,13 @@ const Admin = () => {
                       {getExpirationTime(invitation.expires_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {new Date(invitation.expires_at) > new Date() ? (
+                      {invitation.status === 'pending' && new Date(invitation.expires_at) > new Date() ? (
                         <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
                           Pending
+                        </span>
+                      ) : invitation.status === 'accepted' ? (
+                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                          Accepted
                         </span>
                       ) : (
                         <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">

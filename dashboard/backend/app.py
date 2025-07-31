@@ -1276,8 +1276,12 @@ def migrate_all_user_files():
                 if s3_key.startswith('sellerboard_files/'):
                     continue
                 
-                # Skip system files
+                # Skip system files and generated files
                 if s3_key in ['users.json', 'command_permissions.json', 'amznUploadConfig.json', 'config.json']:
+                    continue
+                
+                # Skip generated _updated files - these are script outputs, not user uploads
+                if '_updated.' in s3_key:
                     continue
                 
                 filename = s3_key.lower()
@@ -1365,6 +1369,49 @@ def migrate_all_user_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/files/cleanup-updated', methods=['POST'])
+@login_required
+def cleanup_updated_files():
+    """Remove _updated files from user records - these are script outputs, not user files"""
+    try:
+        discord_id = session['discord_id']
+        users = get_users_config()
+        
+        user_record = None
+        user_index = None
+        for i, user in enumerate(users):
+            if user.get("discord_id") == discord_id:
+                user_record = user
+                user_index = i
+                break
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if 'uploaded_files' not in user_record:
+            return jsonify({'message': 'No files to clean up', 'removed_count': 0})
+        
+        # Remove _updated files from uploaded_files
+        original_count = len(user_record['uploaded_files'])
+        user_record['uploaded_files'] = [
+            f for f in user_record['uploaded_files'] 
+            if '_updated.' not in f.get('filename', '') and '_updated.' not in f.get('s3_key', '')
+        ]
+        removed_count = original_count - len(user_record['uploaded_files'])
+        
+        # Update the users config
+        users[user_index] = user_record
+        if update_users_config(users):
+            return jsonify({
+                'message': f'Cleaned up {removed_count} _updated files from your record',
+                'removed_count': removed_count
+            })
+        else:
+            return jsonify({'error': 'Failed to update user config'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/files/migrate', methods=['POST'])
 @login_required
 def migrate_existing_files():
@@ -1402,6 +1449,10 @@ def migrate_existing_files():
                     key = obj['Key']
                     # Skip files already in sellerboard_files/
                     if key.startswith('sellerboard_files/'):
+                        continue
+                    
+                    # Skip generated _updated files - these are script outputs, not user uploads
+                    if '_updated.' in key:
                         continue
                     
                     # Check if filename contains user identifier or matches known patterns

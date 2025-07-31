@@ -22,6 +22,7 @@ const FileManager = () => {
   const [dragOver, setDragOver] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [adminMigrating, setAdminMigrating] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   useEffect(() => {
     fetchFiles();
@@ -214,6 +215,36 @@ const FileManager = () => {
     }
   };
 
+  const cleanupUpdatedFiles = async () => {
+    if (!window.confirm('This will remove _updated files from your file list. These are script-generated files, not your original uploads. Continue?')) {
+      return;
+    }
+
+    setCleaning(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/files/cleanup-updated', {}, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message}. Refreshing file list...` 
+      });
+      
+      // Refresh file list after cleanup
+      setTimeout(() => {
+        fetchFiles();
+        setMessage({ type: '', text: '' });
+      }, 2000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to cleanup updated files' 
+      });
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -324,7 +355,7 @@ const FileManager = () => {
           {files.length === 0 && (
             <button
               onClick={migrateExistingFiles}
-              disabled={migrating || adminMigrating}
+              disabled={migrating || adminMigrating || cleaning}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500 disabled:opacity-50"
             >
               <Download className="w-4 h-4 mr-2" />
@@ -332,11 +363,23 @@ const FileManager = () => {
             </button>
           )}
           
+          {/* Cleanup Button - show if user has _updated files */}
+          {files.some(f => f.filename?.includes('_updated') || f.s3_key?.includes('_updated')) && (
+            <button
+              onClick={cleanupUpdatedFiles}
+              disabled={migrating || adminMigrating || cleaning}
+              className="inline-flex items-center px-4 py-2 border border-yellow-300 rounded-md shadow-sm text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {cleaning ? 'Cleaning...' : 'Remove _updated Files'}
+            </button>
+          )}
+          
           {/* Admin Migration Button - only show for admin users */}
           {user?.discord_id === '1278565917206249503' && (
             <button
               onClick={migrateAllUserFiles}
-              disabled={migrating || adminMigrating}
+              disabled={migrating || adminMigrating || cleaning}
               className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
             >
               <Settings className="w-4 h-4 mr-2" />

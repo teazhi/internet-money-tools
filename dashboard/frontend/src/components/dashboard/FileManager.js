@@ -203,13 +203,21 @@ const FileManager = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const date = new Date(dateString);
+    
+    // Use user's timezone from their profile if available
+    const userTimezone = user?.user_record?.timezone;
+    
+    const options = {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
-    });
+      minute: '2-digit',
+      ...(userTimezone && { timeZone: userTimezone })
+    };
+    
+    return date.toLocaleDateString('en-US', options);
   };
 
   if (loading) {

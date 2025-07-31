@@ -1183,7 +1183,7 @@ def upload_sellerboard_file():
         file_info = {
             'filename': filename,
             's3_key': s3_key,
-            'upload_date': datetime.now().isoformat(),
+            'upload_date': datetime.utcnow().isoformat() + 'Z',  # Use UTC with Z suffix
             'file_size': len(file_content),
             'file_type': file.content_type,
             'file_type_category': file_type_category,
@@ -1323,7 +1323,7 @@ def migrate_all_user_files():
                                 file_info = {
                                     'filename': original_filename,
                                     's3_key': new_s3_key,
-                                    'upload_date': obj.get('LastModified', datetime.now()).isoformat(),
+                                    'upload_date': obj.get('LastModified', datetime.utcnow()).isoformat() + 'Z',
                                     'file_size': obj.get('Size', 0),
                                     'file_type': content_type,
                                     'file_type_category': file_type_category
@@ -1450,8 +1450,13 @@ def migrate_existing_files():
                     # Get file size
                     file_size = obj.get('Size', 0)
                     
-                    # Use LastModified as upload date
-                    upload_date = obj.get('LastModified', datetime.now()).isoformat()
+                    # Use LastModified as upload date, ensure it's in UTC format
+                    last_modified = obj.get('LastModified')
+                    if last_modified:
+                        # LastModified from S3 is already in UTC
+                        upload_date = last_modified.isoformat() + 'Z'
+                    else:
+                        upload_date = datetime.utcnow().isoformat() + 'Z'
                     
                     # Determine content type
                     if s3_key.endswith('.xlsx'):

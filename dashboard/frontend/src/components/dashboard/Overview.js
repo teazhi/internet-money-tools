@@ -86,14 +86,25 @@ const Overview = () => {
   const dateDisplayInfo = useMemo(() => {
     if (!analytics?.report_date) return { text: 'Unknown Date', subtitle: null };
     
-    const reportDateObj = new Date(analytics.report_date);
+    // Parse the date string as local time to avoid timezone issues
+    const reportDateStr = analytics.report_date; // YYYY-MM-DD format
+    const [year, month, day] = reportDateStr.split('-').map(Number);
+    const reportDateObj = new Date(year, month - 1, day); // month is 0-based in JS
+    
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day
+    
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0); // Reset time to start of day
     
-    // Check if report date is yesterday
-    const isYesterday = reportDateObj.toDateString() === yesterday.toDateString();
-    const isToday = reportDateObj.toDateString() === today.toDateString();
+    // Reset report date time for accurate comparison
+    const reportDateForComparison = new Date(reportDateObj);
+    reportDateForComparison.setHours(0, 0, 0, 0);
+    
+    // Check if report date is yesterday or today
+    const isYesterday = reportDateForComparison.getTime() === yesterday.getTime();
+    const isToday = reportDateForComparison.getTime() === today.getTime();
     
     const formatted = reportDateObj.toLocaleDateString('en-US', { 
       weekday: 'long', 

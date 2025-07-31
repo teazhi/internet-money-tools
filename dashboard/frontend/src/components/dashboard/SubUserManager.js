@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SubUserManager = () => {
+  const { user } = useAuth();
   const [subUsers, setSubUsers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +67,22 @@ const SubUserManager = () => {
         ? prev.permissions.filter(p => p !== permission)
         : [...prev.permissions, permission]
     }));
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    
+    // Use user's timezone from their profile if available
+    const userTimezone = user?.user_record?.timezone;
+    
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      ...(userTimezone && { timeZone: userTimezone })
+    };
+    
+    return date.toLocaleDateString('en-US', options);
   };
 
   if (loading) {
@@ -191,7 +209,7 @@ const SubUserManager = () => {
                       </p>
                       {subUser.last_activity && (
                         <p className="text-xs text-gray-400">
-                          Last activity: {new Date(subUser.last_activity).toLocaleDateString()}
+                          Last activity: {formatDate(subUser.last_activity)}
                         </p>
                       )}
                     </div>
@@ -228,10 +246,10 @@ const SubUserManager = () => {
                       </p>
                       <p className="text-sm text-gray-500">{invitation.email}</p>
                       <p className="text-xs text-gray-400">
-                        Sent: {new Date(invitation.created_at).toLocaleDateString()}
+                        Sent: {formatDate(invitation.created_at)}
                       </p>
                       <p className="text-xs text-gray-400">
-                        Expires: {new Date(invitation.expires_at).toLocaleDateString()}
+                        Expires: {formatDate(invitation.expires_at)}
                       </p>
                     </div>
                   </div>

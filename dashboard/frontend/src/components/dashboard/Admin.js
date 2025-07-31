@@ -442,7 +442,15 @@ const Admin = () => {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     
-    return date.toLocaleDateString();
+    // Use user's timezone for longer time periods
+    const userTimezone = user?.user_record?.timezone;
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      ...(userTimezone && { timeZone: userTimezone })
+    };
+    return date.toLocaleDateString('en-US', options);
   };
 
   const getExpirationTime = (dateString) => {
@@ -462,7 +470,15 @@ const Admin = () => {
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays}d`;
     
-    return date.toLocaleDateString();
+    // Use user's timezone for longer time periods
+    const userTimezone = user?.user_record?.timezone;
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      ...(userTimezone && { timeZone: userTimezone })
+    };
+    return date.toLocaleDateString('en-US', options);
   };
   
   // Check if current user is admin
@@ -1151,7 +1167,12 @@ const Admin = () => {
                     <span className="text-gray-600">Last Processed:</span>
                     <span className="font-medium">
                       {scriptConfigs?.amznUploadConfig?.last_processed_date ? 
-                        new Date(scriptConfigs.amznUploadConfig.last_processed_date).toLocaleDateString() : 
+                        new Date(scriptConfigs.amznUploadConfig.last_processed_date).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                        }) : 
                         'Not set'}
                     </span>
                   </div>
@@ -1178,7 +1199,12 @@ const Admin = () => {
                     <span className="text-gray-600">Last Processed:</span>
                     <span className="font-medium">
                       {scriptConfigs?.config?.last_processed_date ? 
-                        new Date(scriptConfigs.config.last_processed_date).toLocaleDateString() : 
+                        new Date(scriptConfigs.config.last_processed_date).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                        }) : 
                         'Not set'}
                     </span>
                   </div>
@@ -1458,7 +1484,16 @@ const Admin = () => {
                       <div>
                         <div className="font-medium">{getRelativeTime(user.last_activity)}</div>
                         <div className="text-xs text-gray-400">
-                          {new Date(user.last_activity).toLocaleDateString()} {new Date(user.last_activity).toLocaleTimeString()}
+                          {new Date(user.last_activity).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                          })} {new Date(user.last_activity).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                          })}
                         </div>
                       </div>
                     ) : (

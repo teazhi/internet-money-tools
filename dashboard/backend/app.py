@@ -244,9 +244,10 @@ def has_permission(discord_id, permission):
         return False
     
     user_permissions = user_record.get('permissions', [])
+    user_type = user_record.get('user_type', 'main')
     
     # Main users and admin have all permissions
-    if 'all' in user_permissions or is_admin_user(discord_id):
+    if user_type == 'main' or 'all' in user_permissions or is_admin_user(discord_id):
         return True
     
     # Check specific permission

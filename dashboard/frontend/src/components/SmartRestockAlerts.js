@@ -276,40 +276,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   try {
     return (
       <div className="space-y-6">
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center">
-            <AlertTriangle className="h-8 w-8 text-red-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Critical Alerts</p>
-              <p className="text-2xl font-bold text-gray-900">{critical_alerts?.length || 0}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center">
-            <Target className="h-8 w-8 text-builders-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">High Priority</p>
-              <p className="text-2xl font-bold text-gray-900">{high_priority_count || 0}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center">
-            <BarChart3 className="h-8 w-8 text-blue-500" />
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-600">Products Analyzed</p>
-              <p className="text-2xl font-bold text-gray-900">{analytics.total_products_analyzed || 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Restock Alerts */}
+        {/* Restock Alerts */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Smart Restock Recommendations</h3>

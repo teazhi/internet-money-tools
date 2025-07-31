@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   Users, 
@@ -491,7 +491,7 @@ const Admin = () => {
       fetchInvitations();
       fetchScriptConfigs();
     }
-  }, [isAdmin]);
+  }, [isAdmin, fetchUsers, fetchSystemStats, fetchInvitations]);
 
   if (!isAdmin) {
     return (
@@ -505,16 +505,18 @@ const Admin = () => {
     );
   }
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setError('');
       // Add cache-busting timestamp to ensure fresh data
       const timestamp = Date.now();
       const response = await axios.get(`/api/admin/users?_t=${timestamp}`, { 
         withCredentials: true,
+        timeout: 15000,
         headers: {
           'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Pragma': 'no-cache',
+          'Accept': 'application/json'
         }
       });
       console.log('[FETCH USERS] Received fresh user data:', response.data.users);
@@ -522,31 +524,43 @@ const Admin = () => {
       setRawUserData(JSON.stringify(response.data.users, null, 2));
     } catch (error) {
       console.error('[FETCH USERS] Error:', error);
-      setError(error.response?.data?.error || 'Failed to fetch users');
+      if (error.code === 'ECONNABORTED') {
+        setError('Request timed out. Please try again.');
+      } else {
+        setError(error.response?.data?.error || 'Failed to fetch users');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchSystemStats = async () => {
+  const fetchSystemStats = useCallback(async () => {
     try {
-      const response = await axios.get('/api/admin/stats', { withCredentials: true });
+      const response = await axios.get('/api/admin/stats', { 
+        withCredentials: true,
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      });
       setSystemStats(response.data);
     } catch (error) {
       console.error('Failed to fetch system stats:', error);
     }
-  };
+  }, []);
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     try {
-      const response = await axios.get('/api/admin/invitations', { withCredentials: true });
+      const response = await axios.get('/api/admin/invitations', { 
+        withCredentials: true,
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      });
       // Filter to only show pending invitations
       const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
       setInvitations(pendingInvitations);
     } catch (error) {
       console.error('Failed to fetch invitations:', error);
     }
-  };
+  }, []);
 
   const fetchScriptConfigs = async () => {
     try {
@@ -744,7 +758,7 @@ const Admin = () => {
     return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>;
   };
 
-  const getFilteredUsers = () => {
+  const filteredUsers = useMemo(() => {
     let filtered = users.filter(user => {
       const matchesSearch = 
         user.discord_username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -763,7 +777,7 @@ const Admin = () => {
     });
 
     return filtered;
-  };
+  }, [users, searchTerm, filterStatus]);
 
   const handleTriggerScript = async (scriptType) => {
     if (!window.confirm(`Are you sure you want to run the ${scriptType} Lambda function? It will read the current saved date from S3.`)) {
@@ -1028,13 +1042,108 @@ const Admin = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-builders-500"></div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-8 bg-white/20 rounded w-32 mb-2 animate-pulse"></div>
+              <div className="h-4 bg-white/20 rounded w-48 animate-pulse"></div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="h-10 bg-white/20 rounded w-20 animate-pulse"></div>
+              <div className="h-10 bg-white/20 rounded w-20 animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse">
+              <div className="flex items-center">
+                <div className="h-8 w-8 bg-gray-300 rounded"></div>
+                <div className="ml-3 flex-1">
+                  <div className="h-4 bg-gray-300 rounded w-16 mb-1"></div>
+                  <div className="h-6 bg-gray-300 rounded w-8"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Search/Filter Skeleton */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div className="h-10 bg-gray-300 rounded w-64 animate-pulse"></div>
+            <div className="flex items-center space-x-4">
+              <div className="h-10 bg-gray-300 rounded w-32 animate-pulse"></div>
+              <div className="h-10 bg-gray-300 rounded w-24 animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* User Table Skeleton */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-24 animate-pulse"></div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['User', 'Status', 'Activity', 'Scripts', 'Actions'].map((header, i) => (
+                    <th key={i} className="px-6 py-3">
+                      <div className="h-4 bg-gray-300 rounded w-16 animate-pulse"></div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div className="h-10 w-10 bg-gray-300 rounded-full"></div>
+                        <div className="ml-4">
+                          <div className="h-4 bg-gray-300 rounded w-32 mb-1"></div>
+                          <div className="h-3 bg-gray-300 rounded w-48"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 bg-gray-300 rounded-full w-16"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-4 bg-gray-300 rounded w-20"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="h-6 bg-gray-300 rounded w-12"></div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="h-8 bg-gray-300 rounded w-16"></div>
+                        <div className="h-8 bg-gray-300 rounded w-16"></div>
+                        <div className="h-8 bg-gray-300 rounded w-16"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading admin panel data...</p>
+          <p className="text-gray-500 text-xs mt-1">Fetching users, system stats, and invitations</p>
+        </div>
       </div>
     );
   }
 
-  const filteredUsers = getFilteredUsers();
 
   return (
     <div className="space-y-6">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -16,24 +16,33 @@ const SubUserManager = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [subUsersResponse, invitationsResponse] = await Promise.all([
-        axios.get('/api/my-subusers', { withCredentials: true }),
-        axios.get('/api/my-invitations', { withCredentials: true })
+        axios.get('/api/my-subusers', { 
+          withCredentials: true,
+          timeout: 10000,
+          headers: { 'Accept': 'application/json' }
+        }),
+        axios.get('/api/my-invitations', { 
+          withCredentials: true,
+          timeout: 10000,
+          headers: { 'Accept': 'application/json' }
+        })
       ]);
 
       setSubUsers(subUsersResponse.data.subusers || []);
       setInvitations(invitationsResponse.data.invitations || []);
     } catch (error) {
       console.error('Error fetching sub-user data:', error);
+      // TODO: Add proper error state handling
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
@@ -60,14 +69,14 @@ const SubUserManager = () => {
     }
   };
 
-  const handlePermissionChange = (permission) => {
+  const handlePermissionChange = useCallback((permission) => {
     setInviteForm(prev => ({
       ...prev,
       permissions: prev.permissions.includes(permission)
         ? prev.permissions.filter(p => p !== permission)
         : [...prev.permissions, permission]
     }));
-  };
+  }, []);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -87,8 +96,66 @@ const SubUserManager = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500"></div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex justify-between items-center">
+          <div className="h-8 bg-gray-300 rounded w-64 animate-pulse"></div>
+          <div className="h-10 bg-gray-300 rounded w-24 animate-pulse"></div>
+        </div>
+
+        {/* Active VAs Card Skeleton */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-32 animate-pulse"></div>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="px-6 py-4 flex items-center justify-between animate-pulse">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <div className="h-4 bg-gray-300 rounded w-32 mb-2"></div>
+                      <div className="h-3 bg-gray-300 rounded w-48 mb-1"></div>
+                      <div className="h-3 bg-gray-300 rounded w-40 mb-1"></div>
+                      <div className="h-3 bg-gray-300 rounded w-36"></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-8 bg-gray-300 rounded w-24"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pending Invitations Card Skeleton */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="h-6 bg-gray-300 rounded w-40 animate-pulse"></div>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {[1, 2].map(i => (
+              <div key={i} className="px-6 py-4 flex items-center justify-between animate-pulse">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3">
+                    <div>
+                      <div className="h-4 bg-gray-300 rounded w-40 mb-2"></div>
+                      <div className="h-3 bg-gray-300 rounded w-48 mb-1"></div>
+                      <div className="h-3 bg-gray-300 rounded w-32 mb-1"></div>
+                      <div className="h-3 bg-gray-300 rounded w-36"></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-6 bg-gray-300 rounded-full w-16"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="text-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading VA management data...</p>
+        </div>
       </div>
     );
   }

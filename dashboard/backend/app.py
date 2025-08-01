@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session, redirect, url_for, send_from_directory
+from flask import Flask, request, jsonify, session, redirect, url_for, send_from_directory, make_response
 from flask_cors import CORS
 import os
 import json
@@ -2854,10 +2854,345 @@ def format_website_display_name(website_name):
     
     return formatting_map.get(website_name.lower(), website_name.title())
 
+# ─── UNDERPAID REIMBURSEMENTS HELPER FUNCTIONS ─────────────────────────────
+
+def fetch_all_sheet_titles_for_user(user_record) -> list[str]:
+    """
+    Uses the stored refresh_token to get a fresh access_token,
+    then calls spreadsheets.get?fields=sheets(properties(title))
+    to return a list of all worksheet titles in that user's Sheet.
+    """
+    # 1) Grab a valid access_token (refresh if needed)
+    access_token = user_record["google_tokens"]["access_token"]
+    # Try one request; if 401, refresh and retry
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_record['sheet_id']}?fields=sheets(properties(title))"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 401:
+        access_token = refresh_google_token(user_record)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+
+    data = resp.json()
+    return [sheet["properties"]["title"] for sheet in data.get("sheets", [])]
+
+def fetch_google_sheet_as_df(user_record, worksheet_title):
+    """
+    Fetches one worksheet's entire A1:ZZ range, pads/truncates rows to match headers,
+    and returns a DataFrame with the first row as column names.
+    """
+    import pandas as pd
+    import urllib.parse
+    
+    sheet_id = user_record["sheet_id"]
+    access_token = user_record["google_tokens"]["access_token"]
+    range_ = f"'{worksheet_title}'!A1:ZZ"
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+        f"/values/{urllib.parse.quote(range_)}?majorDimension=ROWS"
+    )
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 401:
+        access_token = refresh_google_token(user_record)
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+
+    values = resp.json().get("values", [])
+    if not values:
+        return pd.DataFrame()
+
+    headers_row = values[0]
+    records = []
+    for row in values[1:]:
+        # pad or truncate so len(row) == len(headers_row)
+        if len(row) < len(headers_row):
+            row = row + [""] * (len(headers_row) - len(row))
+        elif len(row) > len(headers_row):
+            row = row[: len(headers_row)]
+        records.append(row)
+
+    return pd.DataFrame(records, columns=headers_row)
+
+def build_highest_cogs_map_for_user(user_record) -> dict[str, float]:
+    """
+    Fetches every worksheet title, then for each sheet:
+      - normalizes headers to lowercase
+      - finds any "asin" column and any "cogs" column (by substring match)
+      - strips "$" and commas from COGS, coercing to float
+      - groups by ASIN and takes max(COGS)
+    Returns a map { asin_string: highest_cogs_float } across all worksheets.
+    """
+    import pandas as pd
+    
+    max_cogs: dict[str, float] = {}
+    titles = fetch_all_sheet_titles_for_user(user_record)
+
+    for title in titles:
+        df = fetch_google_sheet_as_df(user_record, title)
+        if df.empty:
+            continue
+
+        # lowercase all headers
+        df.columns = [c.strip().lower() for c in df.columns]
+
+        # pick first column that contains "asin" and first that contains "cogs"
+        asin_cols = [c for c in df.columns if "asin" in c]
+        cogs_cols = [c for c in df.columns if "cogs" in c]
+        if not asin_cols or not cogs_cols:
+            # skip sheets that don't have an ASIN or COGS header
+            continue
+
+        asin_col = asin_cols[0]
+        cogs_col = cogs_cols[0]
+
+        # strip "$" and commas from COGS, coerce to float
+        df[cogs_col] = (
+            df[cogs_col]
+            .astype(str)
+            .str.replace("$", "", regex=False)
+            .str.replace(",", "", regex=False)
+        )
+        df[cogs_col] = pd.to_numeric(df[cogs_col], errors="coerce")
+        df = df.dropna(subset=[asin_col, cogs_col])
+        if df.empty:
+            continue
+
+        grouped = df.groupby(asin_col, as_index=False)[cogs_col].max()
+        for _, row in grouped.iterrows():
+            asin = str(row[asin_col]).strip()
+            cogs = float(row[cogs_col])
+            if asin in max_cogs:
+                if cogs > max_cogs[asin]:
+                    max_cogs[asin] = cogs
+            else:
+                max_cogs[asin] = cogs
+
+    return max_cogs
+
+def filter_underpaid_reimbursements(aura_df, max_cogs_map: dict[str, float]):
+    """
+    Given a DataFrame of reimbursements (with columns including "asin" and "amount-per-unit"),
+    returns a new DataFrame containing only rows where 
+      (amount-per-unit < max_cogs_map[asin]) and reason != "Reimbursement_Reversal".
+
+    Output columns: 
+      reimbursement-id, reason, sku, asin, product-name,
+      amount-per-unit, amount-total, quantity-reimbursed-total,
+      highest_cogs, shortfall_amount
+    """
+    import pandas as pd
+    
+    # lowercase columns for consistency
+    aura_df.columns = [c.strip().lower() for c in aura_df.columns]
+
+    required_cols = {
+        "reimbursement-id", "reason", "sku", "asin",
+        "product-name", "amount-per-unit", "amount-total", "quantity-reimbursed-total"
+    }
+    if not required_cols.issubset(set(aura_df.columns)):
+        raise ValueError(f"Missing columns {required_cols - set(aura_df.columns)} in reimbursement CSV")
+
+    # parse "amount-per-unit" into float
+    def parse_money(x):
+        try:
+            return float(str(x).replace("$", "").replace(",", "").strip())
+        except:
+            return None
+
+    aura_df["reimb_amount_per_unit"] = aura_df["amount-per-unit"].apply(parse_money)
+    aura_df = aura_df.dropna(subset=["asin", "reimb_amount_per_unit"])
+
+    rows = []
+    for _, r in aura_df.iterrows():
+        if str(r["reason"]).strip().lower() == "reimbursement_reversal":
+            continue
+        asin = str(r["asin"]).strip()
+        reimb_amt = float(r["reimb_amount_per_unit"])
+        highest = max_cogs_map.get(asin)
+        if highest is not None and reimb_amt < highest:
+            shortfall = round(highest - reimb_amt, 2)
+            rows.append({
+                "reimbursement-id": r["reimbursement-id"],
+                "reason": r["reason"],
+                "sku": r["sku"],
+                "asin": r["asin"],
+                "product-name": r["product-name"],
+                "amount-per-unit": r["amount-per-unit"],
+                "amount-total": r["amount-total"],
+                "quantity-reimbursed-total": r["quantity-reimbursed-total"],
+                "highest_cogs": highest,
+                "shortfall_amount": shortfall
+            })
+
+    cols = [
+        "reimbursement-id", "reason", "sku", "asin", "product-name",
+        "amount-per-unit", "amount-total", "quantity-reimbursed-total",
+        "highest_cogs", "shortfall_amount"
+    ]
+    return pd.DataFrame(rows, columns=cols)
+
+def refresh_google_token(user_record):
+    """
+    Refresh the Google access token for a user record.
+    Updates the user record and returns the new access token.
+    """
+    refresh_token = user_record["google_tokens"].get("refresh_token")
+    if not refresh_token:
+        raise Exception("No refresh_token found. User must re-link Google account.")
+
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    }
+    resp = requests.post(token_url, data=payload)
+    resp.raise_for_status()
+    new_tokens = resp.json()
+    
+    # Keep the old refresh_token if Google didn't return a new one
+    if "refresh_token" not in new_tokens:
+        new_tokens["refresh_token"] = refresh_token
+
+    # Update the user record
+    user_record["google_tokens"].update(new_tokens)
+    
+    # Update the users config
+    users = get_users_config()
+    for i, user in enumerate(users):
+        if user.get("discord_id") == user_record.get("discord_id"):
+            users[i] = user_record
+            break
+    update_users_config(users)
+    
+    return new_tokens["access_token"]
+
 @app.route('/status', methods=['GET'])
 def status():
     """Ultra-simple status check"""
     return 'OK'
+
+@app.route('/api/reimbursements/analyze', methods=['POST'])
+@login_required
+def analyze_underpaid_reimbursements():
+    """Analyze uploaded reimbursement CSV for underpaid reimbursements"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if user has Google Sheet configured
+        if not user_record.get('sheet_id') or not user_record.get('google_tokens'):
+            return jsonify({
+                'error': 'No Google Sheet configured. Please complete setup first.',
+                'setup_required': True
+            }), 400
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Validate file type
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({'error': 'Invalid file type. Please upload a CSV file.'}), 400
+        
+        # Read the CSV file
+        try:
+            import pandas as pd
+            from io import StringIO
+            csv_content = file.read().decode('utf-8')
+            reimburse_df = pd.read_csv(StringIO(csv_content))
+        except UnicodeDecodeError:
+            # Try with latin-1 encoding as fallback
+            file.seek(0)
+            csv_content = file.read().decode('latin-1')
+            reimburse_df = pd.read_csv(StringIO(csv_content))
+        except Exception as e:
+            return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
+        
+        # Build the highest COGS map from Google Sheets
+        try:
+            max_cogs_map = build_highest_cogs_map_for_user(user_record)
+        except Exception as e:
+            return jsonify({'error': f'Error fetching Google Sheets data: {str(e)}'}), 500
+        
+        if not max_cogs_map:
+            return jsonify({
+                'error': 'Could not find any COGS data in your Google Sheets',
+                'max_cogs_count': 0
+            }), 400
+        
+        # Filter for underpaid reimbursements
+        try:
+            underpaid_df = filter_underpaid_reimbursements(reimburse_df, max_cogs_map)
+        except Exception as e:
+            return jsonify({'error': f'Error processing reimbursements: {str(e)}'}), 500
+        
+        # Convert results to JSON for the frontend
+        if underpaid_df.empty:
+            return jsonify({
+                'underpaid_count': 0,
+                'total_shortfall': 0,
+                'max_cogs_count': len(max_cogs_map),
+                'underpaid_reimbursements': []
+            })
+        
+        # Calculate total shortfall
+        total_shortfall = underpaid_df['shortfall_amount'].sum()
+        
+        # Convert DataFrame to list of dictionaries
+        underpaid_list = underpaid_df.to_dict('records')
+        
+        return jsonify({
+            'underpaid_count': len(underpaid_df),
+            'total_shortfall': round(total_shortfall, 2),
+            'max_cogs_count': len(max_cogs_map),
+            'underpaid_reimbursements': underpaid_list
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reimbursements/download', methods=['POST'])
+@login_required  
+def download_underpaid_reimbursements():
+    """Download underpaid reimbursements as CSV"""
+    try:
+        # Get the underpaid reimbursements data from request
+        data = request.get_json()
+        underpaid_reimbursements = data.get('underpaid_reimbursements', [])
+        
+        if not underpaid_reimbursements:
+            return jsonify({'error': 'No data to download'}), 400
+        
+        # Convert to DataFrame and then CSV
+        import pandas as pd
+        from io import StringIO
+        
+        df = pd.DataFrame(underpaid_reimbursements)
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_content = csv_buffer.getvalue()
+        
+        # Return CSV as downloadable response
+        response = make_response(csv_content)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=underpaid_reimbursements.csv'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):

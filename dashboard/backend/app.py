@@ -1191,15 +1191,11 @@ def upload_sellerboard_file():
             user_record['uploaded_files'] = []
         
         # File type management: Keep one of each type (sellerboard and listing loader)
-        # Determine file type based on filename and extension
-        filename_lower = filename.lower()
+        # Determine file type based on filename using standardized function
+        file_type_category = determine_file_type_category(filename)
         
-        if '.xlsm' in filename_lower or 'listing' in filename_lower or 'loader' in filename_lower:
-            file_type_category = 'listing_loader'
-        elif '.xlsx' in filename_lower or 'sellerboard' in filename_lower or 'sb' in filename_lower:
-            file_type_category = 'sellerboard'
-        else:
-            # Default to sellerboard for .csv and unrecognized files
+        # Default to sellerboard for 'other' category files (CSV and unrecognized files)
+        if file_type_category == 'other':
             file_type_category = 'sellerboard'
         
         file_info = {
@@ -1238,6 +1234,33 @@ def upload_sellerboard_file():
         print(f"Upload error: {e}")
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
+def determine_file_type_category(filename):
+    """
+    Standardized function to determine file type category based on filename.
+    Returns: 'listing_loader', 'sellerboard', or 'other'
+    """
+    filename_lower = filename.lower()
+    
+    # Listing loader files - check for specific keywords and .xlsm extension
+    if ('listingloader' in filename_lower or 
+        'listing_loader' in filename_lower or 
+        'listing' in filename_lower or 
+        'loader' in filename_lower or
+        filename_lower.endswith('.xlsm')):
+        return 'listing_loader'
+    
+    # Sellerboard files - broader detection for Excel/CSV files that aren't listing loaders
+    elif ('sellerboard' in filename_lower or 
+          'sb' in filename_lower or 
+          filename_lower.endswith('.xlsx') or 
+          filename_lower.endswith('.csv') or
+          filename_lower.endswith('.xls')):
+        return 'sellerboard'
+    
+    # Everything else
+    else:
+        return 'other'
+
 def get_user_files_from_s3(discord_id):
     """
     Get all files belonging to a specific user based on their discord_id.
@@ -1260,14 +1283,9 @@ def get_user_files_from_s3(discord_id):
             # Check if this file belongs to the user (filename starts with discord_id_)
             if filename.startswith(f"{discord_id}_"):
                 
-                # Determine file type and category
-                filename_lower = filename.lower()
-                if 'listingloader' in filename_lower or 'listing_loader' in filename_lower:
-                    file_type_category = 'listing_loader'
-                elif 'sb' in filename_lower or 'sellerboard' in filename_lower:
-                    file_type_category = 'sellerboard'
-                else:
-                    file_type_category = 'other'
+                # Determine file type and category using standardized function
+                file_type_category = determine_file_type_category(filename)
+                print(f"[DEBUG] File: {filename} -> Category: {file_type_category}")
                 
                 file_info = {
                     'filename': filename,
@@ -1297,7 +1315,7 @@ def detect_duplicate_files_for_user(discord_id):
     
     # Group files by type
     files_by_type = {
-        'listingloader': [],
+        'listing_loader': [],
         'sellerboard': [],
         'other': []
     }
@@ -1305,7 +1323,7 @@ def detect_duplicate_files_for_user(discord_id):
     for file_info in user_files:
         file_category = file_info.get('file_type_category', 'other')
         if file_category == 'listing_loader':
-            files_by_type['listingloader'].append(file_info)
+            files_by_type['listing_loader'].append(file_info)
         elif file_category == 'sellerboard':
             files_by_type['sellerboard'].append(file_info)
         else:
@@ -1316,6 +1334,18 @@ def detect_duplicate_files_for_user(discord_id):
     for file_type, files in files_by_type.items():
         if len(files) > 1:
             duplicates[file_type] = files
+    
+    # Debug logging
+    print(f"[DEBUG] Files by type for user {discord_id}:")
+    for file_type, files in files_by_type.items():
+        print(f"  {file_type}: {len(files)} files")
+        for file_info in files:
+            print(f"    - {file_info['filename']} (category: {file_info.get('file_type_category')})")
+    
+    if duplicates:
+        print(f"[DEBUG] Duplicates found: {list(duplicates.keys())}")
+    else:
+        print(f"[DEBUG] No duplicates found")
     
     return duplicates
 
@@ -1375,7 +1405,9 @@ def list_sellerboard_files():
         warnings = []
         if duplicates:
             for file_type, duplicate_files in duplicates.items():
-                warnings.append(f"You have {len(duplicate_files)} {file_type} files. Please delete {len(duplicate_files)-1} to keep only the latest one.")
+                display_name = 'Listing Loader' if file_type == 'listing_loader' else file_type.title()
+                warnings.append(f"You have {len(duplicate_files)} {display_name} files. Please delete {len(duplicate_files)-1} to keep only the latest one.")
+                print(f"[DEBUG] Created warning for {file_type}: {len(duplicate_files)} files")
         
         return jsonify({
             'files': user_files,

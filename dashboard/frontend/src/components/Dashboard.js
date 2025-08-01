@@ -3,7 +3,6 @@ import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { 
-  BarChart3, 
   Settings as SettingsIcon, 
   ShoppingCart, 
   TrendingUp, 
@@ -12,7 +11,6 @@ import {
   LogOut,
   Home,
   Database,
-  Link as LinkIcon,
   Shield,
   Eye,
   ArrowLeft,
@@ -61,11 +59,21 @@ const Dashboard = () => {
 
   // Check if user is main user (not sub-user)
   const isMainUser = !user?.user_type || user?.user_type === 'main';
+  
+  // Check if user has specific permissions
+  const hasPermission = (permission) => {
+    // Main users and admins have access to everything
+    if (isMainUser || isAdmin) return true;
+    
+    // Check permissions array for sub-users
+    if (!user?.permissions) return false;
+    return user.permissions.includes('all') || user.permissions.includes(permission);
+  };
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
-    { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
+    ...(hasPermission('reimbursements_analysis') ? [{ name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' }] : []),
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     { name: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, current: location.pathname === '/dashboard/settings' },
@@ -222,7 +230,7 @@ const Dashboard = () => {
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
-              <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
+              {hasPermission('reimbursements_analysis') && <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />}
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />

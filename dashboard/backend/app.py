@@ -3078,6 +3078,7 @@ def status():
 
 @app.route('/api/reimbursements/analyze', methods=['POST'])
 @login_required
+@permission_required('reimbursements_analysis')
 def analyze_underpaid_reimbursements():
     """Analyze uploaded reimbursement CSV for underpaid reimbursements"""
     try:
@@ -3165,6 +3166,7 @@ def analyze_underpaid_reimbursements():
 
 @app.route('/api/reimbursements/download', methods=['POST'])
 @login_required  
+@permission_required('reimbursements_analysis')
 def download_underpaid_reimbursements():
     """Download underpaid reimbursements as CSV"""
     try:

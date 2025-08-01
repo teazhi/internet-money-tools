@@ -214,6 +214,15 @@ const SubUserManager = () => {
                     <label className="flex items-center">
                       <input
                         type="checkbox"
+                        checked={inviteForm.permissions.includes('reimbursements_analysis')}
+                        onChange={() => handlePermissionChange('reimbursements_analysis')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Analyze Reimbursements</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
                         checked={inviteForm.permissions.includes('all')}
                         onChange={() => handlePermissionChange('all')}
                         className="mr-2"

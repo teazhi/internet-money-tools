@@ -2221,9 +2221,29 @@ def get_my_invitations():
         discord_id = session['discord_id']
         invitations = get_invitations_config()
         
-        # Find all invitations from this user
+        # Clean up any "accepted" invitations that should have been removed
+        users = get_users_config()
+        initial_count = len(invitations)
+        
+        # Remove invitations that have been accepted (user exists with matching email)
+        cleaned_invitations = []
+        for inv in invitations:
+            if inv.get('status') == 'accepted':
+                # Check if user with this email actually exists
+                user_exists = any(u.get('email') == inv.get('email') for u in users)
+                if user_exists:
+                    print(f"[Cleanup] Removing orphaned accepted invitation for {inv.get('email')}")
+                    continue  # Skip this invitation (remove it)
+            cleaned_invitations.append(inv)
+        
+        # Update config if we cleaned up any invitations
+        if len(cleaned_invitations) < initial_count:
+            update_invitations_config(cleaned_invitations)
+            print(f"[Cleanup] Removed {initial_count - len(cleaned_invitations)} orphaned accepted invitations")
+        
+        # Find all invitations from this user (use cleaned list)
         my_invitations = [
-            inv for inv in invitations 
+            inv for inv in cleaned_invitations 
             if inv.get('invited_by_id') == discord_id
         ]
         

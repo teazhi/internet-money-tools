@@ -582,6 +582,18 @@ def get_user():
             print(f"[API USER] User has google_tokens: {user_record.get('google_tokens') is not None}")
             print(f"[API USER] User has sheet_id: {user_record.get('sheet_id') is not None}")
     
+    # For subusers, check parent's configuration status
+    if user_record and user_record.get('user_type') == 'subuser':
+        parent_user = get_parent_user_record(discord_id)
+        profile_configured = parent_user is not None
+        google_linked = parent_user and parent_user.get('google_tokens') is not None
+        sheet_configured = parent_user and parent_user.get('sheet_id') is not None
+    else:
+        # For main users, check their own configuration
+        profile_configured = user_record is not None
+        google_linked = user_record and user_record.get('google_tokens') is not None
+        sheet_configured = user_record and user_record.get('sheet_id') is not None
+
     response_data = {
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
@@ -591,9 +603,9 @@ def get_user():
         'parent_user_id': user_record.get('parent_user_id') if user_record else None,
         'va_name': user_record.get('va_name') if user_record else None,
         'is_admin': is_admin_user(discord_id),
-        'profile_configured': user_record is not None,
-        'google_linked': user_record and user_record.get('google_tokens') is not None,
-        'sheet_configured': user_record and user_record.get('sheet_id') is not None,
+        'profile_configured': profile_configured,
+        'google_linked': google_linked,
+        'sheet_configured': sheet_configured,
         'user_record': user_record if user_record else None
     }
     
@@ -3088,8 +3100,16 @@ def analyze_underpaid_reimbursements():
         if not user_record:
             return jsonify({'error': 'User not found'}), 404
         
-        # Check if user has Google Sheet configured
-        if not user_record.get('sheet_id') or not user_record.get('google_tokens'):
+        # For subusers, use parent's configuration
+        if user_record.get('user_type') == 'subuser':
+            config_user = get_parent_user_record(discord_id)
+            if not config_user:
+                return jsonify({'error': 'Parent user not found'}), 404
+        else:
+            config_user = user_record
+        
+        # Check if Google Sheet is configured
+        if not config_user.get('sheet_id') or not config_user.get('google_tokens'):
             return jsonify({
                 'error': 'No Google Sheet configured. Please complete setup first.',
                 'setup_required': True
@@ -3123,7 +3143,7 @@ def analyze_underpaid_reimbursements():
         
         # Build the highest COGS map from Google Sheets
         try:
-            max_cogs_map = build_highest_cogs_map_for_user(user_record)
+            max_cogs_map = build_highest_cogs_map_for_user(config_user)
         except Exception as e:
             return jsonify({'error': f'Error fetching Google Sheets data: {str(e)}'}), 500
         

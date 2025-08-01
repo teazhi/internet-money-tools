@@ -95,8 +95,9 @@ const Dashboard = () => {
     return 'Fully Configured';
   };
 
-  // Show onboarding for new users who haven't completed setup
-  const needsOnboarding = !user?.profile_configured || !user?.google_linked || !user?.sheet_configured;
+  // Show onboarding only for main users who haven't completed setup
+  // VA subusers should skip setup and use their parent's configuration
+  const needsOnboarding = isMainUser && (!user?.profile_configured || !user?.google_linked || !user?.sheet_configured);
   
   if (needsOnboarding) {
     return <Onboarding />;

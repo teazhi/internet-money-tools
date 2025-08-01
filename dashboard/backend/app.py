@@ -2222,6 +2222,38 @@ def get_my_invitations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/my-invitations/<invitation_token>', methods=['DELETE'])
+@login_required
+def delete_my_invitation(invitation_token):
+    """Delete a pending invitation that the current user created"""
+    try:
+        discord_id = session['discord_id']
+        invitations = get_invitations_config()
+        
+        # Find the invitation
+        invitation_to_delete = None
+        invitation_index = None
+        
+        for i, inv in enumerate(invitations):
+            if inv['token'] == invitation_token and inv.get('invited_by_id') == discord_id:
+                invitation_to_delete = inv
+                invitation_index = i
+                break
+        
+        if not invitation_to_delete:
+            return jsonify({'error': 'Invitation not found or you do not have permission to delete it'}), 404
+        
+        # Remove the invitation
+        invitations.pop(invitation_index)
+        
+        if update_invitations_config(invitations):
+            return jsonify({'message': 'Invitation deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to delete invitation'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/revoke-subuser/<subuser_id>', methods=['DELETE'])
 @login_required
 def revoke_subuser_access(subuser_id):

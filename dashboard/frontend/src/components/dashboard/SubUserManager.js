@@ -60,6 +60,18 @@ const SubUserManager = () => {
     }
   };
 
+  const handleRemoveInvitation = async (invitationToken) => {
+    if (window.confirm('Are you sure you want to remove this pending invitation?')) {
+      try {
+        await axios.delete(`/api/my-invitations/${invitationToken}`, { withCredentials: true });
+        fetchData(); // Refresh data
+        alert('Invitation removed successfully');
+      } catch (error) {
+        alert(error.response?.data?.error || 'Failed to remove invitation');
+      }
+    }
+  };
+
   const handlePermissionChange = useCallback((permission) => {
     setInviteForm(prev => ({
       ...prev,
@@ -325,6 +337,12 @@ const SubUserManager = () => {
                   <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
                     {invitation.status}
                   </span>
+                  <button
+                    onClick={() => handleRemoveInvitation(invitation.token)}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
             ))

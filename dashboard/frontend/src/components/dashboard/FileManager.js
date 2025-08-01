@@ -560,9 +560,20 @@ const FileManager = () => {
               <div
                 key={index}
                 className={`flex items-center justify-between p-4 border rounded-lg transition-colors duration-200 ${
-                  (file.filename?.includes('_updated') || file.s3_key?.includes('_updated'))
-                    ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100'
-                    : 'border-gray-200 hover:bg-gray-50'
+                  (() => {
+                    const isUpdatedFile = file.filename?.includes('_updated') || file.s3_key?.includes('_updated');
+                    const isDuplicateFile = Object.values(duplicates).some(duplicateList => 
+                      duplicateList.some(duplicateFile => duplicateFile.s3_key === file.s3_key)
+                    );
+                    
+                    if (isUpdatedFile) {
+                      return 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100';
+                    } else if (isDuplicateFile) {
+                      return 'border-orange-200 bg-orange-50 hover:bg-orange-100';
+                    } else {
+                      return 'border-gray-200 hover:bg-gray-50';
+                    }
+                  })()
                 }`}
               >
                 <div className="flex items-center space-x-4">
@@ -584,6 +595,13 @@ const FileManager = () => {
                       {(file.filename?.includes('_updated') || file.s3_key?.includes('_updated')) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
                           Script Output
+                        </span>
+                      )}
+                      {Object.values(duplicates).some(duplicateList => 
+                        duplicateList.some(duplicateFile => duplicateFile.s3_key === file.s3_key)
+                      ) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                          Duplicate
                         </span>
                       )}
                     </div>
@@ -635,6 +653,8 @@ const FileManager = () => {
               <p>• Excel files (.xlsx, .xlsm, .xls) are also supported for compatibility</p>
               <p>• Only one file of each type is kept (Sellerboard + Listing Loader)</p>
               <p>• When you upload a new file of the same type, the old one is automatically replaced</p>
+              <p>• Duplicate files are highlighted with orange background and "Duplicate" badge</p>
+              <p>• Use the "Clean Up Duplicates" button to automatically keep only the newest file of each type</p>
               <p>• Files are used for analytics and automated script processing</p>
             </div>
           </div>

@@ -23,6 +23,8 @@ const FileManager = () => {
   const [migrating, setMigrating] = useState(false);
   const [adminMigrating, setAdminMigrating] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [duplicates, setDuplicates] = useState({});
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false);
 
   useEffect(() => {
     fetchFiles();
@@ -32,6 +34,18 @@ const FileManager = () => {
     try {
       const response = await axios.get('/api/files/sellerboard', { withCredentials: true });
       setFiles(response.data.files || []);
+      setDuplicates(response.data.duplicates || {});
+      
+      // Show warnings if duplicates are detected
+      if (response.data.warnings && response.data.warnings.length > 0) {
+        setMessage({ 
+          type: 'warning', 
+          text: response.data.warnings.join(' ') + ' Use the "Clean Up Duplicates" button to fix this automatically.' 
+        });
+      } else {
+        // Clear any existing warnings if no duplicates
+        setMessage({ type: '', text: '' });
+      }
     } catch (error) {
       console.error('Error fetching files:', error);
       setMessage({ type: 'error', text: 'Failed to load files' });
@@ -255,6 +269,35 @@ const FileManager = () => {
     }
   };
 
+  const cleanupDuplicates = async () => {
+    if (!window.confirm('This will delete duplicate files, keeping only the most recent of each type. Continue?')) {
+      return;
+    }
+
+    setCleaningDuplicates(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/files/cleanup-duplicates', {}, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: `${response.data.message}. Refreshing file list...` 
+      });
+      
+      // Refresh file list after cleanup
+      setTimeout(() => {
+        fetchFiles();
+      }, 1000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to cleanup duplicate files' 
+      });
+    } finally {
+      setCleaningDuplicates(false);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -375,11 +418,23 @@ const FileManager = () => {
           {files.some(f => f.filename?.includes('_updated') || f.s3_key?.includes('_updated')) && (
             <button
               onClick={cleanupUpdatedFiles}
-              disabled={migrating || adminMigrating || cleaning}
+              disabled={migrating || adminMigrating || cleaning || cleaningDuplicates}
               className="inline-flex items-center px-4 py-2 border border-yellow-300 rounded-md shadow-sm text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               {cleaning ? 'Cleaning...' : 'Remove _updated Files'}
+            </button>
+          )}
+          
+          {/* Duplicate Cleanup Button - show if user has duplicate files */}
+          {Object.keys(duplicates).length > 0 && (
+            <button
+              onClick={cleanupDuplicates}
+              disabled={migrating || adminMigrating || cleaning || cleaningDuplicates}
+              className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {cleaningDuplicates ? 'Cleaning...' : 'Clean Up Duplicates'}
             </button>
           )}
           
@@ -412,6 +467,8 @@ const FileManager = () => {
         <div className={`flex items-center space-x-2 p-4 rounded-md ${
           message.type === 'success' 
             ? 'bg-green-50 text-green-800 border border-green-200' 
+            : message.type === 'warning'
+            ? 'bg-yellow-50 text-yellow-800 border border-yellow-200'
             : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
           {message.type === 'success' ? (

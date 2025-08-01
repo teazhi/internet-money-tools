@@ -1212,55 +1212,230 @@ def upload_sellerboard_file():
             'uploaded_by': uploaded_by  # Track who uploaded the file
         }
         
-        # Remove any existing files of the same type
-        files_to_delete = []
-        remaining_files = []
+        # Clean up old files of the same type using the new S3-based cleanup
+        cleanup_result = cleanup_old_files_on_upload(target_user_id, file_type_category, s3_key)
         
-        for existing_file in user_record['uploaded_files']:
-            existing_type = existing_file.get('file_type_category', 'sellerboard')
-            if existing_type == file_type_category:
-                files_to_delete.append(existing_file)
-            else:
-                remaining_files.append(existing_file)
+        # Note: We no longer maintain the uploaded_files array in user records
+        # since we now get files directly from S3 using proper discord_id filtering
+        # This ensures each user only sees their own files
         
-        # Delete old files of same type from S3
-        for old_file in files_to_delete:
-            try:
-                s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=old_file['s3_key'])
-                print(f"Deleted old {file_type_category} file: {old_file['filename']}")
-            except Exception as e:
-                print(f"Error deleting old file {old_file['s3_key']}: {e}")
+        print(f"[UPLOAD] File uploaded successfully: {user_filename}")
+        if cleanup_result['deleted_count'] > 0:
+            print(f"[UPLOAD] Cleaned up {cleanup_result['deleted_count']} old files: {cleanup_result['deleted_files']}")
         
-        # Update the files list (keep other type + new file)
-        user_record['uploaded_files'] = remaining_files
-        user_record['uploaded_files'].append(file_info)
+        # Always return success since we no longer depend on user config updates for file management
+        success_message = 'File uploaded successfully'
+        if cleanup_result['deleted_count'] > 0:
+            success_message += f' (replaced {cleanup_result["deleted_count"]} old file{"s" if cleanup_result["deleted_count"] > 1 else ""})'
         
-        if update_users_config(users):
-            return jsonify({
-                'message': 'File uploaded successfully',
-                'file_info': file_info
-            })
-        else:
-            return jsonify({'error': 'Failed to update user configuration'}), 500
+        return jsonify({
+            'message': success_message,
+            'file_info': file_info,
+            'cleanup_result': cleanup_result
+        })
             
     except Exception as e:
         print(f"Upload error: {e}")
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
+def get_user_files_from_s3(discord_id):
+    """
+    Get all files belonging to a specific user based on their discord_id.
+    This function properly filters files by checking if the filename starts with the discord_id.
+    """
+    s3_client = get_s3_client()
+    user_files = []
+    
+    try:
+        # List all objects in the bucket
+        response = s3_client.list_objects_v2(Bucket=CONFIG_S3_BUCKET)
+        
+        if 'Contents' not in response:
+            return user_files
+        
+        for obj in response['Contents']:
+            key = obj['Key']
+            filename = key.split('/')[-1]  # Get filename without path
+            
+            # Check if this file belongs to the user (filename starts with discord_id_)
+            if filename.startswith(f"{discord_id}_"):
+                
+                # Determine file type and category
+                filename_lower = filename.lower()
+                if 'listingloader' in filename_lower or 'listing_loader' in filename_lower:
+                    file_type_category = 'listing_loader'
+                elif 'sb' in filename_lower or 'sellerboard' in filename_lower:
+                    file_type_category = 'sellerboard'
+                else:
+                    file_type_category = 'other'
+                
+                file_info = {
+                    'filename': filename,
+                    's3_key': key,
+                    'file_size': obj['Size'],
+                    'upload_date': obj['LastModified'].isoformat(),
+                    'file_type_category': file_type_category,
+                    'uploaded_by': discord_id  # Track who uploaded it
+                }
+                user_files.append(file_info)
+        
+        # Sort files by upload date (newest first)
+        user_files.sort(key=lambda x: x['upload_date'], reverse=True)
+        
+        return user_files
+        
+    except Exception as e:
+        print(f"Error getting user files for discord_id {discord_id}: {e}")
+        return user_files
+
+def detect_duplicate_files_for_user(discord_id):
+    """
+    Detect duplicate files for a user (more than one file of the same type).
+    Returns a dict with file types that have duplicates.
+    """
+    user_files = get_user_files_from_s3(discord_id)
+    
+    # Group files by type
+    files_by_type = {
+        'listingloader': [],
+        'sellerboard': [],
+        'other': []
+    }
+    
+    for file_info in user_files:
+        file_category = file_info.get('file_type_category', 'other')
+        if file_category == 'listing_loader':
+            files_by_type['listingloader'].append(file_info)
+        elif file_category == 'sellerboard':
+            files_by_type['sellerboard'].append(file_info)
+        else:
+            files_by_type['other'].append(file_info)
+    
+    # Find duplicates
+    duplicates = {}
+    for file_type, files in files_by_type.items():
+        if len(files) > 1:
+            duplicates[file_type] = files
+    
+    return duplicates
+
+def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
+    """
+    Clean up old files of the same type when a new file is uploaded.
+    This function deletes old files directly from S3.
+    """
+    try:
+        s3_client = get_s3_client()
+        user_files = get_user_files_from_s3(discord_id)
+        
+        files_to_delete = []
+        
+        # Find files of the same type (excluding the newly uploaded file)
+        for file_info in user_files:
+            if (file_info['file_type_category'] == new_file_type and 
+                file_info['s3_key'] != new_s3_key):
+                files_to_delete.append(file_info)
+        
+        # Delete old files from S3
+        deleted_files = []
+        for file_info in files_to_delete:
+            try:
+                s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_info['s3_key'])
+                deleted_files.append(file_info['filename'])
+                print(f"[CLEANUP] Deleted old {new_file_type} file: {file_info['filename']}")
+            except Exception as e:
+                print(f"[CLEANUP ERROR] Failed to delete {file_info['s3_key']}: {e}")
+        
+        return {
+            'deleted_count': len(deleted_files),
+            'deleted_files': deleted_files
+        }
+        
+    except Exception as e:
+        print(f"[CLEANUP ERROR] Error during cleanup for user {discord_id}: {e}")
+        return {
+            'deleted_count': 0,
+            'deleted_files': []
+        }
+
 @app.route('/api/files/sellerboard', methods=['GET'])
 @login_required
 def list_sellerboard_files():
-    """List user's uploaded files"""
+    """List user's uploaded files - now with proper discord_id filtering"""
     try:
         discord_id = session['discord_id']
-        user_record = get_user_record(discord_id)
         
-        if not user_record or 'uploaded_files' not in user_record:
-            return jsonify({'files': []})
+        # Get files directly from S3 using proper discord_id filtering
+        user_files = get_user_files_from_s3(discord_id)
         
-        return jsonify({'files': user_record['uploaded_files']})
+        # Check for duplicates
+        duplicates = detect_duplicate_files_for_user(discord_id)
+        
+        # Add warning if duplicates are found
+        warnings = []
+        if duplicates:
+            for file_type, duplicate_files in duplicates.items():
+                warnings.append(f"You have {len(duplicate_files)} {file_type} files. Please delete {len(duplicate_files)-1} to keep only the latest one.")
+        
+        return jsonify({
+            'files': user_files,
+            'duplicates': duplicates,
+            'warnings': warnings,
+            'total_files': len(user_files)
+        })
         
     except Exception as e:
+        print(f"Error in list_sellerboard_files: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/files/cleanup-duplicates', methods=['POST'])
+@login_required
+def cleanup_user_duplicates():
+    """Clean up duplicate files for the current user, keeping only the latest of each type"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Get duplicates
+        duplicates = detect_duplicate_files_for_user(discord_id)
+        
+        if not duplicates:
+            return jsonify({
+                'success': True,
+                'message': 'No duplicate files found',
+                'deleted_count': 0,
+                'deleted_files': []
+            })
+        
+        s3_client = get_s3_client()
+        total_deleted = 0
+        all_deleted_files = []
+        
+        # For each file type with duplicates, keep only the most recent
+        for file_type, duplicate_files in duplicates.items():
+            # Sort by upload date (newest first)
+            duplicate_files.sort(key=lambda x: x['upload_date'], reverse=True)
+            
+            # Keep the first (newest) file, delete the rest
+            files_to_delete = duplicate_files[1:]  # Skip the first (newest) file
+            
+            for file_info in files_to_delete:
+                try:
+                    s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_info['s3_key'])
+                    all_deleted_files.append(file_info['filename'])
+                    total_deleted += 1
+                    print(f"[CLEANUP] Deleted duplicate {file_type} file: {file_info['filename']}")
+                except Exception as e:
+                    print(f"[CLEANUP ERROR] Failed to delete {file_info['s3_key']}: {e}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully cleaned up {total_deleted} duplicate files',
+            'deleted_count': total_deleted,
+            'deleted_files': all_deleted_files
+        })
+        
+    except Exception as e:
+        print(f"Error in cleanup_user_duplicates: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/migrate-all-files', methods=['POST'])

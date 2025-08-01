@@ -447,17 +447,33 @@ def discord_callback():
     users = get_users_config()
     existing_user = next((u for u in users if u.get("discord_id") == discord_id), None)
     
-    # If user doesn't exist, check for invitation
-    if not existing_user:
-        invitation_token = request.args.get('state')  # Discord passes our state parameter back
-        print(f"[Discord Callback] Invitation token from state: {invitation_token}")
-        print(f"[Discord Callback] Full callback args: {dict(request.args)}")
+    # Check for invitation token from state parameter (runs for both new and existing users)
+    invitation_token = request.args.get('state')  # Discord passes our state parameter back
+    print(f"[Discord Callback] Invitation token from state: {invitation_token}")
+    print(f"[Discord Callback] Full callback args: {dict(request.args)}")
+    
+    # If there's an invitation token, clean it up regardless of whether user exists
+    if invitation_token:
+        invitations = get_invitations_config()
+        print(f"[Discord Callback] Cleaning up invitation token: {invitation_token}")
         
+        # Find and remove the invitation
+        original_count = len(invitations)
+        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
+        
+        if len(invitations) < original_count:
+            update_invitations_config(invitations)
+            print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
+        else:
+            print(f"[Discord Callback] No matching invitation found to remove")
+    
+    # If user doesn't exist, check for invitation requirement (for new users only)
+    if not existing_user:
         if not invitation_token:
-            print(f"[Discord Callback] No invitation token found, redirecting to no_invitation error")
+            print(f"[Discord Callback] No invitation token found for new user, redirecting to no_invitation error")
             return redirect("https://internet-money-tools.vercel.app/login?error=no_invitation")
         
-        # Validate invitation token
+        # Validate invitation token for new users
         invitations = get_invitations_config()
         print(f"[Discord Callback] Checking {len(invitations)} invitations for token: {invitation_token}")
         valid_invitation = None
@@ -491,12 +507,6 @@ def discord_callback():
         if not valid_invitation:
             print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
             return redirect("https://internet-money-tools.vercel.app/login?error=invalid_invitation")
-        
-        # Remove the accepted invitation from the list
-        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
-        update_invitations_config(invitations)
-        
-        print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username
@@ -2229,7 +2239,7 @@ def delete_my_invitation(invitation_token):
         discord_id = session['discord_id']
         invitations = get_invitations_config()
         
-        # Find the invitation
+        # Find the invitation (allow removal of both pending and accepted invitations)
         invitation_to_delete = None
         invitation_index = None
         

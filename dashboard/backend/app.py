@@ -1493,16 +1493,29 @@ def migrate_existing_files():
                     filename = key.lower()
                     user_record_info = user_record
                     
-                    # Try to match by email username or listing_loader_key
-                    if user_record_info.get('email'):
-                        email_username = user_record_info['email'].split('@')[0].lower()
-                        if email_username in filename:
-                            all_objects.append(obj)
+                    # Known user mappings for legacy files
+                    user_mappings = {
+                        'oscar': '1208551911976861737',
+                        'tevin': '1278565917206249503', 
+                        'david': '1189800870125256810'
+                    }
                     
-                    # Also check deprecated listing_loader_key field
-                    if user_record_info.get('listing_loader_key'):
-                        if user_record_info['listing_loader_key'].lower() in filename:
+                    # Try to match by known username mapping first
+                    for username, mapped_discord_id in user_mappings.items():
+                        if username in filename and discord_id == mapped_discord_id:
                             all_objects.append(obj)
+                            break
+                    else:
+                        # Try to match by email username or listing_loader_key
+                        if user_record_info.get('email'):
+                            email_username = user_record_info['email'].split('@')[0].lower()
+                            if email_username in filename:
+                                all_objects.append(obj)
+                        
+                        # Also check deprecated listing_loader_key field
+                        if user_record_info.get('listing_loader_key'):
+                            if user_record_info['listing_loader_key'].lower() in filename:
+                                all_objects.append(obj)
             
             migrated_files = []
             
@@ -1563,8 +1576,46 @@ def migrate_existing_files():
                         'file_type_category': file_type_category
                     }
                     
-                    user_record['uploaded_files'].append(file_info)
                     migrated_files.append(file_info)
+            
+            # Group migrated files by type and keep only the most recent of each type
+            files_by_type = {}
+            files_to_delete_from_s3 = []
+            
+            for file_info in migrated_files:
+                file_type = file_info['file_type_category']
+                upload_date = file_info['upload_date']
+                
+                if file_type not in files_by_type:
+                    files_by_type[file_type] = file_info
+                elif upload_date > files_by_type[file_type]['upload_date']:
+                    # New file is more recent, mark old one for deletion
+                    files_to_delete_from_s3.append(files_by_type[file_type])
+                    files_by_type[file_type] = file_info
+                else:
+                    # Current file is older, mark it for deletion
+                    files_to_delete_from_s3.append(file_info)
+            
+            # Remove existing files of the same types that we're migrating
+            for file_type in files_by_type.keys():
+                user_record['uploaded_files'] = [
+                    f for f in user_record['uploaded_files'] 
+                    if f.get('file_type_category') != file_type
+                ]
+            
+            # Add the most recent file of each type
+            for file_info in files_by_type.values():
+                user_record['uploaded_files'].append(file_info)
+            
+            # Delete duplicate files from S3
+            deleted_count = 0
+            for file_to_delete in files_to_delete_from_s3:
+                try:
+                    s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_to_delete['s3_key'])
+                    deleted_count += 1
+                    print(f"Deleted duplicate file from S3: {file_to_delete['s3_key']}")
+                except Exception as e:
+                    print(f"Error deleting duplicate file {file_to_delete['s3_key']}: {e}")
             
             # Update users config
             users = get_users_config()
@@ -1576,8 +1627,9 @@ def migrate_existing_files():
             update_users_config(users)
             
             return jsonify({
-                'message': f'Successfully migrated {len(migrated_files)} files',
-                'migrated_files': migrated_files
+                'message': f'Successfully migrated {len(files_by_type)} files (deleted {deleted_count} duplicates)',
+                'migrated_files': list(files_by_type.values()),
+                'deleted_duplicates': deleted_count
             })
             
         except Exception as e:

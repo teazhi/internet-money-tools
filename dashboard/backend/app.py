@@ -492,12 +492,11 @@ def discord_callback():
             print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
             return redirect("https://internet-money-tools.vercel.app/login?error=invalid_invitation")
         
-        # Mark invitation as used
-        valid_invitation['status'] = 'accepted'
-        valid_invitation['discord_id'] = discord_id
-        valid_invitation['discord_username'] = discord_username
-        valid_invitation['accepted_at'] = datetime.now().isoformat()
+        # Remove the accepted invitation from the list
+        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
         update_invitations_config(invitations)
+        
+        print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username

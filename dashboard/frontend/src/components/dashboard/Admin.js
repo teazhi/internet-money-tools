@@ -480,7 +480,46 @@ const Admin = () => {
       return matchesSearch;
     });
 
-    return filtered;
+    // Group users hierarchically: main users with their subusers
+    const mainUsers = filtered.filter(user => user.user_type !== 'subuser');
+    const subUsers = filtered.filter(user => user.user_type === 'subuser');
+    
+    const hierarchicalUsers = [];
+    
+    mainUsers.forEach(mainUser => {
+      // Add the main user
+      hierarchicalUsers.push({
+        ...mainUser,
+        isMainUser: true,
+        level: 0
+      });
+      
+      // Add their subusers right after
+      const userSubUsers = subUsers.filter(sub => sub.parent_user_id === mainUser.discord_id);
+      userSubUsers.forEach(subUser => {
+        hierarchicalUsers.push({
+          ...subUser,
+          isSubUser: true,
+          level: 1,
+          parentUser: mainUser
+        });
+      });
+    });
+    
+    // Add any orphaned subusers (subusers whose parent isn't in the filtered list)
+    const orphanedSubUsers = subUsers.filter(sub => 
+      !mainUsers.some(main => main.discord_id === sub.parent_user_id)
+    );
+    orphanedSubUsers.forEach(subUser => {
+      hierarchicalUsers.push({
+        ...subUser,
+        isSubUser: true,
+        isOrphaned: true,
+        level: 0
+      });
+    });
+
+    return hierarchicalUsers;
   }, [users, searchTerm, filterStatus]);
 
   const getRelativeTime = (dateString) => {
@@ -1476,9 +1515,21 @@ const Admin = () => {
       {/* User Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            Users ({filteredUsers.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">
+              Users ({filteredUsers.length})
+            </h3>
+            <div className="flex items-center space-x-4 text-sm text-gray-500">
+              <span className="flex items-center">
+                <div className="w-3 h-3 rounded-full bg-builders-100 mr-1"></div>
+                {filteredUsers.filter(u => u.isMainUser || (!u.isSubUser && !u.isMainUser)).length} Main Users
+              </span>
+              <span className="flex items-center">
+                <div className="w-3 h-3 rounded-full bg-purple-100 mr-1"></div>
+                {filteredUsers.filter(u => u.isSubUser).length} Subusers
+              </span>
+            </div>
+          </div>
         </div>
         
         <div className="overflow-x-auto">
@@ -1504,23 +1555,53 @@ const Admin = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredUsers.map((user) => (
-                <tr key={user.discord_id} className="hover:bg-gray-50">
+                <tr key={user.discord_id} className={`hover:bg-gray-50 ${user.level === 1 ? 'bg-gray-25' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-builders-100 flex items-center justify-center">
-                        <span className="text-sm font-medium text-builders-700">
+                    <div className={`flex items-center ${user.level === 1 ? 'ml-8' : ''}`}>
+                      {user.level === 1 && (
+                        <div className="flex items-center mr-3 text-gray-400">
+                          <div className="w-6 h-6 flex items-center justify-center">
+                            <div className="w-3 h-3 border-l-2 border-b-2 border-gray-300 rounded-bl-md"></div>
+                          </div>
+                        </div>
+                      )}
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                        user.isSubUser 
+                          ? 'bg-purple-100 border-2 border-purple-200' 
+                          : 'bg-builders-100'
+                      }`}>
+                        <span className={`text-sm font-medium ${
+                          user.isSubUser ? 'text-purple-700' : 'text-builders-700'
+                        }`}>
                           {user.discord_username?.charAt(0)?.toUpperCase() || 'U'}
                         </span>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.discord_username || 'Unknown'}
+                        <div className="flex items-center space-x-2">
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.discord_username || 'Unknown'}
+                          </div>
+                          {user.isSubUser && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              VA: {user.va_name || 'Subuser'}
+                            </span>
+                          )}
+                          {user.isOrphaned && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              Orphaned
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500">
                           {user.email || 'No email'}
                         </div>
                         <div className="text-xs text-gray-400">
                           ID: {user.discord_id}
+                          {user.isSubUser && user.parentUser && (
+                            <span className="ml-2">
+                              → Parent: {user.parentUser.discord_username}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

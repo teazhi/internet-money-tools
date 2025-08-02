@@ -148,7 +148,7 @@ const FileManager = () => {
       
       const response = await axios.delete(`/api/files/sellerboard/${encodeURIComponent(fileKey)}`, { 
         withCredentials: true,
-        timeout: 10000 // 10 second timeout
+        timeout: 30000 // 30 second timeout
       });
       
       console.log('Delete response:', response.data);

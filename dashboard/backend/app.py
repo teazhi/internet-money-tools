@@ -1986,22 +1986,15 @@ def delete_sellerboard_file(file_key):
         user_record['uploaded_files'].pop(file_index)
         print(f"[DELETE] Removed file from user record")
         
-        # Delete from S3
+        # Delete from S3 (S3 delete_object is idempotent - no need to check if file exists first)
         s3_client = get_s3_client()
         print(f"[DELETE] Attempting S3 deletion: bucket={CONFIG_S3_BUCKET}, key={file_key}")
         
         try:
-            # Check if file exists in S3 first
-            s3_client.head_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
-            print(f"[DELETE] File exists in S3, proceeding with deletion")
-        except s3_client.exceptions.NoSuchKey:
-            print(f"[DELETE] File does not exist in S3, but continuing with config update")
+            s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
+            print(f"[DELETE] S3 deletion completed successfully")
         except Exception as e:
-            print(f"[DELETE] Error checking S3 file existence: {e}")
-        
-        # Always attempt deletion (S3 delete_object is idempotent)
-        s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
-        print(f"[DELETE] S3 deletion completed (idempotent)")
+            print(f"[DELETE] S3 deletion error (continuing anyway): {e}")
         
         # Update user config with retry logic
         max_retries = 3
@@ -2017,13 +2010,13 @@ def delete_sellerboard_file(file_key):
                     print(f"[DELETE] Failed to update user config on attempt {retry + 1}")
                     if retry < max_retries - 1:
                         import time
-                        time.sleep(0.5)  # Wait before retry
+                        time.sleep(0.1)  # Reduced wait time
                     continue
             except Exception as config_error:
                 print(f"[DELETE] Config update error on attempt {retry + 1}: {config_error}")
                 if retry < max_retries - 1:
                     import time
-                    time.sleep(0.5)  # Wait before retry
+                    time.sleep(0.1)  # Reduced wait time
                     continue
                 raise config_error
         

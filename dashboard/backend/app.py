@@ -1913,48 +1913,126 @@ def delete_sellerboard_file(file_key):
     try:
         from urllib.parse import unquote
         discord_id = session['discord_id']
+        original_file_key = file_key
         file_key = unquote(file_key)  # Decode URL encoding
-        print(f"[DEBUG] Delete request from user {discord_id} for file: {file_key}")
+        print(f"[DELETE] Delete request from user {discord_id}")
+        print(f"[DELETE] Original file key: {original_file_key}")
+        print(f"[DELETE] Decoded file key: {file_key}")
         
         users = get_users_config()
         user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
         
         if not user_record or 'uploaded_files' not in user_record:
-            print(f"[DEBUG] No user record or uploaded_files for {discord_id}")
-            return jsonify({'error': 'File not found'}), 404
+            print(f"[DELETE ERROR] No user record or uploaded_files for {discord_id}")
+            return jsonify({'error': 'User record not found'}), 404
         
-        # Find and remove the file
+        print(f"[DELETE] User has {len(user_record['uploaded_files'])} files")
+        print(f"[DELETE] Available S3 keys:")
+        for i, f in enumerate(user_record['uploaded_files']):
+            print(f"[DELETE]   {i}: '{f.get('s3_key', 'NO_KEY')}' - {f.get('filename', 'NO_FILENAME')}")
+        
+        # Find and remove the file - try multiple matching strategies
         file_to_delete = None
+        file_index = None
+        
+        # Strategy 1: Exact match
         for i, file_info in enumerate(user_record['uploaded_files']):
-            if file_info['s3_key'] == file_key:
-                file_to_delete = user_record['uploaded_files'].pop(i)
-                print(f"[DEBUG] Found file to delete: {file_info}")
+            if file_info.get('s3_key') == file_key:
+                file_to_delete = file_info
+                file_index = i
+                print(f"[DELETE] Found exact match at index {i}: {file_info}")
                 break
         
+        # Strategy 2: Try without URL decoding if exact match failed
         if not file_to_delete:
-            print(f"[DEBUG] File not found in user's uploaded_files. Available keys: {[f['s3_key'] for f in user_record['uploaded_files']]}")
-            return jsonify({'error': 'File not found'}), 404
+            for i, file_info in enumerate(user_record['uploaded_files']):
+                if file_info.get('s3_key') == original_file_key:
+                    file_to_delete = file_info
+                    file_index = i
+                    file_key = original_file_key  # Use original for S3 deletion
+                    print(f"[DELETE] Found match with original encoding at index {i}: {file_info}")
+                    break
+        
+        # Strategy 3: Try partial match (in case of encoding differences)
+        if not file_to_delete:
+            for i, file_info in enumerate(user_record['uploaded_files']):
+                s3_key = file_info.get('s3_key', '')
+                if (file_key in s3_key or original_file_key in s3_key or 
+                    s3_key in file_key or s3_key in original_file_key):
+                    file_to_delete = file_info
+                    file_index = i
+                    file_key = s3_key  # Use the actual S3 key for deletion
+                    print(f"[DELETE] Found partial match at index {i}: {file_info}")
+                    break
+        
+        if not file_to_delete:
+            print(f"[DELETE ERROR] File not found with any matching strategy")
+            return jsonify({
+                'error': 'File not found', 
+                'debug': {
+                    'requested_key': file_key,
+                    'original_key': original_file_key,
+                    'available_keys': [f.get('s3_key') for f in user_record['uploaded_files']]
+                }
+            }), 404
+        
+        # Remove file from user record
+        user_record['uploaded_files'].pop(file_index)
+        print(f"[DELETE] Removed file from user record")
         
         # Delete from S3
         s3_client = get_s3_client()
-        print(f"[DEBUG] Deleting from S3: bucket={CONFIG_S3_BUCKET}, key={file_key}")
-        s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
-        print(f"[DEBUG] S3 deletion successful")
+        print(f"[DELETE] Attempting S3 deletion: bucket={CONFIG_S3_BUCKET}, key={file_key}")
         
-        # Update user config
-        if update_users_config(users):
-            print(f"[DEBUG] User config updated successfully")
-            response = jsonify({'message': 'File deleted successfully'})
-            response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            return response
-        else:
-            print(f"[DEBUG] Failed to update user config")
-            return jsonify({'error': 'Failed to update configuration'}), 500
+        try:
+            # Check if file exists in S3 first
+            s3_client.head_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
+            print(f"[DELETE] File exists in S3, proceeding with deletion")
+        except s3_client.exceptions.NoSuchKey:
+            print(f"[DELETE] File does not exist in S3, but continuing with config update")
+        except Exception as e:
+            print(f"[DELETE] Error checking S3 file existence: {e}")
+        
+        # Always attempt deletion (S3 delete_object is idempotent)
+        s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
+        print(f"[DELETE] S3 deletion completed (idempotent)")
+        
+        # Update user config with retry logic
+        max_retries = 3
+        for retry in range(max_retries):
+            try:
+                if update_users_config(users):
+                    print(f"[DELETE] User config updated successfully on attempt {retry + 1}")
+                    response = jsonify({'message': 'File deleted successfully'})
+                    response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+                    response.headers.add('Access-Control-Allow-Credentials', 'true')
+                    return response
+                else:
+                    print(f"[DELETE] Failed to update user config on attempt {retry + 1}")
+                    if retry < max_retries - 1:
+                        import time
+                        time.sleep(0.5)  # Wait before retry
+                    continue
+            except Exception as config_error:
+                print(f"[DELETE] Config update error on attempt {retry + 1}: {config_error}")
+                if retry < max_retries - 1:
+                    import time
+                    time.sleep(0.5)  # Wait before retry
+                    continue
+                raise config_error
+        
+        # If we get here, all config update attempts failed
+        print(f"[DELETE ERROR] Failed to update user config after {max_retries} attempts")
+        return jsonify({
+            'error': 'File deleted from storage but failed to update configuration. Please refresh the page.',
+            'partial_success': True
+        }), 500
             
     except Exception as e:
-        print(f"[DEBUG] Delete error: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"[DELETE ERROR] Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Delete operation failed: {str(e)}'}), 500
 
 # Admin API endpoints
 @app.route('/api/admin/users', methods=['GET'])

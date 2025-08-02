@@ -135,21 +135,77 @@ const FileManager = () => {
       return;
     }
 
+    // Clear any existing messages
+    setMessage({ type: '', text: '' });
+    
+    // Show loading state
+    const originalMessage = message;
+    setMessage({ type: 'info', text: 'Deleting file...' });
+
     try {
       console.log('Deleting file with key:', fileKey);
+      console.log('Encoded file key:', encodeURIComponent(fileKey));
+      
       const response = await axios.delete(`/api/files/sellerboard/${encodeURIComponent(fileKey)}`, { 
-        withCredentials: true 
+        withCredentials: true,
+        timeout: 10000 // 10 second timeout
       });
+      
       console.log('Delete response:', response.data);
-      setMessage({ type: 'success', text: 'File deleted successfully' });
-      fetchFiles(); // Refresh file list
+      
+      // Handle partial success case
+      if (response.data.partial_success) {
+        setMessage({ 
+          type: 'warning', 
+          text: response.data.error || 'File deleted but configuration update failed. Please refresh the page.' 
+        });
+      } else {
+        setMessage({ type: 'success', text: 'File deleted successfully' });
+      }
+      
+      // Always refresh file list after attempted deletion
+      setTimeout(() => {
+        fetchFiles();
+      }, 1000);
+      
     } catch (error) {
       console.error('Delete error:', error);
       console.error('Error response:', error.response?.data);
+      
+      let errorMessage = 'Failed to delete file';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'File not found. It may have already been deleted.';
+        // Refresh file list since file might actually be gone
+        setTimeout(() => {
+          fetchFiles();
+        }, 1000);
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication required. Please log in again.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Delete operation timed out. Please try again.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+        
+        // Show debug info if available (for troubleshooting)
+        if (error.response.data.debug) {
+          console.log('Debug info:', error.response.data.debug);
+          const debugInfo = error.response.data.debug;
+          errorMessage += ` (Requested: "${debugInfo.requested_key}", Available: ${debugInfo.available_keys?.length || 0} files)`;
+        }
+      }
+      
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.error || 'Failed to delete file' 
+        text: errorMessage
       });
+      
+      // Clear error message after 10 seconds
+      setTimeout(() => {
+        if (message.type === 'error') {
+          setMessage({ type: '', text: '' });
+        }
+      }, 10000);
     }
   };
 
@@ -469,10 +525,14 @@ const FileManager = () => {
             ? 'bg-green-50 text-green-800 border border-green-200' 
             : message.type === 'warning'
             ? 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+            : message.type === 'info'
+            ? 'bg-blue-50 text-blue-800 border border-blue-200'
             : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
           {message.type === 'success' ? (
             <CheckCircle className="h-5 w-5" />
+          ) : message.type === 'info' ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-800"></div>
           ) : (
             <AlertCircle className="h-5 w-5" />
           )}

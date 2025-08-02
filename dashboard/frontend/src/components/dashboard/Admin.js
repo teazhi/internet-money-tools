@@ -785,6 +785,16 @@ const Admin = () => {
   };
 
   const getStatusBadge = (user) => {
+    // Subusers inherit configuration from their parent, so they're always "Active" if they have a parent
+    if (user.isSubUser) {
+      if (user.parentUser) {
+        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>;
+      } else {
+        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">Orphaned</span>;
+      }
+    }
+    
+    // For main users, check their actual configuration
     if (!user.profile_configured) {
       return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">Setup Required</span>;
     }
@@ -1610,43 +1620,62 @@ const Admin = () => {
                     {getStatusBadge(user)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div className="space-y-1">
-                      <div className="flex items-center">
-                        {user.profile_configured ? 
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
-                          <X className="h-4 w-4 text-red-500 mr-1" />
-                        }
-                        Profile
+                    {user.isSubUser ? (
+                      // For subusers, show their permissions and parent configuration
+                      <div className="space-y-1">
+                        <div className="flex items-center">
+                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
+                          <span className="text-purple-600 font-medium">Inherits from Parent</span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          Permissions: {user.permissions?.join(', ') || 'None'}
+                        </div>
+                        {user.parentUser && (
+                          <div className="text-xs text-gray-400">
+                            Uses {user.parentUser.discord_username}'s config
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center">
-                        {user.google_linked ? 
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
-                          <X className="h-4 w-4 text-red-500 mr-1" />
-                        }
-                        Google
+                    ) : (
+                      // For main users, show their actual configuration
+                      <div className="space-y-1">
+                        <div className="flex items-center">
+                          {user.profile_configured ? 
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                            <X className="h-4 w-4 text-red-500 mr-1" />
+                          }
+                          Profile
+                        </div>
+                        <div className="flex items-center">
+                          {user.google_linked ? 
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                            <X className="h-4 w-4 text-red-500 mr-1" />
+                          }
+                          Google
+                        </div>
+                        <div className="flex items-center">
+                          {user.sheet_configured ? 
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                            <X className="h-4 w-4 text-red-500 mr-1" />
+                          }
+                          Sheets
+                        </div>
+                        <div className="flex items-center">
+                          {user.enable_source_links ? 
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                            <X className="h-4 w-4 text-red-500 mr-1" />
+                          }
+                          COGS
+                        </div>
+                        <div className="flex items-center">
+                          {user.search_all_worksheets ? 
+                            <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
+                            <X className="h-4 w-4 text-red-500 mr-1" />
+                          }
+                          All Sheets
+                        </div>
                       </div>
-                      <div className="flex items-center">
-                        {user.sheet_configured ? 
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
-                          <X className="h-4 w-4 text-red-500 mr-1" />
-                        }
-                        Sheets
-                      </div>
-                      <div className="flex items-center">
-                        {user.enable_source_links ? 
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
-                          <X className="h-4 w-4 text-red-500 mr-1" />
-                        }
-                        COGS
-                      </div>
-                      <div className="flex items-center">
-                        {user.search_all_worksheets ? 
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
-                          <X className="h-4 w-4 text-red-500 mr-1" />
-                        }
-                        All Sheets
-                      </div>
-                    </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {user.last_activity ? (

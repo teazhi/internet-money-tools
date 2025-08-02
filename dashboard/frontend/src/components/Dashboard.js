@@ -35,7 +35,7 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Check if current user is admin
-  const isAdmin = user?.discord_id === '1278565917206249503';
+  const isAdmin = user?.discord_id === '712147636463075389';
 
   // Handle returning from impersonation
   const handleReturnFromImpersonation = async () => {

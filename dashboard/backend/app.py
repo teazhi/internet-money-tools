@@ -235,7 +235,7 @@ def login_required(f):
 
 def is_admin_user(discord_id):
     """Check if a Discord ID is an admin"""
-    return discord_id == '1278565917206249503'
+    return discord_id == '712147636463075389'
 
 def has_permission(discord_id, permission):
     """Check if user has specific permission"""
@@ -1478,7 +1478,7 @@ def migrate_all_user_files():
         discord_id = session['discord_id']
         
         # Check if user has admin permissions (you can adjust this logic)
-        if discord_id != '1278565917206249503':  # Your Discord ID
+        if discord_id != '712147636463075389':  # Your Discord ID
             return jsonify({'error': 'Unauthorized'}), 403
         
         s3_client = get_s3_client()
@@ -1487,7 +1487,7 @@ def migrate_all_user_files():
         # Known user mappings
         user_mappings = {
             'oscar': '1208551911976861737',
-            'tevin': '1278565917206249503', 
+            'tevin': '712147636463075389', 
             'david': '1189800870125256810'
         }
         
@@ -1724,7 +1724,7 @@ def migrate_existing_files():
                     # Known user mappings for legacy files
                     user_mappings = {
                         'oscar': '1208551911976861737',
-                        'tevin': '1278565917206249503', 
+                        'tevin': '712147636463075389', 
                         'david': '1189800870125256810'
                     }
                     

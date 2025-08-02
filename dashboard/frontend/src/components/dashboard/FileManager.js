@@ -495,7 +495,7 @@ const FileManager = () => {
           )}
           
           {/* Admin Buttons - only show for admin users */}
-          {user?.discord_id === '1278565917206249503' && (
+          {user?.discord_id === '712147636463075389' && (
             <>
               <button
                 onClick={migrateAllUserFiles}

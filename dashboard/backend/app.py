@@ -594,12 +594,18 @@ def get_user():
     # For subusers, check parent's configuration status
     if user_record and user_record.get('user_type') == 'subuser':
         parent_user = get_parent_user_record(discord_id)
-        profile_configured = parent_user is not None
+        profile_configured = (parent_user is not None and 
+                            parent_user.get('email') and 
+                            parent_user.get('sellerboard_orders_url') and 
+                            parent_user.get('sellerboard_stock_url'))
         google_linked = parent_user and parent_user.get('google_tokens') is not None
         sheet_configured = parent_user and parent_user.get('sheet_id') is not None
     else:
         # For main users, check their own configuration
-        profile_configured = user_record is not None
+        profile_configured = (user_record is not None and 
+                            user_record.get('email') and 
+                            user_record.get('sellerboard_orders_url') and 
+                            user_record.get('sellerboard_stock_url'))
         google_linked = user_record and user_record.get('google_tokens') is not None
         sheet_configured = user_record and user_record.get('sheet_id') is not None
 

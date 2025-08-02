@@ -123,7 +123,7 @@ The application will be available at:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:5000
 
-## API Endpoints
+## API Endpoint
 
 ### Authentication
 - `GET /auth/discord` - Initiate Discord OAuth flow

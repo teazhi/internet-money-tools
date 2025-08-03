@@ -12,7 +12,10 @@ import {
   ArrowDown,
   Minus,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  ShoppingBag,
+  Target,
+  TrendingDown
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -290,6 +293,63 @@ const Overview = () => {
       <span className="text-sm text-gray-600">{count} units</span>
     </div>
   ));
+
+  // Purchase Analytics data processing
+  const purchaseInsights = useMemo(() => {
+    if (!analytics?.purchase_insights) return null;
+    
+    const insights = analytics.purchase_insights;
+    const summary = insights.summary_metrics || {};
+    
+    // Get top ROI recommendations
+    const roiRecs = insights.roi_based_recommendations || {};
+    const topROI = Object.entries(roiRecs)
+      .filter(([_, data]) => data.roi_percentage > 0)
+      .sort(([_, a], [__, b]) => b.roi_percentage - a.roi_percentage)
+      .slice(0, 3);
+    
+    // Get urgent restock items
+    const urgentItems = Object.entries(insights.restock_urgency_scoring || {})
+      .filter(([_, data]) => data.urgency_level === 'CRITICAL' || data.urgency_level === 'HIGH')
+      .sort(([_, a], [__, b]) => b.urgency_score - a.urgency_score)
+      .slice(0, 3);
+    
+    return {
+      summary,
+      topROI,
+      urgentItems,
+      cashFlowRecs: insights.cash_flow_optimization?.cash_flow_recommendations || []
+    };
+  }, [analytics?.purchase_insights]);
+
+  const PurchaseInsightItem = memo(({ asin, data, type }) => {
+    const getIcon = () => {
+      if (type === 'roi') return <DollarSign className="h-4 w-4 text-green-600" />;
+      if (type === 'urgent') return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      return <Target className="h-4 w-4 text-blue-600" />;
+    };
+    
+    const getMetric = () => {
+      if (type === 'roi') return `${data.roi_percentage}% ROI`;
+      if (type === 'urgent') return `${data.urgency_score}/100 urgency`;
+      return '';
+    };
+    
+    return (
+      <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+        <div className="flex items-center space-x-3">
+          {getIcon()}
+          <div>
+            <span className="text-sm font-medium text-gray-900">{asin}</span>
+            <p className="text-xs text-gray-500">
+              {type === 'roi' ? data.reason : type === 'urgent' ? `${data.days_since_last_purchase} days since purchase` : ''}
+            </p>
+          </div>
+        </div>
+        <span className="text-sm font-semibold text-gray-700">{getMetric()}</span>
+      </div>
+    );
+  });
 
   const stockAlertsData = useMemo(() => {
     if (analytics?.enhanced_analytics) {
@@ -847,6 +907,113 @@ const Overview = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Analytics Section */}
+      {purchaseInsights && (
+        <div className="space-y-6">
+          <div className="flex items-center space-x-2">
+            <ShoppingBag className="h-6 w-6 text-blue-600" />
+            <h3 className="text-xl font-semibold text-gray-900">Purchase Analytics</h3>
+          </div>
+          
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Products Tracked</p>
+                  <p className="text-2xl font-bold text-gray-900">{purchaseInsights.summary.total_asins_tracked || 0}</p>
+                </div>
+                <Package className="h-8 w-8 text-blue-600" />
+              </div>
+            </div>
+            
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Investment</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ${(purchaseInsights.summary.total_investment || 0).toLocaleString()}
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+            
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Units Purchased</p>
+                  <p className="text-2xl font-bold text-gray-900">{(purchaseInsights.summary.total_units_purchased || 0).toLocaleString()}</p>
+                </div>
+                <ShoppingCart className="h-8 w-8 text-purple-600" />
+              </div>
+            </div>
+            
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Avg Purchase Value</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ${(purchaseInsights.summary.avg_purchase_value || 0).toFixed(2)}
+                  </p>
+                </div>
+                <BarChart3 className="h-8 w-8 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Insights Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* High ROI Products */}
+            {purchaseInsights.topROI.length > 0 && (
+              <div className="card">
+                <div className="flex items-center space-x-2 mb-4">
+                  <TrendingUp className="h-5 w-5 text-green-600" />
+                  <h4 className="text-lg font-semibold text-gray-900">High ROI Products</h4>
+                </div>
+                <div className="space-y-3">
+                  {purchaseInsights.topROI.map(([asin, data]) => (
+                    <PurchaseInsightItem key={asin} asin={asin} data={data} type="roi" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Urgent Restocks */}
+            {purchaseInsights.urgentItems.length > 0 && (
+              <div className="card">
+                <div className="flex items-center space-x-2 mb-4">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <h4 className="text-lg font-semibold text-gray-900">Urgent Restocks</h4>
+                </div>
+                <div className="space-y-3">
+                  {purchaseInsights.urgentItems.map(([asin, data]) => (
+                    <PurchaseInsightItem key={asin} asin={asin} data={data} type="urgent" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cash Flow Recommendations */}
+            {purchaseInsights.cashFlowRecs.length > 0 && (
+              <div className="card lg:col-span-2">
+                <div className="flex items-center space-x-2 mb-4">
+                  <TrendingDown className="h-5 w-5 text-blue-600" />
+                  <h4 className="text-lg font-semibold text-gray-900">Cash Flow Insights</h4>
+                </div>
+                <div className="space-y-2">
+                  {purchaseInsights.cashFlowRecs.map((rec, index) => (
+                    <div key={index} className="p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+                      <p className="text-sm text-blue-800">{rec}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

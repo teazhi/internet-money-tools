@@ -879,6 +879,10 @@ class EnhancedOrdersAnalysis:
         purchase_insights = {}
         
         print(f"[DEBUG] Checking COGS settings - user_settings: {user_settings}")
+        print(f"[DEBUG] enable_source_links: {user_settings.get('enable_source_links') if user_settings else None}")
+        print(f"[DEBUG] sheet_id: {user_settings.get('sheet_id') if user_settings else None}")
+        print(f"[DEBUG] google_tokens: {bool(user_settings.get('google_tokens')) if user_settings else None}")
+        
         if user_settings and user_settings.get('enable_source_links'):
             print(f"[DEBUG] Source links enabled, attempting to fetch COGS data and purchase analytics...")
             try:

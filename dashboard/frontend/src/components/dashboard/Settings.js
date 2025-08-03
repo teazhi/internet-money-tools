@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink } from 'lucide-react';
 import axios from 'axios';
 
 // Common timezones for the selector
@@ -51,6 +51,7 @@ const Settings = () => {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [amazonStatus, setAmazonStatus] = useState({ connected: false, loading: true });
 
   useEffect(() => {
     if (user?.user_record) {
@@ -68,6 +69,51 @@ const Settings = () => {
       });
     }
   }, [user]);
+
+  // Load Amazon connection status
+  useEffect(() => {
+    const loadAmazonStatus = async () => {
+      try {
+        const response = await axios.get('/api/amazon-seller/status', { withCredentials: true });
+        setAmazonStatus({ ...response.data, loading: false });
+      } catch (error) {
+        console.error('Failed to load Amazon status:', error);
+        setAmazonStatus({ connected: false, loading: false });
+      }
+    };
+
+    if (user) {
+      loadAmazonStatus();
+    }
+  }, [user]);
+
+  const handleConnectAmazon = () => {
+    // Redirect to Amazon OAuth
+    window.location.href = '/auth/amazon-seller';
+  };
+
+  const handleDisconnectAmazon = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your Amazon Seller account? This will disable SP-API data access.')) {
+      return;
+    }
+
+    try {
+      await axios.post('/api/amazon-seller/disconnect', {}, { withCredentials: true });
+      setAmazonStatus({ connected: false, loading: false });
+      setMessage({ type: 'success', text: 'Amazon account disconnected successfully!' });
+      
+      // Update user context
+      updateUser({
+        amazon_connected: false,
+        amazon_connected_at: null
+      });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to disconnect Amazon account' 
+      });
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -395,6 +441,12 @@ const Settings = () => {
               {user?.sheet_configured ? 'Configured' : 'Not Configured'}
             </span>
           </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-200">
+            <span className="text-sm font-medium text-gray-600">Amazon Seller Account</span>
+            <span className={`text-sm ${amazonStatus.connected ? 'text-green-600' : 'text-red-600'}`}>
+              {amazonStatus.loading ? 'Loading...' : (amazonStatus.connected ? 'Connected' : 'Not Connected')}
+            </span>
+          </div>
           <div className="flex justify-between items-center py-2">
             <span className="text-sm font-medium text-gray-600">Profile Status</span>
             <span className={`text-sm ${user?.profile_configured ? 'text-green-600' : 'text-red-600'}`}>
@@ -402,6 +454,78 @@ const Settings = () => {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Amazon Connection */}
+      <div className="card max-w-2xl">
+        <div className="flex items-center space-x-3 mb-4">
+          <ShoppingBag className="h-5 w-5 text-orange-500" />
+          <h3 className="text-lg font-semibold text-gray-900">Amazon Seller Connection</h3>
+        </div>
+        
+        {amazonStatus.loading ? (
+          <div className="text-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto"></div>
+            <p className="text-sm text-gray-500 mt-2">Loading connection status...</p>
+          </div>
+        ) : amazonStatus.connected ? (
+          <div className="bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-green-900">Amazon Account Connected</h4>
+                <p className="text-sm text-green-700 mb-3">
+                  Your Amazon Seller account is connected and ready to use. Analytics data will now come directly from Amazon's SP-API instead of Sellerboard.
+                </p>
+                {amazonStatus.connected_at && (
+                  <p className="text-xs text-green-600 mb-3">
+                    Connected on: {new Date(amazonStatus.connected_at).toLocaleDateString()}
+                  </p>
+                )}
+                {amazonStatus.selling_partner_id && (
+                  <p className="text-xs text-green-600 mb-3">
+                    Seller ID: {amazonStatus.selling_partner_id}
+                  </p>
+                )}
+                <button 
+                  onClick={handleDisconnectAmazon}
+                  className="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md transition-colors duration-200"
+                >
+                  Disconnect Amazon Account
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-orange-900">Connect Your Amazon Seller Account</h4>
+                <p className="text-sm text-orange-700 mb-3">
+                  Connect your Amazon Seller Central account to get real-time analytics data directly from Amazon's SP-API. 
+                  This provides more accurate and up-to-date information than Sellerboard exports.
+                </p>
+                <div className="text-xs text-orange-600 mb-3 space-y-1">
+                  <p>• Real-time order and inventory data</p>
+                  <p>• No more manual Sellerboard exports</p>
+                  <p>• More accurate stock levels and sales data</p>
+                  <p>• Official Amazon API integration</p>
+                </div>
+                <button 
+                  onClick={handleConnectAmazon}
+                  className="flex items-center space-x-2 text-sm bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-md transition-colors duration-200"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Connect Amazon Seller Account</span>
+                </button>
+                <p className="text-xs text-orange-600 mt-2">
+                  You'll be redirected to Amazon Seller Central to authorize this application.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Danger Zone */}

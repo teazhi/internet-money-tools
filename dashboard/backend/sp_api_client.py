@@ -49,25 +49,26 @@ except ImportError:
 class SPAPIClient:
     """Amazon SP-API Client wrapper"""
     
-    def __init__(self, marketplace='ATVPDKIKX0DER'):  # Default to US marketplace
+    def __init__(self, refresh_token=None, marketplace='ATVPDKIKX0DER'):  # Default to US marketplace
         """
         Initialize SP-API client
         
         Args:
+            refresh_token: User's Amazon refresh token (if None, will try environment)
             marketplace: Amazon marketplace ID (default: US)
         """
         if not SP_API_AVAILABLE:
             raise ImportError("python-amazon-sp-api package not installed")
             
-        # Get credentials from environment
-        self.refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
+        # Get credentials - prefer user token over environment
+        self.refresh_token = refresh_token or os.getenv('SP_API_REFRESH_TOKEN')
         self.lwa_app_id = os.getenv('SP_API_LWA_APP_ID') 
         self.lwa_client_secret = os.getenv('SP_API_LWA_CLIENT_SECRET')
         self.marketplace_id = marketplace
         
         # Validate required credentials
         if not all([self.refresh_token, self.lwa_app_id, self.lwa_client_secret]):
-            raise ValueError("Missing required SP-API credentials. Check environment variables: SP_API_REFRESH_TOKEN, SP_API_LWA_APP_ID, SP_API_LWA_CLIENT_SECRET")
+            raise ValueError("Missing required SP-API credentials. Need refresh_token, SP_API_LWA_APP_ID, and SP_API_LWA_CLIENT_SECRET")
         
         # Initialize API clients
         self.credentials = {
@@ -347,11 +348,12 @@ class SPAPIClient:
         
         return processed_item
 
-def create_sp_api_client(marketplace_id: str = 'ATVPDKIKX0DER') -> Optional[SPAPIClient]:
+def create_sp_api_client(refresh_token=None, marketplace_id: str = 'ATVPDKIKX0DER') -> Optional[SPAPIClient]:
     """
     Create and return SP-API client instance
     
     Args:
+        refresh_token: User's Amazon refresh token (if None, will try environment)
         marketplace_id: Amazon marketplace ID
         
     Returns:
@@ -362,7 +364,7 @@ def create_sp_api_client(marketplace_id: str = 'ATVPDKIKX0DER') -> Optional[SPAP
             print("[SP-API] SP-API library not available")
             return None
             
-        client = SPAPIClient(marketplace_id)
+        client = SPAPIClient(refresh_token, marketplace_id)
         print("[SP-API] Client created successfully")
         return client
         

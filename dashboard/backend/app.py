@@ -17,6 +17,9 @@ from functools import wraps
 import urllib.parse
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
+import base64
+import secrets
+from cryptography.fernet import Fernet
 
 # Load environment variables
 try:
@@ -87,12 +90,71 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
 
+# Amazon SP-API OAuth Configuration
+SP_API_LWA_APP_ID = os.getenv('SP_API_LWA_APP_ID')
+SP_API_LWA_CLIENT_SECRET = os.getenv('SP_API_LWA_CLIENT_SECRET')
+# Dynamic Amazon redirect URI for development and production
+default_amazon_redirect = 'https://internet-money-tools-production.up.railway.app/auth/amazon-seller/callback'
+AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_amazon_redirect)
+
+# Encryption key for sensitive data (SP-API tokens)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
+cipher_suite = Fernet(ENCRYPTION_KEY.encode())
+
 def get_s3_client():
     return boto3.client(
         's3',
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     )
+
+def encrypt_token(token):
+    """Encrypt sensitive tokens for storage"""
+    try:
+        if not token:
+            return None
+        encrypted_token = cipher_suite.encrypt(token.encode())
+        return base64.b64encode(encrypted_token).decode()
+    except Exception as e:
+        print(f"[ENCRYPTION] Error encrypting token: {e}")
+        return None
+
+def decrypt_token(encrypted_token):
+    """Decrypt stored tokens"""
+    try:
+        if not encrypted_token:
+            return None
+        encrypted_data = base64.b64decode(encrypted_token.encode())
+        decrypted_token = cipher_suite.decrypt(encrypted_data)
+        return decrypted_token.decode()
+    except Exception as e:
+        print(f"[ENCRYPTION] Error decrypting token: {e}")
+        return None
+
+def exchange_amazon_auth_code(auth_code):
+    """Exchange Amazon authorization code for refresh token"""
+    try:
+        token_url = "https://api.amazon.com/auth/o2/token"
+        
+        data = {
+            'grant_type': 'authorization_code',
+            'code': auth_code,
+            'client_id': SP_API_LWA_APP_ID,
+            'client_secret': SP_API_LWA_CLIENT_SECRET
+        }
+        
+        response = requests.post(token_url, data=data)
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            return token_data.get('refresh_token')
+        else:
+            print(f"[AMAZON OAUTH] Token exchange failed: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"[AMAZON OAUTH] Error exchanging auth code: {e}")
+        return None
 
 def get_users_config():
     s3_client = get_s3_client()
@@ -564,6 +626,147 @@ def logout():
     session.clear()
     return jsonify({'message': 'Logged out successfully'})
 
+@app.route('/auth/amazon-seller')
+@login_required
+def amazon_seller_auth():
+    """Initiate Amazon Seller authorization"""
+    try:
+        # Get Amazon OAuth credentials
+        client_id = os.getenv('SP_API_LWA_APP_ID')
+        redirect_uri = os.getenv('AMAZON_REDIRECT_URI', 'https://internet-money-tools-backend.up.railway.app/auth/amazon-seller/callback')
+        
+        if not client_id:
+            return jsonify({'error': 'Amazon OAuth not configured'}), 500
+        
+        # Generate state parameter for CSRF protection
+        state = secrets.token_urlsafe(32)
+        session['amazon_oauth_state'] = state
+        
+        # Amazon OAuth URL for Seller Partner API
+        amazon_auth_url = (
+            f"https://sellercentral.amazon.com/apps/authorize/consent"
+            f"?application_id={client_id}"
+            f"&state={state}"
+            f"&redirect_uri={redirect_uri}"
+            f"&version=beta"
+        )
+        
+        return redirect(amazon_auth_url)
+        
+    except Exception as e:
+        print(f"[Amazon Auth] Error initiating authorization: {e}")
+        return jsonify({'error': 'Failed to initiate Amazon authorization'}), 500
+
+@app.route('/auth/amazon-seller/callback')
+@login_required
+def amazon_seller_callback():
+    """Handle Amazon Seller authorization callback"""
+    try:
+        # Verify state parameter
+        state = request.args.get('state')
+        stored_state = session.pop('amazon_oauth_state', None)
+        
+        if not state or state != stored_state:
+            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_invalid_state")
+        
+        # Get authorization code
+        code = request.args.get('spapi_oauth_code')
+        selling_partner_id = request.args.get('selling_partner_id')
+        
+        if not code:
+            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_no_code")
+        
+        # Exchange code for refresh token
+        refresh_token = exchange_amazon_auth_code(code)
+        if not refresh_token:
+            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_token_exchange_failed")
+        
+        # Encrypt and store the refresh token
+        encrypted_token = encrypt_token(refresh_token)
+        if not encrypted_token:
+            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_encryption_failed")
+        
+        # Update user record with Amazon credentials
+        discord_id = session.get('discord_id')
+        users = get_users_config()
+        
+        for user in users:
+            if user['discord_id'] == discord_id:
+                user['amazon_refresh_token'] = encrypted_token
+                user['amazon_selling_partner_id'] = selling_partner_id
+                user['amazon_connected_at'] = datetime.now().isoformat()
+                break
+        
+        save_users_config(users)
+        
+        print(f"[Amazon Auth] Successfully connected Amazon account for user {discord_id}")
+        return redirect("https://internet-money-tools.vercel.app/dashboard?success=amazon_connected")
+        
+    except Exception as e:
+        print(f"[Amazon Auth] Callback error: {e}")
+        return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_callback_failed")
+
+@app.route('/api/amazon-seller/disconnect', methods=['POST'])
+@login_required
+def disconnect_amazon_seller():
+    """Disconnect Amazon Seller account"""
+    try:
+        discord_id = session.get('discord_id')
+        users = get_users_config()
+        
+        for user in users:
+            if user['discord_id'] == discord_id:
+                # Remove Amazon credentials
+                user.pop('amazon_refresh_token', None)
+                user.pop('amazon_selling_partner_id', None)
+                user.pop('amazon_connected_at', None)
+                break
+        
+        save_users_config(users)
+        
+        print(f"[Amazon Auth] Disconnected Amazon account for user {discord_id}")
+        return jsonify({'message': 'Amazon account disconnected successfully'})
+        
+    except Exception as e:
+        print(f"[Amazon Auth] Disconnect error: {e}")
+        return jsonify({'error': 'Failed to disconnect Amazon account'}), 500
+
+@app.route('/api/amazon-seller/status')
+@login_required
+def amazon_seller_status():
+    """Get Amazon Seller connection status"""
+    try:
+        discord_id = session.get('discord_id')
+        user_record = get_user_record(discord_id)
+        
+        # Check Amazon connection status
+        amazon_connected = False
+        amazon_connected_at = None
+        selling_partner_id = None
+        
+        if user_record and user_record.get('user_type') == 'subuser':
+            parent_user = get_parent_user_record(discord_id)
+            if parent_user:
+                amazon_connected = parent_user.get('amazon_refresh_token') is not None
+                amazon_connected_at = parent_user.get('amazon_connected_at')
+                selling_partner_id = parent_user.get('amazon_selling_partner_id')
+        else:
+            if user_record:
+                amazon_connected = user_record.get('amazon_refresh_token') is not None
+                amazon_connected_at = user_record.get('amazon_connected_at')
+                selling_partner_id = user_record.get('amazon_selling_partner_id')
+        
+        return jsonify({
+            'connected': amazon_connected,
+            'connected_at': amazon_connected_at,
+            'selling_partner_id': selling_partner_id,
+            'auth_url': '/auth/amazon-seller' if not amazon_connected else None
+        })
+        
+    except Exception as e:
+        print(f"[Amazon Status] Error: {e}")
+        return jsonify({'error': 'Failed to get Amazon connection status'}), 500
+
 @app.route('/api/debug/auth')
 def debug_auth():
     """Debug endpoint to check authentication status"""
@@ -609,6 +812,17 @@ def get_user():
         google_linked = user_record and user_record.get('google_tokens') is not None
         sheet_configured = user_record and user_record.get('sheet_id') is not None
 
+    # Check Amazon connection status
+    amazon_connected = False
+    amazon_connected_at = None
+    if user_record and user_record.get('user_type') == 'subuser':
+        parent_user = get_parent_user_record(discord_id)
+        amazon_connected = parent_user and parent_user.get('amazon_refresh_token') is not None
+        amazon_connected_at = parent_user.get('amazon_connected_at') if parent_user else None
+    else:
+        amazon_connected = user_record and user_record.get('amazon_refresh_token') is not None
+        amazon_connected_at = user_record.get('amazon_connected_at') if user_record else None
+
     response_data = {
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
@@ -621,6 +835,8 @@ def get_user():
         'profile_configured': profile_configured,
         'google_linked': google_linked,
         'sheet_configured': sheet_configured,
+        'amazon_connected': amazon_connected,
+        'amazon_connected_at': amazon_connected_at,
         'user_record': user_record if user_record else None
     }
     
@@ -990,9 +1206,19 @@ def get_orders_analytics():
             from sp_api_client import create_sp_api_client
             from sp_api_analytics import create_sp_api_analytics
             
-            # Create SP-API client
+            # Get user's Amazon refresh token
+            encrypted_token = user_record.get('amazon_refresh_token') if user_record else None
+            if not encrypted_token:
+                raise Exception("User has not connected their Amazon Seller account")
+            
+            # Decrypt the refresh token
+            refresh_token = decrypt_token(encrypted_token)
+            if not refresh_token:
+                raise Exception("Failed to decrypt Amazon refresh token")
+            
+            # Create SP-API client with user's token
             marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
-            sp_client = create_sp_api_client(marketplace_id)
+            sp_client = create_sp_api_client(refresh_token, marketplace_id)
             
             if not sp_client:
                 raise Exception("SP-API client not available. Check credentials.")

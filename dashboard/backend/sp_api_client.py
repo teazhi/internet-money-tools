@@ -13,11 +13,27 @@ try:
     from sp_api.api import Orders, FbaInventory, Reports, CatalogItems
     from sp_api.base import Marketplaces, SellingApiForbiddenException, SellingApiException
     SP_API_AVAILABLE = True
-except ImportError:
-    print("[SP-API] python-amazon-sp-api not installed. Install with: pip install python-amazon-sp-api")
+    print("[SP-API] Successfully imported python-amazon-sp-api")
+except ImportError as e:
+    print(f"[SP-API] ImportError: {e}")
+    print("[SP-API] python-amazon-sp-api not installed. Install with: pip install python-amazon-sp-api==1.8.22")
+    SP_API_AVAILABLE = False
+except Exception as e:
+    print(f"[SP-API] Unexpected error importing SP-API: {e}")
     SP_API_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+# Debug: Check if the package is installed
+try:
+    import pkg_resources
+    try:
+        sp_api_version = pkg_resources.get_distribution("python-amazon-sp-api").version
+        print(f"[SP-API] Found python-amazon-sp-api version: {sp_api_version}")
+    except pkg_resources.DistributionNotFound:
+        print("[SP-API] python-amazon-sp-api package not found in installed packages")
+except ImportError:
+    print("[SP-API] pkg_resources not available for version checking")
 
 class SPAPIClient:
     """Amazon SP-API Client wrapper"""

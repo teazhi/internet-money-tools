@@ -14,6 +14,7 @@ Faker==37.4.0
 Flask==3.0.0
 flask-cors==6.0.1
 frozenlist==1.7.0
+python-amazon-sp-api==1.8.22
 greenlet==3.2.3
 idna==3.10
 itsdangerous==2.2.0
@@ -26,7 +27,7 @@ numpy==2.2.3
 openpyxl==3.1.5
 pandas==2.2.3
 playwright==1.53.0
-playwright-stealth @ git+https://github.com/Granitosaurus/playwright-stealth.git@fbb50332284751db75728eab6900ebd2b7f56446
+# playwright-stealth @ git+https://github.com/Granitosaurus/playwright-stealth.git@fbb50332284751db75728eab6900ebd2b7f56446
 propcache==0.3.2
 pyee==13.0.0
 PyJWT==2.10.1

@@ -84,6 +84,7 @@ class EnhancedOrdersAnalysis:
         # Final parsing results logged
         if successful_format:
             # Best format found
+            pass
         
         # Show sample of unparseable values for debugging
         if nat_count > 0:
@@ -91,6 +92,7 @@ class EnhancedOrdersAnalysis:
             if invalid_mask.any():
                 sample_invalid = series[invalid_mask].head(3).tolist()
                 # Sample unparseable values found
+                pass
         
         return parsed_series
 
@@ -592,6 +594,7 @@ class EnhancedOrdersAnalysis:
             
             if not source_field:
                 # No source field found in columns
+                pass
             
             # Clean and process data
             df[asin_field] = df[asin_field].astype(str).str.strip()
@@ -669,6 +672,7 @@ class EnhancedOrdersAnalysis:
                 # Sample COGS data available
             else:
                 # No COGS data found in sheet
+                pass
             return cogs_data
             
         except Exception as e:
@@ -1078,6 +1082,7 @@ class EnhancedOrdersAnalysis:
             # Debug: Print the first few items to see what values we're getting
             if len(low_stock) < 3:  # Only log first 3 to avoid spam
                 # Processing stock analysis
+                pass
                 
             if days_left < 7 or running_out in ("SOON", "YES"):
                 # Low stock item identified

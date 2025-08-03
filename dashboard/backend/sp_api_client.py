@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 import logging
 
 try:
-    from sp_api.api import Orders, FbaInventory, Reports, CatalogItems
+    from sp_api.api import Orders, Inventories, Reports, CatalogItems
     from sp_api.base import Marketplaces, SellingApiForbiddenException, SellingApiException
     SP_API_AVAILABLE = True
     print("[SP-API] Successfully imported python-amazon-sp-api")
@@ -24,7 +24,18 @@ except Exception as e:
 
 logger = logging.getLogger(__name__)
 
-# Debug: Check if the package is installed
+# Debug: Check if the package is installed and what's available
+try:
+    import sp_api
+    print(f"[SP-API] SP-API package location: {sp_api.__file__}")
+    
+    from sp_api import api
+    available_apis = [attr for attr in dir(api) if not attr.startswith('_')]
+    print(f"[SP-API] Available APIs: {available_apis}")
+    
+except Exception as debug_error:
+    print(f"[SP-API] Debug error: {debug_error}")
+
 try:
     import pkg_resources
     try:
@@ -152,15 +163,25 @@ class SPAPIClient:
             List of inventory items with stock levels
         """
         try:
-            inventory_client = FbaInventory(credentials=self.credentials, marketplace=self.marketplace)
+            inventory_client = Inventories(credentials=self.credentials, marketplace=self.marketplace)
             
             print("[SP-API] Fetching inventory summary")
             
-            response = inventory_client.get_inventory_summaries(
-                granularityType='Marketplace',
-                granularityId=self.marketplace_id,
-                marketplaceIds=[self.marketplace_id]
-            )
+            # Try different method signatures for different versions
+            try:
+                response = inventory_client.get_inventory_summaries(
+                    granularityType='Marketplace',
+                    granularityId=self.marketplace_id,
+                    marketplaceIds=[self.marketplace_id]
+                )
+            except Exception as method_error:
+                print(f"[SP-API] First inventory method failed: {method_error}")
+                # Try alternative method signature
+                response = inventory_client.get_inventory_summaries(
+                    granularity_type='Marketplace',
+                    granularity_id=self.marketplace_id,
+                    marketplace_ids=[self.marketplace_id]
+                )
             
             inventory = []
             if hasattr(response, 'payload') and response.payload:

@@ -710,7 +710,7 @@ class EnhancedOrdersAnalysis:
             
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
-            # Worksheets found in spreadsheet
+            print(f"[DEBUG COGS ALL] Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
             # Expected column structure (exact names)
             expected_columns = {"Date", "Store and Source Link", "ASIN", "COGS"}
@@ -739,10 +739,13 @@ class EnhancedOrdersAnalysis:
                     # Check if column structure matches expected format
                     cols = values[0]
                     available_columns = set(cols)
+                    print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' columns: {cols}")
+                    print(f"[DEBUG COGS ALL] Expected columns: {expected_columns}")
+                    print(f"[DEBUG COGS ALL] Available columns: {available_columns}")
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        # Skipping worksheet - missing columns
+                        print(f"[DEBUG COGS ALL] Skipping '{worksheet_name}' - missing columns: {missing}")
                         continue
                     
                     # Worksheet has correct structure
@@ -939,6 +942,15 @@ class EnhancedOrdersAnalysis:
                             'Sale Price': 'Sale Price',
                             '# Units in Bundle': '# Units in Bundle'
                         }
+                        
+                        # If all worksheets search failed and we have a specific worksheet, try that instead
+                        if not cogs_data and worksheet_title:
+                            print(f"[DEBUG] All worksheets search found no data, trying specific worksheet: {worksheet_title}")
+                            cogs_data, sheet_data = self.fetch_google_sheet_data(
+                                access_token, sheet_id, worksheet_title, column_mapping
+                            )
+                            column_mapping_for_purchase = column_mapping
+                            
                     elif worksheet_title:
                         print(f"[DEBUG] Searching specific worksheet: {worksheet_title}")
                         cogs_data, sheet_data = self.fetch_google_sheet_data(

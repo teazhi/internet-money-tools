@@ -498,7 +498,8 @@ const Settings = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto"></div>
             <p className="text-sm text-gray-500 mt-2">Loading connection status...</p>
           </div>
-        ) : amazonStatus.connected ? (
+        ) : user?.is_admin ? (
+          amazonStatus.connected ? (
           <div className="bg-green-50 border border-green-200 rounded-md p-4">
             <div className="flex items-start space-x-3">
               <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
@@ -573,6 +574,28 @@ const Settings = () => {
                 <p className="text-xs text-blue-600 mt-2">
                   Individual account connection will be available when the SP-API app moves to production status.
                 </p>
+              </div>
+            </div>
+          </div>
+          )
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+            <div className="flex items-start space-x-3">
+              <ShoppingBag className="h-5 w-5 text-gray-500 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-gray-900">Sellerboard Integration Active</h4>
+                <p className="text-sm text-gray-700 mb-3">
+                  Your analytics are powered by Sellerboard data. Configure your Sellerboard URLs in the settings above to get started.
+                </p>
+                <div className="text-xs text-gray-600 mb-3 space-y-1">
+                  <p>• ✅ Reliable order and inventory data</p>
+                  <p>• ✅ Proven analytics pipeline</p>
+                  <p>• ✅ Full restock and stock alerts</p>
+                  <p>• 📊 Sellerboard export integration</p>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Amazon SP-API integration is available for admin users and will be rolled out to all users once testing is complete.
+                </div>
               </div>
             </div>
           </div>

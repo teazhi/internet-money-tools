@@ -781,8 +781,12 @@ def amazon_seller_status():
 @app.route('/api/amazon-seller/test')
 @login_required
 def test_amazon_connection():
-    """Test Amazon SP-API connection"""
+    """Test Amazon SP-API connection (admin only)"""
     try:
+        # Check if user is admin
+        discord_id = session.get('discord_id')
+        if not is_admin_user(discord_id):
+            return jsonify({'error': 'SP-API testing is restricted to admin users'}), 403
         from sp_api_client import create_sp_api_client
         
         # Get environment refresh token
@@ -1311,53 +1315,90 @@ def get_orders_analytics():
         
         print(f"[SP-API Analytics] Fetching data for date: {target_date}")
         
-        # Check if SP-API is configured and available
-        try:
-            from sp_api_client import create_sp_api_client
-            from sp_api_analytics import create_sp_api_analytics
-            
-            # Try to get user's Amazon refresh token first, fallback to environment
-            encrypted_token = user_record.get('amazon_refresh_token') if user_record else None
-            refresh_token = None
-            
-            if encrypted_token:
-                # Decrypt the refresh token
-                refresh_token = decrypt_token(encrypted_token)
+        # Check if user is admin and SP-API should be attempted
+        is_admin = is_admin_user(discord_id)
+        
+        if is_admin:
+            print("[SP-API Analytics] Admin user detected - attempting SP-API integration")
+            try:
+                from sp_api_client import create_sp_api_client
+                from sp_api_analytics import create_sp_api_analytics
+                
+                # Try to get user's Amazon refresh token first, fallback to environment
+                encrypted_token = user_record.get('amazon_refresh_token') if user_record else None
+                refresh_token = None
+                
+                if encrypted_token:
+                    # Decrypt the refresh token
+                    refresh_token = decrypt_token(encrypted_token)
+                    if not refresh_token:
+                        print("[SP-API Analytics] Failed to decrypt user's Amazon refresh token, falling back to environment")
+                
                 if not refresh_token:
-                    print("[SP-API Analytics] Failed to decrypt user's Amazon refresh token, falling back to environment")
-            
-            if not refresh_token:
-                # Fallback to environment variables (for sandbox or shared credentials)
-                refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
-                if refresh_token:
-                    print("[SP-API Analytics] Using refresh token from environment variables")
-                else:
-                    raise Exception("No Amazon refresh token available - user has not connected their Amazon Seller account and no environment token found")
-            
-            # Create SP-API client with token
-            marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
-            sp_client = create_sp_api_client(refresh_token, marketplace_id)
-            
-            if not sp_client:
-                raise Exception("SP-API client not available. Check credentials.")
-            
-            # Create analytics processor
-            analytics_processor = create_sp_api_analytics(sp_client)
-            
-            # Get analytics data from SP-API
-            print(f"[SP-API Analytics] Fetching data from Amazon SP-API...")
-            analysis = analytics_processor.get_orders_analytics(target_date, user_timezone)
-            
-            print(f"[SP-API Analytics] SP-API analysis completed successfully")
-            print(f"[SP-API Analytics] Source: {analysis.get('source', 'unknown')}")
-            print(f"[SP-API Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
-            print(f"[SP-API Analytics] Low stock items: {len(analysis.get('low_stock', {}))}")
-            print(f"[SP-API Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
-            
-        except Exception as sp_api_error:
-            print(f"[SP-API Analytics] SP-API failed, falling back to Sellerboard: {sp_api_error}")
-            
-            # Fallback to Sellerboard data if SP-API fails
+                    # Fallback to environment variables (for sandbox or shared credentials)
+                    refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
+                    if refresh_token:
+                        print("[SP-API Analytics] Using refresh token from environment variables")
+                    else:
+                        raise Exception("No Amazon refresh token available - user has not connected their Amazon Seller account and no environment token found")
+                
+                # Create SP-API client with token
+                marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
+                sp_client = create_sp_api_client(refresh_token, marketplace_id)
+                
+                if not sp_client:
+                    raise Exception("SP-API client not available. Check credentials.")
+                
+                # Create analytics processor
+                analytics_processor = create_sp_api_analytics(sp_client)
+                
+                # Get analytics data from SP-API
+                print(f"[SP-API Analytics] Fetching data from Amazon SP-API...")
+                analysis = analytics_processor.get_orders_analytics(target_date, user_timezone)
+                
+                print(f"[SP-API Analytics] SP-API analysis completed successfully")
+                print(f"[SP-API Analytics] Source: {analysis.get('source', 'unknown')}")
+                print(f"[SP-API Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
+                print(f"[SP-API Analytics] Low stock items: {len(analysis.get('low_stock', {}))}")
+                print(f"[SP-API Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
+                
+            except Exception as sp_api_error:
+                print(f"[SP-API Analytics] Admin SP-API failed, falling back to Sellerboard: {sp_api_error}")
+                
+                # Fallback to Sellerboard data if SP-API fails for admin
+                try:
+                    from orders_analysis import OrdersAnalysis
+                    
+                    # Get user's configured Sellerboard URLs
+                    orders_url = user_record.get('sellerboard_orders_url') if user_record else None
+                    stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                    
+                    if not orders_url or not stock_url:
+                        return jsonify({
+                            'error': 'Admin SP-API failed and no Sellerboard URLs configured. Please configure Sellerboard URLs in Settings.',
+                            'status': 'configuration_required'
+                        }), 400
+                    
+                    # Use Sellerboard data
+                    analyzer = OrdersAnalysis(
+                        orders_url=orders_url,
+                        stock_url=stock_url,
+                        target_date=target_date,
+                        user_timezone=user_timezone
+                    )
+                    
+                    analysis = analyzer.analyze()
+                    
+                except Exception as sellerboard_error:
+                    print(f"[Dashboard Analytics] Sellerboard analysis failed: {sellerboard_error}")
+                    return jsonify({
+                        'error': f'Both SP-API and Sellerboard analysis failed: {str(sellerboard_error)}',
+                        'sp_api_error': str(sp_api_error),
+                        'sellerboard_error': str(sellerboard_error)
+                    }), 500
+        else:
+            print("[SP-API Analytics] Non-admin user - using Sellerboard data only")
+            # Non-admin users use Sellerboard only
             try:
                 from orders_analysis import OrdersAnalysis
                 
@@ -1367,15 +1408,14 @@ def get_orders_analytics():
                 
                 if not orders_url or not stock_url:
                     return jsonify({
-                        'error': 'SP-API unavailable and Sellerboard URLs not configured',
-                        'message': 'Please configure SP-API credentials or Sellerboard report URLs in Settings.',
+                        'error': 'Sellerboard URLs not configured',
+                        'message': 'Please configure Sellerboard report URLs in Settings.',
                         'requires_setup': True,
                         'report_date': target_date.isoformat(),
-                        'is_yesterday': target_date == (date.today() - timedelta(days=1)),
-                        'sp_api_error': str(sp_api_error)
+                        'is_yesterday': target_date == (date.today() - timedelta(days=1))
                     }), 400
                 
-                print(f"[SP-API Analytics] Using Sellerboard fallback...")
+                print(f"[Dashboard Analytics] Using Sellerboard for non-admin user...")
                 analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
                 
                 # Prepare user settings for COGS data fetching
@@ -1389,16 +1429,15 @@ def get_orders_analytics():
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
-                analysis['source'] = 'sellerboard-fallback'
-                analysis['sp_api_error'] = str(sp_api_error)
-                analysis['message'] = 'Using Sellerboard data (SP-API unavailable)'
+                analysis['source'] = 'sellerboard'
+                analysis['message'] = 'Using Sellerboard data'
                 
-                print(f"[SP-API Analytics] Sellerboard fallback completed successfully")
+                print(f"[Dashboard Analytics] Sellerboard analysis completed successfully for non-admin user")
                 
-            except Exception as fallback_error:
-                print(f"[SP-API Analytics] Both SP-API and Sellerboard failed: {fallback_error}")
+            except Exception as sellerboard_error:
+                print(f"[Dashboard Analytics] Sellerboard analysis failed for non-admin user: {sellerboard_error}")
                 
-                # Return basic error structure
+                # Return basic error structure for non-admin users
                 analysis = {
                     'today_sales': {},
                     'velocity': {},
@@ -1411,7 +1450,7 @@ def get_orders_analytics():
                     'sellerboard_orders': [],
                     'total_products_analyzed': 0,
                     'high_priority_count': 0,
-                    'error': f'Both SP-API and Sellerboard failed. SP-API: {str(sp_api_error)}, Sellerboard: {str(fallback_error)}',
+                    'error': f'Sellerboard analysis failed: {str(sellerboard_error)}',
                     'fallback_mode': True,
                     'source': 'error',
                     'report_date': target_date.isoformat(),

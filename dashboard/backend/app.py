@@ -1000,6 +1000,8 @@ def update_profile():
         user_record['enable_source_links'] = data['enable_source_links']
     if 'search_all_worksheets' in data:
         user_record['search_all_worksheets'] = data['search_all_worksheets']
+    if 'disable_sp_api' in data:
+        user_record['disable_sp_api'] = data['disable_sp_api']
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})
@@ -1318,8 +1320,9 @@ def get_orders_analytics():
         
         # Check if user is admin and SP-API should be attempted
         is_admin = is_admin_user(discord_id)
+        disable_sp_api = user_record.get('disable_sp_api', False) if user_record else False
         
-        if is_admin:
+        if is_admin and not disable_sp_api:
             print("[SP-API Analytics] Admin user detected - attempting SP-API integration")
             try:
                 from sp_api_client import create_sp_api_client
@@ -1397,6 +1400,64 @@ def get_orders_analytics():
                         'sp_api_error': str(sp_api_error),
                         'sellerboard_error': str(sellerboard_error)
                     }), 500
+        elif is_admin and disable_sp_api:
+            print("[SP-API Analytics] Admin user with SP-API disabled - using Sellerboard data only")
+            # Admin user with SP-API disabled - use Sellerboard
+            try:
+                from orders_analysis import OrdersAnalysis
+                
+                # Get user's configured Sellerboard URLs
+                orders_url = user_record.get('sellerboard_orders_url') if user_record else None
+                stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                
+                if not orders_url or not stock_url:
+                    return jsonify({
+                        'error': 'SP-API disabled and no Sellerboard URLs configured',
+                        'message': 'Please configure Sellerboard report URLs in Settings or re-enable SP-API.',
+                        'requires_setup': True,
+                        'report_date': target_date.isoformat(),
+                        'is_yesterday': target_date == (date.today() - timedelta(days=1))
+                    }), 400
+                
+                print(f"[Dashboard Analytics] Using Sellerboard for admin user with SP-API disabled...")
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+                
+                # Prepare user settings for COGS data fetching
+                user_settings = {
+                    'enable_source_links': user_record.get('enable_source_links', False),
+                    'search_all_worksheets': user_record.get('search_all_worksheets', False),
+                    'sheet_id': user_record.get('sheet_id'),
+                    'worksheet_title': user_record.get('worksheet_title'),
+                    'google_tokens': user_record.get('google_tokens', {}),
+                    'column_mapping': user_record.get('column_mapping', {})
+                }
+                
+                analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
+                analysis['source'] = 'sellerboard'
+                analysis['message'] = 'Using Sellerboard data (SP-API disabled)'
+                
+                print(f"[Dashboard Analytics] Sellerboard analysis completed successfully for admin user with SP-API disabled")
+                
+            except Exception as sellerboard_error:
+                print(f"[Dashboard Analytics] Sellerboard analysis failed for admin user with SP-API disabled: {sellerboard_error}")
+                
+                # Return basic error structure for admin users with SP-API disabled
+                analysis = {
+                    'today_sales': {},
+                    'velocity': {},
+                    'low_stock': {},
+                    'restock_priority': {},
+                    'stockout_30d': {},
+                    'enhanced_analytics': {},
+                    'restock_alerts': {},
+                    'critical_alerts': [],
+                    'total_products_analyzed': 0,
+                    'high_priority_count': 0,
+                    'sellerboard_orders': [],
+                    'basic_mode': True,
+                    'error': f'Sellerboard analysis failed: {str(sellerboard_error)}',
+                    'source': 'sellerboard_failed'
+                }
         else:
             print("[SP-API Analytics] Non-admin user - using Sellerboard data only")
             # Non-admin users use Sellerboard only

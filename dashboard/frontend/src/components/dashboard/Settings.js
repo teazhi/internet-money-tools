@@ -48,7 +48,8 @@ const Settings = () => {
     sellerboard_stock_url: '',
     timezone: '',
     enable_source_links: false,
-    search_all_worksheets: false
+    search_all_worksheets: false,
+    disable_sp_api: false
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -67,7 +68,8 @@ const Settings = () => {
         sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
         timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         enable_source_links: user.user_record.enable_source_links || false,
-        search_all_worksheets: user.user_record.search_all_worksheets || false
+        search_all_worksheets: user.user_record.search_all_worksheets || false,
+        disable_sp_api: user.user_record.disable_sp_api || false
       });
     }
   }, [user]);
@@ -429,6 +431,32 @@ const Settings = () => {
               </label>
               <p className="text-xs text-gray-500 mt-1">
                 Search through all worksheets in your Google Sheet for COGS data (instead of just the mapped worksheet). All worksheets must have the same column structure: Date, Store and Source Link, ASIN, COGS.
+              </p>
+            </div>
+          )}
+
+          {/* SP-API Disable Toggle (Admin Only) */}
+          {user?.user_record?.is_admin && (
+            <div>
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <div className="flex items-center">
+                  {formData.disable_sp_api ? (
+                    <ToggleRight className="h-6 w-6 text-red-500" />
+                  ) : (
+                    <ToggleLeft className="h-6 w-6 text-gray-400" />
+                  )}
+                  <span className="text-sm font-medium text-gray-700">Disable SP-API (Admin)</span>
+                </div>
+                <input
+                  type="checkbox"
+                  name="disable_sp_api"
+                  checked={formData.disable_sp_api}
+                  onChange={handleChange}
+                  className="sr-only"
+                />
+              </label>
+              <p className="text-xs text-gray-500 mt-1">
+                Disable Amazon SP-API integration and use Sellerboard data only (even for admin users). Useful for testing or when SP-API is having issues.
               </p>
             </div>
           )}

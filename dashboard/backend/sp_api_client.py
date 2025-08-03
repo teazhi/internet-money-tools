@@ -10,9 +10,8 @@ from typing import Dict, List, Optional, Any
 import logging
 
 try:
-    from sp_api.api import Orders, Inventories, Reports, CatalogItems
+    from sp_api.api import Orders, FbaInventory, Reports, CatalogItems
     from sp_api.base import Marketplaces, SellingApiForbiddenException, SellingApiException
-    from sp_api.base.sales_enum import Granularity
     SP_API_AVAILABLE = True
 except ImportError:
     print("[SP-API] python-amazon-sp-api not installed. Install with: pip install python-amazon-sp-api")
@@ -137,7 +136,7 @@ class SPAPIClient:
             List of inventory items with stock levels
         """
         try:
-            inventory_client = Inventories(credentials=self.credentials, marketplace=self.marketplace)
+            inventory_client = FbaInventory(credentials=self.credentials, marketplace=self.marketplace)
             
             print("[SP-API] Fetching inventory summary")
             

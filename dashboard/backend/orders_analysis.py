@@ -706,8 +706,13 @@ class EnhancedOrdersAnalysis:
             print(f"[ERROR] Failed to fetch COGS data from Google Sheet: {e}")
             return {}
 
-    def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str) -> tuple[Dict[str, dict], pd.DataFrame]:
+    def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str, column_mapping: dict) -> tuple[Dict[str, dict], pd.DataFrame]:
         """Fetch COGS and Source links from ALL worksheets in the Google Sheet
+        
+        Args:
+            access_token: Google API access token
+            sheet_id: Google Sheet ID
+            column_mapping: User's column mapping configuration
         
         Returns:
             tuple: (cogs_data dict, combined_dataframe for purchase analytics)
@@ -725,8 +730,15 @@ class EnhancedOrdersAnalysis:
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
             print(f"[DEBUG COGS ALL] Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
-            # Expected column structure (exact names)
-            expected_columns = {"Date", "Store and Source Link", "ASIN", "COGS"}
+            # Expected column structure based on user's column mapping
+            # Get the actual column names from user's mapping
+            expected_columns = set()
+            required_fields = ["Date", "Store and Source Link", "ASIN", "COGS"]
+            for field in required_fields:
+                mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
+                expected_columns.add(mapped_column)
+            
+            print(f"[DEBUG COGS ALL] Expected columns based on user mapping: {expected_columns}")
             
             combined_cogs_data = {}
             combined_dataframes = []  # For purchase analytics
@@ -776,11 +788,11 @@ class EnhancedOrdersAnalysis:
                     
                     df = pd.DataFrame(rows, columns=cols)
                     
-                    # Use exact column names (no mapping needed)
-                    asin_field = "ASIN"
-                    cogs_field = "COGS"
-                    date_field = "Date"
-                    source_field = "Store and Source Link"
+                    # Use user's column mapping
+                    asin_field = column_mapping.get("ASIN", "ASIN")
+                    cogs_field = column_mapping.get("COGS", "COGS")
+                    date_field = column_mapping.get("Date", "Date")
+                    source_field = column_mapping.get("Store and Source Link", "Store and Source Link")
                     
                     # Processing worksheet rows
                     
@@ -815,16 +827,23 @@ class EnhancedOrdersAnalysis:
                             combined_cogs_data[asin] = data
                             combined_cogs_data[asin]['source_sheets'] = [worksheet_name]
                     
-                    # Check if this worksheet has purchase analytics columns
-                    purchase_analytics_columns = {"Amount Purchased", "Sale Price", "# Units in Bundle"}
-                    if purchase_analytics_columns.intersection(available_columns):
+                    # Check if this worksheet has purchase analytics columns (using user's mapping)
+                    purchase_analytics_fields = ["Amount Purchased", "Sale Price", "# Units in Bundle"]
+                    mapped_purchase_columns = set()
+                    for field in purchase_analytics_fields:
+                        mapped_column = column_mapping.get(field, field)
+                        mapped_purchase_columns.add(mapped_column)
+                    
+                    if mapped_purchase_columns.intersection(available_columns):
                         print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' has purchase analytics columns - adding to combined data")
+                        print(f"[DEBUG COGS ALL] Found purchase columns: {mapped_purchase_columns.intersection(available_columns)}")
                         # Add worksheet identifier to the DataFrame
                         df_copy = df.copy()
                         df_copy['_worksheet_source'] = worksheet_name
                         combined_dataframes.append(df_copy)
                     else:
-                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' missing purchase analytics columns: {purchase_analytics_columns - available_columns}")
+                        missing_columns = mapped_purchase_columns - available_columns
+                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' missing purchase analytics columns: {missing_columns}")
                     
                     successful_sheets.append(worksheet_name)
                     # Worksheet processed successfully
@@ -964,18 +983,12 @@ class EnhancedOrdersAnalysis:
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
                         print(f"[DEBUG] Searching all worksheets in Google Sheet...")
+                        print(f"[DEBUG] Using user's column mapping: {column_mapping}")
                         cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
-                            access_token, sheet_id
+                            access_token, sheet_id, column_mapping
                         )
-                        # For all worksheets, use default column mapping
-                        column_mapping_for_purchase = {
-                            'Date': 'Date',
-                            'ASIN': 'ASIN', 
-                            'Amount Purchased': 'Amount Purchased',
-                            'COGS': 'COGS',
-                            'Sale Price': 'Sale Price',
-                            '# Units in Bundle': '# Units in Bundle'
-                        }
+                        # Use the user's column mapping for purchase analytics
+                        column_mapping_for_purchase = column_mapping
                         
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:

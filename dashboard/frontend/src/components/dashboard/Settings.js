@@ -430,7 +430,7 @@ const Settings = () => {
                 />
               </label>
               <p className="text-xs text-gray-500 mt-1">
-                Search through all worksheets in your Google Sheet for COGS data (instead of just the mapped worksheet). All worksheets must have the same column structure: Date, Store and Source Link, ASIN, COGS.
+                Search through all worksheets in your Google Sheet for COGS and purchase data (instead of just the mapped worksheet). All worksheets must have columns that match your column mapping configuration above.
               </p>
             </div>
           )}

@@ -797,17 +797,30 @@ def test_amazon_connection():
         
         # Try a simple API call to test authentication
         try:
-            # Test with a simple marketplace participation call
-            from sp_api.api import Sellers
-            sellers_client = Sellers(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
-            response = sellers_client.get_marketplace_participations()
+            # Test with a simple orders API call (should work in sandbox)
+            from sp_api.api import Orders
+            from datetime import datetime, timedelta
+            
+            orders_client = Orders(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
+            
+            # Get orders from the last day (minimal request to test auth)
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=1)
+            
+            response = orders_client.get_orders(
+                MarketplaceIds=[sp_client.marketplace_id],
+                CreatedAfter=start_date.isoformat(),
+                CreatedBefore=end_date.isoformat()
+            )
             
             return jsonify({
                 'success': True,
-                'message': 'SP-API connection successful',
+                'message': 'SP-API authentication successful',
                 'sandbox_mode': sp_client.sandbox,
                 'marketplace': str(sp_client.marketplace),
-                'response_payload': bool(hasattr(response, 'payload') and response.payload)
+                'marketplace_id': sp_client.marketplace_id,
+                'response_received': bool(hasattr(response, 'payload')),
+                'orders_count': len(response.payload.get('Orders', [])) if hasattr(response, 'payload') and response.payload else 0
             })
             
         except Exception as api_error:

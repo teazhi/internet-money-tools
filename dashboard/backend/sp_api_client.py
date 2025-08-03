@@ -89,8 +89,10 @@ class SPAPIClient:
         
         # Add sandbox parameter if in sandbox mode
         if self.sandbox:
+            # Try different sandbox parameter formats that different versions might expect
             self.credentials['sandbox'] = True
-            print("[SP-API] Using sandbox endpoints")
+            self.credentials['use_sandbox'] = True
+            print("[SP-API] Using sandbox endpoints with sandbox flags")
         
         # Set marketplace
         if marketplace == 'ATVPDKIKX0DER':
@@ -119,7 +121,16 @@ class SPAPIClient:
             end_date = datetime.now(timezone.utc)
             
         try:
-            orders_client = Orders(credentials=self.credentials, marketplace=self.marketplace)
+            # Initialize Orders client with explicit sandbox mode if needed
+            if self.sandbox:
+                print("[SP-API] Creating Orders client with sandbox mode")
+                orders_client = Orders(
+                    credentials=self.credentials, 
+                    marketplace=self.marketplace,
+                    sandbox=True
+                )
+            else:
+                orders_client = Orders(credentials=self.credentials, marketplace=self.marketplace)
             
             # Convert dates to ISO format
             start_iso = start_date.isoformat()

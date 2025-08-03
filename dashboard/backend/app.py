@@ -797,21 +797,40 @@ def test_amazon_connection():
         
         # Try a simple API call to test authentication
         try:
+            # Debug: Print credentials structure (without sensitive data)
+            print(f"[Amazon Test] Credentials structure: {list(sp_client.credentials.keys())}")
+            print(f"[Amazon Test] Sandbox in credentials: {'sandbox' in sp_client.credentials}")
+            print(f"[Amazon Test] Marketplace: {sp_client.marketplace}")
+            print(f"[Amazon Test] Marketplace ID: {sp_client.marketplace_id}")
+            
             # Test with a simple orders API call (should work in sandbox)
             from sp_api.api import Orders
             from datetime import datetime, timedelta
             
-            orders_client = Orders(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
+            # Initialize Orders client with explicit sandbox mode if needed
+            if sp_client.sandbox:
+                print("[Amazon Test] Creating Orders client with explicit sandbox parameter")
+                orders_client = Orders(
+                    credentials=sp_client.credentials, 
+                    marketplace=sp_client.marketplace,
+                    sandbox=True
+                )
+            else:
+                orders_client = Orders(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
             
             # Get orders from the last day (minimal request to test auth)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=1)
+            
+            print(f"[Amazon Test] Making API call with date range: {start_date.isoformat()} to {end_date.isoformat()}")
             
             response = orders_client.get_orders(
                 MarketplaceIds=[sp_client.marketplace_id],
                 CreatedAfter=start_date.isoformat(),
                 CreatedBefore=end_date.isoformat()
             )
+            
+            print(f"[Amazon Test] API call successful!")
             
             return jsonify({
                 'success': True,

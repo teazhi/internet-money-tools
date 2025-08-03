@@ -451,7 +451,7 @@ def safe_google_api_call(user_record, api_call_func):
 
 @app.route('/auth/discord')
 def discord_login():
-    print(f"[DEBUG] Discord OAuth redirect URI being used: {DISCORD_REDIRECT_URI}")
+    # Discord OAuth redirect URI configured
     
     # Get invitation token from query parameters
     invitation_token = request.args.get('invitation')
@@ -467,7 +467,7 @@ def discord_login():
         f"&scope=identify"
         f"{state_param}"
     )
-    print(f"[DEBUG] Full Discord auth URL: {discord_auth_url}")
+    # Discord auth URL generated
     return redirect(discord_auth_url)
 
 @app.route('/auth/discord/callback')
@@ -574,8 +574,7 @@ def discord_callback():
     session['discord_username'] = discord_username
     session['discord_avatar'] = user_data.get('avatar')
     
-    print(f"[DEBUG] Session set with discord_id: {session['discord_id']}")
-    print(f"[DEBUG] Full session data: {dict(session)}")
+    # Session configured with Discord ID
     
     # Save Discord username to user record for admin panel
     try:
@@ -607,13 +606,13 @@ def discord_callback():
         user_record['discord_username'] = user_data['username']
         user_record['last_activity'] = datetime.now().isoformat()
         update_users_config(users)
-        print(f"[DEBUG] Updated user record with Discord username: {user_data['username']}")
+        # User record updated with Discord data
     except Exception as e:
-        print(f"[DEBUG] Failed to update user record: {e}")
+        # Failed to update user record
     
     # FORCE redirect to Vercel frontend - UPDATED
     frontend_url = "https://dms-amazon.vercel.app/dashboard"
-    print(f"[DEBUG] Discord callback redirecting to: {frontend_url}")
+    # Redirecting to frontend after Discord auth
     
     # Dynamic redirect based on environment (backup)
     # if os.environ.get('FRONTEND_URL'):
@@ -1178,7 +1177,7 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
 def debug_stock_columns():
     """Debug endpoint to check stock data columns"""
     try:
-        print("[DEBUG] Testing stock columns endpoint")
+        # Testing stock columns
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         
@@ -1194,16 +1193,16 @@ def debug_stock_columns():
         stock_df = analyzer.download_csv(stock_url)
         
         columns = list(stock_df.columns)
-        print(f"[DEBUG] Stock columns: {columns}")
+        # Stock columns retrieved
         
         # Get sample data from first row
         if len(stock_df) > 0:
             sample_row = stock_df.iloc[0].to_dict()
-            print(f"[DEBUG] Sample row data: {sample_row}")
+            # Sample row data retrieved
             
             # Look for source-like columns
             source_columns = [col for col in columns if 'source' in col.lower() or 'link' in col.lower() or 'url' in col.lower()]
-            print(f"[DEBUG] Potential source columns: {source_columns}")
+            # Source columns identified
             
             return jsonify({
                 'columns': columns,
@@ -1219,7 +1218,7 @@ def debug_stock_columns():
             })
             
     except Exception as e:
-        print(f"[DEBUG] Error in stock columns debug: {str(e)}")
+        # Error in stock columns debug
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug/cogs-status', methods=['GET'])
@@ -1280,7 +1279,7 @@ def get_orders_analytics():
                         break
                 update_users_config(users)
             except Exception as e:
-                print(f"[DEBUG] Failed to update last activity: {e}")
+                # Failed to update last activity
         
         # Get query parameter for date, default to yesterday until 11:59 PM
         target_date_str = request.args.get('date')
@@ -1684,7 +1683,7 @@ def get_user_files_from_s3(discord_id):
                 
                 # Determine file type and category using standardized function
                 file_type_category = determine_file_type_category(filename)
-                print(f"[DEBUG] File: {filename} -> Category: {file_type_category}")
+                # File categorized
                 
                 file_info = {
                     'filename': filename,
@@ -1735,16 +1734,16 @@ def detect_duplicate_files_for_user(discord_id):
             duplicates[file_type] = files
     
     # Debug logging
-    print(f"[DEBUG] Files by type for user {discord_id}:")
+    # Files by type retrieved
     for file_type, files in files_by_type.items():
         print(f"  {file_type}: {len(files)} files")
         for file_info in files:
             print(f"    - {file_info['filename']} (category: {file_info.get('file_type_category')})")
     
     if duplicates:
-        print(f"[DEBUG] Duplicates found: {list(duplicates.keys())}")
+        # Duplicates found
     else:
-        print(f"[DEBUG] No duplicates found")
+        # No duplicates found
     
     return duplicates
 
@@ -1806,7 +1805,7 @@ def list_sellerboard_files():
             for file_type, duplicate_files in duplicates.items():
                 display_name = 'Listing Loader' if file_type == 'listing_loader' else file_type.title()
                 warnings.append(f"You have {len(duplicate_files)} {display_name} files. Please delete {len(duplicate_files)-1} to keep only the latest one.")
-                print(f"[DEBUG] Created warning for {file_type}: {len(duplicate_files)} files")
+                # Warning created for duplicate files
         
         return jsonify({
             'files': user_files,

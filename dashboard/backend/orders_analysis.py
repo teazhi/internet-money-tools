@@ -34,7 +34,7 @@ class EnhancedOrdersAnalysis:
 
     def _parse_datetime_robust(self, series: pd.Series, column_name: str) -> pd.Series:
         """Robust datetime parsing that tries multiple formats"""
-        print(f"[DEBUG] Parsing datetime column '{column_name}' with {len(series)} values")
+        # Parsing datetime column
         
         # Common datetime formats from Sellerboard and other sources
         # PRIORITY ORDER: Most common Sellerboard formats first
@@ -66,7 +66,7 @@ class EnhancedOrdersAnalysis:
                 # Count how many values were successfully parsed
                 valid_count = parsed_series.notna().sum()
                 if valid_count > 0:
-                    print(f"[DEBUG] Format '{fmt}' parsed {valid_count}/{len(series)} values successfully")
+                    # Format parsed successfully
                     successful_format = fmt
                     break
             except Exception as e:
@@ -74,23 +74,23 @@ class EnhancedOrdersAnalysis:
         
         # If no specific format worked, try pandas' flexible parsing as fallback
         if parsed_series is None or parsed_series.notna().sum() == 0:
-            print(f"[DEBUG] All specific formats failed, trying flexible parsing")
+            # All specific formats failed, trying flexible parsing
             parsed_series = pd.to_datetime(series, errors='coerce')
         
         # Log results
         final_valid_count = parsed_series.notna().sum()
         nat_count = parsed_series.isna().sum()
         
-        print(f"[DEBUG] Final parsing results: {final_valid_count} valid, {nat_count} NaT values")
+        # Final parsing results logged
         if successful_format:
-            print(f"[DEBUG] Best format was: '{successful_format}'")
+            # Best format found
         
         # Show sample of unparseable values for debugging
         if nat_count > 0:
             invalid_mask = parsed_series.isna() & series.notna()
             if invalid_mask.any():
                 sample_invalid = series[invalid_mask].head(3).tolist()
-                print(f"[DEBUG] Sample unparseable values: {sample_invalid}")
+                # Sample unparseable values found
         
         return parsed_series
 
@@ -214,7 +214,7 @@ class EnhancedOrdersAnalysis:
             if today_sales_for_asin > 0:
                 weighted_velocity = today_sales_for_asin  # Use today's sales as velocity
                 velocity_data['current_velocity'] = today_sales_for_asin
-                print(f"[DEBUG] Using today's sales as velocity for {asin}: {today_sales_for_asin}")
+                # Using today's sales as velocity baseline
         
         # Trend analysis with safety checks
         recent_velocity = (velocity_data['7d'] + velocity_data['14d']) / 2
@@ -265,7 +265,7 @@ class EnhancedOrdersAnalysis:
         """Helper function to get days left value handling column name variations"""
         # Debug: print available columns (only once)
         if not hasattr(self, '_debug_printed'):
-            print(f"[DEBUG] Available stock columns: {list(stock_record.keys())}")
+            # Stock columns available
             self._debug_printed = True
             
         # List of possible column name patterns for days left
@@ -587,20 +587,20 @@ class EnhancedOrdersAnalysis:
                 col_lower = col.lower()
                 if any(keyword in col_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor', 'store']):
                     source_field = col
-                    print(f"[DEBUG] Found source field: '{col}'")
+                    # Source field found
                     break
             
             if not source_field:
-                print(f"[DEBUG] No source field found. Available columns: {list(df.columns)}")
+                # No source field found in columns
             
             # Clean and process data
             df[asin_field] = df[asin_field].astype(str).str.strip()
-            print(f"[DEBUG] Processing COGS field '{cogs_field}' - sample values: {df[cogs_field].head().tolist()}")
+            # Processing COGS field
             df[cogs_field] = pd.to_numeric(
                 df[cogs_field].astype(str).replace(r"[\$,]", "", regex=True), errors="coerce"
             )
-            print(f"[DEBUG] After COGS cleaning - sample values: {df[cogs_field].head().tolist()}")
-            print(f"[DEBUG] Valid COGS values: {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
+            # COGS field cleaned
+            # Valid COGS values counted
             
             # Convert date column for sorting
             try:
@@ -647,7 +647,7 @@ class EnhancedOrdersAnalysis:
                     elif last_known_source and last_known_source not in all_sources:
                         all_sources.append(last_known_source)
                 
-                print(f"[DEBUG] ASIN {asin} - found {len(all_sources)} unique sources: {all_sources}")
+                # Sources found for ASIN
                 
                 # Use the most recent valid source as the primary source
                 primary_source = all_sources[-1] if all_sources else None
@@ -660,20 +660,15 @@ class EnhancedOrdersAnalysis:
                     'source_column': source_field,
                     'total_purchases': len(asin_rows)
                 }
-                print(f"[DEBUG] ASIN {asin} - final COGS data: {cogs_data[asin]}")
+                # COGS data processed for ASIN
             
-            print(f"[DEBUG] Fetched COGS data for {len(cogs_data)} ASINs from Google Sheet")
+            # COGS data fetched from Google Sheet
             if len(cogs_data) > 0:
                 # Show sample COGS data
                 sample_asin = list(cogs_data.keys())[0]
-                print(f"[DEBUG] Sample COGS data for {sample_asin}: {cogs_data[sample_asin]}")
+                # Sample COGS data available
             else:
-                print(f"[DEBUG] No COGS data found. Sheet columns: {list(df.columns)}")
-                print(f"[DEBUG] Looking for ASIN field: '{asin_field}', COGS field: '{cogs_field}', Date field: '{date_field}'")
-                print(f"[DEBUG] Source field found: '{source_field}'")
-                print(f"[DEBUG] Total rows in sheet: {len(df)}")
-                print(f"[DEBUG] Non-empty ASIN values: {len(df[df[asin_field].notna() & (df[asin_field] != '') & (df[asin_field] != 'nan')])}")
-                print(f"[DEBUG] Non-empty COGS values: {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
+                # No COGS data found in sheet
             return cogs_data
             
         except Exception as e:
@@ -693,7 +688,7 @@ class EnhancedOrdersAnalysis:
             
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
-            print(f"[DEBUG] Found {len(worksheet_names)} worksheets: {worksheet_names}")
+            # Worksheets found in spreadsheet
             
             # Expected column structure (exact names)
             expected_columns = {"Date", "Store and Source Link", "ASIN", "COGS"}
@@ -703,7 +698,7 @@ class EnhancedOrdersAnalysis:
             
             for worksheet_name in worksheet_names:
                 try:
-                    print(f"[DEBUG] Processing worksheet: '{worksheet_name}'")
+                    # Processing worksheet
                     
                     # Fetch worksheet data
                     range_ = f"'{worksheet_name}'!A1:Z"
@@ -716,7 +711,7 @@ class EnhancedOrdersAnalysis:
                     values = r.json().get("values", [])
                     
                     if not values or len(values) < 2:
-                        print(f"[DEBUG] Skipping '{worksheet_name}' - insufficient data")
+                        # Skipping worksheet - insufficient data
                         continue
                     
                     # Check if column structure matches expected format
@@ -725,10 +720,10 @@ class EnhancedOrdersAnalysis:
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        print(f"[DEBUG] Skipping '{worksheet_name}' - missing columns: {missing}")
+                        # Skipping worksheet - missing columns
                         continue
                     
-                    print(f"[DEBUG] '{worksheet_name}' has correct column structure, processing...")
+                    # Worksheet has correct structure
                     
                     # Create DataFrame
                     rows = []
@@ -748,7 +743,7 @@ class EnhancedOrdersAnalysis:
                     date_field = "Date"
                     source_field = "Store and Source Link"
                     
-                    print(f"[DEBUG] '{worksheet_name}' - processing {len(df)} rows")
+                    # Processing worksheet rows
                     
                     # Clean and process data
                     df[asin_field] = df[asin_field].astype(str).str.strip()
@@ -782,14 +777,14 @@ class EnhancedOrdersAnalysis:
                             combined_cogs_data[asin]['source_sheets'] = [worksheet_name]
                     
                     successful_sheets.append(worksheet_name)
-                    print(f"[DEBUG] '{worksheet_name}' processed successfully - found {len(worksheet_cogs)} products")
+                    # Worksheet processed successfully
                     
                 except Exception as e:
-                    print(f"[DEBUG] Error processing worksheet '{worksheet_name}': {e}")
+                    # Error processing worksheet
                     continue
             
-            print(f"[DEBUG] Successfully processed {len(successful_sheets)} worksheets: {successful_sheets}")
-            print(f"[DEBUG] Combined COGS data for {len(combined_cogs_data)} unique ASINs")
+            # All worksheets processed
+            # COGS data combined from all worksheets
             
             return combined_cogs_data
             
@@ -973,11 +968,11 @@ class EnhancedOrdersAnalysis:
             if asin in today_sales or asin in yesterday_sales:
                 products_to_analyze.add(asin)
         
-        print(f"[DEBUG] Total products to analyze: {len(products_to_analyze)} (today_sales: {len(today_sales)}, yesterday_sales: {len(yesterday_sales)}, stock_info: {len(stock_info)})")
+        # Total products to analyze calculated
         
         for asin in products_to_analyze:
             if asin not in stock_info:
-                print(f"[DEBUG] Skipping {asin} - no stock info")
+                # Skipping product with no stock info
                 continue
                 
             # Calculate enhanced velocity
@@ -985,7 +980,7 @@ class EnhancedOrdersAnalysis:
             
             # Skip products with zero velocity across all periods
             if velocity_data.get('weighted_velocity', 0) == 0 and today_sales.get(asin, 0) == 0:
-                print(f"[DEBUG] Skipping {asin} - zero velocity and no current sales")
+                # Skipping product with zero velocity
                 continue
             
             # Get priority score
@@ -1041,10 +1036,7 @@ class EnhancedOrdersAnalysis:
                 if priority_data['category'].startswith('critical'):
                     critical_alerts.append(alert)
                     
-        print(f"[DEBUG] Final enhanced analytics count: {len(enhanced_analytics)}")
-        print(f"[DEBUG] Products with non-zero velocity: {len([a for a in enhanced_analytics.values() if a['velocity']['weighted_velocity'] > 0])}")
-        print(f"[DEBUG] Restock alerts generated: {len(restock_alerts)}")
-        print(f"[DEBUG] Critical alerts generated: {len(critical_alerts)}")
+        # Enhanced analytics completed
 
         # Legacy velocity calculation for backward compatibility
         velocity = {}
@@ -1085,10 +1077,10 @@ class EnhancedOrdersAnalysis:
             
             # Debug: Print the first few items to see what values we're getting
             if len(low_stock) < 3:  # Only log first 3 to avoid spam
-                print(f"[DEBUG] ASIN {asin}: days_left={days_left}, running_out='{running_out}', sales={sales}")
+                # Processing stock analysis
                 
             if days_left < 7 or running_out in ("SOON", "YES"):
-                print(f"[DEBUG] Found low stock item: {asin} - days_left={days_left}, running_out='{running_out}'")
+                # Low stock item identified
                 low_stock[asin] = {
                     "days_left": days_left,
                     "running_out": running_out,
@@ -1121,12 +1113,12 @@ class EnhancedOrdersAnalysis:
         if not today_orders.empty:
             # Convert DataFrame to dict format for frontend
             sellerboard_orders = today_orders.to_dict('records')
-            print(f"[DEBUG] Revenue data: {len(sellerboard_orders)} orders for revenue calculation")
+            # Revenue data prepared
             if sellerboard_orders:
                 # Check what revenue fields are available
                 sample_order = sellerboard_orders[0]
                 revenue_fields = [k for k in sample_order.keys() if 'total' in k.lower() or 'amount' in k.lower() or 'revenue' in k.lower()]
-                print(f"[DEBUG] Available revenue fields: {revenue_fields}")
+                # Revenue fields identified
 
         return {
             # Enhanced analytics (new)

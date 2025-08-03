@@ -7,6 +7,7 @@ import os
 import math
 import numpy as np
 from typing import Dict, Optional, List, Tuple
+from purchase_analytics import PurchaseAnalytics
 
 # Default URLs removed for security - users must configure their own URLs
 ORDERS_REPORT_URL = None
@@ -19,6 +20,9 @@ class EnhancedOrdersAnalysis:
             raise ValueError("Both orders_url and stock_url must be provided. No default URLs available.")
         self.orders_url = orders_url
         self.stock_url = stock_url
+        
+        # Initialize purchase analytics
+        self.purchase_analytics = PurchaseAnalytics()
         
         # Test numpy import and warn if not available
         try:
@@ -523,8 +527,8 @@ class EnhancedOrdersAnalysis:
             stock_info[asin] = row.to_dict()
         return stock_info
 
-    def fetch_google_sheet_cogs_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Dict[str, dict]:
-        """Fetch COGS and Source links from Google Sheet for each ASIN"""
+    def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:
+        """Fetch both COGS data and full sheet data for purchase analytics"""
         try:
             # Fetch the sheet data using existing function
             import requests
@@ -539,7 +543,7 @@ class EnhancedOrdersAnalysis:
             values = r.json().get("values", [])
             
             if not values or len(values) < 2:
-                return {}
+                return {}, pd.DataFrame()
             
             # Create DataFrame
             cols = values[0]
@@ -553,6 +557,24 @@ class EnhancedOrdersAnalysis:
                 rows.append(row)
             
             df = pd.DataFrame(rows, columns=cols)
+            
+            # Generate COGS data using existing logic
+            cogs_data = self._process_cogs_data(df, column_mapping)
+            
+            return cogs_data, df
+            
+        except Exception as e:
+            print(f"[Google Sheets] Error fetching sheet data: {e}")
+            return {}, pd.DataFrame()
+
+    def fetch_google_sheet_cogs_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Dict[str, dict]:
+        """Fetch COGS and Source links from Google Sheet for each ASIN"""
+        cogs_data, _ = self.fetch_google_sheet_data(access_token, sheet_id, worksheet_title, column_mapping)
+        return cogs_data
+    
+    def _process_cogs_data(self, df: pd.DataFrame, column_mapping: dict) -> Dict[str, dict]:
+        """Process DataFrame to extract COGS data"""
+        try:
             
             # Get column mappings
             asin_field = column_mapping.get("ASIN", "ASIN")
@@ -852,11 +874,13 @@ class EnhancedOrdersAnalysis:
         stock_df = self.download_csv(self.stock_url)
         stock_info = self.get_stock_info(stock_df)
 
-        # Fetch COGS data from Google Sheet if enabled
+        # Fetch COGS data and purchase analytics from Google Sheet if enabled
         cogs_data = {}
+        purchase_insights = {}
+        
         print(f"[DEBUG] Checking COGS settings - user_settings: {user_settings}")
         if user_settings and user_settings.get('enable_source_links'):
-            print(f"[DEBUG] Source links enabled, attempting to fetch COGS data...")
+            print(f"[DEBUG] Source links enabled, attempting to fetch COGS data and purchase analytics...")
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -884,20 +908,46 @@ class EnhancedOrdersAnalysis:
                         cogs_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id
                         )
+                        # For all worksheets, use default column mapping
+                        sheet_data = pd.DataFrame()  # Empty for now as all worksheets doesn't return full data
+                        column_mapping_for_purchase = {
+                            'Date': 'Date',
+                            'ASIN': 'ASIN', 
+                            'Amount Purchased': 'Amount Purchased',
+                            'COGS': 'COGS',
+                            'Sale Price': 'Sale Price',
+                            '# Units in Bundle': '# Units in Bundle'
+                        }
                     elif worksheet_title:
                         print(f"[DEBUG] Searching specific worksheet: {worksheet_title}")
-                        cogs_data = self.fetch_google_sheet_cogs_data(
+                        cogs_data, sheet_data = self.fetch_google_sheet_data(
                             access_token, sheet_id, worksheet_title, column_mapping
                         )
+                        column_mapping_for_purchase = column_mapping
                     else:
                         print(f"[DEBUG] No worksheet specified and search all worksheets disabled")
                         cogs_data = {}
+                        sheet_data = pd.DataFrame()
+                        column_mapping_for_purchase = {}
+                    
                     print(f"[DEBUG] Successfully fetched COGS data for {len(cogs_data)} products")
+                    
+                    # Generate purchase analytics if we have sheet data
+                    if not sheet_data.empty:
+                        print(f"[DEBUG] Generating purchase analytics from {len(sheet_data)} sheet records...")
+                        purchase_insights = self.purchase_analytics.analyze_purchase_data(
+                            sheet_data, column_mapping_for_purchase
+                        )
+                        print(f"[DEBUG] Purchase analytics generated successfully")
+                    else:
+                        print(f"[DEBUG] No sheet data available for purchase analytics")
+                        
                 else:
                     print("[DEBUG] Missing Google Sheet settings for COGS data")
             except Exception as e:
-                print(f"[ERROR] Failed to fetch COGS data: {e}")
+                print(f"[ERROR] Failed to fetch COGS data and purchase analytics: {e}")
                 cogs_data = {}
+                purchase_insights = {}
 
         # Load historical sales for comparison
         if prev_date is None:
@@ -941,7 +991,7 @@ class EnhancedOrdersAnalysis:
             # Calculate optimal restock quantity
             restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin])
             
-            # Combine all data including COGS data if available
+            # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {
                 'current_sales': current_sales,
                 'velocity': velocity_data,
@@ -949,7 +999,13 @@ class EnhancedOrdersAnalysis:
                 'restock': restock_data,
                 'stock_info': stock_info[asin],
                 'product_name': stock_info[asin].get('Title', f'Product {asin}'),
-                'cogs_data': cogs_data.get(asin, {})  # Include COGS and source link data
+                'cogs_data': cogs_data.get(asin, {}),  # Include COGS and source link data
+                'purchase_analytics': {
+                    'velocity_analysis': purchase_insights.get('purchase_velocity_analysis', {}).get(asin, {}),
+                    'urgency_scoring': purchase_insights.get('restock_urgency_scoring', {}).get(asin, {}),
+                    'roi_recommendations': purchase_insights.get('roi_based_recommendations', {}).get(asin, {}),
+                    'seasonal_trends': purchase_insights.get('seasonal_purchase_trends', {}).get(asin, {})
+                }
             }
             
             # Generate alerts for high priority items (only products with velocity > 0)
@@ -1075,6 +1131,9 @@ class EnhancedOrdersAnalysis:
             "critical_alerts": critical_alerts,
             "total_products_analyzed": len(enhanced_analytics),
             "high_priority_count": len([a for a in enhanced_analytics.values() if a['priority']['category'] in ['critical_high_velocity', 'critical_low_velocity', 'warning_high_velocity']]),
+            
+            # Purchase analytics insights
+            "purchase_insights": purchase_insights,
             
             # Legacy data (for backward compatibility)
             "today_sales": today_sales,

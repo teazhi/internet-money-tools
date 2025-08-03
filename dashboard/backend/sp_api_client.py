@@ -49,13 +49,14 @@ except ImportError:
 class SPAPIClient:
     """Amazon SP-API Client wrapper"""
     
-    def __init__(self, refresh_token=None, marketplace='ATVPDKIKX0DER'):  # Default to US marketplace
+    def __init__(self, refresh_token=None, marketplace='ATVPDKIKX0DER', sandbox=None):  # Default to US marketplace
         """
         Initialize SP-API client
         
         Args:
             refresh_token: User's Amazon refresh token (if None, will try environment)
             marketplace: Amazon marketplace ID (default: US)
+            sandbox: Whether to use sandbox mode (if None, will check environment)
         """
         if not SP_API_AVAILABLE:
             raise ImportError("python-amazon-sp-api package not installed")
@@ -66,9 +67,18 @@ class SPAPIClient:
         self.lwa_client_secret = os.getenv('SP_API_LWA_CLIENT_SECRET')
         self.marketplace_id = marketplace
         
+        # Check if we should use sandbox mode
+        self.sandbox = sandbox if sandbox is not None else os.getenv('SP_API_SANDBOX', 'false').lower() == 'true'
+        print(f"[SP-API] Sandbox mode: {self.sandbox}")
+        
         # Validate required credentials
         if not all([self.refresh_token, self.lwa_app_id, self.lwa_client_secret]):
             raise ValueError("Missing required SP-API credentials. Need refresh_token, SP_API_LWA_APP_ID, and SP_API_LWA_CLIENT_SECRET")
+        
+        # Debug credential info (without exposing sensitive data)
+        print(f"[SP-API] LWA App ID: {self.lwa_app_id[:10]}..." if self.lwa_app_id else "[SP-API] Missing LWA App ID")
+        print(f"[SP-API] Refresh token length: {len(self.refresh_token)}" if self.refresh_token else "[SP-API] Missing refresh token")
+        print(f"[SP-API] Client secret length: {len(self.lwa_client_secret)}" if self.lwa_client_secret else "[SP-API] Missing client secret")
         
         # Initialize API clients
         self.credentials = {
@@ -76,6 +86,11 @@ class SPAPIClient:
             'lwa_app_id': self.lwa_app_id,
             'lwa_client_secret': self.lwa_client_secret,
         }
+        
+        # Add sandbox parameter if in sandbox mode
+        if self.sandbox:
+            self.credentials['sandbox'] = True
+            print("[SP-API] Using sandbox endpoints")
         
         # Set marketplace
         if marketplace == 'ATVPDKIKX0DER':

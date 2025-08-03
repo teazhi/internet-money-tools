@@ -532,6 +532,9 @@ class EnhancedOrdersAnalysis:
     def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:
         """Fetch both COGS data and full sheet data for purchase analytics"""
         try:
+            print(f"[DEBUG FETCH] Fetching data from sheet {sheet_id}, worksheet '{worksheet_title}'")
+            print(f"[DEBUG FETCH] Column mapping: {column_mapping}")
+            
             # Fetch the sheet data using existing function
             import requests
             range_ = f"'{worksheet_title}'!A1:Z"
@@ -543,12 +546,15 @@ class EnhancedOrdersAnalysis:
             r = requests.get(url, headers=headers)
             r.raise_for_status()
             values = r.json().get("values", [])
+            print(f"[DEBUG FETCH] Retrieved {len(values)} rows from Google Sheets API")
             
             if not values or len(values) < 2:
+                print(f"[DEBUG FETCH] Insufficient data: {len(values) if values else 0} rows")
                 return {}, pd.DataFrame()
             
             # Create DataFrame
             cols = values[0]
+            print(f"[DEBUG FETCH] Sheet columns: {cols}")
             rows = []
             for row in values[1:]:
                 # pad/truncate to match header length
@@ -559,9 +565,12 @@ class EnhancedOrdersAnalysis:
                 rows.append(row)
             
             df = pd.DataFrame(rows, columns=cols)
+            print(f"[DEBUG FETCH] DataFrame created: {df.shape} rows x columns")
+            print(f"[DEBUG FETCH] DataFrame columns: {list(df.columns)}")
             
             # Generate COGS data using existing logic
             cogs_data = self._process_cogs_data(df, column_mapping)
+            print(f"[DEBUG FETCH] Final result: {len(cogs_data)} COGS records processed")
             
             return cogs_data, df
             
@@ -697,8 +706,12 @@ class EnhancedOrdersAnalysis:
             print(f"[ERROR] Failed to fetch COGS data from Google Sheet: {e}")
             return {}
 
-    def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str) -> Dict[str, dict]:
-        """Fetch COGS and Source links from ALL worksheets in the Google Sheet"""
+    def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str) -> tuple[Dict[str, dict], pd.DataFrame]:
+        """Fetch COGS and Source links from ALL worksheets in the Google Sheet
+        
+        Returns:
+            tuple: (cogs_data dict, combined_dataframe for purchase analytics)
+        """
         try:
             import requests
             
@@ -716,6 +729,7 @@ class EnhancedOrdersAnalysis:
             expected_columns = {"Date", "Store and Source Link", "ASIN", "COGS"}
             
             combined_cogs_data = {}
+            combined_dataframes = []  # For purchase analytics
             successful_sheets = []
             
             for worksheet_name in worksheet_names:
@@ -801,6 +815,17 @@ class EnhancedOrdersAnalysis:
                             combined_cogs_data[asin] = data
                             combined_cogs_data[asin]['source_sheets'] = [worksheet_name]
                     
+                    # Check if this worksheet has purchase analytics columns
+                    purchase_analytics_columns = {"Amount Purchased", "Sale Price", "# Units in Bundle"}
+                    if purchase_analytics_columns.intersection(available_columns):
+                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' has purchase analytics columns - adding to combined data")
+                        # Add worksheet identifier to the DataFrame
+                        df_copy = df.copy()
+                        df_copy['_worksheet_source'] = worksheet_name
+                        combined_dataframes.append(df_copy)
+                    else:
+                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' missing purchase analytics columns: {purchase_analytics_columns - available_columns}")
+                    
                     successful_sheets.append(worksheet_name)
                     # Worksheet processed successfully
                     
@@ -811,11 +836,19 @@ class EnhancedOrdersAnalysis:
             # All worksheets processed
             # COGS data combined from all worksheets
             
-            return combined_cogs_data
+            # Combine all DataFrames for purchase analytics
+            if combined_dataframes:
+                combined_df = pd.concat(combined_dataframes, ignore_index=True)
+                print(f"[DEBUG COGS ALL] Combined DataFrame: {len(combined_df)} rows from {len(combined_dataframes)} worksheets")
+            else:
+                combined_df = pd.DataFrame()
+                print(f"[DEBUG COGS ALL] No worksheets with purchase analytics columns found")
+            
+            return combined_cogs_data, combined_df
             
         except Exception as e:
             print(f"[ERROR] Failed to fetch COGS data from all worksheets: {e}")
-            return {}
+            return {}, pd.DataFrame()
 
     def process_asin_cogs_data(self, df, asin_field, cogs_field, date_field, source_field):
         """Extract COGS data for each ASIN from a worksheet DataFrame"""
@@ -901,7 +934,9 @@ class EnhancedOrdersAnalysis:
         print(f"[DEBUG] Checking COGS settings - user_settings: {user_settings}")
         print(f"[DEBUG] enable_source_links: {user_settings.get('enable_source_links') if user_settings else None}")
         print(f"[DEBUG] sheet_id: {user_settings.get('sheet_id') if user_settings else None}")
+        print(f"[DEBUG] worksheet_title: {user_settings.get('worksheet_title') if user_settings else None}")
         print(f"[DEBUG] google_tokens: {bool(user_settings.get('google_tokens')) if user_settings else None}")
+        print(f"[DEBUG] search_all_worksheets: {user_settings.get('search_all_worksheets') if user_settings else None}")
         
         if user_settings and user_settings.get('enable_source_links'):
             print(f"[DEBUG] Source links enabled, attempting to fetch COGS data and purchase analytics...")
@@ -929,11 +964,10 @@ class EnhancedOrdersAnalysis:
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
                         print(f"[DEBUG] Searching all worksheets in Google Sheet...")
-                        cogs_data = self.fetch_google_sheet_cogs_data_all_worksheets(
+                        cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id
                         )
                         # For all worksheets, use default column mapping
-                        sheet_data = pd.DataFrame()  # Empty for now as all worksheets doesn't return full data
                         column_mapping_for_purchase = {
                             'Date': 'Date',
                             'ASIN': 'ASIN', 
@@ -946,10 +980,12 @@ class EnhancedOrdersAnalysis:
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:
                             print(f"[DEBUG] All worksheets search found no data, trying specific worksheet: {worksheet_title}")
+                            print(f"[DEBUG] Using column mapping: {column_mapping}")
                             cogs_data, sheet_data = self.fetch_google_sheet_data(
                                 access_token, sheet_id, worksheet_title, column_mapping
                             )
                             column_mapping_for_purchase = column_mapping
+                            print(f"[DEBUG] Fallback result: {len(cogs_data)} COGS records, {len(sheet_data)} sheet rows")
                             
                     elif worksheet_title:
                         print(f"[DEBUG] Searching specific worksheet: {worksheet_title}")

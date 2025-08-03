@@ -931,8 +931,7 @@ def get_orders_analytics():
         print(f"[Dashboard Analytics] Request headers: {dict(request.headers)}")
         print(f"[Dashboard Analytics] Session keys: {list(session.keys())}")
         
-        # Import the orders analysis class (copied to backend directory)
-        from orders_analysis import OrdersAnalysis
+        # Try SP-API first, fallback to Sellerboard if needed
         
         # Get user's timezone preference first and update last activity
         discord_id = session['discord_id']
@@ -984,87 +983,97 @@ def get_orders_analytics():
                 target_date = now.date() - timedelta(days=1)
                 print(f"[Dashboard Analytics] Showing yesterday's data (will switch at 11:59 PM {user_timezone or 'system timezone'})")
         
-        print(f"[Dashboard Analytics] Fetching data for date: {target_date}")
-        print(f"[Dashboard Analytics] About to call OrdersAnalysis")
+        print(f"[SP-API Analytics] Fetching data for date: {target_date}")
         
-        # Get user's custom URLs if configured
-        discord_id = session['discord_id']
-        user_record = get_user_record(discord_id)
-        
-        orders_url = None
-        stock_url = None
-        if user_record:
-            orders_url = user_record.get('sellerboard_orders_url')
-            stock_url = user_record.get('sellerboard_stock_url')
-        
-        # Require user to have configured their own URLs
-        if not orders_url or not stock_url:
-            return jsonify({
-                'error': 'Report URLs not configured',
-                'message': 'Please configure your Sellerboard report URLs in Settings before accessing analytics.',
-                'requires_setup': True,
-                'report_date': target_date.isoformat(),
-                'is_yesterday': target_date == (date.today() - timedelta(days=1))
-            }), 400
-        
-        print(f"[Dashboard Analytics] Using user-configured URLs")
-        print(f"[Dashboard Analytics] Orders URL: {orders_url[:50]}..." if orders_url else "No orders URL")
-        print(f"[Dashboard Analytics] Stock URL: {stock_url[:50]}..." if stock_url else "No stock URL")
-        
+        # Check if SP-API is configured and available
         try:
-            print(f"[Dashboard Analytics] Initializing OrdersAnalysis...")
-            analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
-            print(f"[Dashboard Analytics] OrdersAnalysis initialized, starting analysis...")
-            # Prepare user settings for COGS data fetching
-            user_settings = {
-                'enable_source_links': user_record.get('enable_source_links', False),
-                'search_all_worksheets': user_record.get('search_all_worksheets', False),
-                'sheet_id': user_record.get('sheet_id'),
-                'worksheet_title': user_record.get('worksheet_title'),
-                'google_tokens': user_record.get('google_tokens', {}),
-                'column_mapping': user_record.get('column_mapping', {})
-            }
+            from sp_api_client import create_sp_api_client
+            from sp_api_analytics import create_sp_api_analytics
             
-            analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
-            print(f"[Dashboard Analytics] Analysis completed successfully")
-            print(f"[Dashboard Analytics] Low stock items found: {len(analysis.get('low_stock', {}))}")
-            print(f"[Dashboard Analytics] Restock priority items: {len(analysis.get('restock_priority', {}))}")
-            print(f"[Dashboard Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
-            print(f"[Dashboard Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
-            print(f"[Dashboard Analytics] Restock alerts: {len(analysis.get('restock_alerts', {}))}")
-            print(f"[Dashboard Analytics] Critical alerts: {len(analysis.get('critical_alerts', []))}")
+            # Create SP-API client
+            marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
+            sp_client = create_sp_api_client(marketplace_id)
             
-            # Debug: Show sample enhanced analytics data
-            if analysis.get('enhanced_analytics'):
-                sample_asin = list(analysis['enhanced_analytics'].keys())[0]
-                sample_data = analysis['enhanced_analytics'][sample_asin]
-                print(f"[DEBUG] Sample enhanced analytics for {sample_asin}:")
-                print(f"[DEBUG]   velocity: {sample_data.get('velocity', {})}")
-                print(f"[DEBUG]   priority: {sample_data.get('priority', {})}")
-                print(f"[DEBUG]   restock: {sample_data.get('restock', {})}")
-        except Exception as analysis_error:
-            print(f"[Dashboard Analytics] Enhanced analysis failed: {analysis_error}")
-            print(f"[Dashboard Analytics] Error type: {type(analysis_error).__name__}")
-            import traceback
-            print(f"[Dashboard Analytics] Full traceback:")
-            traceback.print_exc()
-            print(f"[Dashboard Analytics] Falling back to basic analytics...")
+            if not sp_client:
+                raise Exception("SP-API client not available. Check credentials.")
             
-            # Fallback to basic analytics structure
-            analysis = {
-                'today_sales': {},
-                'velocity': {},
-                'low_stock': {},
-                'restock_priority': {},
-                'stockout_30d': {},
-                'enhanced_analytics': {},
-                'restock_alerts': {},
-                'critical_alerts': [],
-                'total_products_analyzed': 0,
-                'high_priority_count': 0,
-                'error': f'Enhanced analytics failed: {str(analysis_error)}',
-                'fallback_mode': True
-            }
+            # Create analytics processor
+            analytics_processor = create_sp_api_analytics(sp_client)
+            
+            # Get analytics data from SP-API
+            print(f"[SP-API Analytics] Fetching data from Amazon SP-API...")
+            analysis = analytics_processor.get_orders_analytics(target_date, user_timezone)
+            
+            print(f"[SP-API Analytics] SP-API analysis completed successfully")
+            print(f"[SP-API Analytics] Source: {analysis.get('source', 'unknown')}")
+            print(f"[SP-API Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
+            print(f"[SP-API Analytics] Low stock items: {len(analysis.get('low_stock', {}))}")
+            print(f"[SP-API Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
+            
+        except Exception as sp_api_error:
+            print(f"[SP-API Analytics] SP-API failed, falling back to Sellerboard: {sp_api_error}")
+            
+            # Fallback to Sellerboard data if SP-API fails
+            try:
+                from orders_analysis import OrdersAnalysis
+                
+                # Get user's configured Sellerboard URLs
+                orders_url = user_record.get('sellerboard_orders_url') if user_record else None
+                stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                
+                if not orders_url or not stock_url:
+                    return jsonify({
+                        'error': 'SP-API unavailable and Sellerboard URLs not configured',
+                        'message': 'Please configure SP-API credentials or Sellerboard report URLs in Settings.',
+                        'requires_setup': True,
+                        'report_date': target_date.isoformat(),
+                        'is_yesterday': target_date == (date.today() - timedelta(days=1)),
+                        'sp_api_error': str(sp_api_error)
+                    }), 400
+                
+                print(f"[SP-API Analytics] Using Sellerboard fallback...")
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+                
+                # Prepare user settings for COGS data fetching
+                user_settings = {
+                    'enable_source_links': user_record.get('enable_source_links', False),
+                    'search_all_worksheets': user_record.get('search_all_worksheets', False),
+                    'sheet_id': user_record.get('sheet_id'),
+                    'worksheet_title': user_record.get('worksheet_title'),
+                    'google_tokens': user_record.get('google_tokens', {}),
+                    'column_mapping': user_record.get('column_mapping', {})
+                }
+                
+                analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
+                analysis['source'] = 'sellerboard-fallback'
+                analysis['sp_api_error'] = str(sp_api_error)
+                analysis['message'] = 'Using Sellerboard data (SP-API unavailable)'
+                
+                print(f"[SP-API Analytics] Sellerboard fallback completed successfully")
+                
+            except Exception as fallback_error:
+                print(f"[SP-API Analytics] Both SP-API and Sellerboard failed: {fallback_error}")
+                
+                # Return basic error structure
+                analysis = {
+                    'today_sales': {},
+                    'velocity': {},
+                    'low_stock': {},
+                    'restock_priority': {},
+                    'stockout_30d': {},
+                    'enhanced_analytics': {},
+                    'restock_alerts': {},
+                    'critical_alerts': [],
+                    'sellerboard_orders': [],
+                    'total_products_analyzed': 0,
+                    'high_priority_count': 0,
+                    'error': f'Both SP-API and Sellerboard failed. SP-API: {str(sp_api_error)}, Sellerboard: {str(fallback_error)}',
+                    'fallback_mode': True,
+                    'source': 'error',
+                    'report_date': target_date.isoformat(),
+                    'is_yesterday': target_date == (date.today() - timedelta(days=1)),
+                    'user_timezone': user_timezone
+                }
         
         # Ensure all expected keys exist with default values
         analysis.setdefault('today_sales', {})
@@ -1110,28 +1119,29 @@ def get_orders_analytics():
         analysis['is_yesterday'] = target_date == (date.today() - timedelta(days=1))
         analysis['user_timezone'] = user_timezone
         
-        print(f"[Dashboard Analytics] Successfully fetched data with {len(analysis.get('today_sales', {}))} products")
-        print(f"[Dashboard Analytics] Final analysis keys: {list(analysis.keys())}")
-        print(f"[Dashboard Analytics] today_sales in analysis: {'today_sales' in analysis}")
-        print(f"[Dashboard Analytics] today_sales value: {analysis.get('today_sales')}")
+        print(f"[SP-API Analytics] Analysis ready with {len(analysis)} top-level keys")
+        print(f"[SP-API Analytics] Data source: {analysis.get('source', 'unknown')}")
+        print(f"[SP-API Analytics] Sending response...")
         
         response = jsonify(analysis)
         response.headers['Content-Type'] = 'application/json'
         return response
         
     except Exception as e:
-        print(f"[Dashboard Analytics] Error getting analytics data: {e}")
+        print(f"[SP-API Analytics] Error getting analytics data: {e}")
         import traceback
-        print(f"[Dashboard Analytics] Full traceback: {traceback.format_exc()}")
+        print(f"[SP-API Analytics] Full traceback: {traceback.format_exc()}")
         
         # Return error with more details for debugging
         return jsonify({
             'error': f'Failed to fetch analytics data: {str(e)}',
             'report_date': (date.today() - timedelta(days=1)).isoformat(),
             'is_yesterday': True,
+            'source': 'error',
             'debug_info': {
+                'user_session': session.get('discord_id', 'Not logged in'),
                 'error_type': type(e).__name__,
-                'traceback': traceback.format_exc()
+                'timestamp': datetime.now().isoformat()
             }
         }), 500
 

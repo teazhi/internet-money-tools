@@ -53,6 +53,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [amazonStatus, setAmazonStatus] = useState({ connected: false, loading: true });
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     if (user?.user_record) {
@@ -113,6 +114,34 @@ const Settings = () => {
         type: 'error', 
         text: error.response?.data?.error || 'Failed to disconnect Amazon account' 
       });
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.get('/api/amazon-seller/test', { withCredentials: true });
+      
+      if (response.data.success) {
+        setMessage({ 
+          type: 'success', 
+          text: `SP-API connection successful! (${response.data.sandbox_mode ? 'Sandbox' : 'Production'} mode)` 
+        });
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: `Connection test failed: ${response.data.error}` 
+        });
+      }
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Connection test failed' 
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -511,16 +540,36 @@ const Settings = () => {
                   <p>• ✅ Real-time order and inventory data</p>
                   <p>• ✅ Direct Amazon API integration</p>
                   <p>• ✅ More accurate than Sellerboard exports</p>
-                  <p>• 🔄 Shared credentials (sandbox mode)</p>
+                  <p>• 🔄 Shared credentials ({amazonStatus.sandbox_mode ? 'sandbox' : 'production'} mode)</p>
+                  {amazonStatus.env_credentials_available && <p>• ✅ Environment credentials loaded</p>}
                 </div>
-                <button 
-                  onClick={handleConnectAmazon}
-                  disabled
-                  className="flex items-center space-x-2 text-sm bg-gray-400 text-white px-3 py-2 rounded-md cursor-not-allowed opacity-50"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>Individual Connection (Coming Soon)</span>
-                </button>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    className="flex items-center space-x-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded-md transition-colors duration-200"
+                  >
+                    {testingConnection ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Testing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        <span>Test Connection</span>
+                      </>
+                    )}
+                  </button>
+                  <button 
+                    onClick={handleConnectAmazon}
+                    disabled
+                    className="flex items-center space-x-2 text-sm bg-gray-400 text-white px-3 py-2 rounded-md cursor-not-allowed opacity-50"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>Individual Connection (Coming Soon)</span>
+                  </button>
+                </div>
                 <p className="text-xs text-blue-600 mt-2">
                   Individual account connection will be available when the SP-API app moves to production status.
                 </p>

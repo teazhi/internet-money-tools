@@ -760,16 +760,67 @@ def amazon_seller_status():
                 amazon_connected_at = user_record.get('amazon_connected_at')
                 selling_partner_id = user_record.get('amazon_selling_partner_id')
         
+        # Check if environment credentials are available
+        env_credentials_available = bool(os.getenv('SP_API_REFRESH_TOKEN') and 
+                                       os.getenv('SP_API_LWA_APP_ID') and 
+                                       os.getenv('SP_API_LWA_CLIENT_SECRET'))
+        
         return jsonify({
             'connected': amazon_connected,
             'connected_at': amazon_connected_at,
             'selling_partner_id': selling_partner_id,
+            'env_credentials_available': env_credentials_available,
+            'sandbox_mode': os.getenv('SP_API_SANDBOX', 'false').lower() == 'true',
             'auth_url': '/auth/amazon-seller' if not amazon_connected else None
         })
         
     except Exception as e:
         print(f"[Amazon Status] Error: {e}")
         return jsonify({'error': 'Failed to get Amazon connection status'}), 500
+
+@app.route('/api/amazon-seller/test')
+@login_required
+def test_amazon_connection():
+    """Test Amazon SP-API connection"""
+    try:
+        from sp_api_client import create_sp_api_client
+        
+        # Get environment refresh token
+        refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
+        if not refresh_token:
+            return jsonify({'error': 'No refresh token in environment variables'}), 400
+        
+        # Test SP-API connection
+        sp_client = create_sp_api_client(refresh_token, 'ATVPDKIKX0DER')
+        if not sp_client:
+            return jsonify({'error': 'Failed to create SP-API client'}), 500
+        
+        # Try a simple API call to test authentication
+        try:
+            # Test with a simple marketplace participation call
+            from sp_api.api import Sellers
+            sellers_client = Sellers(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
+            response = sellers_client.get_marketplace_participations()
+            
+            return jsonify({
+                'success': True,
+                'message': 'SP-API connection successful',
+                'sandbox_mode': sp_client.sandbox,
+                'marketplace': str(sp_client.marketplace),
+                'response_payload': bool(hasattr(response, 'payload') and response.payload)
+            })
+            
+        except Exception as api_error:
+            return jsonify({
+                'success': False,
+                'error': f'SP-API call failed: {str(api_error)}',
+                'sandbox_mode': sp_client.sandbox,
+                'marketplace': str(sp_client.marketplace)
+            }), 400
+        
+    except Exception as e:
+        print(f"[Amazon Test] Error: {e}")
+        return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
 @app.route('/api/debug/auth')
 def debug_auth():

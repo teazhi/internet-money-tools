@@ -577,11 +577,16 @@ class EnhancedOrdersAnalysis:
     def _process_cogs_data(self, df: pd.DataFrame, column_mapping: dict) -> Dict[str, dict]:
         """Process DataFrame to extract COGS data"""
         try:
+            print(f"[DEBUG COGS] Sheet shape: {df.shape}")
+            print(f"[DEBUG COGS] Available columns: {list(df.columns)}")
+            print(f"[DEBUG COGS] Column mapping: {column_mapping}")
             
             # Get column mappings
             asin_field = column_mapping.get("ASIN", "ASIN")
             cogs_field = column_mapping.get("COGS", "COGS")
             date_field = column_mapping.get("Date", "Date")
+            
+            print(f"[DEBUG COGS] Using fields - ASIN: '{asin_field}', COGS: '{cogs_field}', Date: '{date_field}'")
             
             # Look for Source/Link columns
             source_field = None
@@ -597,13 +602,26 @@ class EnhancedOrdersAnalysis:
                 pass
             
             # Clean and process data
+            print(f"[DEBUG COGS] Processing ASIN field '{asin_field}' - sample raw values: {df[asin_field].head().tolist()}")
             df[asin_field] = df[asin_field].astype(str).str.strip()
-            # Processing COGS field
-            df[cogs_field] = pd.to_numeric(
-                df[cogs_field].astype(str).replace(r"[\$,]", "", regex=True), errors="coerce"
-            )
-            # COGS field cleaned
-            # Valid COGS values counted
+            print(f"[DEBUG COGS] After ASIN cleaning: {df[asin_field].head().tolist()}")
+            print(f"[DEBUG COGS] Valid ASINs: {len(df[df[asin_field].notna() & (df[asin_field] != '') & (df[asin_field] != 'nan')])}")
+            
+            print(f"[DEBUG COGS] Processing COGS field '{cogs_field}' - sample raw values: {df[cogs_field].head().tolist()}")
+            print(f"[DEBUG COGS] COGS column dtype: {df[cogs_field].dtype}")
+            
+            # Process COGS field step by step with debugging
+            cogs_raw = df[cogs_field].astype(str)
+            print(f"[DEBUG COGS] After str conversion: {cogs_raw.head().tolist()}")
+            
+            cogs_cleaned = cogs_raw.replace(r"[\$,]", "", regex=True)
+            print(f"[DEBUG COGS] After removing $,: {cogs_cleaned.head().tolist()}")
+            
+            df[cogs_field] = pd.to_numeric(cogs_cleaned, errors="coerce")
+            print(f"[DEBUG COGS] After numeric conversion: {df[cogs_field].head().tolist()}")
+            print(f"[DEBUG COGS] Valid COGS values (>0): {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
+            print(f"[DEBUG COGS] Total non-null COGS: {df[cogs_field].notna().sum()}")
+            print(f"[DEBUG COGS] COGS field stats: min={df[cogs_field].min()}, max={df[cogs_field].max()}")
             
             # Convert date column for sorting
             try:

@@ -633,7 +633,7 @@ def amazon_seller_auth():
     try:
         # Get Amazon OAuth credentials
         client_id = os.getenv('SP_API_LWA_APP_ID')
-        redirect_uri = os.getenv('AMAZON_REDIRECT_URI', 'https://internet-money-tools-backend.up.railway.app/auth/amazon-seller/callback')
+        redirect_uri = os.getenv('AMAZON_REDIRECT_URI', 'https://internet-money-tools-production.up.railway.app/auth/amazon-seller/callback')
         
         if not client_id:
             return jsonify({'error': 'Amazon OAuth not configured'}), 500

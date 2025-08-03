@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink } from 'lucide-react';
+import { API_ENDPOINTS } from '../../config/api';
 import axios from 'axios';
 
 // Common timezones for the selector
@@ -88,8 +89,8 @@ const Settings = () => {
   }, [user]);
 
   const handleConnectAmazon = () => {
-    // Redirect to Amazon OAuth
-    window.location.href = '/auth/amazon-seller';
+    // Redirect to Amazon OAuth on backend
+    window.location.href = API_ENDPOINTS.AMAZON_AUTH;
   };
 
   const handleDisconnectAmazon = async () => {

@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   DISCORD_AUTH: `${API_BASE_URL}/auth/discord`,
   DISCORD_CALLBACK: `${API_BASE_URL}/auth/discord/callback`,
   GOOGLE_AUTH: `${API_BASE_URL}/auth/google`,
+  AMAZON_AUTH: `${API_BASE_URL}/auth/amazon-seller`,
   LOGOUT: `${API_BASE_URL}/auth/logout`,
   
   // User endpoints  

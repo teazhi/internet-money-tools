@@ -314,30 +314,20 @@ const Overview = () => {
       .sort(([_, a], [__, b]) => b.urgency_score - a.urgency_score)
       .slice(0, 3);
     
-    // Calculate date range for display
+    // Calculate current month date range for display
     let dateRange = '';
-    if (summary.analysis_date_range) {
-      const startDate = summary.analysis_date_range.start;
-      const endDate = summary.analysis_date_range.end;
-      if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const formatOptions = { month: 'short', day: 'numeric' };
-        
-        // If same year, don't show year twice
-        if (start.getFullYear() === end.getFullYear()) {
-          if (start.getMonth() === end.getMonth() && start.getDate() === end.getDate()) {
-            // Same date
-            dateRange = start.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' });
-          } else {
-            // Different dates, same year
-            dateRange = `${start.toLocaleDateString('en-US', formatOptions)} - ${end.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })}`;
-          }
-        } else {
-          // Different years
-          dateRange = `${start.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })} - ${end.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })}`;
-        }
-      }
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentDay = today.getDate();
+    
+    const formatOptions = { month: 'short', day: 'numeric' };
+    
+    if (currentDay === 1) {
+      // If it's the 1st of the month, just show the single date
+      dateRange = firstDayOfMonth.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' });
+    } else {
+      // Show range from 1st to current day
+      dateRange = `${firstDayOfMonth.toLocaleDateString('en-US', formatOptions)} - ${today.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })}`;
     }
     
     return {

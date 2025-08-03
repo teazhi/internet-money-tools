@@ -609,6 +609,7 @@ def discord_callback():
         # User record updated with Discord data
     except Exception as e:
         # Failed to update user record
+        pass
     
     # FORCE redirect to Vercel frontend - UPDATED
     frontend_url = "https://dms-amazon.vercel.app/dashboard"

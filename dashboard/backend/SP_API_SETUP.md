@@ -62,7 +62,7 @@ SP_API_DEFAULT_MARKETPLACE=ATVPDKIKX0DER  # US marketplace
 The SP-API integration requires the `python-amazon-sp-api` package:
 
 ```bash
-pip install python-amazon-sp-api==1.9.46
+pip install python-amazon-sp-api==1.8.22
 ```
 
 This is already added to `requirements.txt`.

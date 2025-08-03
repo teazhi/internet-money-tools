@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   TrendingUp, 
@@ -62,8 +62,8 @@ const Overview = () => {
 
   useEffect(() => {
     fetchAnalytics();
-    // Auto-refresh every 10 minutes (reduced from 5 minutes)
-    const interval = setInterval(fetchAnalytics, 10 * 60 * 1000);
+    // Auto-refresh every 15 minutes to reduce server load, but don't show loading state
+    const interval = setInterval(() => fetchAnalytics(false), 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAnalytics]);
 
@@ -258,7 +258,7 @@ const Overview = () => {
     }
     
     return { todayOrders, activeProducts, lowStockCount, restockPriorityCount, yesterdayRevenue };
-  }, [analytics]);
+  }, [analytics?.today_sales, analytics?.sellerboard_orders, analytics?.enhanced_analytics, analytics?.low_stock, analytics?.restock_priority]);
 
   const topProducts = useMemo(() => {
     if (!analytics?.today_sales) return [];
@@ -268,7 +268,30 @@ const Overview = () => {
       .slice(0, 5);
   }, [analytics?.today_sales]);
 
-  const stockAlerts = useMemo(() => {
+  const TopProductItem = memo(({ asin, count, index }) => (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-3">
+        <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
+          {index + 1}
+        </span>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium text-gray-900">{asin}</span>
+          <a
+            href={`https://amazon.com/dp/${asin}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+            title="View on Amazon"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </div>
+      </div>
+      <span className="text-sm text-gray-600">{count} units</span>
+    </div>
+  ));
+
+  const stockAlertsData = useMemo(() => {
     if (analytics?.enhanced_analytics) {
       const lowStockProducts = [];
       
@@ -285,9 +308,8 @@ const Overview = () => {
         if (daysLeft < 14) {
           lowStockProducts.push({
             asin,
-            data,
+            productName: data.product_name,
             daysLeft,
-            velocity,
             currentStock,
             suggestedQty: data.restock.suggested_quantity || 0
           });
@@ -297,46 +319,45 @@ const Overview = () => {
       // Sort by days left and take top 5
       return lowStockProducts
         .sort((a, b) => a.daysLeft - b.daysLeft)
-        .slice(0, 5)
-        .map(({ asin, data, daysLeft, currentStock, suggestedQty }) => (
-          <div key={asin} className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{asin}</p>
-              <p className="text-xs text-gray-500 truncate max-w-xs">
-                {data.product_name?.length > 40 
-                  ? data.product_name.substring(0, 40) + '...'
-                  : data.product_name
-                }
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-red-600 font-medium">
-                {daysLeft < 1 ? '< 1 day' : `${Math.round(daysLeft)} days left`}
-              </p>
-              <p className="text-xs text-gray-500">
-                Stock: {Math.round(currentStock)} • Reorder: {suggestedQty}
-              </p>
-            </div>
-          </div>
-        ));
+        .slice(0, 5);
     } else if (analytics?.low_stock) {
       return Object.entries(analytics.low_stock)
         .slice(0, 5)
-        .map(([asin, info]) => (
-          <div key={asin} className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{asin}</p>
-              <p className="text-xs text-gray-500 truncate max-w-xs">{info.title}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-red-600 font-medium">{info.days_left} days left</p>
-              <p className="text-xs text-gray-500">Reorder: {info.reorder_qty}</p>
-            </div>
-          </div>
-        ));
+        .map(([asin, info]) => ({
+          asin,
+          productName: info.title,
+          daysLeft: parseInt(info.days_left) || 0,
+          currentStock: 0,
+          suggestedQty: info.reorder_qty || 0,
+          isLegacy: true
+        }));
     }
-    return null;
+    return [];
   }, [analytics?.enhanced_analytics, analytics?.low_stock]);
+
+  const StockAlertItem = memo(({ item }) => (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-900">{item.asin}</p>
+        <p className="text-xs text-gray-500 truncate max-w-xs">
+          {item.productName?.length > 40 
+            ? item.productName.substring(0, 40) + '...'
+            : item.productName
+          }
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-sm text-red-600 font-medium">
+          {item.isLegacy ? `${item.daysLeft} days left` : 
+           item.daysLeft < 1 ? '< 1 day' : `${Math.round(item.daysLeft)} days left`}
+        </p>
+        <p className="text-xs text-gray-500">
+          {item.isLegacy ? `Reorder: ${item.suggestedQty}` :
+           `Stock: ${Math.round(item.currentStock)} • Reorder: ${item.suggestedQty}`}
+        </p>
+      </div>
+    </div>
+  ));
 
   // Check if user is authenticated (after all hooks)
   if (user === null) {
@@ -618,7 +639,7 @@ const Overview = () => {
             )}
           </div>
           <button
-            onClick={fetchAnalytics}
+            onClick={() => fetchAnalytics(true)}
             disabled={loading}
             className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
             title={loading ? "Loading..." : "Refresh Data"}
@@ -764,27 +785,8 @@ const Overview = () => {
           <div className="space-y-3">
             {topProducts.length > 0 ? 
               topProducts.map(([asin, count], index) => (
-                  <div key={asin} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
-                        {index + 1}
-                      </span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium text-gray-900">{asin}</span>
-                        <a
-                          href={`https://amazon.com/dp/${asin}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
-                          title="View on Amazon"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </div>
-                    </div>
-                    <span className="text-sm text-gray-600">{count} units</span>
-                  </div>
-                )) : (
+                <TopProductItem key={asin} asin={asin} count={count} index={index} />
+              )) : (
               <div className="text-center py-8">
                 <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 text-sm">
@@ -806,8 +808,10 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
           <div className="space-y-3">
-            {stockAlerts}
-            {analyticsStats.lowStockCount === 0 && (
+            {stockAlertsData.map((item) => (
+              <StockAlertItem key={item.asin} item={item} />
+            ))}
+            {stockAlertsData.length === 0 && (
               <p className="text-gray-500 text-sm">No stock alerts</p>
             )}
           </div>
@@ -851,4 +855,4 @@ const Overview = () => {
   );
 };
 
-export default Overview;
+export default memo(Overview);

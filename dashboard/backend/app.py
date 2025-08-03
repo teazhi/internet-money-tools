@@ -643,13 +643,17 @@ def amazon_seller_auth():
         session['amazon_oauth_state'] = state
         
         # Amazon OAuth URL for Seller Partner API
+        # Using the correct Amazon OAuth endpoint for SP-API
         amazon_auth_url = (
             f"https://sellercentral.amazon.com/apps/authorize/consent"
             f"?application_id={client_id}"
             f"&state={state}"
             f"&redirect_uri={redirect_uri}"
-            f"&version=beta"
         )
+        
+        print(f"[Amazon Auth] Generated OAuth URL: {amazon_auth_url}")
+        print(f"[Amazon Auth] Client ID: {client_id}")
+        print(f"[Amazon Auth] Redirect URI: {redirect_uri}")
         
         return redirect(amazon_auth_url)
         

@@ -1744,8 +1744,10 @@ def detect_duplicate_files_for_user(discord_id):
     
     if duplicates:
         # Duplicates found
+        pass
     else:
         # No duplicates found
+        pass
     
     return duplicates
 

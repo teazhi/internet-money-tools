@@ -1281,6 +1281,7 @@ def get_orders_analytics():
                 update_users_config(users)
             except Exception as e:
                 # Failed to update last activity
+                pass
         
         # Get query parameter for date, default to yesterday until 11:59 PM
         target_date_str = request.args.get('date')

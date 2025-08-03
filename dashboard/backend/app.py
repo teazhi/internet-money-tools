@@ -1210,17 +1210,25 @@ def get_orders_analytics():
             from sp_api_client import create_sp_api_client
             from sp_api_analytics import create_sp_api_analytics
             
-            # Get user's Amazon refresh token
+            # Try to get user's Amazon refresh token first, fallback to environment
             encrypted_token = user_record.get('amazon_refresh_token') if user_record else None
-            if not encrypted_token:
-                raise Exception("User has not connected their Amazon Seller account")
+            refresh_token = None
             
-            # Decrypt the refresh token
-            refresh_token = decrypt_token(encrypted_token)
+            if encrypted_token:
+                # Decrypt the refresh token
+                refresh_token = decrypt_token(encrypted_token)
+                if not refresh_token:
+                    print("[SP-API Analytics] Failed to decrypt user's Amazon refresh token, falling back to environment")
+            
             if not refresh_token:
-                raise Exception("Failed to decrypt Amazon refresh token")
+                # Fallback to environment variables (for sandbox or shared credentials)
+                refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
+                if refresh_token:
+                    print("[SP-API Analytics] Using refresh token from environment variables")
+                else:
+                    raise Exception("No Amazon refresh token available - user has not connected their Amazon Seller account and no environment token found")
             
-            # Create SP-API client with user's token
+            # Create SP-API client with token
             marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
             sp_client = create_sp_api_client(refresh_token, marketplace_id)
             

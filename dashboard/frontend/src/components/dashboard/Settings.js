@@ -498,30 +498,31 @@ const Settings = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-orange-50 border border-orange-200 rounded-md p-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5" />
               <div className="flex-1">
-                <h4 className="text-sm font-medium text-orange-900">Connect Your Amazon Seller Account</h4>
-                <p className="text-sm text-orange-700 mb-3">
-                  Connect your Amazon Seller Central account to get real-time analytics data directly from Amazon's SP-API. 
-                  This provides more accurate and up-to-date information than Sellerboard exports.
+                <h4 className="text-sm font-medium text-blue-900">Amazon SP-API Available</h4>
+                <p className="text-sm text-blue-700 mb-3">
+                  Amazon SP-API is currently configured through shared credentials. Your analytics data comes directly from Amazon's API.
+                  Individual account connection is available for production apps.
                 </p>
-                <div className="text-xs text-orange-600 mb-3 space-y-1">
-                  <p>• Real-time order and inventory data</p>
-                  <p>• No more manual Sellerboard exports</p>
-                  <p>• More accurate stock levels and sales data</p>
-                  <p>• Official Amazon API integration</p>
+                <div className="text-xs text-blue-600 mb-3 space-y-1">
+                  <p>• ✅ Real-time order and inventory data</p>
+                  <p>• ✅ Direct Amazon API integration</p>
+                  <p>• ✅ More accurate than Sellerboard exports</p>
+                  <p>• 🔄 Shared credentials (sandbox mode)</p>
                 </div>
                 <button 
                   onClick={handleConnectAmazon}
-                  className="flex items-center space-x-2 text-sm bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-md transition-colors duration-200"
+                  disabled
+                  className="flex items-center space-x-2 text-sm bg-gray-400 text-white px-3 py-2 rounded-md cursor-not-allowed opacity-50"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  <span>Connect Amazon Seller Account</span>
+                  <span>Individual Connection (Coming Soon)</span>
                 </button>
-                <p className="text-xs text-orange-600 mt-2">
-                  You'll be redirected to Amazon Seller Central to authorize this application.
+                <p className="text-xs text-blue-600 mt-2">
+                  Individual account connection will be available when the SP-API app moves to production status.
                 </p>
               </div>
             </div>

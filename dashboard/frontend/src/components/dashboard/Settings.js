@@ -436,7 +436,7 @@ const Settings = () => {
           )}
 
           {/* SP-API Disable Toggle (Admin Only) */}
-          {user?.user_record?.is_admin && (
+          {user?.is_admin && (
             <div>
               <label className="flex items-center space-x-3 cursor-pointer">
                 <div className="flex items-center">

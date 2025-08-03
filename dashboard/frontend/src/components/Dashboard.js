@@ -137,7 +137,7 @@ const Dashboard = () => {
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
           <div className="flex items-center flex-shrink-0 px-4">
             <ShoppingCart className="h-8 w-8 text-builders-500" />
-            <span className="ml-2 text-xl font-bold text-gray-900">builders+</span>
+            <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 space-y-1">

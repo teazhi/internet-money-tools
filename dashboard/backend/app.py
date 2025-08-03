@@ -46,7 +46,7 @@ app.config['UPLOAD_FOLDER'] = '/tmp'
 # CORS configuration for development and production
 allowed_origins = [
     "http://localhost:3000",
-    "https://internet-money-tools.vercel.app",  # Add Vercel frontend
+    "https://dms-amazon.vercel.app",  # Add Vercel frontend
     "https://internet-money-tools-git-main-teazhis-projects.vercel.app",  # Vercel preview URLs
     "https://internet-money-tools-dfqzt1xy0-teazhis-projects.vercel.app"  # Vercel deployment URLs
 ]
@@ -244,16 +244,16 @@ def send_invitation_email(email, invitation_token, invited_by):
         msg = MIMEMultipart()
         msg['From'] = SMTP_EMAIL
         msg['To'] = email
-        msg['Subject'] = "You're invited to builders+ Dashboard"
+        msg['Subject'] = "You're invited to DMS Dashboard"
         
-        invitation_url = f"https://internet-money-tools.vercel.app/login?invitation={invitation_token}"
+        invitation_url = f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
         
         body = f"""
         <html>
         <body>
-            <h2>You're invited to builders+ Dashboard!</h2>
+            <h2>You're invited to DMS Dashboard!</h2>
             <p>Hi there!</p>
-            <p>{invited_by} has invited you to join the builders+ Amazon Seller Dashboard.</p>
+            <p>{invited_by} has invited you to join the DMS Amazon Seller Dashboard.</p>
             <p>This platform provides:</p>
             <ul>
                 <li>Advanced analytics for your Amazon business</li>
@@ -264,7 +264,7 @@ def send_invitation_email(email, invitation_token, invited_by):
             <p>Or copy and paste this link: {invitation_url}</p>
             <p>This invitation will expire in 7 days.</p>
             <br>
-            <p>Best regards,<br>builders+ Team</p>
+            <p>Best regards,<br>DMS Team</p>
         </body>
         </html>
         """
@@ -533,7 +533,7 @@ def discord_callback():
     if not existing_user:
         if not invitation_token:
             print(f"[Discord Callback] No invitation token found for new user, redirecting to no_invitation error")
-            return redirect("https://internet-money-tools.vercel.app/login?error=no_invitation")
+            return redirect("https://dms-amazon.vercel.app/login?error=no_invitation")
         
         # Validate invitation token for new users
         invitations = get_invitations_config()
@@ -568,7 +568,7 @@ def discord_callback():
         
         if not valid_invitation:
             print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
-            return redirect("https://internet-money-tools.vercel.app/login?error=invalid_invitation")
+            return redirect("https://dms-amazon.vercel.app/login?error=invalid_invitation")
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username
@@ -612,7 +612,7 @@ def discord_callback():
         print(f"[DEBUG] Failed to update user record: {e}")
     
     # FORCE redirect to Vercel frontend - UPDATED
-    frontend_url = "https://internet-money-tools.vercel.app/dashboard"
+    frontend_url = "https://dms-amazon.vercel.app/dashboard"
     print(f"[DEBUG] Discord callback redirecting to: {frontend_url}")
     
     # Dynamic redirect based on environment (backup)
@@ -671,24 +671,24 @@ def amazon_seller_callback():
         stored_state = session.pop('amazon_oauth_state', None)
         
         if not state or state != stored_state:
-            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_invalid_state")
+            return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_invalid_state")
         
         # Get authorization code
         code = request.args.get('spapi_oauth_code')
         selling_partner_id = request.args.get('selling_partner_id')
         
         if not code:
-            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_no_code")
+            return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_no_code")
         
         # Exchange code for refresh token
         refresh_token = exchange_amazon_auth_code(code)
         if not refresh_token:
-            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_token_exchange_failed")
+            return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_token_exchange_failed")
         
         # Encrypt and store the refresh token
         encrypted_token = encrypt_token(refresh_token)
         if not encrypted_token:
-            return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_encryption_failed")
+            return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_encryption_failed")
         
         # Update user record with Amazon credentials
         discord_id = session.get('discord_id')
@@ -704,11 +704,11 @@ def amazon_seller_callback():
         save_users_config(users)
         
         print(f"[Amazon Auth] Successfully connected Amazon account for user {discord_id}")
-        return redirect("https://internet-money-tools.vercel.app/dashboard?success=amazon_connected")
+        return redirect("https://dms-amazon.vercel.app/dashboard?success=amazon_connected")
         
     except Exception as e:
         print(f"[Amazon Auth] Callback error: {e}")
-        return redirect("https://internet-money-tools.vercel.app/dashboard?error=amazon_auth_callback_failed")
+        return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_callback_failed")
 
 @app.route('/api/amazon-seller/disconnect', methods=['POST'])
 @login_required
@@ -2665,7 +2665,7 @@ def serve_dashboard(path=None):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>builders+ Dashboard</title>
+        <title>DMS Dashboard</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; background: #f8fafc; }
             .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; }
@@ -2678,7 +2678,7 @@ def serve_dashboard(path=None):
     </head>
     <body>
         <div class="container">
-            <h1>🚀 builders+ Dashboard</h1>
+            <h1>🚀 DMS Dashboard</h1>
             <p class="success">✅ Authentication successful!</p>
             <p class="info">You've been logged in via Discord OAuth.</p>
             
@@ -2724,7 +2724,7 @@ def debug_redirect():
     if os.environ.get('FRONTEND_URL'):
         frontend_url = f"{os.environ.get('FRONTEND_URL')}/dashboard"
     else:
-        frontend_url = "https://internet-money-tools.vercel.app/dashboard"
+        frontend_url = "https://dms-amazon.vercel.app/dashboard"
     
     return jsonify({
         'redirect_url': frontend_url,
@@ -2736,7 +2736,7 @@ def debug_redirect():
 @app.route('/test/redirect')
 def test_redirect():
     """Test actual redirect behavior"""
-    return redirect("https://internet-money-tools.vercel.app/dashboard")
+    return redirect("https://dms-amazon.vercel.app/dashboard")
 
 @app.route('/api/admin/invitations', methods=['GET'])
 @admin_required

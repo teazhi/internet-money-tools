@@ -53,7 +53,7 @@ const Login = () => {
             </svg>
           </div>
           <h2 className="text-3xl font-bold text-white mb-2">
-            builders+
+            DMS
           </h2>
           <p className="text-builders-200 mb-8">
             Connect with Discord to access your personalized business tools

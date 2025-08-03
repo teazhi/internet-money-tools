@@ -314,11 +314,38 @@ const Overview = () => {
       .sort(([_, a], [__, b]) => b.urgency_score - a.urgency_score)
       .slice(0, 3);
     
+    // Calculate date range for display
+    let dateRange = '';
+    if (summary.analysis_date_range) {
+      const startDate = summary.analysis_date_range.start;
+      const endDate = summary.analysis_date_range.end;
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const formatOptions = { month: 'short', day: 'numeric' };
+        
+        // If same year, don't show year twice
+        if (start.getFullYear() === end.getFullYear()) {
+          if (start.getMonth() === end.getMonth() && start.getDate() === end.getDate()) {
+            // Same date
+            dateRange = start.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' });
+          } else {
+            // Different dates, same year
+            dateRange = `${start.toLocaleDateString('en-US', formatOptions)} - ${end.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })}`;
+          }
+        } else {
+          // Different years
+          dateRange = `${start.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })} - ${end.toLocaleDateString('en-US', { ...formatOptions, year: 'numeric' })}`;
+        }
+      }
+    }
+    
     return {
       summary,
       topROI,
       urgentItems,
-      cashFlowRecs: insights.cash_flow_optimization?.cash_flow_recommendations || []
+      cashFlowRecs: insights.cash_flow_optimization?.cash_flow_recommendations || [],
+      dateRange
     };
   }, [analytics?.purchase_insights]);
 
@@ -914,17 +941,25 @@ const Overview = () => {
       {/* Purchase Analytics Section */}
       {purchaseInsights && (
         <div className="space-y-6">
-          <div className="flex items-center space-x-2">
-            <ShoppingBag className="h-6 w-6 text-blue-600" />
-            <h3 className="text-xl font-semibold text-gray-900">Purchase Analytics</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <ShoppingBag className="h-6 w-6 text-blue-600" />
+              <h3 className="text-xl font-semibold text-gray-900">Purchase Analytics</h3>
+            </div>
+            {purchaseInsights.dateRange && (
+              <div className="flex items-center space-x-2 text-gray-600">
+                <Calendar className="h-4 w-4" />
+                <span className="text-sm font-medium">{purchaseInsights.dateRange}</span>
+              </div>
+            )}
           </div>
           
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="card p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Products Tracked</p>
+                  <p className="text-sm font-medium text-gray-600">ASIN's Purchased</p>
                   <p className="text-2xl font-bold text-gray-900">{purchaseInsights.summary.total_asins_tracked || 0}</p>
                 </div>
                 <Package className="h-8 w-8 text-blue-600" />
@@ -950,18 +985,6 @@ const Overview = () => {
                   <p className="text-2xl font-bold text-gray-900">{(purchaseInsights.summary.total_units_purchased || 0).toLocaleString()}</p>
                 </div>
                 <ShoppingCart className="h-8 w-8 text-purple-600" />
-              </div>
-            </div>
-            
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Purchase Value</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${(purchaseInsights.summary.avg_purchase_value || 0).toFixed(2)}
-                  </p>
-                </div>
-                <BarChart3 className="h-8 w-8 text-orange-600" />
               </div>
             </div>
           </div>

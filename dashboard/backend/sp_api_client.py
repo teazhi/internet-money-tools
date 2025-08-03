@@ -89,10 +89,10 @@ class SPAPIClient:
         
         # Add sandbox parameter if in sandbox mode
         if self.sandbox:
-            # Try different sandbox parameter formats that different versions might expect
+            # For python-amazon-sp-api library, sandbox is typically handled via endpoints
+            # The library should automatically use sandbox endpoints when sandbox=True in credentials
             self.credentials['sandbox'] = True
-            self.credentials['use_sandbox'] = True
-            print("[SP-API] Using sandbox endpoints with sandbox flags")
+            print(f"[SP-API] Sandbox credentials: {list(self.credentials.keys())}")
         
         # Set marketplace
         if marketplace == 'ATVPDKIKX0DER':
@@ -121,16 +121,7 @@ class SPAPIClient:
             end_date = datetime.now(timezone.utc)
             
         try:
-            # Initialize Orders client with explicit sandbox mode if needed
-            if self.sandbox:
-                print("[SP-API] Creating Orders client with sandbox mode")
-                orders_client = Orders(
-                    credentials=self.credentials, 
-                    marketplace=self.marketplace,
-                    sandbox=True
-                )
-            else:
-                orders_client = Orders(credentials=self.credentials, marketplace=self.marketplace)
+            orders_client = Orders(credentials=self.credentials, marketplace=self.marketplace)
             
             # Convert dates to ISO format
             start_iso = start_date.isoformat()

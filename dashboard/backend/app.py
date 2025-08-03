@@ -803,44 +803,67 @@ def test_amazon_connection():
             print(f"[Amazon Test] Marketplace: {sp_client.marketplace}")
             print(f"[Amazon Test] Marketplace ID: {sp_client.marketplace_id}")
             
-            # Test with a simple orders API call (should work in sandbox)
-            from sp_api.api import Orders
-            from datetime import datetime, timedelta
+            # Try the token refresh first to see if that works
+            from sp_api.api import Tokens
             
-            # Initialize Orders client with explicit sandbox mode if needed
-            if sp_client.sandbox:
-                print("[Amazon Test] Creating Orders client with explicit sandbox parameter")
-                orders_client = Orders(
-                    credentials=sp_client.credentials, 
-                    marketplace=sp_client.marketplace,
-                    sandbox=True
+            print("[Amazon Test] Testing token refresh capability...")
+            tokens_client = Tokens(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
+            
+            # This is a safer test - just check if we can create a restricted data token
+            # This doesn't require specific permissions and should work with basic SP-API access
+            try:
+                token_response = tokens_client.create_restricted_data_token(
+                    restrictedResources=[{
+                        "method": "GET",
+                        "path": "/orders/v0/orders",
+                        "dataElements": ["buyerInfo"]
+                    }]
                 )
-            else:
+                
+                print("[Amazon Test] Token creation successful - authentication working!")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'SP-API authentication successful (token test)',
+                    'sandbox_mode': sp_client.sandbox,
+                    'marketplace': str(sp_client.marketplace),
+                    'marketplace_id': sp_client.marketplace_id,
+                    'test_method': 'restricted_data_token'
+                })
+                
+            except Exception as token_error:
+                print(f"[Amazon Test] Token test failed, trying basic orders call: {token_error}")
+                
+                # Fall back to basic orders call
+                from sp_api.api import Orders
+                from datetime import datetime, timedelta
+                
                 orders_client = Orders(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
-            
-            # Get orders from the last day (minimal request to test auth)
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=1)
-            
-            print(f"[Amazon Test] Making API call with date range: {start_date.isoformat()} to {end_date.isoformat()}")
-            
-            response = orders_client.get_orders(
-                MarketplaceIds=[sp_client.marketplace_id],
-                CreatedAfter=start_date.isoformat(),
-                CreatedBefore=end_date.isoformat()
-            )
-            
-            print(f"[Amazon Test] API call successful!")
-            
-            return jsonify({
-                'success': True,
-                'message': 'SP-API authentication successful',
-                'sandbox_mode': sp_client.sandbox,
-                'marketplace': str(sp_client.marketplace),
-                'marketplace_id': sp_client.marketplace_id,
-                'response_received': bool(hasattr(response, 'payload')),
-                'orders_count': len(response.payload.get('Orders', [])) if hasattr(response, 'payload') and response.payload else 0
-            })
+                
+                # Get orders from the last day (minimal request to test auth)
+                end_date = datetime.now()
+                start_date = end_date - timedelta(days=1)
+                
+                print(f"[Amazon Test] Making API call with date range: {start_date.isoformat()} to {end_date.isoformat()}")
+                
+                response = orders_client.get_orders(
+                    MarketplaceIds=[sp_client.marketplace_id],
+                    CreatedAfter=start_date.isoformat(),
+                    CreatedBefore=end_date.isoformat()
+                )
+                
+                print(f"[Amazon Test] Orders API call successful!")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'SP-API authentication successful (orders test)',
+                    'sandbox_mode': sp_client.sandbox,
+                    'marketplace': str(sp_client.marketplace),
+                    'marketplace_id': sp_client.marketplace_id,
+                    'response_received': bool(hasattr(response, 'payload')),
+                    'orders_count': len(response.payload.get('Orders', [])) if hasattr(response, 'payload') and response.payload else 0,
+                    'test_method': 'orders_call'
+                })
             
         except Exception as api_error:
             return jsonify({

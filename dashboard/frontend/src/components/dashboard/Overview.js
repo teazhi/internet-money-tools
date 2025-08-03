@@ -271,28 +271,62 @@ const Overview = () => {
       .slice(0, 5);
   }, [analytics?.today_sales]);
 
-  const TopProductItem = memo(({ asin, count, index }) => (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center space-x-3">
-        <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
-          {index + 1}
-        </span>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-900">{asin}</span>
-          <a
-            href={`https://amazon.com/dp/${asin}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
-            title="View on Amazon"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
+  const TopProductItem = memo(({ asin, count, index }) => {
+    // Get purchase insights for this ASIN if available
+    const purchaseInsights = analytics?.purchase_insights || {};
+    const asinPurchaseData = {
+      urgency: purchaseInsights.restock_urgency_scoring?.[asin],
+      roi: purchaseInsights.roi_based_recommendations?.[asin],
+      velocity: purchaseInsights.purchase_velocity_analysis?.[asin]
+    };
+
+    const getTrendIcon = (trend) => {
+      if (!trend) return '';
+      if (trend > 0.1) return '↗️';
+      if (trend < -0.1) return '↘️';
+      return '→';
+    };
+
+    return (
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <span className="flex-shrink-0 w-6 h-6 bg-builders-100 text-builders-600 rounded-full flex items-center justify-center text-sm font-medium">
+            {index + 1}
+          </span>
+          <div className="flex-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-900">{asin}</span>
+              {asinPurchaseData.velocity && (
+                <span className="text-sm">{getTrendIcon(asinPurchaseData.velocity.purchase_trend)}</span>
+              )}
+              <a
+                href={`https://amazon.com/dp/${asin}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                title="View on Amazon"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+            {asinPurchaseData.roi && (
+              <div className="text-xs text-gray-500 mt-1">
+                ROI: {asinPurchaseData.roi.roi_percentage}% • Profit: ${asinPurchaseData.roi.profit_per_unit}/unit
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-sm text-gray-600">{count} units sold</span>
+          {asinPurchaseData.urgency && asinPurchaseData.urgency.urgency_level !== 'LOW' && (
+            <div className="text-xs text-orange-600 mt-1">
+              Restock {asinPurchaseData.urgency.urgency_level.toLowerCase()}
+            </div>
+          )}
         </div>
       </div>
-      <span className="text-sm text-gray-600">{count} units</span>
-    </div>
-  ));
+    );
+  });
 
   // Purchase Analytics data processing
   const purchaseInsights = useMemo(() => {
@@ -412,29 +446,73 @@ const Overview = () => {
     return [];
   }, [analytics?.enhanced_analytics, analytics?.low_stock]);
 
-  const StockAlertItem = memo(({ item }) => (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-900">{item.asin}</p>
-        <p className="text-xs text-gray-500 truncate max-w-xs">
-          {item.productName?.length > 40 
-            ? item.productName.substring(0, 40) + '...'
-            : item.productName
-          }
-        </p>
+  const StockAlertItem = memo(({ item }) => {
+    // Get purchase insights for this ASIN if available
+    const purchaseInsights = analytics?.purchase_insights || {};
+    const asinPurchaseData = {
+      urgency: purchaseInsights.restock_urgency_scoring?.[item.asin],
+      roi: purchaseInsights.roi_based_recommendations?.[item.asin],
+      velocity: purchaseInsights.purchase_velocity_analysis?.[item.asin]
+    };
+
+    const getUrgencyIcon = (urgencyLevel) => {
+      switch (urgencyLevel) {
+        case 'CRITICAL': return '🔥';
+        case 'HIGH': return '⚠️';
+        case 'MEDIUM': return '⏰';
+        default: return '';
+      }
+    };
+
+    const getTrendIcon = (trend) => {
+      if (!trend) return '';
+      if (trend > 0.1) return '↗️';
+      if (trend < -0.1) return '↘️';
+      return '→';
+    };
+
+    return (
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-2">
+            <p className="text-sm font-medium text-gray-900">{item.asin}</p>
+            {asinPurchaseData.urgency && (
+              <span className="text-sm">{getUrgencyIcon(asinPurchaseData.urgency.urgency_level)}</span>
+            )}
+            {asinPurchaseData.velocity && (
+              <span className="text-sm">{getTrendIcon(asinPurchaseData.velocity.purchase_trend)}</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 truncate max-w-xs">
+            {item.productName?.length > 40 
+              ? item.productName.substring(0, 40) + '...'
+              : item.productName
+            }
+          </p>
+          {asinPurchaseData.roi && (
+            <p className="text-xs text-green-600">
+              ROI: {asinPurchaseData.roi.roi_percentage}% • Profit: ${asinPurchaseData.roi.profit_per_unit}
+            </p>
+          )}
+        </div>
+        <div className="text-right ml-4">
+          <p className="text-sm text-red-600 font-medium">
+            {item.isLegacy ? `${item.daysLeft} days left` : 
+             item.daysLeft < 1 ? '< 1 day' : `${Math.round(item.daysLeft)} days left`}
+          </p>
+          <p className="text-xs text-gray-500">
+            {item.isLegacy ? `Reorder: ${item.suggestedQty}` :
+             `Stock: ${Math.round(item.currentStock)} • Reorder: ${item.suggestedQty}`}
+          </p>
+          {asinPurchaseData.velocity && (
+            <p className="text-xs text-blue-600">
+              Last purchased: {asinPurchaseData.velocity.days_since_last_purchase}d ago
+            </p>
+          )}
+        </div>
       </div>
-      <div className="text-right">
-        <p className="text-sm text-red-600 font-medium">
-          {item.isLegacy ? `${item.daysLeft} days left` : 
-           item.daysLeft < 1 ? '< 1 day' : `${Math.round(item.daysLeft)} days left`}
-        </p>
-        <p className="text-xs text-gray-500">
-          {item.isLegacy ? `Reorder: ${item.suggestedQty}` :
-           `Stock: ${Math.round(item.currentStock)} • Reorder: ${item.suggestedQty}`}
-        </p>
-      </div>
-    </div>
-  ));
+    );
+  });
 
   // Check if user is authenticated (after all hooks)
   if (user === null) {
@@ -778,7 +856,7 @@ const Overview = () => {
       )}
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <div className="card">
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -853,6 +931,28 @@ const Overview = () => {
             </div>
           </div>
         </div>
+
+        {/* Purchase Insights Card */}
+        {purchaseInsights && (
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <ShoppingBag className="h-8 w-8 text-indigo-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  {purchaseInsights.dateRange}
+                </p>
+                <p className="text-lg font-semibold text-gray-900">
+                  ${(purchaseInsights.summary.total_investment || 0).toLocaleString()} invested
+                </p>
+                <p className="text-xs text-gray-500">
+                  {(purchaseInsights.summary.total_asins_tracked || 0)} ASINs • {(purchaseInsights.summary.total_units_purchased || 0)} units
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Yesterday's Top Sellers */}
@@ -928,108 +1028,7 @@ const Overview = () => {
         </div>
       )}
 
-      {/* Purchase Analytics Section */}
-      {purchaseInsights && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ShoppingBag className="h-6 w-6 text-blue-600" />
-              <h3 className="text-xl font-semibold text-gray-900">Purchase Analytics</h3>
-            </div>
-            {purchaseInsights.dateRange && (
-              <div className="flex items-center space-x-2 text-gray-600">
-                <Calendar className="h-4 w-4" />
-                <span className="text-sm font-medium">{purchaseInsights.dateRange}</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">ASIN's Purchased</p>
-                  <p className="text-2xl font-bold text-gray-900">{purchaseInsights.summary.total_asins_tracked || 0}</p>
-                </div>
-                <Package className="h-8 w-8 text-blue-600" />
-              </div>
-            </div>
-            
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Investment</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${(purchaseInsights.summary.total_investment || 0).toLocaleString()}
-                  </p>
-                </div>
-                <DollarSign className="h-8 w-8 text-green-600" />
-              </div>
-            </div>
-            
-            <div className="card p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Units Purchased</p>
-                  <p className="text-2xl font-bold text-gray-900">{(purchaseInsights.summary.total_units_purchased || 0).toLocaleString()}</p>
-                </div>
-                <ShoppingCart className="h-8 w-8 text-purple-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Insights Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* High ROI Products */}
-            {purchaseInsights.topROI.length > 0 && (
-              <div className="card">
-                <div className="flex items-center space-x-2 mb-4">
-                  <TrendingUp className="h-5 w-5 text-green-600" />
-                  <h4 className="text-lg font-semibold text-gray-900">High ROI Products</h4>
-                </div>
-                <div className="space-y-3">
-                  {purchaseInsights.topROI.map(([asin, data]) => (
-                    <PurchaseInsightItem key={asin} asin={asin} data={data} type="roi" />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Urgent Restocks */}
-            {purchaseInsights.urgentItems.length > 0 && (
-              <div className="card">
-                <div className="flex items-center space-x-2 mb-4">
-                  <AlertTriangle className="h-5 w-5 text-red-600" />
-                  <h4 className="text-lg font-semibold text-gray-900">Urgent Restocks</h4>
-                </div>
-                <div className="space-y-3">
-                  {purchaseInsights.urgentItems.map(([asin, data]) => (
-                    <PurchaseInsightItem key={asin} asin={asin} data={data} type="urgent" />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Cash Flow Recommendations */}
-            {purchaseInsights.cashFlowRecs.length > 0 && (
-              <div className="card lg:col-span-2">
-                <div className="flex items-center space-x-2 mb-4">
-                  <TrendingDown className="h-5 w-5 text-blue-600" />
-                  <h4 className="text-lg font-semibold text-gray-900">Cash Flow Insights</h4>
-                </div>
-                <div className="space-y-2">
-                  {purchaseInsights.cashFlowRecs.map((rec, index) => (
-                    <div key={index} className="p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
-                      <p className="text-sm text-blue-800">{rec}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Purchase Insights - Integrated into existing sections above */}
 
     </div>
   );

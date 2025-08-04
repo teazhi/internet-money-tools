@@ -855,104 +855,109 @@ const Overview = () => {
         </div>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-        <div className="card">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <ShoppingCart className="h-8 w-8 text-blue-500" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">
-                {analytics?.is_yesterday ? "Yesterday's Orders" : "Today's Orders"}
-              </p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {analyticsStats.todayOrders || '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Package className="h-8 w-8 text-green-500" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Active Products</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {analyticsStats.activeProducts || '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <AlertTriangle className="h-8 w-8 text-red-500" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Low Stock Alerts</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {analyticsStats.lowStockCount || '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <TrendingUp className="h-8 w-8 text-purple-500" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">Restock Priority</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {analyticsStats.restockPriorityCount || '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <DollarSign className="h-8 w-8 text-green-500" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-500">
-                {analytics?.is_yesterday ? "Yesterday's Revenue" : "Today's Revenue"}
-              </p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {analyticsStats.yesterdayRevenue ? 
-                  `$${analyticsStats.yesterdayRevenue.toFixed(2)}` : '—'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Purchase Insights Card */}
-        {purchaseInsights && (
+      {/* Quick Stats - Operational Metrics */}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="card">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <ShoppingBag className="h-8 w-8 text-indigo-500" />
+                <ShoppingCart className="h-8 w-8 text-blue-500" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">
-                  {purchaseInsights.dateRange}
+                  {analytics?.is_yesterday ? "Yesterday's Orders" : "Today's Orders"}
                 </p>
-                <p className="text-lg font-semibold text-gray-900">
-                  ${(purchaseInsights.summary.total_investment || 0).toLocaleString()} invested
-                </p>
-                <p className="text-xs text-gray-500">
-                  {(purchaseInsights.summary.total_asins_tracked || 0)} ASINs • {(purchaseInsights.summary.total_units_purchased || 0)} units
+                <p className="text-2xl font-semibold text-gray-900">
+                  {analyticsStats.todayOrders || '—'}
                 </p>
               </div>
             </div>
           </div>
-        )}
+
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Package className="h-8 w-8 text-green-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Active Products</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {analyticsStats.activeProducts || '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-8 w-8 text-red-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Low Stock Alerts</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {analyticsStats.lowStockCount || '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <TrendingUp className="h-8 w-8 text-purple-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Restock Priority</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {analyticsStats.restockPriorityCount || '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Financial Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <DollarSign className="h-8 w-8 text-green-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  {analytics?.is_yesterday ? "Yesterday's Revenue" : "Today's Revenue"}
+                </p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {analyticsStats.yesterdayRevenue ? 
+                    `$${analyticsStats.yesterdayRevenue.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Purchase Insights Card - Enhanced */}
+          {purchaseInsights && (
+            <div className="card">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <ShoppingBag className="h-8 w-8 text-indigo-500" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">
+                    Purchase Investment ({purchaseInsights.dateRange})
+                  </p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    ${(purchaseInsights.summary.total_investment || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {(purchaseInsights.summary.total_asins_tracked || 0)} ASINs • {(purchaseInsights.summary.total_units_purchased || 0)} units
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Yesterday's Top Sellers */}

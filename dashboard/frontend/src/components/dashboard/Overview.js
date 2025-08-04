@@ -15,7 +15,9 @@ import {
   ExternalLink,
   ShoppingBag,
   Target,
-  TrendingDown
+  TrendingDown,
+  Eye,
+  User
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -154,6 +156,22 @@ const Overview = () => {
   }, [analytics?.report_date, analytics?.user_timezone]);
 
   const setupProgress = useMemo(() => {
+    // Subusers inherit configuration from their parent, so they're always 100% complete
+    const isSubuser = user?.user_type === 'subuser';
+    
+    if (isSubuser) {
+      return {
+        progress: 100,
+        steps: [
+          { name: 'Profile Setup', completed: true },
+          { name: 'Google Account Linked', completed: true },
+          { name: 'Sheet Configuration', completed: true },
+          { name: 'Scripts Active', completed: true }
+        ]
+      };
+    }
+    
+    // For main users, check individual setup steps
     let progress = 0;
     let steps = [];
     
@@ -186,7 +204,7 @@ const Overview = () => {
     }
     
     return { progress, steps };
-  }, [user?.profile_configured, user?.google_linked, user?.sheet_configured, user?.user_record?.run_scripts]);
+  }, [user?.profile_configured, user?.google_linked, user?.sheet_configured, user?.user_record?.run_scripts, user?.user_type]);
 
   const formatTrendIcon = useCallback((pct) => {
     if (pct > 0) return <ArrowUp className="h-4 w-4 text-green-500" />;
@@ -772,6 +790,23 @@ const Overview = () => {
 
   return (
     <div className="space-y-6">
+      {/* Subuser Indicator Banner */}
+      {user?.user_type === 'subuser' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="flex items-center space-x-3">
+            <Eye className="h-5 w-5 text-blue-600" />
+            <div>
+              <p className="text-sm font-medium text-blue-800">
+                Assistant View: You're viewing your main account's dashboard
+              </p>
+              <p className="text-xs text-blue-700">
+                All data and settings are inherited from the main account holder
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Welcome Header */}
       <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
         <div className="flex justify-between items-start">

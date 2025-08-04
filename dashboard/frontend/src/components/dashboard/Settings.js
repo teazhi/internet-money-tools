@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import axios from 'axios';
 
@@ -183,6 +183,23 @@ const Settings = () => {
 
   return (
     <div className="space-y-6">
+      {/* Subuser Indicator Banner */}
+      {user?.user_type === 'subuser' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="flex items-center space-x-3">
+            <Eye className="h-5 w-5 text-blue-600" />
+            <div>
+              <p className="text-sm font-medium text-blue-800">
+                Assistant Account: Settings are managed by the main account holder
+              </p>
+              <p className="text-xs text-blue-700">
+                You can only modify your timezone preference. All other settings are inherited.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex items-center space-x-3">
         <SettingsIcon className="h-8 w-8 text-builders-500" />
@@ -232,85 +249,94 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Listing Loader Key */}
-          <div>
-            <label htmlFor="listing_loader_key" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <FileText className="h-4 w-4" />
-              <span>Listing Loader Key</span>
-            </label>
-            <input
-              type="text"
-              id="listing_loader_key"
-              name="listing_loader_key"
-              value={formData.listing_loader_key}
-              onChange={handleChange}
-              className="input-field"
-              placeholder="your-listing-loader-file"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Name of your listing loader file (without .xlsm extension)
-            </p>
-          </div>
+          {/* Listing Loader Key - Hidden for subusers */}
+          {user?.user_type !== 'subuser' && (
+            <div>
+              <label htmlFor="listing_loader_key" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                <FileText className="h-4 w-4" />
+                <span>Listing Loader Key</span>
+              </label>
+              <input
+                type="text"
+                id="listing_loader_key"
+                name="listing_loader_key"
+                value={formData.listing_loader_key}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="your-listing-loader-file"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Name of your listing loader file (without .xlsm extension)
+              </p>
+            </div>
+          )}
 
-          {/* Sellerboard File Key */}
-          <div>
-            <label htmlFor="sb_file_key" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <FileText className="h-4 w-4" />
-              <span>Sellerboard File Key</span>
-            </label>
-            <input
-              type="text"
-              id="sb_file_key"
-              name="sb_file_key"
-              value={formData.sb_file_key}
-              onChange={handleChange}
-              className="input-field"
-              placeholder="your-sellerboard-file"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Name of your sellerboard file (without .xlsx extension)
-            </p>
-          </div>
+          {/* Sellerboard File Key - Hidden for subusers */}
+          {user?.user_type !== 'subuser' && (
+            <div>
+              <label htmlFor="sb_file_key" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                <FileText className="h-4 w-4" />
+                <span>Sellerboard File Key</span>
+              </label>
+              <input
+                type="text"
+                id="sb_file_key"
+                name="sb_file_key"
+                value={formData.sb_file_key}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="your-sellerboard-file"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Name of your sellerboard file (without .xlsx extension)
+              </p>
+            </div>
+          )}
 
-          {/* Sellerboard Orders URL */}
-          <div>
-            <label htmlFor="sellerboard_orders_url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <Link className="h-4 w-4" />
-              <span>Sellerboard Orders Report URL</span>
-            </label>
-            <input
-              type="url"
-              id="sellerboard_orders_url"
-              name="sellerboard_orders_url"
-              value={formData.sellerboard_orders_url}
-              onChange={handleChange}
-              className="input-field"
-              placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              The automation URL for your Sellerboard orders report (includes orders data for analytics)
-            </p>
-          </div>
+          {/* Sellerboard URLs - Hidden for subusers */}
+          {user?.user_type !== 'subuser' && (
+            <>
+              {/* Sellerboard Orders URL */}
+              <div>
+                <label htmlFor="sellerboard_orders_url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Link className="h-4 w-4" />
+                  <span>Sellerboard Orders Report URL</span>
+                </label>
+                <input
+                  type="url"
+                  id="sellerboard_orders_url"
+                  name="sellerboard_orders_url"
+                  value={formData.sellerboard_orders_url}
+                  onChange={handleChange}
+                  className="input-field"
+                  placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  The automation URL for your Sellerboard orders report (includes orders data for analytics)
+                </p>
+              </div>
 
-          {/* Sellerboard Stock URL */}
-          <div>
-            <label htmlFor="sellerboard_stock_url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-              <Link className="h-4 w-4" />
-              <span>Sellerboard Stock Report URL</span>
-            </label>
-            <input
-              type="url"
-              id="sellerboard_stock_url"
-              name="sellerboard_stock_url"
-              value={formData.sellerboard_stock_url}
-              onChange={handleChange}
-              className="input-field"
-              placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              The automation URL for your Sellerboard stock report (includes inventory and stock data)
-            </p>
-          </div>
+              {/* Sellerboard Stock URL */}
+              <div>
+                <label htmlFor="sellerboard_stock_url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <Link className="h-4 w-4" />
+                  <span>Sellerboard Stock Report URL</span>
+                </label>
+                <input
+                  type="url"
+                  id="sellerboard_stock_url"
+                  name="sellerboard_stock_url"
+                  value={formData.sellerboard_stock_url}
+                  onChange={handleChange}
+                  className="input-field"
+                  placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  The automation URL for your Sellerboard stock report (includes inventory and stock data)
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Timezone Selector */}
           <div>
@@ -337,80 +363,85 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Amazon Listing Loader & Sellerboard Toggle */}
-          <div>
-            <label className="flex items-center justify-between cursor-pointer">
-              <div className="flex items-center space-x-2">
-                {formData.run_scripts ? (
-                  <ToggleRight className="h-6 w-6 text-green-500" />
-                ) : (
-                  <ToggleLeft className="h-6 w-6 text-gray-400" />
-                )}
-                <span className="text-sm font-medium text-gray-700">Amazon Listing Loader & Sellerboard Automation</span>
+          {/* Automation Toggles - Hidden for subusers */}
+          {user?.user_type !== 'subuser' && (
+            <>
+              {/* Amazon Listing Loader & Sellerboard Toggle */}
+              <div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center space-x-2">
+                    {formData.run_scripts ? (
+                      <ToggleRight className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <ToggleLeft className="h-6 w-6 text-gray-400" />
+                    )}
+                    <span className="text-sm font-medium text-gray-700">Amazon Listing Loader & Sellerboard Automation</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    name="run_scripts"
+                    checked={formData.run_scripts}
+                    onChange={handleChange}
+                    className="sr-only"
+                  />
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically run Amazon listing loader scripts and Sellerboard analytics
+                </p>
               </div>
-              <input
-                type="checkbox"
-                name="run_scripts"
-                checked={formData.run_scripts}
-                onChange={handleChange}
-                className="sr-only"
-              />
-            </label>
-            <p className="text-xs text-gray-500 mt-1">
-              Automatically run Amazon listing loader scripts and Sellerboard analytics
-            </p>
-          </div>
 
-          {/* Prep Center Sheet Toggle */}
-          <div>
-            <label className="flex items-center justify-between cursor-pointer">
-              <div className="flex items-center space-x-2">
-                {formData.run_prep_center ? (
-                  <ToggleRight className="h-6 w-6 text-green-500" />
-                ) : (
-                  <ToggleLeft className="h-6 w-6 text-gray-400" />
-                )}
-                <span className="text-sm font-medium text-gray-700">Prep Center Sheet Automation</span>
+              {/* Prep Center Sheet Toggle */}
+              <div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center space-x-2">
+                    {formData.run_prep_center ? (
+                      <ToggleRight className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <ToggleLeft className="h-6 w-6 text-gray-400" />
+                    )}
+                    <span className="text-sm font-medium text-gray-700">Prep Center Sheet Automation</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    name="run_prep_center"
+                    checked={formData.run_prep_center}
+                    onChange={handleChange}
+                    className="sr-only"
+                  />
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically update and upload prep center sheets
+                </p>
               </div>
-              <input
-                type="checkbox"
-                name="run_prep_center"
-                checked={formData.run_prep_center}
-                onChange={handleChange}
-                className="sr-only"
-              />
-            </label>
-            <p className="text-xs text-gray-500 mt-1">
-              Automatically update and upload prep center sheets
-            </p>
-          </div>
 
-          {/* Source Links Toggle */}
-          <div>
-            <label className="flex items-center justify-between cursor-pointer">
-              <div className="flex items-center space-x-2">
-                {formData.enable_source_links ? (
-                  <ToggleRight className="h-6 w-6 text-green-500" />
-                ) : (
-                  <ToggleLeft className="h-6 w-6 text-gray-400" />
-                )}
-                <span className="text-sm font-medium text-gray-700">Source Links from Google Sheet</span>
+              {/* Source Links Toggle */}
+              <div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center space-x-2">
+                    {formData.enable_source_links ? (
+                      <ToggleRight className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <ToggleLeft className="h-6 w-6 text-gray-400" />
+                    )}
+                    <span className="text-sm font-medium text-gray-700">Source Links from Google Sheet</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    name="enable_source_links"
+                    checked={formData.enable_source_links}
+                    onChange={handleChange}
+                    className="sr-only"
+                  />
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Pull COGS and Source links from your Google Sheet for restock recommendations (disabled by default for privacy)
+                </p>
               </div>
-              <input
-                type="checkbox"
-                name="enable_source_links"
-                checked={formData.enable_source_links}
-                onChange={handleChange}
-                className="sr-only"
-              />
-            </label>
-            <p className="text-xs text-gray-500 mt-1">
-              Pull COGS and Source links from your Google Sheet for restock recommendations (disabled by default for privacy)
-            </p>
-          </div>
+            </>
+          )}
 
-          {/* Search All Worksheets Toggle - only show when source links are enabled */}
-          {formData.enable_source_links && (
+          {/* Search All Worksheets Toggle - only show when source links are enabled and user is not subuser */}
+          {user?.user_type !== 'subuser' && formData.enable_source_links && (
             <div>
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex items-center space-x-2">

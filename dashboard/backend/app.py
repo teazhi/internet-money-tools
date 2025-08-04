@@ -101,6 +101,19 @@ AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_ama
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
 cipher_suite = Fernet(ENCRYPTION_KEY.encode())
 
+def is_date_yesterday(target_date, user_timezone):
+    """Helper function to determine if target_date is yesterday in the user's timezone"""
+    if user_timezone:
+        try:
+            tz = pytz.timezone(user_timezone)
+            current_date_in_user_tz = datetime.now(tz).date()
+        except pytz.UnknownTimeZoneError:
+            current_date_in_user_tz = date.today()
+    else:
+        current_date_in_user_tz = date.today()
+    
+    return target_date == (current_date_in_user_tz - timedelta(days=1))
+
 def get_s3_client():
     return boto3.client(
         's3',
@@ -1416,7 +1429,7 @@ def get_orders_analytics():
                         'message': 'Please configure Sellerboard report URLs in Settings or re-enable SP-API.',
                         'requires_setup': True,
                         'report_date': target_date.isoformat(),
-                        'is_yesterday': target_date == (date.today() - timedelta(days=1))
+                        'is_yesterday': is_date_yesterday(target_date, user_timezone)
                     }), 400
                 
                 print(f"[Dashboard Analytics] Using Sellerboard for admin user with SP-API disabled...")
@@ -1474,7 +1487,7 @@ def get_orders_analytics():
                         'message': 'Please configure Sellerboard report URLs in Settings.',
                         'requires_setup': True,
                         'report_date': target_date.isoformat(),
-                        'is_yesterday': target_date == (date.today() - timedelta(days=1))
+                        'is_yesterday': is_date_yesterday(target_date, user_timezone)
                     }), 400
                 
                 print(f"[Dashboard Analytics] Using Sellerboard for non-admin user...")
@@ -1561,8 +1574,12 @@ def get_orders_analytics():
         
         # Add metadata about the date being analyzed
         analysis['report_date'] = target_date.isoformat()
-        analysis['is_yesterday'] = target_date == (date.today() - timedelta(days=1))
+        
+        # Calculate is_yesterday using timezone-aware logic
+        analysis['is_yesterday'] = is_date_yesterday(target_date, user_timezone)
         analysis['user_timezone'] = user_timezone
+        
+        print(f"[Dashboard Analytics] target_date: {target_date}, is_yesterday: {analysis['is_yesterday']}")
         
         print(f"[SP-API Analytics] Analysis ready with {len(analysis)} top-level keys")
         print(f"[SP-API Analytics] Data source: {analysis.get('source', 'unknown')}")

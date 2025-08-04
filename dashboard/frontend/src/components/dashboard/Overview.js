@@ -880,7 +880,7 @@ const Overview = () => {
                 <Package className="h-8 w-8 text-green-500" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active Products</p>
+                <p className="text-sm font-medium text-gray-500">ASIN's Sold</p>
                 <p className="text-2xl font-semibold text-gray-900">
                   {analyticsStats.activeProducts || '—'}
                 </p>

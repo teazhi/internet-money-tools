@@ -54,34 +54,63 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     }
   };
 
+  // Function to extract URLs from a text string (handles multiple URLs in one cell)
+  const extractUrlsFromText = (text) => {
+    if (!text) return [];
+    
+    // Handle URLs that might be separated by spaces, semicolons, commas, or newlines
+    const urlRegex = /https?:\/\/[^\s;,\n]+/gi;
+    const urls = text.match(urlRegex) || [];
+    
+    // Clean URLs (remove trailing punctuation)
+    return urls.map(url => url.replace(/[.,;]+$/, ''));
+  };
+
   // Function to handle restock button click
   const handleRestockClick = async (asin, existingSourceLink) => {
-    if (!existingSourceLink) {
-      alert('No purchase history found for this product');
-      return;
-    }
-
     setSourcesLoading(true);
     try {
+      // First, try to get sources from the backend
       const response = await axios.get(`/api/asin/${asin}/purchase-sources`, { withCredentials: true });
-      const sources = response.data.sources || [];
+      const backendSources = response.data.sources || [];
       
-      if (sources.length === 0) {
-        // No sources found, use the existing source link
-        window.open(existingSourceLink, '_blank');
-      } else if (sources.length === 1) {
-        // Only one source found, go directly to it
-        window.open(sources[0].url, '_blank');
+      // Extract URLs from existing source link (handle multiple URLs in one cell)
+      const extractedUrls = extractUrlsFromText(existingSourceLink);
+      
+      // Combine backend sources with extracted URLs, remove duplicates
+      const allUrls = new Set();
+      backendSources.forEach(source => allUrls.add(source.url));
+      extractedUrls.forEach(url => allUrls.add(url));
+      
+      const uniqueUrls = Array.from(allUrls).filter(Boolean);
+      
+      if (uniqueUrls.length === 0) {
+        alert('No purchase sources found for this product');
+        return;
+      } else if (uniqueUrls.length === 1) {
+        // Only one URL found, open directly
+        window.open(uniqueUrls[0], '_blank');
       } else {
-        // Multiple sources found, show the modal
-        setPurchaseSources(sources);
-        setModalAsin(asin);
-        setShowSourcesModal(true);
+        // Multiple URLs found, open all of them
+        console.log(`Opening ${uniqueUrls.length} source links for ASIN ${asin}:`, uniqueUrls);
+        uniqueUrls.forEach(url => {
+          window.open(url, '_blank');
+        });
       }
     } catch (error) {
       console.error('Error fetching purchase sources:', error);
-      // Fallback to existing source link
-      window.open(existingSourceLink, '_blank');
+      // Fallback: extract and open URLs from existing source link
+      const extractedUrls = extractUrlsFromText(existingSourceLink);
+      if (extractedUrls.length > 0) {
+        extractedUrls.forEach(url => {
+          window.open(url, '_blank');
+        });
+      } else if (existingSourceLink) {
+        // Last resort: try to open the raw source link
+        window.open(existingSourceLink, '_blank');
+      } else {
+        alert('No purchase sources found for this product');
+      }
     } finally {
       setSourcesLoading(false);
     }
@@ -373,7 +402,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
 
                     {/* COGS and Restock Information */}
                     {console.log(`[DEBUG] ASIN ${alert.asin} COGS data:`, enhanced_analytics?.[alert.asin]?.cogs_data)}
-                    {enhanced_analytics?.[alert.asin]?.cogs_data && Object.keys(enhanced_analytics[alert.asin].cogs_data).length > 0 && (
+                    {enhanced_analytics?.[alert.asin]?.cogs_data && enhanced_analytics[alert.asin].cogs_data.cogs && (
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4 text-sm">
@@ -395,17 +424,16 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                             )}
                           </div>
                           
-                          {enhanced_analytics[alert.asin].cogs_data.source_link && (
-                            <button
-                              onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
-                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                              disabled={sourcesLoading}
-                            >
-                              <ShoppingCart className="h-4 w-4 mr-1" />
-                              {sourcesLoading ? 'Loading...' : 'Restock Here'}
-                              <Globe className="h-3 w-3 ml-1" />
-                            </button>
-                          )}
+                          {/* Always show Restock Here button - handle multiple source links */}
+                          <button
+                            onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
+                            className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            disabled={sourcesLoading}
+                          >
+                            <ShoppingCart className="h-4 w-4 mr-1" />
+                            {sourcesLoading ? 'Loading...' : 'Restock Here'}
+                            <Globe className="h-3 w-3 ml-1" />
+                          </button>
                         </div>
                       </div>
                     )}

@@ -763,9 +763,9 @@ class EnhancedOrdersAnalysis:
                     try:
                         batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchGet"
                         batch_params = {
-                            'ranges': [f"'{worksheet_name}'!A1:Z"],
+                            'ranges': [f"'{worksheet_name}'!A1:ZZ"],
                             'includeGridData': 'true',
-                            'fields': 'sheets.data.rowData.values.hyperlink,sheets.data.rowData.values.textFormatRuns'
+                            'fields': 'sheets.data.rowData.values.hyperlink,sheets.data.rowData.values.textFormatRuns,sheets.data.rowData.values.formattedValue'
                         }
                         batch_r = requests.get(batch_url, headers=headers, params=batch_params)
                         if batch_r.status_code == 200:
@@ -962,6 +962,10 @@ class EnhancedOrdersAnalysis:
                 values = row.get('values', [])
                 for col_idx, cell in enumerate(values):
                     cell_links = []
+                    
+                    # Debug: Show what's in the cell
+                    if any(key in cell for key in ['hyperlink', 'textFormatRuns', 'formattedValue']):
+                        print(f"[DEBUG HYPERLINKS] Cell {row_idx},{col_idx} contents: {cell.get('formattedValue', 'No text')} - Keys: {list(cell.keys())}")
                     
                     # Check for direct hyperlink
                     if 'hyperlink' in cell:

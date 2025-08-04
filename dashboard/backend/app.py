@@ -2533,10 +2533,12 @@ def admin_get_stats():
         users = get_users_config()
         
         total_users = len(users)
+        
+        # Calculate active users - subusers are always considered active since they inherit from parent
         active_users = sum(1 for u in users if 
-                          u.get('email') and 
-                          u.get('google_tokens') and 
-                          u.get('sheet_id'))
+                          u.get('user_type') == 'subuser' or  # Subusers are always active
+                          (u.get('email') and u.get('google_tokens') and u.get('sheet_id')))  # Main users need full setup
+        
         pending_users = total_users - active_users
         
         return jsonify({

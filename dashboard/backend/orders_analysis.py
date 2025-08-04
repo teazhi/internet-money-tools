@@ -940,17 +940,23 @@ class EnhancedOrdersAnalysis:
         """Extract hyperlinks from Google Sheets batchGet response"""
         hyperlinks = {}
         try:
+            print(f"[DEBUG HYPERLINKS] Processing batch data keys: {list(batch_data.keys())}")
             sheets = batch_data.get('sheets', [])
             if not sheets:
+                print(f"[DEBUG HYPERLINKS] No sheets found in batch data")
                 return hyperlinks
                 
             sheet = sheets[0]  # First sheet in the response
+            print(f"[DEBUG HYPERLINKS] Sheet keys: {list(sheet.keys())}")
             data = sheet.get('data', [])
             if not data:
+                print(f"[DEBUG HYPERLINKS] No data found in sheet")
                 return hyperlinks
                 
             grid_data = data[0]  # First data range
+            print(f"[DEBUG HYPERLINKS] Grid data keys: {list(grid_data.keys())}")
             row_data = grid_data.get('rowData', [])
+            print(f"[DEBUG HYPERLINKS] Processing {len(row_data)} rows")
             
             for row_idx, row in enumerate(row_data):
                 values = row.get('values', [])
@@ -960,21 +966,32 @@ class EnhancedOrdersAnalysis:
                     # Check for direct hyperlink
                     if 'hyperlink' in cell:
                         cell_links.append(cell['hyperlink'])
+                        print(f"[DEBUG HYPERLINKS] Found direct hyperlink at {row_idx},{col_idx}: {cell['hyperlink']}")
                     
                     # Check for textFormatRuns (multiple hyperlinks in one cell)
                     if 'textFormatRuns' in cell:
-                        for run in cell['textFormatRuns']:
-                            if 'format' in run and 'link' in run['format']:
-                                link_info = run['format']['link']
-                                if 'uri' in link_info:
-                                    cell_links.append(link_info['uri'])
+                        print(f"[DEBUG HYPERLINKS] Found textFormatRuns at {row_idx},{col_idx}: {len(cell['textFormatRuns'])} runs")
+                        for run_idx, run in enumerate(cell['textFormatRuns']):
+                            print(f"[DEBUG HYPERLINKS] Run {run_idx} keys: {list(run.keys())}")
+                            if 'format' in run:
+                                print(f"[DEBUG HYPERLINKS] Format keys: {list(run['format'].keys())}")
+                                if 'link' in run['format']:
+                                    link_info = run['format']['link']
+                                    print(f"[DEBUG HYPERLINKS] Link info: {link_info}")
+                                    if 'uri' in link_info:
+                                        cell_links.append(link_info['uri'])
+                                        print(f"[DEBUG HYPERLINKS] Found textFormatRun link at {row_idx},{col_idx}: {link_info['uri']}")
                     
                     if cell_links:
                         hyperlinks[f"{row_idx},{col_idx}"] = cell_links
+                        print(f"[DEBUG HYPERLINKS] Stored {len(cell_links)} links for cell {row_idx},{col_idx}")
                         
+            print(f"[DEBUG HYPERLINKS] Total hyperlinks found: {len(hyperlinks)}")
             return hyperlinks
         except Exception as e:
             print(f"[ERROR] Failed to extract hyperlinks: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
 
     def process_asin_cogs_data(self, df, asin_field, cogs_field, date_field, source_field, hyperlinks=None):
@@ -1018,9 +1035,15 @@ class EnhancedOrdersAnalysis:
                         original_row_idx = row.name + 1  # Add 1 because Google Sheets rows are 1-indexed and we skip header
                         hyperlink_key = f"{original_row_idx},{col_idx}"
                         
+                        print(f"[DEBUG COGS] Looking for hyperlinks for ASIN {asin} at DataFrame row {row.name}, Google Sheets row {original_row_idx}, col {col_idx} (field: {source_field})")
+                        print(f"[DEBUG COGS] Source value in this row: '{source_value}'")
+                        print(f"[DEBUG COGS] Available hyperlink keys: {list(hyperlinks.keys())}")
+                        
                         if hyperlink_key in hyperlinks:
                             hyperlink_sources = hyperlinks[hyperlink_key]
-                            print(f"[DEBUG COGS] Found hyperlinks for ASIN {asin} at row {original_row_idx}, col {col_idx}: {hyperlink_sources}")
+                            print(f"[DEBUG COGS] Found hyperlinks for ASIN {asin} at {hyperlink_key}: {hyperlink_sources}")
+                        else:
+                            print(f"[DEBUG COGS] No hyperlinks found for key {hyperlink_key}")
                     except Exception as e:
                         print(f"[DEBUG COGS] Error getting hyperlinks for ASIN {asin}: {e}")
                 

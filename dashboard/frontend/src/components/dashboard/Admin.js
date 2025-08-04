@@ -471,8 +471,14 @@ const Admin = () => {
 
       if (filterStatus === 'all') return matchesSearch;
       
-      const isActive = user.profile_configured && user.google_linked && user.sheet_configured;
-      const isPending = !user.profile_configured || !user.google_linked || !user.sheet_configured;
+      // Subusers are considered active if they exist (they inherit setup from parent)
+      const isActive = user.user_type === 'subuser' 
+        ? true // Subusers are always considered "active"
+        : (user.profile_configured && user.google_linked && user.sheet_configured);
+      // Subusers don't need full setup - they inherit from parent user
+      const isPending = user.user_type === 'subuser' 
+        ? false // Subusers are never considered "pending setup"
+        : (!user.profile_configured || !user.google_linked || !user.sheet_configured);
       
       if (filterStatus === 'active') return matchesSearch && isActive;
       if (filterStatus === 'pending') return matchesSearch && isPending;

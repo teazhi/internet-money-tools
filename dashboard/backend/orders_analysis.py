@@ -758,6 +758,24 @@ class EnhancedOrdersAnalysis:
                     r.raise_for_status()
                     values = r.json().get("values", [])
                     
+                    # Also fetch hyperlinks using batchGet to get rich text data
+                    hyperlinks = {}
+                    try:
+                        batch_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchGet"
+                        batch_params = {
+                            'ranges': [f"'{worksheet_name}'!A1:Z"],
+                            'includeGridData': 'true',
+                            'fields': 'sheets.data.rowData.values.hyperlink,sheets.data.rowData.values.textFormatRuns'
+                        }
+                        batch_r = requests.get(batch_url, headers=headers, params=batch_params)
+                        if batch_r.status_code == 200:
+                            batch_data = batch_r.json()
+                            hyperlinks = self.extract_hyperlinks_from_batch_data(batch_data)
+                            print(f"[DEBUG COGS ALL] Extracted {len(hyperlinks)} hyperlink entries from '{worksheet_name}'")
+                    except Exception as e:
+                        print(f"[DEBUG COGS ALL] Could not fetch hyperlinks for '{worksheet_name}': {e}")
+                        hyperlinks = {}
+                    
                     if not values or len(values) < 2:
                         # Skipping worksheet - insufficient data
                         continue
@@ -832,8 +850,8 @@ class EnhancedOrdersAnalysis:
                     except:
                         df['_row_order'] = range(len(df))
                     
-                    # Process each ASIN in this worksheet
-                    worksheet_cogs = self.process_asin_cogs_data(df, asin_field, cogs_field, date_field, source_field)
+                    # Process each ASIN in this worksheet, passing hyperlinks data
+                    worksheet_cogs = self.process_asin_cogs_data(df, asin_field, cogs_field, date_field, source_field, hyperlinks)
                     
                     # Merge with combined data (later sheets override earlier ones for same ASIN)
                     for asin, data in worksheet_cogs.items():
@@ -917,8 +935,49 @@ class EnhancedOrdersAnalysis:
         except Exception as e:
             print(f"[ERROR] Failed to fetch COGS data from all worksheets: {e}")
             return {}, pd.DataFrame()
+    
+    def extract_hyperlinks_from_batch_data(self, batch_data):
+        """Extract hyperlinks from Google Sheets batchGet response"""
+        hyperlinks = {}
+        try:
+            sheets = batch_data.get('sheets', [])
+            if not sheets:
+                return hyperlinks
+                
+            sheet = sheets[0]  # First sheet in the response
+            data = sheet.get('data', [])
+            if not data:
+                return hyperlinks
+                
+            grid_data = data[0]  # First data range
+            row_data = grid_data.get('rowData', [])
+            
+            for row_idx, row in enumerate(row_data):
+                values = row.get('values', [])
+                for col_idx, cell in enumerate(values):
+                    cell_links = []
+                    
+                    # Check for direct hyperlink
+                    if 'hyperlink' in cell:
+                        cell_links.append(cell['hyperlink'])
+                    
+                    # Check for textFormatRuns (multiple hyperlinks in one cell)
+                    if 'textFormatRuns' in cell:
+                        for run in cell['textFormatRuns']:
+                            if 'format' in run and 'link' in run['format']:
+                                link_info = run['format']['link']
+                                if 'uri' in link_info:
+                                    cell_links.append(link_info['uri'])
+                    
+                    if cell_links:
+                        hyperlinks[f"{row_idx},{col_idx}"] = cell_links
+                        
+            return hyperlinks
+        except Exception as e:
+            print(f"[ERROR] Failed to extract hyperlinks: {e}")
+            return {}
 
-    def process_asin_cogs_data(self, df, asin_field, cogs_field, date_field, source_field):
+    def process_asin_cogs_data(self, df, asin_field, cogs_field, date_field, source_field, hyperlinks=None):
         """Extract COGS data for each ASIN from a worksheet DataFrame"""
         cogs_data = {}
         
@@ -945,8 +1004,27 @@ class EnhancedOrdersAnalysis:
             all_sources = []
             last_known_source = None
             
-            for _, row in asin_rows.iterrows():
+            for row_idx, row in asin_rows.iterrows():
                 source_value = row[source_field] if source_field else None
+                
+                # Check for hyperlinks from Google Sheets API data
+                hyperlink_sources = []
+                if hyperlinks and source_field:
+                    # Find the column index for the source field
+                    col_idx = None
+                    try:
+                        col_idx = df.columns.get_loc(source_field)
+                        # Get the original row index (accounting for header row)
+                        original_row_idx = row.name + 1  # Add 1 because Google Sheets rows are 1-indexed and we skip header
+                        hyperlink_key = f"{original_row_idx},{col_idx}"
+                        
+                        if hyperlink_key in hyperlinks:
+                            hyperlink_sources = hyperlinks[hyperlink_key]
+                            print(f"[DEBUG COGS] Found hyperlinks for ASIN {asin} at row {original_row_idx}, col {col_idx}: {hyperlink_sources}")
+                    except Exception as e:
+                        print(f"[DEBUG COGS] Error getting hyperlinks for ASIN {asin}: {e}")
+                
+                # Process text-based source value
                 if source_value and not pd.isna(source_value):
                     cleaned_source = str(source_value).strip()
                     if cleaned_source and cleaned_source != '' and cleaned_source.lower() != 'nan':
@@ -954,9 +1032,17 @@ class EnhancedOrdersAnalysis:
                         last_known_source = cleaned_source
                         if cleaned_source not in all_sources:
                             all_sources.append(cleaned_source)
+                
+                # Add hyperlink sources
+                for hyperlink_url in hyperlink_sources:
+                    if hyperlink_url and hyperlink_url not in all_sources:
+                        all_sources.append(hyperlink_url)
+                        last_known_source = hyperlink_url
+                        
                 # If this row has empty source but we have a last known source, use that
-                elif last_known_source and last_known_source not in all_sources:
-                    all_sources.append(last_known_source)
+                if not source_value or pd.isna(source_value):
+                    if last_known_source and last_known_source not in all_sources:
+                        all_sources.append(last_known_source)
             
             # Use the most recent valid source as the primary source
             primary_source = all_sources[-1] if all_sources else None

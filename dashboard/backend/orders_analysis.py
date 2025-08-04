@@ -769,6 +769,11 @@ class EnhancedOrdersAnalysis:
                     print(f"[DEBUG COGS ALL] Expected columns: {expected_columns}")
                     print(f"[DEBUG COGS ALL] Available columns: {available_columns}")
                     
+                    # Check if this looks like data instead of headers (common issue)
+                    if any(col.startswith(('$', 'http', 'B0', '20')) or col.replace('.', '').replace('%', '').isdigit() for col in cols if col):
+                        print(f"[DEBUG COGS ALL] Skipping '{worksheet_name}' - first row appears to be data, not headers")
+                        continue
+                    
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
                         print(f"[DEBUG COGS ALL] Skipping '{worksheet_name}' - missing columns: {missing}")
@@ -857,9 +862,16 @@ class EnhancedOrdersAnalysis:
                         print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' has purchase analytics columns - adding to combined data")
                         print(f"[DEBUG COGS ALL] Found purchase columns: {mapped_purchase_columns.intersection(available_columns)}")
                         # Add worksheet identifier to the DataFrame
-                        df_copy = df.copy()
-                        df_copy['_worksheet_source'] = worksheet_name
-                        combined_dataframes.append(df_copy)
+                        try:
+                            df_copy = df.copy()
+                            df_copy['_worksheet_source'] = worksheet_name
+                            # Reset index to avoid conflicts when concatenating
+                            df_copy = df_copy.reset_index(drop=True)
+                            combined_dataframes.append(df_copy)
+                            print(f"[DEBUG COGS ALL] Added DataFrame from '{worksheet_name}': {len(df_copy)} rows")
+                        except Exception as df_error:
+                            print(f"[ERROR] Failed to process DataFrame from worksheet '{worksheet_name}': {df_error}")
+                            continue
                     else:
                         missing_columns = mapped_purchase_columns - available_columns
                         print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' missing purchase analytics columns: {missing_columns}")
@@ -876,8 +888,26 @@ class EnhancedOrdersAnalysis:
             
             # Combine all DataFrames for purchase analytics
             if combined_dataframes:
-                combined_df = pd.concat(combined_dataframes, ignore_index=True)
-                print(f"[DEBUG COGS ALL] Combined DataFrame: {len(combined_df)} rows from {len(combined_dataframes)} worksheets")
+                try:
+                    print(f"[DEBUG COGS ALL] Attempting to combine {len(combined_dataframes)} DataFrames...")
+                    # Check for column compatibility before concatenating
+                    if len(combined_dataframes) > 1:
+                        first_cols = set(combined_dataframes[0].columns)
+                        for i, df in enumerate(combined_dataframes[1:], 1):
+                            current_cols = set(df.columns)
+                            if first_cols != current_cols:
+                                print(f"[DEBUG COGS ALL] Column mismatch in DataFrame {i}: {first_cols.symmetric_difference(current_cols)}")
+                    
+                    combined_df = pd.concat(combined_dataframes, ignore_index=True, sort=False)
+                    print(f"[DEBUG COGS ALL] Combined DataFrame: {len(combined_df)} rows from {len(combined_dataframes)} worksheets")
+                except Exception as concat_error:
+                    print(f"[ERROR] Failed to concatenate DataFrames: {concat_error}")
+                    # Fall back to using just the first DataFrame
+                    if combined_dataframes:
+                        combined_df = combined_dataframes[0].copy()
+                        print(f"[DEBUG COGS ALL] Using first DataFrame as fallback: {len(combined_df)} rows")
+                    else:
+                        combined_df = pd.DataFrame()
             else:
                 combined_df = pd.DataFrame()
                 print(f"[DEBUG COGS ALL] No worksheets with purchase analytics columns found")

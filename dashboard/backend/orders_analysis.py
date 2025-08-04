@@ -731,14 +731,14 @@ class EnhancedOrdersAnalysis:
             print(f"[DEBUG COGS ALL] Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
             # Expected column structure based on user's column mapping
-            # Get the actual column names from user's mapping
+            # Get the actual column names from user's mapping (excluding source field which we'll detect dynamically)
             expected_columns = set()
-            required_fields = ["Date", "Store and Source Link", "ASIN", "COGS"]
+            required_fields = ["Date", "ASIN", "COGS"]  # Removed "Store and Source Link" - we'll detect source columns dynamically
             for field in required_fields:
                 mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
                 expected_columns.add(mapped_column)
             
-            print(f"[DEBUG COGS ALL] Expected columns based on user mapping: {expected_columns}")
+            print(f"[DEBUG COGS ALL] Expected columns based on user mapping (excluding source): {expected_columns}")
             
             combined_cogs_data = {}
             combined_dataframes = []  # For purchase analytics
@@ -792,7 +792,26 @@ class EnhancedOrdersAnalysis:
                     asin_field = column_mapping.get("ASIN", "ASIN")
                     cogs_field = column_mapping.get("COGS", "COGS")
                     date_field = column_mapping.get("Date", "Date")
-                    source_field = column_mapping.get("Store and Source Link", "Store and Source Link")
+                    
+                    # Dynamically detect source field - look for any column containing "Source"
+                    source_field = None
+                    # First try the user's mapping if they have one
+                    if "Store and Source Link" in column_mapping:
+                        mapped_source = column_mapping["Store and Source Link"]
+                        if mapped_source in available_columns:
+                            source_field = mapped_source
+                    
+                    # If no mapping or mapped field not found, search for any column containing "Source"
+                    if not source_field:
+                        for col in available_columns:
+                            if "source" in col.lower():
+                                source_field = col
+                                print(f"[DEBUG COGS ALL] Found source field: '{col}' in worksheet '{worksheet_name}'")
+                                break
+                    
+                    if not source_field:
+                        print(f"[DEBUG COGS ALL] No source field found in worksheet '{worksheet_name}' - COGS data will have no source links")
+                        source_field = None  # Will be handled gracefully in process_asin_cogs_data
                     
                     # Processing worksheet rows
                     

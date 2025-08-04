@@ -1281,6 +1281,18 @@ def get_orders_analytics():
         # Get user's timezone preference first and update last activity
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
+        
+        # For subusers, we need to check their parent's configuration for Sellerboard URLs
+        # but keep their own timezone preference
+        config_user_record = user_record
+        if user_record and user_record.get('user_type') == 'subuser':
+            parent_user_id = user_record.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+                    print(f"[Dashboard Analytics] Subuser {discord_id} using parent {parent_user_id} configuration")
+        
         user_timezone = user_record.get('timezone') if user_record else None
         
         # Update last activity for analytics access
@@ -1333,7 +1345,7 @@ def get_orders_analytics():
         
         # Check if user is admin and SP-API should be attempted
         is_admin = is_admin_user(discord_id)
-        disable_sp_api = user_record.get('disable_sp_api', False) if user_record else False
+        disable_sp_api = config_user_record.get('disable_sp_api', False) if config_user_record else False
         
         if is_admin and not disable_sp_api:
             print("[SP-API Analytics] Admin user detected - attempting SP-API integration")
@@ -1387,8 +1399,8 @@ def get_orders_analytics():
                     from orders_analysis import OrdersAnalysis
                     
                     # Get user's configured Sellerboard URLs
-                    orders_url = user_record.get('sellerboard_orders_url') if user_record else None
-                    stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                    orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
+                    stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
                     
                     if not orders_url or not stock_url:
                         return jsonify({
@@ -1420,8 +1432,8 @@ def get_orders_analytics():
                 from orders_analysis import OrdersAnalysis
                 
                 # Get user's configured Sellerboard URLs
-                orders_url = user_record.get('sellerboard_orders_url') if user_record else None
-                stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
+                stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -1437,12 +1449,12 @@ def get_orders_analytics():
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
-                    'enable_source_links': user_record.get('enable_source_links', False),
-                    'search_all_worksheets': user_record.get('search_all_worksheets', False),
-                    'sheet_id': user_record.get('sheet_id'),
-                    'worksheet_title': user_record.get('worksheet_title'),
-                    'google_tokens': user_record.get('google_tokens', {}),
-                    'column_mapping': user_record.get('column_mapping', {})
+                    'enable_source_links': config_user_record.get('enable_source_links', False),
+                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'sheet_id': config_user_record.get('sheet_id'),
+                    'worksheet_title': config_user_record.get('worksheet_title'),
+                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'column_mapping': config_user_record.get('column_mapping', {})
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
@@ -1478,8 +1490,8 @@ def get_orders_analytics():
                 from orders_analysis import OrdersAnalysis
                 
                 # Get user's configured Sellerboard URLs
-                orders_url = user_record.get('sellerboard_orders_url') if user_record else None
-                stock_url = user_record.get('sellerboard_stock_url') if user_record else None
+                orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
+                stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -1495,12 +1507,12 @@ def get_orders_analytics():
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
-                    'enable_source_links': user_record.get('enable_source_links', False),
-                    'search_all_worksheets': user_record.get('search_all_worksheets', False),
-                    'sheet_id': user_record.get('sheet_id'),
-                    'worksheet_title': user_record.get('worksheet_title'),
-                    'google_tokens': user_record.get('google_tokens', {}),
-                    'column_mapping': user_record.get('column_mapping', {})
+                    'enable_source_links': config_user_record.get('enable_source_links', False),
+                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'sheet_id': config_user_record.get('sheet_id'),
+                    'worksheet_title': config_user_record.get('worksheet_title'),
+                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'column_mapping': config_user_record.get('column_mapping', {})
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)

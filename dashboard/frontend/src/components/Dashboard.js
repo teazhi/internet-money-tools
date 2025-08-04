@@ -82,6 +82,10 @@ const Dashboard = () => {
   ];
 
   const getStatusColor = () => {
+    // Subusers inherit configuration from their parent, so they're always configured
+    if (!isMainUser) return 'bg-green-100 text-green-800';
+    
+    // Main users need individual setup steps
     if (!user?.profile_configured) return 'bg-red-100 text-red-800';
     if (!user?.google_linked) return 'bg-yellow-100 text-yellow-800';
     if (!user?.sheet_configured) return 'bg-blue-100 text-blue-800';
@@ -89,6 +93,10 @@ const Dashboard = () => {
   };
 
   const getStatusText = () => {
+    // Subusers inherit configuration from their parent, so they're always configured
+    if (!isMainUser) return 'Fully Configured';
+    
+    // Main users need individual setup steps
     if (!user?.profile_configured) return 'Setup Required';
     if (!user?.google_linked) return 'Google Linking Required';
     if (!user?.sheet_configured) return 'Sheet Configuration Required';

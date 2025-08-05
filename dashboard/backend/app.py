@@ -527,21 +527,6 @@ def discord_callback():
     print(f"[Discord Callback] Invitation token from state: {invitation_token}")
     print(f"[Discord Callback] Full callback args: {dict(request.args)}")
     
-    # If there's an invitation token, clean it up regardless of whether user exists
-    if invitation_token:
-        invitations = get_invitations_config()
-        print(f"[Discord Callback] Cleaning up invitation token: {invitation_token}")
-        
-        # Find and remove the invitation
-        original_count = len(invitations)
-        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
-        
-        if len(invitations) < original_count:
-            update_invitations_config(invitations)
-            print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
-        else:
-            print(f"[Discord Callback] No matching invitation found to remove")
-    
     # If user doesn't exist, check for invitation requirement (for new users only)
     if not existing_user:
         if not invitation_token:
@@ -582,6 +567,12 @@ def discord_callback():
         if not valid_invitation:
             print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
             return redirect("https://dms-amazon.vercel.app/login?error=invalid_invitation")
+        
+        # Clean up the invitation only after successful validation
+        print(f"[Discord Callback] Cleaning up invitation token after successful validation: {invitation_token}")
+        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
+        update_invitations_config(invitations)
+        print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username

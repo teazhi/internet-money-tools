@@ -8,10 +8,16 @@ const SubUserManager = () => {
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInviteForm, setShowInviteForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [inviteForm, setInviteForm] = useState({
     email: '',
     va_name: '',
     permissions: ['sellerboard_upload']
+  });
+  const [editForm, setEditForm] = useState({
+    va_name: '',
+    permissions: []
   });
 
   const fetchData = useCallback(async () => {
@@ -80,6 +86,38 @@ const SubUserManager = () => {
         : [...prev.permissions, permission]
     }));
   }, []);
+
+  const handleEditPermissionChange = useCallback((permission) => {
+    setEditForm(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(permission)
+        ? prev.permissions.filter(p => p !== permission)
+        : [...prev.permissions, permission]
+    }));
+  }, []);
+
+  const handleEditUser = (subUser) => {
+    setEditingUser(subUser);
+    setEditForm({
+      va_name: subUser.va_name || '',
+      permissions: [...subUser.permissions]
+    });
+    setShowEditForm(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`/api/edit-subuser/${editingUser.discord_id}`, editForm, { withCredentials: true });
+      setShowEditForm(false);
+      setEditingUser(null);
+      setEditForm({ va_name: '', permissions: [] });
+      fetchData(); // Refresh data
+      alert('VA updated successfully!');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to update VA');
+    }
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -265,6 +303,99 @@ const SubUserManager = () => {
         </div>
       )}
 
+      {/* Edit VA Form Modal */}
+      {showEditForm && editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="card max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold mb-4">Edit Virtual Assistant</h3>
+            <form onSubmit={handleEditSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    disabled
+                    value={editingUser.email}
+                    className="input-field bg-gray-100 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    VA Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.va_name}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, va_name: e.target.value }))}
+                    className="input-field"
+                    placeholder="Assistant Name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Permissions
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={editForm.permissions.includes('sellerboard_upload')}
+                        onChange={() => handleEditPermissionChange('sellerboard_upload')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Upload Sellerboard Files</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={editForm.permissions.includes('reimbursements_analysis')}
+                        onChange={() => handleEditPermissionChange('reimbursements_analysis')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Analyze Reimbursements</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={editForm.permissions.includes('all')}
+                        onChange={() => handleEditPermissionChange('all')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Full Dashboard Access (All Permissions)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setEditingUser(null);
+                    setEditForm({ va_name: '', permissions: [] });
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Active Sub-Users */}
       <div className="card !p-0">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -294,12 +425,20 @@ const SubUserManager = () => {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRevokeAccess(subUser.discord_id)}
-                  className="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
-                >
-                  Revoke Access
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEditUser(subUser)}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleRevokeAccess(subUser.discord_id)}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+                  >
+                    Revoke Access
+                  </button>
+                </div>
               </div>
             ))
           )}

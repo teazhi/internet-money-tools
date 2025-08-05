@@ -3055,6 +3055,54 @@ def delete_my_invitation(invitation_token):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/edit-subuser/<subuser_id>', methods=['PUT'])
+@login_required
+def edit_subuser(subuser_id):
+    """Edit a sub-user's permissions and details"""
+    try:
+        discord_id = session['discord_id']
+        data = request.json
+        users = get_users_config()
+        
+        # Find the sub-user
+        subuser_index = None
+        for i, user in enumerate(users):
+            if user.get('discord_id') == subuser_id and user.get('parent_user_id') == discord_id:
+                subuser_index = i
+                break
+        
+        if subuser_index is None:
+            return jsonify({'error': 'Sub-user not found or not authorized'}), 404
+        
+        # Update the sub-user's information
+        if 'va_name' in data:
+            users[subuser_index]['va_name'] = data['va_name']
+        
+        if 'permissions' in data:
+            # Validate permissions
+            valid_permissions = ['sellerboard_upload', 'reimbursements_analysis', 'all']
+            permissions = [p for p in data['permissions'] if p in valid_permissions]
+            users[subuser_index]['permissions'] = permissions
+        
+        # Update last modified timestamp
+        users[subuser_index]['updated_at'] = datetime.utcnow().isoformat()
+        
+        if update_users_config(users):
+            return jsonify({
+                'success': True, 
+                'message': 'Sub-user updated successfully',
+                'subuser': {
+                    'discord_id': users[subuser_index]['discord_id'],
+                    'va_name': users[subuser_index].get('va_name'),
+                    'permissions': users[subuser_index]['permissions'],
+                    'updated_at': users[subuser_index]['updated_at']
+                }
+            })
+        else:
+            return jsonify({'error': 'Failed to update users configuration'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/revoke-subuser/<subuser_id>', methods=['DELETE'])
 @login_required
 def revoke_subuser_access(subuser_id):

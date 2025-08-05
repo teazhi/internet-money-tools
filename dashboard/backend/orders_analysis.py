@@ -176,8 +176,9 @@ class EnhancedOrdersAnalysis:
         return orders_df[product_col].value_counts().to_dict()
 
     def calculate_enhanced_velocity(self, asin: str, orders_df: pd.DataFrame, target_date: date, user_timezone: str = None) -> Dict:
-        """Calculate enhanced multi-period velocity with trend analysis"""
-        periods = [7, 14, 30, 60, 90]
+        """Calculate enhanced multi-period velocity with trend analysis (optimized for 30-day Sellerboard data)"""
+        # Adjusted periods for 30-day Sellerboard data limit
+        periods = [3, 7, 14, 21, 30]
         velocity_data = {}
         
         try:
@@ -196,13 +197,13 @@ class EnhancedOrdersAnalysis:
                 print(f"[ERROR] start_date: {start_date} (type: {type(start_date)})")
             raise
         
-        # Calculate weighted velocity (recent performance weighted higher)
+        # Calculate weighted velocity (recent performance weighted higher) - adjusted for 30-day data
         weighted_velocity = (
-            velocity_data['7d'] * 0.4 +
-            velocity_data['14d'] * 0.25 +
-            velocity_data['30d'] * 0.2 +
-            velocity_data['60d'] * 0.1 +
-            velocity_data['90d'] * 0.05
+            velocity_data['3d'] * 0.35 +   # Very recent (3 days)
+            velocity_data['7d'] * 0.3 +    # Recent (1 week)
+            velocity_data['14d'] * 0.2 +   # Medium term (2 weeks)
+            velocity_data['21d'] * 0.1 +   # Longer term (3 weeks)
+            velocity_data['30d'] * 0.05    # Full period (1 month)
         )
         
         # Ensure no NaN/Inf values
@@ -218,9 +219,9 @@ class EnhancedOrdersAnalysis:
                 velocity_data['current_velocity'] = today_sales_for_asin
                 # Using today's sales as velocity baseline
         
-        # Trend analysis with safety checks
-        recent_velocity = (velocity_data['7d'] + velocity_data['14d']) / 2
-        historical_velocity = (velocity_data['60d'] + velocity_data['90d']) / 2
+        # Trend analysis with safety checks (adjusted for 30-day data limit)
+        recent_velocity = (velocity_data['3d'] + velocity_data['7d']) / 2      # Very recent: 3-7 days
+        historical_velocity = (velocity_data['21d'] + velocity_data['30d']) / 2 # Historical: 3-4 weeks ago
         
         # Debug: Print trend calculation details for first few products
         if not hasattr(self, '_trend_debug_count'):
@@ -228,10 +229,11 @@ class EnhancedOrdersAnalysis:
         
         if self._trend_debug_count < 3:  # Debug first 3 products
             print(f"[TREND DEBUG] ASIN: {asin if 'asin' in locals() else 'unknown'}")
+            print(f"[TREND DEBUG] 3d velocity: {velocity_data['3d']}")
             print(f"[TREND DEBUG] 7d velocity: {velocity_data['7d']}")
             print(f"[TREND DEBUG] 14d velocity: {velocity_data['14d']}")
-            print(f"[TREND DEBUG] 60d velocity: {velocity_data['60d']}")
-            print(f"[TREND DEBUG] 90d velocity: {velocity_data['90d']}")
+            print(f"[TREND DEBUG] 21d velocity: {velocity_data['21d']}")
+            print(f"[TREND DEBUG] 30d velocity: {velocity_data['30d']}")
             print(f"[TREND DEBUG] recent_velocity: {recent_velocity}")
             print(f"[TREND DEBUG] historical_velocity: {historical_velocity}")
             self._trend_debug_count += 1
@@ -273,7 +275,7 @@ class EnhancedOrdersAnalysis:
             confidence = 0.5
         
         return {
-            'current_velocity': velocity_data['7d'],
+            'current_velocity': velocity_data['3d'],  # Use 3-day as "current"
             'weighted_velocity': weighted_velocity,
             'trend_factor': trend_factor,
             'trend_direction': trend_direction,

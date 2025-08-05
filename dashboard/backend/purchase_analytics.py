@@ -58,7 +58,7 @@ class PurchaseAnalytics:
                 'seasonal_purchase_trends': self._analyze_seasonal_trends(df),
                 'cash_flow_optimization': self._analyze_cash_flow_impact(df),
                 'summary_metrics': self._generate_summary_metrics(df),
-                'current_month_purchases': self._analyze_current_month_purchases(df)
+                'recent_2_months_purchases': self._analyze_recent_2_months_purchases(df)
             }
             
             return insights
@@ -448,46 +448,109 @@ class PurchaseAnalytics:
         
         return recommendations
     
-    def _analyze_current_month_purchases(self, df: pd.DataFrame) -> Dict:
-        """Analyze purchases made in the current month for each ASIN"""
-        current_month_data = {}
+    def _analyze_recent_2_months_purchases(self, df: pd.DataFrame) -> Dict:
+        """Analyze purchases from the last 2 worksheets (representing last 2 months due to Amazon lead time)"""
+        recent_purchases_data = {}
         
         try:
-            # Filter to current month
-            current_date = datetime.now()
-            current_month_start = current_date.replace(day=1)
-            current_month_df = df[df['date'] >= current_month_start]
+            # Check if we have worksheet source information
+            if '_worksheet_source' not in df.columns:
+                print(f"[Purchase Analytics] No worksheet source info - falling back to date-based analysis")
+                return self._analyze_by_date_fallback(df)
             
-            if current_month_df.empty:
-                print(f"[Purchase Analytics] No purchases found in current month ({current_date.strftime('%Y-%m')})")
+            # Get the list of unique worksheets, sorted to identify the most recent ones
+            worksheets = df['_worksheet_source'].unique()
+            print(f"[Purchase Analytics] Found worksheets: {list(worksheets)}")
+            
+            # Try to identify the last 2 worksheets by sorting (assuming chronological naming)
+            # Sort worksheets to get the most recent ones (assuming they're named chronologically)
+            sorted_worksheets = sorted(worksheets, reverse=True)
+            last_2_worksheets = sorted_worksheets[:2]
+            
+            print(f"[Purchase Analytics] Analyzing last 2 worksheets: {last_2_worksheets}")
+            
+            # Filter to only data from the last 2 worksheets
+            recent_df = df[df['_worksheet_source'].isin(last_2_worksheets)]
+            
+            if recent_df.empty:
+                print(f"[Purchase Analytics] No purchases found in last 2 worksheets")
                 return {}
             
-            # Group by ASIN and sum amounts purchased this month
-            monthly_purchases = current_month_df.groupby('asin').agg({
+            # Group by ASIN and sum amounts purchased from last 2 worksheets
+            recent_purchases = recent_df.groupby('asin').agg({
                 'amount_purchased': 'sum',
-                'date': ['count', 'max'],  # count of purchases and most recent date
-                'cogs': 'mean'  # average COGS for current month
+                'date': ['count', 'max', 'min'],  # count, most recent, and earliest date
+                'cogs': 'mean',  # average COGS for recent purchases
+                '_worksheet_source': lambda x: list(x.unique())  # which worksheets this ASIN appears in
             }).reset_index()
             
             # Flatten column names
-            monthly_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'avg_cogs']
+            recent_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'first_purchase_date', 'avg_cogs', 'source_worksheets']
             
             # Convert to dictionary format
-            for _, row in monthly_purchases.iterrows():
+            for _, row in recent_purchases.iterrows():
                 asin = row['asin']
-                current_month_data[asin] = {
+                recent_purchases_data[asin] = {
                     'total_quantity_purchased': int(row['total_qty_purchased']),
                     'purchase_count': int(row['purchase_count']),
                     'last_purchase_date': row['last_purchase_date'].isoformat() if pd.notna(row['last_purchase_date']) else None,
-                    'avg_cogs_this_month': float(row['avg_cogs']) if pd.notna(row['avg_cogs']) else 0,
-                    'month_year': current_date.strftime('%Y-%m')
+                    'first_purchase_date': row['first_purchase_date'].isoformat() if pd.notna(row['first_purchase_date']) else None,
+                    'avg_cogs_recent': float(row['avg_cogs']) if pd.notna(row['avg_cogs']) else 0,
+                    'source_worksheets': row['source_worksheets'],
+                    'analysis_period': f"Last 2 worksheets: {', '.join(last_2_worksheets)}",
+                    'worksheets_analyzed': last_2_worksheets
                 }
             
-            print(f"[Purchase Analytics] Found current month purchases for {len(current_month_data)} ASINs")
-            return current_month_data
+            print(f"[Purchase Analytics] Found recent 2-worksheet purchases for {len(recent_purchases_data)} ASINs")
+            return recent_purchases_data
             
         except Exception as e:
-            print(f"[Purchase Analytics] Error analyzing current month purchases: {e}")
+            print(f"[Purchase Analytics] Error analyzing recent 2-worksheet purchases: {e}")
+            # Fallback to date-based analysis
+            return self._analyze_by_date_fallback(df)
+    
+    def _analyze_by_date_fallback(self, df: pd.DataFrame) -> Dict:
+        """Fallback method using date-based analysis when worksheet info is not available"""
+        recent_purchases_data = {}
+        
+        try:
+            # Filter to last 2 months (approximately 60 days) as fallback
+            current_date = datetime.now()
+            two_months_ago = current_date - timedelta(days=60)
+            recent_df = df[df['date'] >= two_months_ago]
+            
+            if recent_df.empty:
+                print(f"[Purchase Analytics] No purchases found in last 2 months (fallback)")
+                return {}
+            
+            # Group by ASIN and sum amounts purchased in last 2 months
+            recent_purchases = recent_df.groupby('asin').agg({
+                'amount_purchased': 'sum',
+                'date': ['count', 'max', 'min'],  # count, most recent, and earliest date
+                'cogs': 'mean'  # average COGS for recent purchases
+            }).reset_index()
+            
+            # Flatten column names
+            recent_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'first_purchase_date', 'avg_cogs']
+            
+            # Convert to dictionary format
+            for _, row in recent_purchases.iterrows():
+                asin = row['asin']
+                recent_purchases_data[asin] = {
+                    'total_quantity_purchased': int(row['total_qty_purchased']),
+                    'purchase_count': int(row['purchase_count']),
+                    'last_purchase_date': row['last_purchase_date'].isoformat() if pd.notna(row['last_purchase_date']) else None,
+                    'first_purchase_date': row['first_purchase_date'].isoformat() if pd.notna(row['first_purchase_date']) else None,
+                    'avg_cogs_recent': float(row['avg_cogs']) if pd.notna(row['avg_cogs']) else 0,
+                    'analysis_period': f"{two_months_ago.strftime('%Y-%m-%d')} to {current_date.strftime('%Y-%m-%d')} (date fallback)",
+                    'days_analyzed': 60
+                }
+            
+            print(f"[Purchase Analytics Fallback] Found recent 2-month purchases for {len(recent_purchases_data)} ASINs")
+            return recent_purchases_data
+            
+        except Exception as e:
+            print(f"[Purchase Analytics] Error in date-based fallback analysis: {e}")
             return {}
     
     def _empty_analytics_response(self) -> Dict:
@@ -520,6 +583,6 @@ class PurchaseAnalytics:
                 'recent_30d_investment': 0,
                 'analysis_date_range': {'start': None, 'end': None}
             },
-            'current_month_purchases': {},
+            'recent_2_months_purchases': {},
             'error': 'No purchase data available for analysis'
         }

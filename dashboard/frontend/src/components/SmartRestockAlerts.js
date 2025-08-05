@@ -406,11 +406,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                         <div className="flex items-center text-sm">
                           <ShoppingCart className="h-4 w-4 text-purple-600 mr-2" />
                           <span className="text-purple-700">
-                            <strong>Already purchased this month:</strong> {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment} units
+                            <strong>Already purchased (last 2 months):</strong> {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment} units
                           </span>
                         </div>
                         <div className="text-xs text-purple-600 mt-1">
-                          Restock recommendation reduced by this amount
+                          Restock recommendation reduced by this amount (due to 2-month Amazon lead time)
                         </div>
                       </div>
                     )}
@@ -513,7 +513,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     Last COGS
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    This Month
+                    Last 2 Months
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Suggested Order

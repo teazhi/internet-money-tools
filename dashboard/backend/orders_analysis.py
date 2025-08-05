@@ -477,13 +477,13 @@ class EnhancedOrdersAnalysis:
         # Subtract current stock to get reorder quantity
         suggested_quantity = max(0, total_needed - current_stock)
         
-        # NEW: Adjust for monthly purchases - reduce recommended quantity by what was already purchased this month
+        # NEW: Adjust for recent purchases - reduce recommended quantity by what was already purchased in last 2 months
         monthly_purchase_adjustment = 0
         if purchase_analytics:
-            monthly_purchases = self.get_current_month_purchases(asin, purchase_analytics)
-            if monthly_purchases > 0:
-                monthly_purchase_adjustment = monthly_purchases
-                suggested_quantity = max(0, suggested_quantity - monthly_purchases)
+            recent_purchases = self.get_recent_2_months_purchases(asin, purchase_analytics)
+            if recent_purchases > 0:
+                monthly_purchase_adjustment = recent_purchases
+                suggested_quantity = max(0, suggested_quantity - recent_purchases)
         
         # Round to reasonable quantities
         if suggested_quantity < 10:
@@ -508,9 +508,9 @@ class EnhancedOrdersAnalysis:
         if abs(seasonality - 1.0) > 0.1:
             reasoning_parts.append(f"Seasonal adjustment: {seasonality:.1f}x")
         
-        # Add monthly purchase adjustment to reasoning
+        # Add recent purchase adjustment to reasoning
         if monthly_purchase_adjustment > 0:
-            reasoning_parts.append(f"Already purchased this month: -{monthly_purchase_adjustment} units")
+            reasoning_parts.append(f"Already purchased in last 2 months: -{monthly_purchase_adjustment} units")
         
         reasoning = ", ".join(reasoning_parts)
         
@@ -526,16 +526,16 @@ class EnhancedOrdersAnalysis:
             'monthly_purchase_adjustment': monthly_purchase_adjustment
         }
 
-    def get_current_month_purchases(self, asin: str, purchase_analytics: Dict) -> int:
-        """Get the quantity purchased for this ASIN in the current month"""
+    def get_recent_2_months_purchases(self, asin: str, purchase_analytics: Dict) -> int:
+        """Get the quantity purchased for this ASIN in the last 2 months (from last 2 worksheets)"""
         if not purchase_analytics:
             return 0
         
-        # First check the dedicated current month purchases data
-        current_month_data = purchase_analytics.get('current_month_purchases', {})
-        if asin in current_month_data:
-            qty_purchased = current_month_data[asin].get('total_quantity_purchased', 0)
-            print(f"[Monthly Purchase] Found {qty_purchased} units purchased this month for ASIN {asin}")
+        # First check the dedicated recent 2 months purchases data
+        recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
+        if asin in recent_2_months_data:
+            qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
+            print(f"[Recent Purchase] Found {qty_purchased} units purchased in last 2 months for ASIN {asin}")
             return qty_purchased
         
         # Fallback to velocity analysis approach
@@ -543,13 +543,13 @@ class EnhancedOrdersAnalysis:
         if velocity_analysis:
             days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
             
-            # If purchased within the current month (last 31 days), return the last purchase quantity
-            if days_since_last <= 31:
+            # If purchased within the last 2 months (last 60 days), return the last purchase quantity
+            if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
-                print(f"[Monthly Purchase] Fallback: Found {qty} units from recent purchase for ASIN {asin}")
+                print(f"[Recent Purchase] Fallback: Found {qty} units from recent purchase for ASIN {asin}")
                 return qty
         
-        print(f"[Monthly Purchase] No current month purchases found for ASIN {asin}")
+        print(f"[Recent Purchase] No recent purchases found for ASIN {asin}")
         return 0
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:

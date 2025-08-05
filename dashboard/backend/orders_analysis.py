@@ -222,6 +222,20 @@ class EnhancedOrdersAnalysis:
         recent_velocity = (velocity_data['7d'] + velocity_data['14d']) / 2
         historical_velocity = (velocity_data['60d'] + velocity_data['90d']) / 2
         
+        # Debug: Print trend calculation details for first few products
+        if not hasattr(self, '_trend_debug_count'):
+            self._trend_debug_count = 0
+        
+        if self._trend_debug_count < 3:  # Debug first 3 products
+            print(f"[TREND DEBUG] ASIN: {asin if 'asin' in locals() else 'unknown'}")
+            print(f"[TREND DEBUG] 7d velocity: {velocity_data['7d']}")
+            print(f"[TREND DEBUG] 14d velocity: {velocity_data['14d']}")
+            print(f"[TREND DEBUG] 60d velocity: {velocity_data['60d']}")
+            print(f"[TREND DEBUG] 90d velocity: {velocity_data['90d']}")
+            print(f"[TREND DEBUG] recent_velocity: {recent_velocity}")
+            print(f"[TREND DEBUG] historical_velocity: {historical_velocity}")
+            self._trend_debug_count += 1
+        
         # Ensure no NaN/Inf values in trend calculation
         if historical_velocity > 0 and recent_velocity >= 0:
             trend_factor = recent_velocity / historical_velocity
@@ -229,7 +243,11 @@ class EnhancedOrdersAnalysis:
             trend_factor = 1.0
             
         # Clamp trend_factor to reasonable bounds to prevent extreme values
+        raw_trend_factor = trend_factor
         trend_factor = max(0.0, min(10.0, trend_factor))
+        
+        if self._trend_debug_count <= 3 and raw_trend_factor != trend_factor:
+            print(f"[TREND DEBUG] Raw trend_factor: {raw_trend_factor}, clamped to: {trend_factor}")
         
         # Determine trend direction
         if trend_factor > 1.2:
@@ -423,13 +441,19 @@ class EnhancedOrdersAnalysis:
             reasoning_parts.append(f"{days_left:.1f} days stock remaining")
         reasoning_parts.append(f"{velocity:.1f} daily velocity")
         
-        # Apply same smoothing as restock calculation for consistent display
-        display_trend_factor = max(0.5, min(trend_factor, 2.0))
-        
-        if display_trend_factor > 1.2:
-            reasoning_parts.append(f"accelerating trend (+{(display_trend_factor-1)*100:.0f}%)")
-        elif display_trend_factor < 0.8:
-            reasoning_parts.append(f"declining trend ({(display_trend_factor-1)*100:.0f}%)")
+        # Show trend information with more nuanced display
+        if trend_factor > 1.2:
+            if trend_factor >= 3.0:
+                reasoning_parts.append(f"strong acceleration (3x+ recent growth)")
+            elif trend_factor >= 2.0:
+                reasoning_parts.append(f"accelerating trend (+{(trend_factor-1)*100:.0f}%)")
+            else:
+                reasoning_parts.append(f"accelerating trend (+{(trend_factor-1)*100:.0f}%)")
+        elif trend_factor < 0.8:
+            if trend_factor <= 0.3:
+                reasoning_parts.append(f"steep decline (-{(1-trend_factor)*100:.0f}%)")
+            else:
+                reasoning_parts.append(f"declining trend (-{(1-trend_factor)*100:.0f}%)")
         
         if seasonality > 1.1:
             reasoning_parts.append(f"high season (+{(seasonality-1)*100:.0f}%)")
@@ -463,7 +487,7 @@ class EnhancedOrdersAnalysis:
         seasonality = self.calculate_seasonality_factor(date.today())
         
         # Smooth velocity to avoid extreme spikes (cap trend factor impact)
-        trend_factor = max(0.5, min(trend_factor, 2.0))  # Limit trend impact to -50% to +100%
+        trend_factor = max(0.3, min(trend_factor, 3.0))  # Limit trend impact to -70% to +200%
         
         # Adjusted daily velocity with smoothing
         adjusted_velocity = base_velocity * trend_factor * seasonality

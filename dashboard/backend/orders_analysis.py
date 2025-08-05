@@ -447,7 +447,7 @@ class EnhancedOrdersAnalysis:
             'emoji': emoji
         }
 
-    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 60, purchase_analytics: Dict = None) -> Dict:
+    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 90, purchase_analytics: Dict = None) -> Dict:
         """Calculate realistic restock quantity with practical business constraints"""
         if not stock_info or not velocity_data:
             return {'suggested_quantity': 0, 'reasoning': 'Insufficient data', 'monthly_purchase_adjustment': 0}
@@ -468,8 +468,8 @@ class EnhancedOrdersAnalysis:
         # Adjusted daily velocity with smoothing
         adjusted_velocity = base_velocity * trend_factor * seasonality
         
-        # Realistic lead time: 90 days (3 months for Amazon)
-        amazon_lead_time = 90
+        # Use user-configured lead time, fallback to 90 days (3 months for Amazon)
+        amazon_lead_time = lead_time_days
         
         # Target stock after arrival: 45 days (1.5 months)
         target_stock_days = 45
@@ -487,23 +487,23 @@ class EnhancedOrdersAnalysis:
         total_coverage_days = amazon_lead_time + target_stock_days + safety_days
         total_needed = adjusted_velocity * total_coverage_days
         
-        # Apply velocity-based caps to prevent unrealistic orders (updated for 3-month lead time)
+        # Apply velocity-based caps to prevent unrealistic orders (realistic caps for variable lead time)
         daily_velocity = adjusted_velocity
         if daily_velocity <= 0.5:
-            # Very slow moving: cap at 5 months worth
-            max_quantity = daily_velocity * 150
+            # Very slow moving: cap at lead time + 2 months
+            max_quantity = daily_velocity * (amazon_lead_time + 60)
         elif daily_velocity <= 1.0:
-            # Slow moving: cap at 4 months worth  
-            max_quantity = daily_velocity * 120
+            # Slow moving: cap at lead time + 1.5 months
+            max_quantity = daily_velocity * (amazon_lead_time + 45)
         elif daily_velocity <= 2.0:
-            # Medium velocity: cap at 3.5 months worth
-            max_quantity = daily_velocity * 105
+            # Medium velocity: cap at lead time + 1 month
+            max_quantity = daily_velocity * (amazon_lead_time + 30)
         elif daily_velocity <= 5.0:
-            # High velocity: cap at 3 months worth
-            max_quantity = daily_velocity * 90
+            # High velocity: cap at lead time + 2 weeks
+            max_quantity = daily_velocity * (amazon_lead_time + 14)
         else:
-            # Very high velocity: cap at 2.5 months worth to reduce risk
-            max_quantity = daily_velocity * 75
+            # Very high velocity: cap at lead time + 1 week to reduce risk
+            max_quantity = daily_velocity * (amazon_lead_time + 7)
         
         # Apply the cap
         total_needed = min(total_needed, max_quantity)
@@ -531,8 +531,8 @@ class EnhancedOrdersAnalysis:
         else:
             suggested_quantity = math.ceil(suggested_quantity / 10) * 10  # Round to nearest 10 for large quantities
         
-        # Final safety check: never recommend more than 8 months of inventory at current velocity (increased for 3-month lead time)
-        absolute_max = base_velocity * 240  # 8 months at base velocity
+        # Final safety check: never recommend more than lead time + 3 months of inventory at current velocity
+        absolute_max = base_velocity * (amazon_lead_time + 90)  # Lead time + 3 months at base velocity
         if suggested_quantity > absolute_max and absolute_max > 0:
             suggested_quantity = math.ceil(absolute_max / 10) * 10
         
@@ -543,7 +543,7 @@ class EnhancedOrdersAnalysis:
         # Generate reasoning with new realistic approach
         reasoning_parts = [
             f"Base velocity: {base_velocity:.1f}/day",
-            f"Amazon lead time: {amazon_lead_time} days",
+            f"Lead time: {amazon_lead_time} days",
             f"Target stock: {target_stock_days} days",
             f"Safety buffer: {safety_days} days"
         ]
@@ -557,18 +557,20 @@ class EnhancedOrdersAnalysis:
         if abs(seasonality - 1.0) > 0.1:
             reasoning_parts.append(f"Seasonal factor: {seasonality:.1f}x")
         
-        # Add velocity-based capping info (updated for 3-month lead time)
+        # Add velocity-based capping info (dynamic based on lead time)
         if total_needed != adjusted_velocity * total_coverage_days:
+            cap_days = max_quantity / daily_velocity if daily_velocity > 0 else 0
+            cap_months = cap_days / 30
             if daily_velocity <= 0.5:
-                reasoning_parts.append("Capped at 5mo (slow-moving)")
+                reasoning_parts.append(f"Capped at {cap_months:.1f}mo (slow-moving)")
             elif daily_velocity <= 1.0:
-                reasoning_parts.append("Capped at 4mo (moderate)")
+                reasoning_parts.append(f"Capped at {cap_months:.1f}mo (moderate)")
             elif daily_velocity <= 2.0:
-                reasoning_parts.append("Capped at 3.5mo (medium)")
+                reasoning_parts.append(f"Capped at {cap_months:.1f}mo (medium)")
             elif daily_velocity <= 5.0:
-                reasoning_parts.append("Capped at 3mo (high velocity)")
+                reasoning_parts.append(f"Capped at {cap_months:.1f}mo (high velocity)")
             else:
-                reasoning_parts.append("Capped at 2.5mo (very high velocity)")
+                reasoning_parts.append(f"Capped at {cap_months:.1f}mo (very high velocity)")
         
         # Add recent purchase adjustment to reasoning
         if monthly_purchase_adjustment > 0:
@@ -1333,8 +1335,11 @@ class EnhancedOrdersAnalysis:
             current_sales = today_sales.get(asin, 0)
             priority_data = self.get_priority_score(asin, velocity_data, stock_info[asin], current_sales)
             
-            # Calculate optimal restock quantity with purchase analytics
-            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], purchase_analytics=purchase_insights)
+            # Get user's lead time setting, default to 90 days
+            user_lead_time = user_settings.get('amazon_lead_time_days', 90) if user_settings else 90
+            
+            # Calculate optimal restock quantity with purchase analytics and user's lead time
+            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], lead_time_days=user_lead_time, purchase_analytics=purchase_insights)
             
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {

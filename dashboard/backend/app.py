@@ -1006,6 +1006,13 @@ def update_profile():
         user_record['search_all_worksheets'] = data['search_all_worksheets']
     if 'disable_sp_api' in data:
         user_record['disable_sp_api'] = data['disable_sp_api']
+    if 'amazon_lead_time_days' in data:
+        # Validate lead time is within reasonable bounds
+        lead_time = data['amazon_lead_time_days']
+        if isinstance(lead_time, (int, float)) and 30 <= lead_time <= 180:
+            user_record['amazon_lead_time_days'] = int(lead_time)
+        else:
+            return jsonify({'error': 'Amazon lead time must be between 30 and 180 days'}), 400
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})
@@ -1445,7 +1452,8 @@ def get_orders_analytics():
                     'sheet_id': config_user_record.get('sheet_id'),
                     'worksheet_title': config_user_record.get('worksheet_title'),
                     'google_tokens': config_user_record.get('google_tokens', {}),
-                    'column_mapping': config_user_record.get('column_mapping', {})
+                    'column_mapping': config_user_record.get('column_mapping', {}),
+                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
@@ -1503,7 +1511,8 @@ def get_orders_analytics():
                     'sheet_id': config_user_record.get('sheet_id'),
                     'worksheet_title': config_user_record.get('worksheet_title'),
                     'google_tokens': config_user_record.get('google_tokens', {}),
-                    'column_mapping': config_user_record.get('column_mapping', {})
+                    'column_mapping': config_user_record.get('column_mapping', {}),
+                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)

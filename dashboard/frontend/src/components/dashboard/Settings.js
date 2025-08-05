@@ -49,7 +49,8 @@ const Settings = () => {
     timezone: '',
     enable_source_links: false,
     search_all_worksheets: false,
-    disable_sp_api: false
+    disable_sp_api: false,
+    amazon_lead_time_days: 90
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -69,7 +70,8 @@ const Settings = () => {
         timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         enable_source_links: user.user_record.enable_source_links || false,
         search_all_worksheets: user.user_record.search_all_worksheets || false,
-        disable_sp_api: user.user_record.disable_sp_api || false
+        disable_sp_api: user.user_record.disable_sp_api || false,
+        amazon_lead_time_days: user.user_record.amazon_lead_time_days || 90
       });
     }
   }, [user]);
@@ -361,6 +363,32 @@ const Settings = () => {
             <p className="text-xs text-gray-500 mt-1">
               Your timezone affects when the Overview switches from yesterday's to today's data (switches at 11:59 PM in your timezone)
             </p>
+          </div>
+
+          {/* Amazon Lead Time Setting */}
+          <div>
+            <label htmlFor="amazon_lead_time_days" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+              <ShoppingBag className="h-4 w-4" />
+              <span>Amazon Lead Time (Days)</span>
+            </label>
+            <input
+              type="number"
+              id="amazon_lead_time_days"
+              name="amazon_lead_time_days"
+              value={formData.amazon_lead_time_days}
+              onChange={handleChange}
+              min="30"
+              max="180"
+              step="1"
+              className="input-field"
+              placeholder="90"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              How many days it takes for Amazon to receive and process your inventory shipments (affects restock recommendations)
+            </p>
+            <div className="text-xs text-gray-400 mt-1">
+              <span className="font-medium">Common values:</span> 60 days (2 months), 90 days (3 months), 120 days (4 months)
+            </div>
           </div>
 
           {/* Automation Toggles - Hidden for subusers */}

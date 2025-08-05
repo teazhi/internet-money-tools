@@ -528,7 +528,7 @@ const Admin = () => {
     return hierarchicalUsers;
   }, [users, searchTerm, filterStatus]);
 
-  const getRelativeTime = (dateString) => {
+  const getRelativeTime = (dateString, userTimezone = null) => {
     if (!dateString) return 'Never';
     
     const now = new Date();
@@ -544,8 +544,7 @@ const Admin = () => {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     
-    // Use user's timezone for longer time periods
-    const userTimezone = user?.user_record?.timezone;
+    // Use individual user's timezone for longer time periods
     const options = {
       year: 'numeric',
       month: 'short',
@@ -572,13 +571,13 @@ const Admin = () => {
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays}d`;
     
-    // Use user's timezone for longer time periods
-    const userTimezone = user?.user_record?.timezone;
+    // Use admin's timezone for longer time periods (since these are invitations)
+    const adminTimezone = user?.user_record?.timezone;
     const options = {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
-      ...(userTimezone && { timeZone: userTimezone })
+      ...(adminTimezone && { timeZone: adminTimezone })
     };
     return date.toLocaleDateString('en-US', options);
   };
@@ -1399,7 +1398,7 @@ const Admin = () => {
                       {invitation.email}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getRelativeTime(invitation.created_at)}
+                      {getRelativeTime(invitation.created_at, user?.user_record?.timezone)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {getExpirationTime(invitation.expires_at)}
@@ -1686,17 +1685,17 @@ const Admin = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {user.last_activity ? (
                       <div>
-                        <div className="font-medium">{getRelativeTime(user.last_activity)}</div>
+                        <div className="font-medium">{getRelativeTime(user.last_activity, user.timezone)}</div>
                         <div className="text-xs text-gray-400">
                           {new Date(user.last_activity).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
-                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                            ...(user.timezone && { timeZone: user.timezone })
                           })} {new Date(user.last_activity).toLocaleTimeString('en-US', {
                             hour: '2-digit',
                             minute: '2-digit',
-                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                            ...(user.timezone && { timeZone: user.timezone })
                           })}
                         </div>
                       </div>

@@ -444,10 +444,10 @@ class EnhancedOrdersAnalysis:
             'emoji': emoji
         }
 
-    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 30, purchase_analytics: Dict = None) -> Dict:
-        """Calculate optimal restock quantity with dynamic factors and monthly purchase adjustments"""
+    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 60, purchase_analytics: Dict = None) -> Dict:
+        """Calculate realistic restock quantity with practical business constraints"""
         if not stock_info or not velocity_data:
-            return {'suggested_quantity': 0, 'reasoning': 'Insufficient data'}
+            return {'suggested_quantity': 0, 'reasoning': 'Insufficient data', 'monthly_purchase_adjustment': 0}
         
         try:
             current_stock = float(stock_info.get('FBA/FBM Stock', 0))
@@ -459,25 +459,56 @@ class EnhancedOrdersAnalysis:
         trend_factor = velocity_data.get('trend_factor', 1.0)
         seasonality = self.calculate_seasonality_factor(date.today())
         
-        # Adjusted daily velocity
+        # Smooth velocity to avoid extreme spikes (cap trend factor impact)
+        trend_factor = max(0.5, min(trend_factor, 2.0))  # Limit trend impact to -50% to +100%
+        
+        # Adjusted daily velocity with smoothing
         adjusted_velocity = base_velocity * trend_factor * seasonality
         
-        # Safety stock calculation (dynamic based on variability)
+        # Realistic lead time: 60 days (2 months for Amazon)
+        amazon_lead_time = 60
+        
+        # Target stock after arrival: 45 days (1.5 months)
+        target_stock_days = 45
+        
+        # Safety buffer based on velocity variability (much more conservative)
         confidence = velocity_data.get('confidence', 0.5)
         if confidence > 0.8:
-            safety_days = 7  # High confidence, less safety stock
+            safety_days = 7   # High confidence products
         elif confidence > 0.6:
             safety_days = 14  # Medium confidence
         else:
-            safety_days = 21  # Low confidence, more safety stock
+            safety_days = 21  # Low confidence products
         
-        # Calculate total needed inventory
-        total_needed = adjusted_velocity * (lead_time_days + safety_days)
+        # Calculate base needed inventory (lead time + target stock + safety)
+        total_coverage_days = amazon_lead_time + target_stock_days + safety_days
+        total_needed = adjusted_velocity * total_coverage_days
+        
+        # Apply velocity-based caps to prevent unrealistic orders
+        daily_velocity = adjusted_velocity
+        if daily_velocity <= 0.5:
+            # Very slow moving: cap at 3 months worth
+            max_quantity = daily_velocity * 90
+        elif daily_velocity <= 1.0:
+            # Slow moving: cap at 2.5 months worth  
+            max_quantity = daily_velocity * 75
+        elif daily_velocity <= 2.0:
+            # Medium velocity: cap at 2 months worth
+            max_quantity = daily_velocity * 60
+        elif daily_velocity <= 5.0:
+            # High velocity: cap at 1.5 months worth
+            max_quantity = daily_velocity * 45
+        else:
+            # Very high velocity: cap at 1 month worth to reduce risk
+            max_quantity = daily_velocity * 30
+        
+        # Apply the cap
+        total_needed = min(total_needed, max_quantity)
         
         # Subtract current stock to get reorder quantity
         suggested_quantity = max(0, total_needed - current_stock)
         
-        # NEW: Adjust for recent purchases - reduce recommended quantity by what was already purchased in last 2 months
+        # Adjust for recent purchases - reduce recommended quantity by what was already purchased in last 2 months
         monthly_purchase_adjustment = 0
         if purchase_analytics:
             recent_purchases = self.get_recent_2_months_purchases(asin, purchase_analytics)
@@ -485,32 +516,60 @@ class EnhancedOrdersAnalysis:
                 monthly_purchase_adjustment = recent_purchases
                 suggested_quantity = max(0, suggested_quantity - recent_purchases)
         
-        # Round to reasonable quantities
-        if suggested_quantity < 10:
-            suggested_quantity = math.ceil(suggested_quantity)
-        else:
+        # Apply minimum order thresholds and rounding
+        if suggested_quantity <= 0:
+            suggested_quantity = 0
+        elif suggested_quantity < 5:
+            suggested_quantity = max(1, math.ceil(suggested_quantity))  # Minimum 1 unit
+        elif suggested_quantity < 20:
+            suggested_quantity = math.ceil(suggested_quantity)  # Round up for small quantities
+        elif suggested_quantity < 100:
             suggested_quantity = math.ceil(suggested_quantity / 5) * 5  # Round to nearest 5
+        else:
+            suggested_quantity = math.ceil(suggested_quantity / 10) * 10  # Round to nearest 10 for large quantities
+        
+        # Final safety check: never recommend more than 6 months of inventory at current velocity
+        absolute_max = base_velocity * 180  # 6 months at base velocity
+        if suggested_quantity > absolute_max and absolute_max > 0:
+            suggested_quantity = math.ceil(absolute_max / 10) * 10
         
         # Calculate estimated coverage
         total_after_restock = current_stock + suggested_quantity
         estimated_coverage = total_after_restock / adjusted_velocity if adjusted_velocity > 0 else 999
         
-        # Generate reasoning
+        # Generate reasoning with new realistic approach
         reasoning_parts = [
             f"Base velocity: {base_velocity:.1f}/day",
-            f"Lead time: {lead_time_days} days",
+            f"Amazon lead time: {amazon_lead_time} days",
+            f"Target stock: {target_stock_days} days",
             f"Safety buffer: {safety_days} days"
         ]
         
         if abs(trend_factor - 1.0) > 0.1:
-            reasoning_parts.append(f"Trend adjustment: {trend_factor:.1f}x")
+            if trend_factor > 1.0:
+                reasoning_parts.append(f"Growing trend (+{(trend_factor-1)*100:.0f}%)")
+            else:
+                reasoning_parts.append(f"Declining trend ({(trend_factor-1)*100:.0f}%)")
         
         if abs(seasonality - 1.0) > 0.1:
-            reasoning_parts.append(f"Seasonal adjustment: {seasonality:.1f}x")
+            reasoning_parts.append(f"Seasonal factor: {seasonality:.1f}x")
+        
+        # Add velocity-based capping info
+        if total_needed != adjusted_velocity * total_coverage_days:
+            if daily_velocity <= 0.5:
+                reasoning_parts.append("Capped at 3mo (slow-moving)")
+            elif daily_velocity <= 1.0:
+                reasoning_parts.append("Capped at 2.5mo (moderate)")
+            elif daily_velocity <= 2.0:
+                reasoning_parts.append("Capped at 2mo (medium)")
+            elif daily_velocity <= 5.0:
+                reasoning_parts.append("Capped at 1.5mo (high velocity)")
+            else:
+                reasoning_parts.append("Capped at 1mo (very high velocity)")
         
         # Add recent purchase adjustment to reasoning
         if monthly_purchase_adjustment > 0:
-            reasoning_parts.append(f"Already purchased in last 2 months: -{monthly_purchase_adjustment} units")
+            reasoning_parts.append(f"Reduced by {monthly_purchase_adjustment} units (recent purchases)")
         
         reasoning = ", ".join(reasoning_parts)
         

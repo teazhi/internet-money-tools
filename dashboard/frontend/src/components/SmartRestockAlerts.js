@@ -400,6 +400,21 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       </div>
                     </div>
 
+                    {/* Monthly Purchase Adjustment Display */}
+                    {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 && (
+                      <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-md">
+                        <div className="flex items-center text-sm">
+                          <ShoppingCart className="h-4 w-4 text-purple-600 mr-2" />
+                          <span className="text-purple-700">
+                            <strong>Already purchased this month:</strong> {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment} units
+                          </span>
+                        </div>
+                        <div className="text-xs text-purple-600 mt-1">
+                          Restock recommendation reduced by this amount
+                        </div>
+                      </div>
+                    )}
+
                     {/* COGS and Restock Information */}
                     {console.log(`[DEBUG] ASIN ${alert.asin} COGS data:`, enhanced_analytics?.[alert.asin]?.cogs_data)}
                     {enhanced_analytics?.[alert.asin]?.cogs_data && enhanced_analytics[alert.asin].cogs_data.cogs && (
@@ -498,6 +513,9 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     Last COGS
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    This Month
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Suggested Order
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -559,6 +577,18 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           </div>
                         ) : (
                           <span className="text-gray-400">N/A</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {data.restock?.monthly_purchase_adjustment > 0 ? (
+                          <div className="flex items-center space-x-1">
+                            <ShoppingCart className="h-3 w-3 text-purple-600" />
+                            <span className="text-purple-700 font-medium">
+                              {data.restock.monthly_purchase_adjustment}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-builders-600">

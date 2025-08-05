@@ -444,8 +444,8 @@ class EnhancedOrdersAnalysis:
             'emoji': emoji
         }
 
-    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 30) -> Dict:
-        """Calculate optimal restock quantity with dynamic factors"""
+    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 30, purchase_analytics: Dict = None) -> Dict:
+        """Calculate optimal restock quantity with dynamic factors and monthly purchase adjustments"""
         if not stock_info or not velocity_data:
             return {'suggested_quantity': 0, 'reasoning': 'Insufficient data'}
         
@@ -477,6 +477,14 @@ class EnhancedOrdersAnalysis:
         # Subtract current stock to get reorder quantity
         suggested_quantity = max(0, total_needed - current_stock)
         
+        # NEW: Adjust for monthly purchases - reduce recommended quantity by what was already purchased this month
+        monthly_purchase_adjustment = 0
+        if purchase_analytics:
+            monthly_purchases = self.get_current_month_purchases(asin, purchase_analytics)
+            if monthly_purchases > 0:
+                monthly_purchase_adjustment = monthly_purchases
+                suggested_quantity = max(0, suggested_quantity - monthly_purchases)
+        
         # Round to reasonable quantities
         if suggested_quantity < 10:
             suggested_quantity = math.ceil(suggested_quantity)
@@ -500,6 +508,10 @@ class EnhancedOrdersAnalysis:
         if abs(seasonality - 1.0) > 0.1:
             reasoning_parts.append(f"Seasonal adjustment: {seasonality:.1f}x")
         
+        # Add monthly purchase adjustment to reasoning
+        if monthly_purchase_adjustment > 0:
+            reasoning_parts.append(f"Already purchased this month: -{monthly_purchase_adjustment} units")
+        
         reasoning = ", ".join(reasoning_parts)
         
         return {
@@ -510,9 +522,36 @@ class EnhancedOrdersAnalysis:
             'safety_days': safety_days,
             'reasoning': reasoning,
             'lead_time_days': lead_time_days,
-            'confidence': confidence
+            'confidence': confidence,
+            'monthly_purchase_adjustment': monthly_purchase_adjustment
         }
 
+    def get_current_month_purchases(self, asin: str, purchase_analytics: Dict) -> int:
+        """Get the quantity purchased for this ASIN in the current month"""
+        if not purchase_analytics:
+            return 0
+        
+        # First check the dedicated current month purchases data
+        current_month_data = purchase_analytics.get('current_month_purchases', {})
+        if asin in current_month_data:
+            qty_purchased = current_month_data[asin].get('total_quantity_purchased', 0)
+            print(f"[Monthly Purchase] Found {qty_purchased} units purchased this month for ASIN {asin}")
+            return qty_purchased
+        
+        # Fallback to velocity analysis approach
+        velocity_analysis = purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
+        if velocity_analysis:
+            days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
+            
+            # If purchased within the current month (last 31 days), return the last purchase quantity
+            if days_since_last <= 31:
+                qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
+                print(f"[Monthly Purchase] Fallback: Found {qty} units from recent purchase for ASIN {asin}")
+                return qty
+        
+        print(f"[Monthly Purchase] No current month purchases found for ASIN {asin}")
+        return 0
+    
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
         """Extract stock information from stock report"""
         asin_col = None
@@ -1232,8 +1271,8 @@ class EnhancedOrdersAnalysis:
             current_sales = today_sales.get(asin, 0)
             priority_data = self.get_priority_score(asin, velocity_data, stock_info[asin], current_sales)
             
-            # Calculate optimal restock quantity
-            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin])
+            # Calculate optimal restock quantity with purchase analytics
+            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], purchase_analytics=purchase_insights)
             
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {

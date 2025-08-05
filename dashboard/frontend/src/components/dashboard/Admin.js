@@ -1569,11 +1569,11 @@ const Admin = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.map((user) => (
-                <tr key={user.discord_id} className={`hover:bg-gray-50 ${user.level === 1 ? 'bg-gray-25' : ''}`}>
+              {filteredUsers.map((tableUser) => (
+                <tr key={tableUser.discord_id} className={`hover:bg-gray-50 ${tableUser.level === 1 ? 'bg-gray-25' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={`flex items-center ${user.level === 1 ? 'ml-8' : ''}`}>
-                      {user.level === 1 && (
+                    <div className={`flex items-center ${tableUser.level === 1 ? 'ml-8' : ''}`}>
+                      {tableUser.level === 1 && (
                         <div className="flex items-center mr-3 text-gray-400">
                           <div className="w-6 h-6 flex items-center justify-center">
                             <div className="w-3 h-3 border-l-2 border-b-2 border-gray-300 rounded-bl-md"></div>
@@ -1581,40 +1581,40 @@ const Admin = () => {
                         </div>
                       )}
                       <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                        user.isSubUser 
+                        tableUser.isSubUser 
                           ? 'bg-purple-100 border-2 border-purple-200' 
                           : 'bg-builders-100'
                       }`}>
                         <span className={`text-sm font-medium ${
-                          user.isSubUser ? 'text-purple-700' : 'text-builders-700'
+                          tableUser.isSubUser ? 'text-purple-700' : 'text-builders-700'
                         }`}>
-                          {user.discord_username?.charAt(0)?.toUpperCase() || 'U'}
+                          {tableUser.discord_username?.charAt(0)?.toUpperCase() || 'U'}
                         </span>
                       </div>
                       <div className="ml-4">
                         <div className="flex items-center space-x-2">
                           <div className="text-sm font-medium text-gray-900">
-                            {user.discord_username || 'Unknown'}
+                            {tableUser.discord_username || 'Unknown'}
                           </div>
-                          {user.isSubUser && (
+                          {tableUser.isSubUser && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              VA: {user.va_name || 'Subuser'}
+                              VA: {tableUser.va_name || 'Subuser'}
                             </span>
                           )}
-                          {user.isOrphaned && (
+                          {tableUser.isOrphaned && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                               Orphaned
                             </span>
                           )}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {user.email || 'No email'}
+                          {tableUser.email || 'No email'}
                         </div>
                         <div className="text-xs text-gray-400">
-                          ID: {user.discord_id}
-                          {user.isSubUser && user.parentUser && (
+                          ID: {tableUser.discord_id}
+                          {tableUser.isSubUser && tableUser.parentUser && (
                             <span className="ml-2">
-                              → Parent: {user.parentUser.discord_username}
+                              → Parent: {tableUser.parentUser.discord_username}
                             </span>
                           )}
                         </div>
@@ -1622,10 +1622,10 @@ const Admin = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(user)}
+                    {getStatusBadge(tableUser)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.isSubUser ? (
+                    {tableUser.isSubUser ? (
                       // For subusers, show their permissions and parent configuration
                       <div className="space-y-1">
                         <div className="flex items-center">
@@ -1633,11 +1633,11 @@ const Admin = () => {
                           <span className="text-purple-600 font-medium">Inherits from Parent</span>
                         </div>
                         <div className="text-xs text-gray-400">
-                          Permissions: {user.permissions?.join(', ') || 'None'}
+                          Permissions: {tableUser.permissions?.join(', ') || 'None'}
                         </div>
-                        {user.parentUser && (
+                        {tableUser.parentUser && (
                           <div className="text-xs text-gray-400">
-                            Uses {user.parentUser.discord_username}'s config
+                            Uses {tableUser.parentUser.discord_username}'s config
                           </div>
                         )}
                       </div>
@@ -1645,35 +1645,35 @@ const Admin = () => {
                       // For main users, show their actual configuration
                       <div className="space-y-1">
                         <div className="flex items-center">
-                          {user.profile_configured ? 
+                          {tableUser.profile_configured ? 
                             <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
                             <X className="h-4 w-4 text-red-500 mr-1" />
                           }
                           Profile
                         </div>
                         <div className="flex items-center">
-                          {user.google_linked ? 
+                          {tableUser.google_linked ? 
                             <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
                             <X className="h-4 w-4 text-red-500 mr-1" />
                           }
                           Google
                         </div>
                         <div className="flex items-center">
-                          {user.sheet_configured ? 
+                          {tableUser.sheet_configured ? 
                             <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
                             <X className="h-4 w-4 text-red-500 mr-1" />
                           }
                           Sheets
                         </div>
                         <div className="flex items-center">
-                          {user.enable_source_links ? 
+                          {tableUser.enable_source_links ? 
                             <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
                             <X className="h-4 w-4 text-red-500 mr-1" />
                           }
                           COGS
                         </div>
                         <div className="flex items-center">
-                          {user.search_all_worksheets ? 
+                          {tableUser.search_all_worksheets ? 
                             <CheckCircle className="h-4 w-4 text-green-500 mr-1" /> : 
                             <X className="h-4 w-4 text-red-500 mr-1" />
                           }
@@ -1683,19 +1683,19 @@ const Admin = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.last_activity ? (
+                    {tableUser.last_activity ? (
                       <div>
-                        <div className="font-medium">{getRelativeTime(user.last_activity, user.timezone)}</div>
+                        <div className="font-medium">{getRelativeTime(tableUser.last_activity, user?.user_record?.timezone)}</div>
                         <div className="text-xs text-gray-400">
-                          {new Date(user.last_activity).toLocaleDateString('en-US', {
+                          {new Date(tableUser.last_activity).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
-                            ...(user.timezone && { timeZone: user.timezone })
-                          })} {new Date(user.last_activity).toLocaleTimeString('en-US', {
+                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
+                          })} {new Date(tableUser.last_activity).toLocaleTimeString('en-US', {
                             hour: '2-digit',
                             minute: '2-digit',
-                            ...(user.timezone && { timeZone: user.timezone })
+                            ...(user?.user_record?.timezone && { timeZone: user.user_record.timezone })
                           })}
                         </div>
                       </div>
@@ -1706,21 +1706,21 @@ const Admin = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
                       <button
-                        onClick={() => handleViewUserDashboard(user.discord_id)}
+                        onClick={() => handleViewUserDashboard(tableUser.discord_id)}
                         className="text-blue-600 hover:text-blue-900"
                         title="View User's Dashboard"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => setEditingUser(user)}
+                        onClick={() => setEditingUser(tableUser)}
                         className="text-builders-600 hover:text-builders-900"
                         title="Edit User"
                       >
                         <Edit3 className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDeleteUser(user.discord_id)}
+                        onClick={() => handleDeleteUser(tableUser.discord_id)}
                         className="text-red-600 hover:text-red-900"
                         title="Delete User"
                       >

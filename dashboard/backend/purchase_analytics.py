@@ -57,7 +57,8 @@ class PurchaseAnalytics:
                 'roi_based_recommendations': self._generate_roi_recommendations(df),
                 'seasonal_purchase_trends': self._analyze_seasonal_trends(df),
                 'cash_flow_optimization': self._analyze_cash_flow_impact(df),
-                'summary_metrics': self._generate_summary_metrics(df)
+                'summary_metrics': self._generate_summary_metrics(df),
+                'current_month_purchases': self._analyze_current_month_purchases(df)
             }
             
             return insights
@@ -447,6 +448,48 @@ class PurchaseAnalytics:
         
         return recommendations
     
+    def _analyze_current_month_purchases(self, df: pd.DataFrame) -> Dict:
+        """Analyze purchases made in the current month for each ASIN"""
+        current_month_data = {}
+        
+        try:
+            # Filter to current month
+            current_date = datetime.now()
+            current_month_start = current_date.replace(day=1)
+            current_month_df = df[df['date'] >= current_month_start]
+            
+            if current_month_df.empty:
+                print(f"[Purchase Analytics] No purchases found in current month ({current_date.strftime('%Y-%m')})")
+                return {}
+            
+            # Group by ASIN and sum amounts purchased this month
+            monthly_purchases = current_month_df.groupby('asin').agg({
+                'amount_purchased': 'sum',
+                'date': ['count', 'max'],  # count of purchases and most recent date
+                'cogs': 'mean'  # average COGS for current month
+            }).reset_index()
+            
+            # Flatten column names
+            monthly_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'avg_cogs']
+            
+            # Convert to dictionary format
+            for _, row in monthly_purchases.iterrows():
+                asin = row['asin']
+                current_month_data[asin] = {
+                    'total_quantity_purchased': int(row['total_qty_purchased']),
+                    'purchase_count': int(row['purchase_count']),
+                    'last_purchase_date': row['last_purchase_date'].isoformat() if pd.notna(row['last_purchase_date']) else None,
+                    'avg_cogs_this_month': float(row['avg_cogs']) if pd.notna(row['avg_cogs']) else 0,
+                    'month_year': current_date.strftime('%Y-%m')
+                }
+            
+            print(f"[Purchase Analytics] Found current month purchases for {len(current_month_data)} ASINs")
+            return current_month_data
+            
+        except Exception as e:
+            print(f"[Purchase Analytics] Error analyzing current month purchases: {e}")
+            return {}
+    
     def _empty_analytics_response(self) -> Dict:
         """Return empty analytics response when no data is available"""
         return {
@@ -477,5 +520,6 @@ class PurchaseAnalytics:
                 'recent_30d_investment': 0,
                 'analysis_date_range': {'start': None, 'end': None}
             },
+            'current_month_purchases': {},
             'error': 'No purchase data available for analysis'
         }

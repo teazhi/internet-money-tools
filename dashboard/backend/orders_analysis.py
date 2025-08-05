@@ -423,10 +423,13 @@ class EnhancedOrdersAnalysis:
             reasoning_parts.append(f"{days_left:.1f} days stock remaining")
         reasoning_parts.append(f"{velocity:.1f} daily velocity")
         
-        if trend_factor > 1.2:
-            reasoning_parts.append(f"accelerating trend (+{(trend_factor-1)*100:.0f}%)")
-        elif trend_factor < 0.8:
-            reasoning_parts.append(f"declining trend ({(trend_factor-1)*100:.0f}%)")
+        # Apply same smoothing as restock calculation for consistent display
+        display_trend_factor = max(0.5, min(trend_factor, 2.0))
+        
+        if display_trend_factor > 1.2:
+            reasoning_parts.append(f"accelerating trend (+{(display_trend_factor-1)*100:.0f}%)")
+        elif display_trend_factor < 0.8:
+            reasoning_parts.append(f"declining trend ({(display_trend_factor-1)*100:.0f}%)")
         
         if seasonality > 1.1:
             reasoning_parts.append(f"high season (+{(seasonality-1)*100:.0f}%)")
@@ -465,8 +468,8 @@ class EnhancedOrdersAnalysis:
         # Adjusted daily velocity with smoothing
         adjusted_velocity = base_velocity * trend_factor * seasonality
         
-        # Realistic lead time: 60 days (2 months for Amazon)
-        amazon_lead_time = 60
+        # Realistic lead time: 90 days (3 months for Amazon)
+        amazon_lead_time = 90
         
         # Target stock after arrival: 45 days (1.5 months)
         target_stock_days = 45
@@ -484,23 +487,23 @@ class EnhancedOrdersAnalysis:
         total_coverage_days = amazon_lead_time + target_stock_days + safety_days
         total_needed = adjusted_velocity * total_coverage_days
         
-        # Apply velocity-based caps to prevent unrealistic orders
+        # Apply velocity-based caps to prevent unrealistic orders (updated for 3-month lead time)
         daily_velocity = adjusted_velocity
         if daily_velocity <= 0.5:
-            # Very slow moving: cap at 3 months worth
-            max_quantity = daily_velocity * 90
+            # Very slow moving: cap at 5 months worth
+            max_quantity = daily_velocity * 150
         elif daily_velocity <= 1.0:
-            # Slow moving: cap at 2.5 months worth  
-            max_quantity = daily_velocity * 75
+            # Slow moving: cap at 4 months worth  
+            max_quantity = daily_velocity * 120
         elif daily_velocity <= 2.0:
-            # Medium velocity: cap at 2 months worth
-            max_quantity = daily_velocity * 60
+            # Medium velocity: cap at 3.5 months worth
+            max_quantity = daily_velocity * 105
         elif daily_velocity <= 5.0:
-            # High velocity: cap at 1.5 months worth
-            max_quantity = daily_velocity * 45
+            # High velocity: cap at 3 months worth
+            max_quantity = daily_velocity * 90
         else:
-            # Very high velocity: cap at 1 month worth to reduce risk
-            max_quantity = daily_velocity * 30
+            # Very high velocity: cap at 2.5 months worth to reduce risk
+            max_quantity = daily_velocity * 75
         
         # Apply the cap
         total_needed = min(total_needed, max_quantity)
@@ -528,8 +531,8 @@ class EnhancedOrdersAnalysis:
         else:
             suggested_quantity = math.ceil(suggested_quantity / 10) * 10  # Round to nearest 10 for large quantities
         
-        # Final safety check: never recommend more than 6 months of inventory at current velocity
-        absolute_max = base_velocity * 180  # 6 months at base velocity
+        # Final safety check: never recommend more than 8 months of inventory at current velocity (increased for 3-month lead time)
+        absolute_max = base_velocity * 240  # 8 months at base velocity
         if suggested_quantity > absolute_max and absolute_max > 0:
             suggested_quantity = math.ceil(absolute_max / 10) * 10
         
@@ -554,18 +557,18 @@ class EnhancedOrdersAnalysis:
         if abs(seasonality - 1.0) > 0.1:
             reasoning_parts.append(f"Seasonal factor: {seasonality:.1f}x")
         
-        # Add velocity-based capping info
+        # Add velocity-based capping info (updated for 3-month lead time)
         if total_needed != adjusted_velocity * total_coverage_days:
             if daily_velocity <= 0.5:
-                reasoning_parts.append("Capped at 3mo (slow-moving)")
+                reasoning_parts.append("Capped at 5mo (slow-moving)")
             elif daily_velocity <= 1.0:
-                reasoning_parts.append("Capped at 2.5mo (moderate)")
+                reasoning_parts.append("Capped at 4mo (moderate)")
             elif daily_velocity <= 2.0:
-                reasoning_parts.append("Capped at 2mo (medium)")
+                reasoning_parts.append("Capped at 3.5mo (medium)")
             elif daily_velocity <= 5.0:
-                reasoning_parts.append("Capped at 1.5mo (high velocity)")
+                reasoning_parts.append("Capped at 3mo (high velocity)")
             else:
-                reasoning_parts.append("Capped at 1mo (very high velocity)")
+                reasoning_parts.append("Capped at 2.5mo (very high velocity)")
         
         # Add recent purchase adjustment to reasoning
         if monthly_purchase_adjustment > 0:

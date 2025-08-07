@@ -97,10 +97,50 @@ class EnhancedOrdersAnalysis:
         return parsed_series
 
     def download_csv(self, url: str) -> pd.DataFrame:
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        df = pd.read_csv(StringIO(response.text))
-        return df
+        print(f"[DEBUG] Attempting to download from URL: {url}")
+        
+        # Check if URL has required parameters
+        if 'sellerboard.com' in url and 'format=csv' not in url:
+            # Add CSV format if missing
+            separator = '&' if '?' in url else '?'
+            url = f"{url}{separator}format=csv"
+            print(f"[DEBUG] Added format=csv to URL: {url}")
+        
+        # Try to download with better error handling
+        try:
+            response = requests.get(url, timeout=30, allow_redirects=True)
+            print(f"[DEBUG] Response status code: {response.status_code}")
+            print(f"[DEBUG] Final URL after redirects: {response.url}")
+            if response.history:
+                print(f"[DEBUG] Redirect history: {[r.status_code for r in response.history]}")
+            
+            # Check for authentication errors specifically
+            if response.status_code == 401:
+                print(f"[ERROR] Authentication failed. The Sellerboard automation URL token may be expired.")
+                print(f"[ERROR] Please regenerate the automation URLs from Sellerboard:")
+                print(f"[ERROR] 1. Log into Sellerboard")
+                print(f"[ERROR] 2. Go to Reports > Automation")
+                print(f"[ERROR] 3. Regenerate the automation URLs")
+                print(f"[ERROR] 4. Update the URLs in Settings")
+            
+            response.raise_for_status()
+            
+            # Try to parse the CSV
+            try:
+                df = pd.read_csv(StringIO(response.text))
+                print(f"[DEBUG] Successfully parsed CSV with {len(df)} rows")
+                return df
+            except Exception as csv_error:
+                print(f"[ERROR] Failed to parse CSV response: {csv_error}")
+                print(f"[ERROR] Response content preview: {response.text[:500]}")
+                raise
+                
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Request failed: {type(e).__name__}: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"[ERROR] Response status: {e.response.status_code}")
+                print(f"[ERROR] Response headers: {dict(e.response.headers)}")
+            raise
 
     def get_orders_for_date_range(self, df: pd.DataFrame, start_date: date, end_date: date, user_timezone: str = None) -> pd.DataFrame:
         """Get orders for a date range instead of just single date"""

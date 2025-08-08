@@ -376,6 +376,9 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       Priority
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Reasoning
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Current Stock
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -445,9 +448,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                                 </>
                               )}
                             </div>
-                            <div className="text-xs text-gray-600 mt-1">
-                              {alert.reasoning}
-                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -464,6 +464,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           </span>
                           <div className="text-xs text-gray-500 mt-1">
                             Score: {alert.priority_score.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-700 max-w-xs">
+                            {alert.reasoning}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -536,7 +541,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="10" className="px-6 py-12 text-center">
+                      <td colSpan="11" className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <Package className="h-12 w-12 text-gray-400 mb-3" />
                           <h3 className="text-sm font-medium text-gray-900 mb-1">No Priority Alerts</h3>

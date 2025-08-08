@@ -400,40 +400,6 @@ const EnhancedAnalytics = () => {
         </div>
       </div>
 
-      {/* Enhanced Analytics Stats */}
-      {analytics?.enhanced_analytics && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center">
-              <BarChart3 className="h-6 w-6 text-blue-500" />
-              <div className="ml-3">
-                <p className="text-xs font-medium text-gray-600">Products Analyzed</p>
-                <p className="text-lg font-bold text-gray-900">{analytics.total_products_analyzed}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center">
-              <AlertTriangle className="h-6 w-6 text-red-500" />
-              <div className="ml-3">
-                <p className="text-xs font-medium text-gray-600">Critical Alerts</p>
-                <p className="text-lg font-bold text-gray-900">{analytics.critical_alerts?.length || 0}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex items-center">
-              <Target className="h-6 w-6 text-builders-500" />
-              <div className="ml-3">
-                <p className="text-xs font-medium text-gray-600">High Priority</p>
-                <p className="text-lg font-bold text-gray-900">{analytics.high_priority_count}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Smart Restock Alerts */}
       <SmartRestockAlerts analytics={analytics} />

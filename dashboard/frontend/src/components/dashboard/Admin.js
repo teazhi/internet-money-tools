@@ -431,6 +431,7 @@ const Admin = () => {
   const [showLogs, setShowLogs] = useState({});
   const [discountMonitoring, setDiscountMonitoring] = useState(null);
   const [discountLoading, setDiscountLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('users');
 
   // Hook definitions must come before any early returns
   const fetchUsers = useCallback(async () => {
@@ -1202,54 +1203,118 @@ const Admin = () => {
     );
   }
 
+  const tabs = [
+    {
+      id: 'users',
+      name: 'Users',
+      icon: Users,
+      count: users.length
+    },
+    {
+      id: 'system',
+      name: 'System',
+      icon: Activity,
+      count: null
+    },
+    {
+      id: 'scripts',
+      name: 'Scripts',
+      icon: Cog,
+      count: null
+    },
+    {
+      id: 'discount',
+      name: 'Discounts',
+      icon: Percent,
+      count: null
+    },
+    {
+      id: 'invitations',
+      name: 'Invitations',
+      icon: UserPlus,
+      count: invitations.length
+    }
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
+      {/* Compact Header */}
+      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-4 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2">Admin Panel</h1>
-            <p className="text-builders-100">Manage users and system settings</p>
+            <h1 className="text-xl font-bold">Admin Panel</h1>
+            <p className="text-sm text-builders-100">System management & configuration</p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             <button
               onClick={fetchUsers}
-              className="flex items-center px-3 py-2 bg-builders-700 hover:bg-builders-800 rounded-md transition-colors"
+              className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm transition-colors"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-3 w-3 mr-1" />
               Refresh
             </button>
             <button
               onClick={exportUserData}
-              className="flex items-center px-3 py-2 bg-builders-700 hover:bg-builders-800 rounded-md transition-colors"
+              className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm transition-colors"
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="h-3 w-3 mr-1" />
               Export
-            </button>
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md transition-colors"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Invite User
-            </button>
-            <button
-              onClick={() => {
-                fetchScriptConfigs();
-                setShowScriptModal(true);
-              }}
-              className="flex items-center px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md transition-colors"
-            >
-              <Cog className="h-4 w-4 mr-2" />
-              Script Control
             </button>
           </div>
         </div>
       </div>
 
-      {/* System Stats */}
-      {systemStats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 px-6">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                    activeTab === tab.id
+                      ? 'border-builders-500 text-builders-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.name}</span>
+                  {tab.count !== null && (
+                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs font-medium ${
+                      activeTab === tab.id
+                        ? 'bg-builders-100 text-builders-600'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="space-y-6">
+
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">User Management</h3>
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="flex items-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors text-sm"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Invite User
+                </button>
+              </div>
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
               <Users className="h-8 w-8 text-blue-500" />

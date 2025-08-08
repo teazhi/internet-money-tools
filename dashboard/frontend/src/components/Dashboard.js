@@ -27,7 +27,7 @@ import EnhancedAnalytics from './dashboard/EnhancedAnalytics';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 import FileManager from './dashboard/FileManager';
-import Admin from './dashboard/Admin';
+import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import Onboarding from './Onboarding';
@@ -319,7 +319,7 @@ const Dashboard = () => {
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
               {isMainUser && <Route path="/subusers" element={<SubUserManager />} />}
-              {isAdmin && <Route path="/admin" element={<Admin />} />}
+              {isAdmin && <Route path="/admin" element={<AdminCompact />} />}
             </Routes>
           </div>
         </main>

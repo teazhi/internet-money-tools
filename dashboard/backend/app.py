@@ -99,7 +99,8 @@ AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_ama
 
 # Discount Monitoring Configuration (Admin Only)
 DISCOUNT_MONITOR_EMAIL = os.getenv('DISCOUNT_MONITOR_EMAIL')  # Admin email for discount monitoring
-DISCOUNT_KEYWORDS = ['sale', 'discount', '% off', 'clearance', 'deal', 'promotion', 'special offer']
+DISCOUNT_SENDER_EMAIL = 'alert@distill.io'  # Only monitor emails from this sender
+DISCOUNT_KEYWORDS = ['sale', 'discount', '% off', 'clearance', 'deal', 'promotion', 'special offer', 'price drop', 'reduced']
 
 # Encryption key for sensitive data (SP-API tokens)
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
@@ -4295,6 +4296,7 @@ def get_discount_monitoring_status():
         return jsonify({
             'email_configured': bool(DISCOUNT_MONITOR_EMAIL),
             'monitor_email': DISCOUNT_MONITOR_EMAIL if DISCOUNT_MONITOR_EMAIL else None,
+            'sender_email': DISCOUNT_SENDER_EMAIL,
             'keywords': DISCOUNT_KEYWORDS,
             'status': 'active' if DISCOUNT_MONITOR_EMAIL else 'not_configured'
         })
@@ -4316,8 +4318,9 @@ def test_discount_monitoring():
         # For now, just return success if email is configured
         return jsonify({
             'success': True,
-            'message': f'Discount monitoring configured for {DISCOUNT_MONITOR_EMAIL}',
-            'keywords_count': len(DISCOUNT_KEYWORDS)
+            'message': f'Discount monitoring configured for {DISCOUNT_MONITOR_EMAIL} (monitoring {DISCOUNT_SENDER_EMAIL})',
+            'keywords_count': len(DISCOUNT_KEYWORDS),
+            'sender_email': DISCOUNT_SENDER_EMAIL
         })
     except Exception as e:
         return jsonify({

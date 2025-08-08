@@ -1436,12 +1436,20 @@ const Admin = () => {
                     </span>
                   </div>
                   {discountMonitoring?.email_configured && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Monitor Email:</span>
-                      <span className="font-medium text-gray-900">
-                        {discountMonitoring.monitor_email}
-                      </span>
-                    </div>
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Monitor Email:</span>
+                        <span className="font-medium text-gray-900">
+                          {discountMonitoring.monitor_email}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Monitoring From:</span>
+                        <span className="font-medium text-blue-600">
+                          {discountMonitoring.sender_email || 'alert@distill.io'}
+                        </span>
+                      </div>
+                    </>
                   )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Keywords:</span>
@@ -1483,18 +1491,19 @@ const Admin = () => {
                 <div className="flex items-start">
                   <AlertTriangle className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
                   <div className="text-sm">
-                    <p className="font-medium text-blue-900 mb-1">How Discount Monitoring Works</p>
+                    <p className="font-medium text-blue-900 mb-1">Distill.io Discount Monitoring</p>
                     <div className="text-blue-800 space-y-1">
-                      <p>• Admin email monitors for discount notifications from suppliers and retailers</p>
-                      <p>• Keywords trigger analysis of current discount opportunities</p>
+                      <p>• Monitors emails from <code className="bg-blue-100 px-1 rounded">alert@distill.io</code> only</p>
+                      <p>• Distill Web Monitor tracks price changes and discount alerts</p>
+                      <p>• Keywords in Distill alerts trigger opportunity analysis</p>
                       <p>• Users see personalized discount opportunities in their Smart Restock tab</p>
-                      <p>• No user email configuration required - all monitoring is admin-managed</p>
+                      <p>• Set up Distill monitors on supplier/retailer websites for automatic alerts</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {!discountMonitoring?.email_configured && (
+              {!discountMonitoring?.email_configured ? (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-start">
                     <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5 mr-3 flex-shrink-0" />
@@ -1504,6 +1513,21 @@ const Admin = () => {
                         Set the <code className="bg-yellow-100 px-1 rounded">DISCOUNT_MONITOR_EMAIL</code> environment variable 
                         to enable discount monitoring functionality.
                       </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium text-green-900 mb-1">Setup Instructions</p>
+                      <div className="text-green-800 space-y-1">
+                        <p><strong>1.</strong> Set up <a href="https://distill.io" target="_blank" rel="noopener noreferrer" className="underline">Distill Web Monitor</a> accounts</p>
+                        <p><strong>2.</strong> Create monitors on supplier/retailer websites for price drops</p>
+                        <p><strong>3.</strong> Configure Distill to send alerts to: <code className="bg-green-100 px-1 rounded">{discountMonitoring.monitor_email}</code></p>
+                        <p><strong>4.</strong> Distill alerts will automatically trigger opportunity analysis</p>
+                      </div>
                     </div>
                   </div>
                 </div>

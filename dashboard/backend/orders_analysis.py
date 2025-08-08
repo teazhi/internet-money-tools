@@ -29,7 +29,7 @@ class EnhancedOrdersAnalysis:
             import numpy as np
             self.has_numpy = True
         except ImportError:
-            print("Warning: numpy not available, some enhanced analytics features may be limited")
+            pass  # Debug print removed
             self.has_numpy = False
 
     def _parse_datetime_robust(self, series: pd.Series, column_name: str) -> pd.Series:
@@ -97,14 +97,12 @@ class EnhancedOrdersAnalysis:
         return parsed_series
 
     def download_csv(self, url: str) -> pd.DataFrame:
-        print(f"[DEBUG] Attempting to download from URL: {url}")
         
         # Check if URL has required parameters
         if 'sellerboard.com' in url and 'format=csv' not in url:
             # Add CSV format if missing
             separator = '&' if '?' in url else '?'
             url = f"{url}{separator}format=csv"
-            print(f"[DEBUG] Added format=csv to URL: {url}")
         
         # Try to download with better error handling
         try:
@@ -122,16 +120,14 @@ class EnhancedOrdersAnalysis:
             
             # First, try to get the initial response without following redirects
             initial_response = session.get(url, timeout=30, allow_redirects=False, headers=headers)
-            print(f"[DEBUG] Initial response status: {initial_response.status_code}")
             
             if initial_response.status_code == 302:
                 # Handle redirect manually to see what's happening
                 redirect_url = initial_response.headers.get('Location')
-                print(f"[DEBUG] Redirect URL: {redirect_url}")
                 
                 # Check if the redirect URL is a download URL
                 if redirect_url and 'download-report' in redirect_url:
-                    print(f"[DEBUG] Attempting to download from redirect URL: {redirect_url}")
+                    pass  # Debug print removed
                     # Try to follow the redirect with the session cookies
                     response = session.get(redirect_url, timeout=30, headers=headers)
                 else:
@@ -140,35 +136,33 @@ class EnhancedOrdersAnalysis:
             else:
                 response = initial_response
                 
-            print(f"[DEBUG] Final response status code: {response.status_code}")
-            print(f"[DEBUG] Final URL: {response.url}")
+            pass  # Debug print removed
             
             # Check for authentication errors specifically
             if response.status_code == 401:
-                print(f"[ERROR] Authentication failed. The Sellerboard automation URL token may be expired.")
-                print(f"[ERROR] Please regenerate the automation URLs from Sellerboard:")
-                print(f"[ERROR] 1. Log into Sellerboard")
-                print(f"[ERROR] 2. Go to Reports > Automation")
-                print(f"[ERROR] 3. Regenerate the automation URLs")
-                print(f"[ERROR] 4. Update the URLs in Settings")
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
             
             response.raise_for_status()
             
             # Try to parse the CSV
             try:
                 df = pd.read_csv(StringIO(response.text))
-                print(f"[DEBUG] Successfully parsed CSV with {len(df)} rows")
+                pass  # Debug print removed
                 return df
             except Exception as csv_error:
-                print(f"[ERROR] Failed to parse CSV response: {csv_error}")
-                print(f"[ERROR] Response content preview: {response.text[:500]}")
+                pass  # Debug print removed
+                pass  # Debug print removed
                 raise
                 
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Request failed: {type(e).__name__}: {str(e)}")
+            pass  # Debug print removed
             if hasattr(e, 'response') and e.response is not None:
-                print(f"[ERROR] Response status: {e.response.status_code}")
-                print(f"[ERROR] Response headers: {dict(e.response.headers)}")
+                pass  # Debug print removed
+                pass  # Debug print removed
             raise
 
     def get_orders_for_date_range(self, df: pd.DataFrame, start_date: date, end_date: date, user_timezone: str = None) -> pd.DataFrame:
@@ -192,7 +186,7 @@ class EnhancedOrdersAnalysis:
                     df[date_col] = df[date_col].dt.tz_localize('UTC')
                 df[date_col] = df[date_col].dt.tz_convert(user_timezone)
             except Exception as e:
-                print(f"Warning: Could not convert to timezone {user_timezone}: {e}")
+                pass  # Timezone conversion error
         
         # Filter by date range - convert dates to pandas datetime for comparison
         start_date_pd = pd.to_datetime(start_date)
@@ -221,16 +215,16 @@ class EnhancedOrdersAnalysis:
             return self.get_orders_for_date_range(df, for_date, for_date, user_timezone)
         except Exception as e:
             if "Invalid comparison between dtype=datetime64[ns] and date" in str(e):
-                print(f"[ERROR] Pandas datetime comparison error in get_orders_for_date")
-                print(f"[ERROR] for_date: {for_date} (type: {type(for_date)})")
-                print(f"[ERROR] DataFrame shape: {df.shape}")
-                print(f"[ERROR] DataFrame columns: {list(df.columns)}")
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
                 # Try to find date columns
                 date_columns = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
                 if date_columns:
-                    print(f"[ERROR] Date columns found: {date_columns}")
-                    print(f"[ERROR] First date column dtype: {df[date_columns[0]].dtype}")
-                    print(f"[ERROR] Sample values: {df[date_columns[0]].head().tolist()}")
+                    pass  # Debug print removed
+                    pass  # Debug print removed
+                    pass  # Debug print removed
             raise
 
     def asin_sales_count(self, orders_df: pd.DataFrame) -> Dict[str, int]:
@@ -259,11 +253,11 @@ class EnhancedOrdersAnalysis:
                 velocity_data[f'{period}d'] = daily_avg
         except Exception as e:
             if "Invalid comparison between dtype=datetime64[ns] and date" in str(e):
-                print(f"[ERROR] Pandas datetime comparison error in calculate_enhanced_velocity")
-                print(f"[ERROR] ASIN: {asin}")
-                print(f"[ERROR] target_date: {target_date} (type: {type(target_date)})")
-                print(f"[ERROR] Failed on period: {period}")
-                print(f"[ERROR] start_date: {start_date} (type: {type(start_date)})")
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
             raise
         
         # Calculate weighted velocity (recent performance weighted higher) - adjusted for 30-day data
@@ -297,14 +291,14 @@ class EnhancedOrdersAnalysis:
             self._trend_debug_count = 0
         
         if self._trend_debug_count < 3:  # Debug first 3 products
-            print(f"[TREND DEBUG] ASIN: {asin if 'asin' in locals() else 'unknown'}")
-            print(f"[TREND DEBUG] 3d velocity: {velocity_data['3d']}")
-            print(f"[TREND DEBUG] 7d velocity: {velocity_data['7d']}")
-            print(f"[TREND DEBUG] 14d velocity: {velocity_data['14d']}")
-            print(f"[TREND DEBUG] 21d velocity: {velocity_data['21d']}")
-            print(f"[TREND DEBUG] 30d velocity: {velocity_data['30d']}")
-            print(f"[TREND DEBUG] recent_velocity: {recent_velocity}")
-            print(f"[TREND DEBUG] historical_velocity: {historical_velocity}")
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
             self._trend_debug_count += 1
         
         # Ensure no NaN/Inf values in trend calculation
@@ -316,9 +310,6 @@ class EnhancedOrdersAnalysis:
         # Clamp trend_factor to reasonable bounds to prevent extreme values
         raw_trend_factor = trend_factor
         trend_factor = max(0.0, min(10.0, trend_factor))
-        
-        if self._trend_debug_count <= 3 and raw_trend_factor != trend_factor:
-            print(f"[TREND DEBUG] Raw trend_factor: {raw_trend_factor}, clamped to: {trend_factor}")
         
         # Determine trend direction
         if trend_factor > 1.2:
@@ -694,7 +685,7 @@ class EnhancedOrdersAnalysis:
         recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
         if asin in recent_2_months_data:
             qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
-            print(f"[Recent Purchase] Found {qty_purchased} units purchased in last 2 months for ASIN {asin}")
+            pass  # Debug print removed
             return qty_purchased
         
         # Fallback to velocity analysis approach
@@ -705,10 +696,10 @@ class EnhancedOrdersAnalysis:
             # If purchased within the last 2 months (last 60 days), return the last purchase quantity
             if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
-                print(f"[Recent Purchase] Fallback: Found {qty} units from recent purchase for ASIN {asin}")
+                pass  # Debug print removed
                 return qty
         
-        print(f"[Recent Purchase] No recent purchases found for ASIN {asin}")
+        pass  # Debug print removed
         return 0
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
@@ -730,8 +721,7 @@ class EnhancedOrdersAnalysis:
     def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:
         """Fetch both COGS data and full sheet data for purchase analytics"""
         try:
-            print(f"[DEBUG FETCH] Fetching data from sheet {sheet_id}, worksheet '{worksheet_title}'")
-            print(f"[DEBUG FETCH] Column mapping: {column_mapping}")
+            pass  # Debug print removed
             
             # Fetch the sheet data using existing function
             import requests
@@ -744,15 +734,14 @@ class EnhancedOrdersAnalysis:
             r = requests.get(url, headers=headers)
             r.raise_for_status()
             values = r.json().get("values", [])
-            print(f"[DEBUG FETCH] Retrieved {len(values)} rows from Google Sheets API")
             
             if not values or len(values) < 2:
-                print(f"[DEBUG FETCH] Insufficient data: {len(values) if values else 0} rows")
+                pass  # Debug print removed
                 return {}, pd.DataFrame()
             
             # Create DataFrame
             cols = values[0]
-            print(f"[DEBUG FETCH] Sheet columns: {cols}")
+            pass  # Debug print removed
             rows = []
             for row in values[1:]:
                 # pad/truncate to match header length
@@ -763,17 +752,15 @@ class EnhancedOrdersAnalysis:
                 rows.append(row)
             
             df = pd.DataFrame(rows, columns=cols)
-            print(f"[DEBUG FETCH] DataFrame created: {df.shape} rows x columns")
-            print(f"[DEBUG FETCH] DataFrame columns: {list(df.columns)}")
+            pass  # Debug print removed
             
             # Generate COGS data using existing logic
             cogs_data = self._process_cogs_data(df, column_mapping)
-            print(f"[DEBUG FETCH] Final result: {len(cogs_data)} COGS records processed")
             
             return cogs_data, df
             
         except Exception as e:
-            print(f"[Google Sheets] Error fetching sheet data: {e}")
+            pass  # Debug print removed
             return {}, pd.DataFrame()
 
     def fetch_google_sheet_cogs_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Dict[str, dict]:
@@ -784,16 +771,14 @@ class EnhancedOrdersAnalysis:
     def _process_cogs_data(self, df: pd.DataFrame, column_mapping: dict) -> Dict[str, dict]:
         """Process DataFrame to extract COGS data"""
         try:
-            print(f"[DEBUG COGS] Sheet shape: {df.shape}")
-            print(f"[DEBUG COGS] Available columns: {list(df.columns)}")
-            print(f"[DEBUG COGS] Column mapping: {column_mapping}")
+            pass  # Debug print removed
+            pass  # Debug print removed
             
             # Get column mappings
             asin_field = column_mapping.get("ASIN", "ASIN")
             cogs_field = column_mapping.get("COGS", "COGS")
             date_field = column_mapping.get("Date", "Date")
             
-            print(f"[DEBUG COGS] Using fields - ASIN: '{asin_field}', COGS: '{cogs_field}', Date: '{date_field}'")
             
             # Look for Source/Link columns
             source_field = None
@@ -809,26 +794,21 @@ class EnhancedOrdersAnalysis:
                 pass
             
             # Clean and process data
-            print(f"[DEBUG COGS] Processing ASIN field '{asin_field}' - sample raw values: {df[asin_field].head().tolist()}")
+            pass  # Debug print removed
             df[asin_field] = df[asin_field].astype(str).str.strip()
-            print(f"[DEBUG COGS] After ASIN cleaning: {df[asin_field].head().tolist()}")
-            print(f"[DEBUG COGS] Valid ASINs: {len(df[df[asin_field].notna() & (df[asin_field] != '') & (df[asin_field] != 'nan')])}")
+            pass  # Debug print removed
             
-            print(f"[DEBUG COGS] Processing COGS field '{cogs_field}' - sample raw values: {df[cogs_field].head().tolist()}")
-            print(f"[DEBUG COGS] COGS column dtype: {df[cogs_field].dtype}")
+            pass  # Debug print removed
             
             # Process COGS field step by step with debugging
             cogs_raw = df[cogs_field].astype(str)
-            print(f"[DEBUG COGS] After str conversion: {cogs_raw.head().tolist()}")
             
             cogs_cleaned = cogs_raw.replace(r"[\$,]", "", regex=True)
-            print(f"[DEBUG COGS] After removing $,: {cogs_cleaned.head().tolist()}")
             
             df[cogs_field] = pd.to_numeric(cogs_cleaned, errors="coerce")
-            print(f"[DEBUG COGS] After numeric conversion: {df[cogs_field].head().tolist()}")
-            print(f"[DEBUG COGS] Valid COGS values (>0): {len(df[df[cogs_field].notna() & (df[cogs_field] > 0)])}")
-            print(f"[DEBUG COGS] Total non-null COGS: {df[cogs_field].notna().sum()}")
-            print(f"[DEBUG COGS] COGS field stats: min={df[cogs_field].min()}, max={df[cogs_field].max()}")
+            pass  # Debug print removed
+            pass  # Debug print removed
+            pass  # Debug print removed
             
             # Convert date column for sorting
             try:
@@ -901,7 +881,7 @@ class EnhancedOrdersAnalysis:
             return cogs_data
             
         except Exception as e:
-            print(f"[ERROR] Failed to fetch COGS data from Google Sheet: {e}")
+            pass  # Debug print removed
             return {}
 
     def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str, column_mapping: dict) -> tuple[Dict[str, dict], pd.DataFrame]:
@@ -926,7 +906,6 @@ class EnhancedOrdersAnalysis:
             
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
-            print(f"[DEBUG COGS ALL] Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
             # Expected column structure based on user's column mapping
             # Get the actual column names from user's mapping (excluding source field which we'll detect dynamically)
@@ -936,7 +915,6 @@ class EnhancedOrdersAnalysis:
                 mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
                 expected_columns.add(mapped_column)
             
-            print(f"[DEBUG COGS ALL] Expected columns based on user mapping (excluding source): {expected_columns}")
             
             combined_cogs_data = {}
             combined_dataframes = []  # For purchase analytics
@@ -969,9 +947,9 @@ class EnhancedOrdersAnalysis:
                         if batch_r.status_code == 200:
                             batch_data = batch_r.json()
                             hyperlinks = self.extract_hyperlinks_from_batch_data(batch_data)
-                            print(f"[DEBUG COGS ALL] Extracted {len(hyperlinks)} hyperlink entries from '{worksheet_name}'")
+                            pass  # Debug print removed
                     except Exception as e:
-                        print(f"[DEBUG COGS ALL] Could not fetch hyperlinks for '{worksheet_name}': {e}")
+                        pass  # Debug print removed
                         hyperlinks = {}
                     
                     if not values or len(values) < 2:
@@ -981,18 +959,17 @@ class EnhancedOrdersAnalysis:
                     # Check if column structure matches expected format
                     cols = values[0]
                     available_columns = set(cols)
-                    print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' columns: {cols}")
-                    print(f"[DEBUG COGS ALL] Expected columns: {expected_columns}")
-                    print(f"[DEBUG COGS ALL] Available columns: {available_columns}")
+                    pass  # Debug print removed
+                    pass  # Debug print removed
                     
                     # Check if this looks like data instead of headers (common issue)
                     if any(col.startswith(('$', 'http', 'B0', '20')) or col.replace('.', '').replace('%', '').isdigit() for col in cols if col):
-                        print(f"[DEBUG COGS ALL] Skipping '{worksheet_name}' - first row appears to be data, not headers")
+                        pass  # Debug print removed
                         continue
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        print(f"[DEBUG COGS ALL] Skipping '{worksheet_name}' - missing columns: {missing}")
+                        pass  # Debug print removed
                         continue
                     
                     # Worksheet has correct structure
@@ -1027,11 +1004,11 @@ class EnhancedOrdersAnalysis:
                         for col in available_columns:
                             if "source" in col.lower():
                                 source_field = col
-                                print(f"[DEBUG COGS ALL] Found source field: '{col}' in worksheet '{worksheet_name}'")
+                                pass  # Debug print removed
                                 break
                     
                     if not source_field:
-                        print(f"[DEBUG COGS ALL] No source field found in worksheet '{worksheet_name}' - COGS data will have no source links")
+                        pass  # Debug print removed
                         source_field = None  # Will be handled gracefully in process_asin_cogs_data
                     
                     # Processing worksheet rows
@@ -1075,8 +1052,8 @@ class EnhancedOrdersAnalysis:
                         mapped_purchase_columns.add(mapped_column)
                     
                     if mapped_purchase_columns.intersection(available_columns):
-                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' has purchase analytics columns - adding to combined data")
-                        print(f"[DEBUG COGS ALL] Found purchase columns: {mapped_purchase_columns.intersection(available_columns)}")
+                        pass  # Debug print removed
+                        pass  # Debug print removed
                         # Add worksheet identifier to the DataFrame
                         try:
                             df_copy = df.copy()
@@ -1084,13 +1061,12 @@ class EnhancedOrdersAnalysis:
                             # Reset index to avoid conflicts when concatenating
                             df_copy = df_copy.reset_index(drop=True)
                             combined_dataframes.append(df_copy)
-                            print(f"[DEBUG COGS ALL] Added DataFrame from '{worksheet_name}': {len(df_copy)} rows")
+                            pass  # Debug print removed
                         except Exception as df_error:
-                            print(f"[ERROR] Failed to process DataFrame from worksheet '{worksheet_name}': {df_error}")
+                            pass  # Debug print removed
                             continue
                     else:
                         missing_columns = mapped_purchase_columns - available_columns
-                        print(f"[DEBUG COGS ALL] Worksheet '{worksheet_name}' missing purchase analytics columns: {missing_columns}")
                     
                     successful_sheets.append(worksheet_name)
                     # Worksheet processed successfully
@@ -1105,93 +1081,84 @@ class EnhancedOrdersAnalysis:
             # Combine all DataFrames for purchase analytics
             if combined_dataframes:
                 try:
-                    print(f"[DEBUG COGS ALL] Attempting to combine {len(combined_dataframes)} DataFrames...")
+                    pass  # Debug print removed
                     # Check for column compatibility before concatenating
                     if len(combined_dataframes) > 1:
                         first_cols = set(combined_dataframes[0].columns)
                         for i, df in enumerate(combined_dataframes[1:], 1):
                             current_cols = set(df.columns)
                             if first_cols != current_cols:
-                                print(f"[DEBUG COGS ALL] Column mismatch in DataFrame {i}: {first_cols.symmetric_difference(current_cols)}")
+                                pass  # Column mismatch
                     
                     combined_df = pd.concat(combined_dataframes, ignore_index=True, sort=False)
-                    print(f"[DEBUG COGS ALL] Combined DataFrame: {len(combined_df)} rows from {len(combined_dataframes)} worksheets")
+                    pass  # Debug print removed
                 except Exception as concat_error:
-                    print(f"[ERROR] Failed to concatenate DataFrames: {concat_error}")
+                    pass  # Debug print removed
                     # Fall back to using just the first DataFrame
                     if combined_dataframes:
                         combined_df = combined_dataframes[0].copy()
-                        print(f"[DEBUG COGS ALL] Using first DataFrame as fallback: {len(combined_df)} rows")
+                        pass  # Debug print removed
                     else:
                         combined_df = pd.DataFrame()
             else:
                 combined_df = pd.DataFrame()
-                print(f"[DEBUG COGS ALL] No worksheets with purchase analytics columns found")
             
             return combined_cogs_data, combined_df
             
         except Exception as e:
-            print(f"[ERROR] Failed to fetch COGS data from all worksheets: {e}")
+            pass  # Debug print removed
             return {}, pd.DataFrame()
     
     def extract_hyperlinks_from_batch_data(self, batch_data):
         """Extract hyperlinks from Google Sheets batchGet response"""
         hyperlinks = {}
         try:
-            print(f"[DEBUG HYPERLINKS] Processing batch data keys: {list(batch_data.keys())}")
+            pass  # Debug print removed
             sheets = batch_data.get('sheets', [])
             if not sheets:
-                print(f"[DEBUG HYPERLINKS] No sheets found in batch data")
+                pass  # Debug print removed
                 return hyperlinks
                 
             sheet = sheets[0]  # First sheet in the response
-            print(f"[DEBUG HYPERLINKS] Sheet keys: {list(sheet.keys())}")
+            pass  # Debug print removed
             data = sheet.get('data', [])
             if not data:
-                print(f"[DEBUG HYPERLINKS] No data found in sheet")
+                pass  # Debug print removed
                 return hyperlinks
                 
             grid_data = data[0]  # First data range
-            print(f"[DEBUG HYPERLINKS] Grid data keys: {list(grid_data.keys())}")
+            pass  # Debug print removed
             row_data = grid_data.get('rowData', [])
-            print(f"[DEBUG HYPERLINKS] Processing {len(row_data)} rows")
             
             for row_idx, row in enumerate(row_data):
                 values = row.get('values', [])
                 for col_idx, cell in enumerate(values):
                     cell_links = []
                     
-                    # Debug: Show what's in the cell
-                    if any(key in cell for key in ['hyperlink', 'textFormatRuns', 'formattedValue']):
-                        print(f"[DEBUG HYPERLINKS] Cell {row_idx},{col_idx} contents: {cell.get('formattedValue', 'No text')} - Keys: {list(cell.keys())}")
-                    
                     # Check for direct hyperlink
                     if 'hyperlink' in cell:
                         cell_links.append(cell['hyperlink'])
-                        print(f"[DEBUG HYPERLINKS] Found direct hyperlink at {row_idx},{col_idx}: {cell['hyperlink']}")
                     
                     # Check for textFormatRuns (multiple hyperlinks in one cell)
                     if 'textFormatRuns' in cell:
-                        print(f"[DEBUG HYPERLINKS] Found textFormatRuns at {row_idx},{col_idx}: {len(cell['textFormatRuns'])} runs")
+                        pass  # Debug print removed
                         for run_idx, run in enumerate(cell['textFormatRuns']):
-                            print(f"[DEBUG HYPERLINKS] Run {run_idx} keys: {list(run.keys())}")
+                            pass  # Debug print removed
                             if 'format' in run:
-                                print(f"[DEBUG HYPERLINKS] Format keys: {list(run['format'].keys())}")
+                                pass  # Debug print removed
                                 if 'link' in run['format']:
                                     link_info = run['format']['link']
-                                    print(f"[DEBUG HYPERLINKS] Link info: {link_info}")
+                                    pass  # Debug print removed
                                     if 'uri' in link_info:
                                         cell_links.append(link_info['uri'])
-                                        print(f"[DEBUG HYPERLINKS] Found textFormatRun link at {row_idx},{col_idx}: {link_info['uri']}")
                     
                     if cell_links:
                         hyperlinks[f"{row_idx},{col_idx}"] = cell_links
-                        print(f"[DEBUG HYPERLINKS] Stored {len(cell_links)} links for cell {row_idx},{col_idx}")
                         
-            print(f"[DEBUG HYPERLINKS] Total hyperlinks found: {len(hyperlinks)}")
+            pass  # Debug print removed
             return hyperlinks
         except Exception as e:
-            print(f"[ERROR] Failed to extract hyperlinks: {e}")
+            pass  # Debug print removed
             import traceback
             traceback.print_exc()
             return {}
@@ -1237,17 +1204,15 @@ class EnhancedOrdersAnalysis:
                         original_row_idx = row.name + 1  # Add 1 because Google Sheets rows are 1-indexed and we skip header
                         hyperlink_key = f"{original_row_idx},{col_idx}"
                         
-                        print(f"[DEBUG COGS] Looking for hyperlinks for ASIN {asin} at DataFrame row {row.name}, Google Sheets row {original_row_idx}, col {col_idx} (field: {source_field})")
-                        print(f"[DEBUG COGS] Source value in this row: '{source_value}'")
-                        print(f"[DEBUG COGS] Available hyperlink keys: {list(hyperlinks.keys())}")
+                        pass  # Debug print removed
+                        pass  # Debug print removed
                         
                         if hyperlink_key in hyperlinks:
                             hyperlink_sources = hyperlinks[hyperlink_key]
-                            print(f"[DEBUG COGS] Found hyperlinks for ASIN {asin} at {hyperlink_key}: {hyperlink_sources}")
+                            pass  # Debug print removed
                         else:
-                            print(f"[DEBUG COGS] No hyperlinks found for key {hyperlink_key}")
+                            pass  # Debug print removed
                     except Exception as e:
-                        print(f"[DEBUG COGS] Error getting hyperlinks for ASIN {asin}: {e}")
                 
                 # Process text-based source value
                 if source_value and not pd.isna(source_value):
@@ -1310,15 +1275,14 @@ class EnhancedOrdersAnalysis:
         cogs_data = {}
         purchase_insights = {}
         
-        print(f"[DEBUG] Checking COGS settings - user_settings: {user_settings}")
-        print(f"[DEBUG] enable_source_links: {user_settings.get('enable_source_links') if user_settings else None}")
-        print(f"[DEBUG] sheet_id: {user_settings.get('sheet_id') if user_settings else None}")
-        print(f"[DEBUG] worksheet_title: {user_settings.get('worksheet_title') if user_settings else None}")
-        print(f"[DEBUG] google_tokens: {bool(user_settings.get('google_tokens')) if user_settings else None}")
-        print(f"[DEBUG] search_all_worksheets: {user_settings.get('search_all_worksheets') if user_settings else None}")
+        pass  # Debug print removed
+        pass  # Debug print removed
+        pass  # Debug print removed
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         if user_settings and user_settings.get('enable_source_links'):
-            print(f"[DEBUG] Source links enabled, attempting to fetch COGS data and purchase analytics...")
+            pass  # Debug print removed
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -1342,8 +1306,8 @@ class EnhancedOrdersAnalysis:
                     
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
-                        print(f"[DEBUG] Searching all worksheets in Google Sheet...")
-                        print(f"[DEBUG] Using user's column mapping: {column_mapping}")
+                        pass  # Debug print removed
+                        pass  # Debug print removed
                         cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id, column_mapping
                         )
@@ -1352,42 +1316,39 @@ class EnhancedOrdersAnalysis:
                         
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:
-                            print(f"[DEBUG] All worksheets search found no data, trying specific worksheet: {worksheet_title}")
-                            print(f"[DEBUG] Using column mapping: {column_mapping}")
+                            pass  # Debug print removed
+                            pass  # Debug print removed
                             cogs_data, sheet_data = self.fetch_google_sheet_data(
                                 access_token, sheet_id, worksheet_title, column_mapping
                             )
                             column_mapping_for_purchase = column_mapping
-                            print(f"[DEBUG] Fallback result: {len(cogs_data)} COGS records, {len(sheet_data)} sheet rows")
                             
                     elif worksheet_title:
-                        print(f"[DEBUG] Searching specific worksheet: {worksheet_title}")
+                        pass  # Debug print removed
                         cogs_data, sheet_data = self.fetch_google_sheet_data(
                             access_token, sheet_id, worksheet_title, column_mapping
                         )
                         column_mapping_for_purchase = column_mapping
                     else:
-                        print(f"[DEBUG] No worksheet specified and search all worksheets disabled")
+                        pass  # Debug print removed
                         cogs_data = {}
                         sheet_data = pd.DataFrame()
                         column_mapping_for_purchase = {}
                     
-                    print(f"[DEBUG] Successfully fetched COGS data for {len(cogs_data)} products")
                     
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
-                        print(f"[DEBUG] Generating purchase analytics from {len(sheet_data)} sheet records...")
+                        pass  # Debug print removed
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
                             sheet_data, column_mapping_for_purchase
                         )
-                        print(f"[DEBUG] Purchase analytics generated successfully")
+                        pass  # Debug print removed
                     else:
-                        print(f"[DEBUG] No sheet data available for purchase analytics")
                         
                 else:
-                    print("[DEBUG] Missing Google Sheet settings for COGS data")
+                    pass  # Debug print removed
             except Exception as e:
-                print(f"[ERROR] Failed to fetch COGS data and purchase analytics: {e}")
+                pass  # Debug print removed
                 cogs_data = {}
                 purchase_insights = {}
 
@@ -1622,7 +1583,7 @@ class OrdersAnalysis(EnhancedOrdersAnalysis):
         try:
             super().__init__(orders_url, stock_url)
         except Exception as e:
-            print(f"Enhanced analytics initialization failed: {e}")
+            pass  # Debug print removed
             # Fall back to basic implementation
             self.orders_url = orders_url
             self.stock_url = stock_url

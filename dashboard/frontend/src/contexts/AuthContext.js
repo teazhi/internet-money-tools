@@ -21,15 +21,12 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      console.log('Checking auth status...');
-      console.log('Making request to:', axios.defaults.baseURL + '/api/user');
+
       const response = await axios.get('/api/user', { withCredentials: true });
-      console.log('Auth check response:', response.data);
+      
       setUser(response.data);
     } catch (error) {
-      console.error('Auth check failed:', error);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
+
       setUser(null);
     } finally {
       setLoading(false);
@@ -38,9 +35,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = (invitationToken = null) => {
     const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://internet-money-tools-production.up.railway.app';
-    console.log('Environment REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-    console.log('Using API URL for Discord auth:', apiBaseUrl);
-    
+
     let authUrl = `${apiBaseUrl}/auth/discord`;
     if (invitationToken) {
       authUrl += `?invitation=${invitationToken}`;
@@ -54,7 +49,7 @@ export const AuthProvider = ({ children }) => {
       await axios.get('/auth/logout', { withCredentials: true });
       setUser(null);
     } catch (error) {
-      console.error('Logout error:', error);
+      
     }
   };
 
@@ -68,7 +63,7 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data);
       return response.data;
     } catch (error) {
-      console.error('Failed to refresh user data:', error);
+      
       throw error;
     }
   };

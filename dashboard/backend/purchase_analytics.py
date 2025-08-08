@@ -64,7 +64,7 @@ class PurchaseAnalytics:
             return insights
             
         except Exception as e:
-            print(f"[Purchase Analytics] Error analyzing purchase data: {e}")
+            pass  # Debug print removed
             return self._empty_analytics_response()
     
     def _clean_purchase_data(self, df: pd.DataFrame, field_mapping: dict) -> pd.DataFrame:
@@ -103,11 +103,11 @@ class PurchaseAnalytics:
                 (clean_df['amount_purchased'] > 0)
             ]
             
-            print(f"[Purchase Analytics] Cleaned data: {len(clean_df)} valid purchase records")
+            pass  # Debug print removed
             return clean_df
             
         except Exception as e:
-            print(f"[Purchase Analytics] Error cleaning data: {e}")
+            pass  # Debug print removed
             return pd.DataFrame()
     
     def _analyze_purchase_velocity(self, df: pd.DataFrame) -> Dict:
@@ -455,25 +455,23 @@ class PurchaseAnalytics:
         try:
             # Check if we have worksheet source information
             if '_worksheet_source' not in df.columns:
-                print(f"[Purchase Analytics] No worksheet source info - falling back to date-based analysis")
+                pass  # Debug print removed
                 return self._analyze_by_date_fallback(df)
             
             # Get the list of unique worksheets, sorted to identify the most recent ones
             worksheets = df['_worksheet_source'].unique()
-            print(f"[Purchase Analytics] Found worksheets: {list(worksheets)}")
             
             # Try to identify the last 2 worksheets by sorting (assuming chronological naming)
             # Sort worksheets to get the most recent ones (assuming they're named chronologically)
             sorted_worksheets = sorted(worksheets, reverse=True)
             last_2_worksheets = sorted_worksheets[:2]
             
-            print(f"[Purchase Analytics] Analyzing last 2 worksheets: {last_2_worksheets}")
             
             # Filter to only data from the last 2 worksheets
             recent_df = df[df['_worksheet_source'].isin(last_2_worksheets)]
             
             if recent_df.empty:
-                print(f"[Purchase Analytics] No purchases found in last 2 worksheets")
+                pass  # Debug print removed
                 return {}
             
             # Group by ASIN and sum amounts purchased from last 2 worksheets
@@ -501,11 +499,11 @@ class PurchaseAnalytics:
                     'worksheets_analyzed': last_2_worksheets
                 }
             
-            print(f"[Purchase Analytics] Found recent 2-worksheet purchases for {len(recent_purchases_data)} ASINs")
+            pass  # Debug print removed
             return recent_purchases_data
             
         except Exception as e:
-            print(f"[Purchase Analytics] Error analyzing recent 2-worksheet purchases: {e}")
+            pass  # Debug print removed
             # Fallback to date-based analysis
             return self._analyze_by_date_fallback(df)
     
@@ -520,7 +518,7 @@ class PurchaseAnalytics:
             recent_df = df[df['date'] >= two_months_ago]
             
             if recent_df.empty:
-                print(f"[Purchase Analytics] No purchases found in last 2 months (fallback)")
+                pass  # Debug print removed
                 return {}
             
             # Group by ASIN and sum amounts purchased in last 2 months
@@ -546,11 +544,11 @@ class PurchaseAnalytics:
                     'days_analyzed': 60
                 }
             
-            print(f"[Purchase Analytics Fallback] Found recent 2-month purchases for {len(recent_purchases_data)} ASINs")
+            pass  # Debug print removed
             return recent_purchases_data
             
         except Exception as e:
-            print(f"[Purchase Analytics] Error in date-based fallback analysis: {e}")
+            pass  # Debug print removed
             return {}
     
     def _empty_analytics_response(self) -> Dict:

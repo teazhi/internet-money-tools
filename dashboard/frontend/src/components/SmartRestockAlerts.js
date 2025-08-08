@@ -24,11 +24,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [purchaseSources, setPurchaseSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   
-  // Debug: Check if source links are enabled
-  console.log('[DEBUG] SmartRestockAlerts - Analytics object:', analytics);
-  console.log('[DEBUG] SmartRestockAlerts - Enhanced analytics present:', !!analytics?.enhanced_analytics);
-  console.log('[DEBUG] SmartRestockAlerts - Enhanced analytics keys:', analytics?.enhanced_analytics ? Object.keys(analytics.enhanced_analytics) : 'none');
-  
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
 
@@ -46,7 +41,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       setModalAsin(asin);
       setShowSourcesModal(true);
     } catch (error) {
-      console.error('Error fetching purchase sources:', error);
+      
       // Show a simple alert or could add error state
       alert(error.response?.data?.message || 'Failed to fetch purchase sources');
     } finally {
@@ -92,13 +87,13 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         window.open(uniqueUrls[0], '_blank');
       } else {
         // Multiple URLs found, open all of them
-        console.log(`Opening ${uniqueUrls.length} source links for ASIN ${asin}:`, uniqueUrls);
+        
         uniqueUrls.forEach(url => {
           window.open(url, '_blank');
         });
       }
     } catch (error) {
-      console.error('Error fetching purchase sources:', error);
+      
       // Fallback: extract and open URLs from existing source link
       const extractedUrls = extractUrlsFromText(existingSourceLink);
       if (extractedUrls.length > 0) {
@@ -416,7 +411,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     )}
 
                     {/* COGS and Restock Information */}
-                    {console.log(`[DEBUG] ASIN ${alert.asin} COGS data:`, enhanced_analytics?.[alert.asin]?.cogs_data)}
+                    {}
                     {enhanced_analytics?.[alert.asin]?.cogs_data && enhanced_analytics[alert.asin].cogs_data.cogs && (
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
                         <div className="flex items-center justify-between">
@@ -687,7 +682,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     </div>
   );
   } catch (error) {
-    console.error('Error in SmartRestockAlerts:', error);
+    
     return (
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>

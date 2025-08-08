@@ -40,7 +40,6 @@ class SPAPIAnalytics:
             start_datetime = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
             end_datetime = start_datetime + timedelta(days=1)
             
-            print(f"[SP-API Analytics] Analyzing orders for {target_date}")
             
             # Fetch orders from SP-API
             orders = self.client.get_orders(start_datetime, end_datetime)

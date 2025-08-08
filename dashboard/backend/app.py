@@ -24,14 +24,14 @@ from cryptography.fernet import Fernet
 # Load environment variables
 try:
     load_dotenv()
-    print("[INIT] Environment variables loaded")
+    pass  # Environment variables loaded
 except Exception as e:
-    print(f"[INIT WARNING] Failed to load .env file: {e}")
+    pass  # Failed to load .env file
 
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
-print("[INIT] Flask app initialized")
+# Flask app initialized
 
 # Configure session for cookies to work properly with cross-domain
 app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS cross-domain
@@ -57,9 +57,9 @@ if os.environ.get('RAILWAY_STATIC_URL'):
 
 try:
     CORS(app, supports_credentials=True, origins=allowed_origins)
-    print("[INIT] CORS configured")
+    pass  # CORS configured
 except Exception as e:
-    print(f"[INIT ERROR] CORS configuration failed: {e}")
+    pass  # CORS configuration failed
     # Try basic CORS as fallback
     CORS(app)
 
@@ -129,7 +129,7 @@ def encrypt_token(token):
         encrypted_token = cipher_suite.encrypt(token.encode())
         return base64.b64encode(encrypted_token).decode()
     except Exception as e:
-        print(f"[ENCRYPTION] Error encrypting token: {e}")
+        pass  # Error encrypting token
         return None
 
 def decrypt_token(encrypted_token):
@@ -141,7 +141,7 @@ def decrypt_token(encrypted_token):
         decrypted_token = cipher_suite.decrypt(encrypted_data)
         return decrypted_token.decode()
     except Exception as e:
-        print(f"[ENCRYPTION] Error decrypting token: {e}")
+        pass  # Error decrypting token
         return None
 
 def exchange_amazon_auth_code(auth_code):
@@ -162,11 +162,11 @@ def exchange_amazon_auth_code(auth_code):
             token_data = response.json()
             return token_data.get('refresh_token')
         else:
-            print(f"[AMAZON OAUTH] Token exchange failed: {response.text}")
+            pass  # Token exchange failed
             return None
             
     except Exception as e:
-        print(f"[AMAZON OAUTH] Error exchanging auth code: {e}")
+        pass  # Error exchanging auth code
         return None
 
 def get_users_config():
@@ -183,17 +183,14 @@ def get_users_config():
         
         return users
     except Exception as e:
-        print(f"Error fetching users config: {e}")
+        pass  # Error fetching users config
         return []
 
 def update_users_config(users):
     s3_client = get_s3_client()
     config_data = json.dumps({"users": users}, indent=2)
     
-    print(f"[UPDATE CONFIG] About to save {len(users)} users to S3")
-    print(f"[UPDATE CONFIG] S3 Bucket: {CONFIG_S3_BUCKET}")
-    print(f"[UPDATE CONFIG] S3 Key: {USERS_CONFIG_KEY}")
-    print(f"[UPDATE CONFIG] Config data preview: {config_data[:500]}...")
+    # About to save users to S3
     
     try:
         result = s3_client.put_object(
@@ -202,20 +199,19 @@ def update_users_config(users):
             Body=config_data,
             ContentType='application/json'
         )
-        print(f"[UPDATE CONFIG] S3 put_object result: {result}")
-        print("Users configuration updated successfully.")
+        # Users configuration updated successfully
         
         # Verify the save by reading it back immediately
         try:
             verify_response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
             verify_data = json.loads(verify_response['Body'].read().decode('utf-8'))
-            print(f"[UPDATE CONFIG] Verification: read back {len(verify_data.get('users', []))} users")
+            pass  # Verification successful
         except Exception as verify_error:
-            print(f"[UPDATE CONFIG] Verification failed: {verify_error}")
+            pass  # Verification failed
         
         return True
     except Exception as e:
-        print(f"[UPDATE CONFIG] Error updating users config: {e}")
+        pass  # Error updating users config
         import traceback
         traceback.print_exc()
         return False
@@ -229,7 +225,7 @@ def get_invitations_config():
     except s3_client.exceptions.NoSuchKey:
         return []
     except Exception as e:
-        print(f"Error reading invitations config: {e}")
+        pass  # Error reading invitations config
         return []
 
 def update_invitations_config(invitations):
@@ -244,13 +240,13 @@ def update_invitations_config(invitations):
         )
         return True
     except Exception as e:
-        print(f"Error updating invitations config: {e}")
+        pass  # Error updating invitations config
         return False
 
 def send_invitation_email(email, invitation_token, invited_by):
     """Send invitation email to user"""
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print("SMTP credentials not configured")
+        pass  # SMTP credentials not configured
         return False
     
     try:
@@ -293,18 +289,14 @@ def send_invitation_email(email, invitation_token, invited_by):
         
         return True
     except Exception as e:
-        print(f"Error sending invitation email: {e}")
+        pass  # Error sending invitation email
         return False
 
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        print(f"[Auth Check] Session data: {dict(session)}")
-        print(f"[Auth Check] Discord ID in session: {'discord_id' in session}")
         if 'discord_id' not in session:
-            print(f"[Auth Check] Authentication failed - no discord_id in session")
             return jsonify({'error': 'Authentication required'}), 401
-        print(f"[Auth Check] Authentication successful for user: {session['discord_id']}")
         return f(*args, **kwargs)
     return decorated_function
 
@@ -468,9 +460,9 @@ def discord_login():
     
     # Get invitation token from query parameters
     invitation_token = request.args.get('invitation')
-    print(f"[Discord Auth] Invitation token received: {invitation_token}")
+    pass  # Process invitation token
     state_param = f"&state={invitation_token}" if invitation_token else ""
-    print(f"[Discord Auth] State parameter: {state_param}")
+    # State parameter set
     
     discord_auth_url = (
         f"https://discord.com/api/oauth2/authorize"
@@ -524,21 +516,20 @@ def discord_callback():
     
     # Check for invitation token from state parameter (runs for both new and existing users)
     invitation_token = request.args.get('state')  # Discord passes our state parameter back
-    print(f"[Discord Callback] Invitation token from state: {invitation_token}")
-    print(f"[Discord Callback] Full callback args: {dict(request.args)}")
+    # Process Discord callback with invitation token
     
     # If user doesn't exist, check for invitation requirement (for new users only)
     if not existing_user:
         if not invitation_token:
-            print(f"[Discord Callback] No invitation token found for new user, redirecting to no_invitation error")
+            pass  # No invitation token found for new user
             return redirect("https://dms-amazon.vercel.app/login?error=no_invitation")
         
         # Validate invitation token for new users
         invitations = get_invitations_config()
-        print(f"[Discord Callback] Checking {len(invitations)} invitations for token: {invitation_token}")
+        # Check invitations for valid token
         valid_invitation = None
         for inv in invitations:
-            print(f"[Discord Callback] Checking invitation: token={inv['token']}, status={inv['status']}, created={inv['created_at']}")
+            pass  # Check invitation validity
             if inv['token'] == invitation_token and inv['status'] == 'pending':
                 # Check if invitation is not expired (7 days)
                 try:
@@ -548,31 +539,31 @@ def discord_callback():
                     # Use UTC for both comparisons to avoid timezone issues
                     current_time = datetime.utcnow()
                     time_diff = current_time - invitation_date
-                    print(f"[Discord Callback] Invitation age: {time_diff}, expires after 7 days")
+                    pass  # Check invitation expiry
                     if time_diff < timedelta(days=7):
                         valid_invitation = inv
-                        print(f"[Discord Callback] Found valid invitation for email: {inv['email']}")
+                        pass  # Found valid invitation
                         break
                     else:
-                        print(f"[Discord Callback] Invitation expired ({time_diff} old)")
+                        pass  # Invitation expired
                 except Exception as date_error:
-                    print(f"[Discord Callback] Date parsing error: {date_error}, treating as valid for now")
+                    pass  # Date parsing error, treating as valid
                     # If date parsing fails, allow the invitation (fallback)
                     valid_invitation = inv
-                    print(f"[Discord Callback] Found valid invitation for email: {inv['email']} (date parse fallback)")
+                    pass  # Found valid invitation (date parse fallback)
                     break
             else:
-                print(f"[Discord Callback] Invitation mismatch: token={inv['token'] == invitation_token}, status={inv['status'] == 'pending'}")
+                pass  # Invitation mismatch
         
         if not valid_invitation:
-            print(f"[Discord Callback] No valid invitation found, redirecting to invalid_invitation error")
+            pass  # No valid invitation found
             return redirect("https://dms-amazon.vercel.app/login?error=invalid_invitation")
         
         # Clean up the invitation only after successful validation
-        print(f"[Discord Callback] Cleaning up invitation token after successful validation: {invitation_token}")
+        # Clean up invitation token after successful validation
         invitations = [inv for inv in invitations if inv['token'] != invitation_token]
         update_invitations_config(invitations)
-        print(f"[Discord Callback] Removed accepted invitation from list for user: {discord_username}")
+        # Removed accepted invitation from list
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username
@@ -655,14 +646,12 @@ def amazon_seller_auth():
             f"&redirect_uri={redirect_uri}"
         )
         
-        print(f"[Amazon Auth] Generated OAuth URL: {amazon_auth_url}")
-        print(f"[Amazon Auth] Client ID: {client_id}")
-        print(f"[Amazon Auth] Redirect URI: {redirect_uri}")
+        # Generated Amazon OAuth URL
         
         return redirect(amazon_auth_url)
         
     except Exception as e:
-        print(f"[Amazon Auth] Error initiating authorization: {e}")
+        pass  # Error initiating authorization
         return jsonify({'error': 'Failed to initiate Amazon authorization'}), 500
 
 @app.route('/auth/amazon-seller/callback')
@@ -707,11 +696,11 @@ def amazon_seller_callback():
         
         save_users_config(users)
         
-        print(f"[Amazon Auth] Successfully connected Amazon account for user {discord_id}")
+        # Successfully connected Amazon account
         return redirect("https://dms-amazon.vercel.app/dashboard?success=amazon_connected")
         
     except Exception as e:
-        print(f"[Amazon Auth] Callback error: {e}")
+        pass  # Amazon auth callback error
         return redirect("https://dms-amazon.vercel.app/dashboard?error=amazon_auth_callback_failed")
 
 @app.route('/api/amazon-seller/disconnect', methods=['POST'])
@@ -732,11 +721,11 @@ def disconnect_amazon_seller():
         
         save_users_config(users)
         
-        print(f"[Amazon Auth] Disconnected Amazon account for user {discord_id}")
+        # Disconnected Amazon account
         return jsonify({'message': 'Amazon account disconnected successfully'})
         
     except Exception as e:
-        print(f"[Amazon Auth] Disconnect error: {e}")
+        pass  # Amazon disconnect error
         return jsonify({'error': 'Failed to disconnect Amazon account'}), 500
 
 @app.route('/api/amazon-seller/status')
@@ -779,7 +768,7 @@ def amazon_seller_status():
         })
         
     except Exception as e:
-        print(f"[Amazon Status] Error: {e}")
+        pass  # Amazon status error
         return jsonify({'error': 'Failed to get Amazon connection status'}), 500
 
 @app.route('/api/amazon-seller/test')
@@ -806,15 +795,12 @@ def test_amazon_connection():
         # Try a simple API call to test authentication
         try:
             # Debug: Print credentials structure (without sensitive data)
-            print(f"[Amazon Test] Credentials structure: {list(sp_client.credentials.keys())}")
-            print(f"[Amazon Test] Sandbox in credentials: {'sandbox' in sp_client.credentials}")
-            print(f"[Amazon Test] Marketplace: {sp_client.marketplace}")
-            print(f"[Amazon Test] Marketplace ID: {sp_client.marketplace_id}")
+            # Amazon test credentials verified
             
             # Try the token refresh first to see if that works
             from sp_api.api import Tokens
             
-            print("[Amazon Test] Testing token refresh capability...")
+            # Testing token refresh capability
             tokens_client = Tokens(credentials=sp_client.credentials, marketplace=sp_client.marketplace)
             
             # This is a safer test - just check if we can create a restricted data token
@@ -828,7 +814,7 @@ def test_amazon_connection():
                     }]
                 )
                 
-                print("[Amazon Test] Token creation successful - authentication working!")
+                pass  # Token creation successful
                 
                 return jsonify({
                     'success': True,
@@ -840,7 +826,7 @@ def test_amazon_connection():
                 })
                 
             except Exception as token_error:
-                print(f"[Amazon Test] Token test failed, trying basic orders call: {token_error}")
+                pass  # Token test failed, trying basic orders call
                 
                 # Fall back to basic orders call
                 from sp_api.api import Orders
@@ -852,7 +838,7 @@ def test_amazon_connection():
                 end_date = datetime.now()
                 start_date = end_date - timedelta(days=1)
                 
-                print(f"[Amazon Test] Making API call with date range: {start_date.isoformat()} to {end_date.isoformat()}")
+                # Making API call with date range
                 
                 response = orders_client.get_orders(
                     MarketplaceIds=[sp_client.marketplace_id],
@@ -860,7 +846,7 @@ def test_amazon_connection():
                     CreatedBefore=end_date.isoformat()
                 )
                 
-                print(f"[Amazon Test] Orders API call successful!")
+                pass  # Orders API call successful
                 
                 return jsonify({
                     'success': True,
@@ -882,7 +868,7 @@ def test_amazon_connection():
             }), 400
         
     except Exception as e:
-        print(f"[Amazon Test] Error: {e}")
+        pass  # Amazon test error
         return jsonify({'error': f'Test failed: {str(e)}'}), 500
 
 @app.route('/api/debug/auth')
@@ -903,14 +889,6 @@ def get_user():
     
     # Check if we're in admin impersonation mode
     admin_impersonating = session.get('admin_impersonating')
-    
-    # Debug logging
-    if admin_impersonating:
-        print(f"[API USER] Impersonation mode - returning data for: {discord_id}")
-        print(f"[API USER] User record found: {user_record is not None}")
-        if user_record:
-            print(f"[API USER] User has google_tokens: {user_record.get('google_tokens') is not None}")
-            print(f"[API USER] User has sheet_id: {user_record.get('sheet_id') is not None}")
     
     # For subusers, check parent's configuration status
     if user_record and user_record.get('user_type') == 'subuser':
@@ -963,7 +941,7 @@ def get_user():
         response_data['admin_impersonating'] = True
         response_data['original_admin_id'] = admin_impersonating['original_discord_id']
         response_data['original_admin_username'] = admin_impersonating['original_discord_username']
-        print(f"[API USER] Returning impersonated user data: {response_data['discord_username']}")
+        # Return impersonated user data
     
     return jsonify(response_data)
 
@@ -1267,16 +1245,14 @@ def debug_cogs_status():
         })
     
     except Exception as e:
-        print(f"[DEBUG COGS] Error: {e}")
+        pass  # COGS error
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analytics/orders')
 @login_required
 def get_orders_analytics():
     try:
-        print(f"[Dashboard Analytics] User session: {session.get('discord_id', 'Not logged in')}")
-        print(f"[Dashboard Analytics] Request headers: {dict(request.headers)}")
-        print(f"[Dashboard Analytics] Session keys: {list(session.keys())}")
+        # Process dashboard analytics request
         
         # Try SP-API first, fallback to Sellerboard if needed
         
@@ -1293,7 +1269,6 @@ def get_orders_analytics():
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
                     config_user_record = parent_record
-                    print(f"[Dashboard Analytics] Subuser {discord_id} using parent {parent_user_id} configuration")
         
         user_timezone = user_record.get('timezone') if user_record else None
         
@@ -1325,32 +1300,29 @@ def get_orders_analytics():
                 try:
                     tz = pytz.timezone(user_timezone)
                     now = datetime.now(tz)
-                    print(f"[Dashboard Analytics] Using user timezone: {user_timezone}")
+                    pass  # Debug print removed
                 except pytz.UnknownTimeZoneError:
                     now = datetime.now()
-                    print(f"[Dashboard Analytics] Invalid timezone {user_timezone}, using system time")
+                    pass  # Debug print removed
             else:
                 now = datetime.now()
-                print(f"[Dashboard Analytics] No timezone set, using system time")
             
             # Show yesterday's data until 11:59 PM today, then show today's data
             if now.hour == 23 and now.minute == 59:
                 # At 11:59 PM, switch to today's data
                 target_date = now.date()
-                print(f"[Dashboard Analytics] Switching to today's data at 11:59 PM {user_timezone or 'system timezone'}")
+                pass  # Debug print removed
             else:
                 # Show yesterday's complete data throughout the day
                 target_date = now.date() - timedelta(days=1)
-                print(f"[Dashboard Analytics] Showing yesterday's data (will switch at 11:59 PM {user_timezone or 'system timezone'})")
         
-        print(f"[SP-API Analytics] Fetching data for date: {target_date}")
         
         # Check if user is admin and SP-API should be attempted
         is_admin = is_admin_user(discord_id)
         disable_sp_api = config_user_record.get('disable_sp_api', False) if config_user_record else False
         
         if is_admin and not disable_sp_api:
-            print("[SP-API Analytics] Admin user detected - attempting SP-API integration")
+            pass  # Debug print removed
             try:
                 from sp_api_client import create_sp_api_client
                 from sp_api_analytics import create_sp_api_analytics
@@ -1362,14 +1334,12 @@ def get_orders_analytics():
                 if encrypted_token:
                     # Decrypt the refresh token
                     refresh_token = decrypt_token(encrypted_token)
-                    if not refresh_token:
-                        print("[SP-API Analytics] Failed to decrypt user's Amazon refresh token, falling back to environment")
                 
                 if not refresh_token:
                     # Fallback to environment variables (for sandbox or shared credentials)
                     refresh_token = os.getenv('SP_API_REFRESH_TOKEN')
                     if refresh_token:
-                        print("[SP-API Analytics] Using refresh token from environment variables")
+                        pass  # Debug print removed
                     else:
                         raise Exception("No Amazon refresh token available - user has not connected their Amazon Seller account and no environment token found")
                 
@@ -1384,17 +1354,15 @@ def get_orders_analytics():
                 analytics_processor = create_sp_api_analytics(sp_client)
                 
                 # Get analytics data from SP-API
-                print(f"[SP-API Analytics] Fetching data from Amazon SP-API...")
+                pass  # Debug print removed
                 analysis = analytics_processor.get_orders_analytics(target_date, user_timezone)
                 
-                print(f"[SP-API Analytics] SP-API analysis completed successfully")
-                print(f"[SP-API Analytics] Source: {analysis.get('source', 'unknown')}")
-                print(f"[SP-API Analytics] Today's sales items: {len(analysis.get('today_sales', {}))}")
-                print(f"[SP-API Analytics] Low stock items: {len(analysis.get('low_stock', {}))}")
-                print(f"[SP-API Analytics] Enhanced analytics items: {len(analysis.get('enhanced_analytics', {}))}")
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
+                pass  # Debug print removed
                 
             except Exception as sp_api_error:
-                print(f"[SP-API Analytics] Admin SP-API failed, falling back to Sellerboard: {sp_api_error}")
                 
                 # Fallback to Sellerboard data if SP-API fails for admin
                 try:
@@ -1421,14 +1389,14 @@ def get_orders_analytics():
                     analysis = analyzer.analyze()
                     
                 except Exception as sellerboard_error:
-                    print(f"[Dashboard Analytics] Sellerboard analysis failed: {sellerboard_error}")
+                    pass  # Debug print removed
                     return jsonify({
                         'error': f'Both SP-API and Sellerboard analysis failed: {str(sellerboard_error)}',
                         'sp_api_error': str(sp_api_error),
                         'sellerboard_error': str(sellerboard_error)
                     }), 500
         elif is_admin and disable_sp_api:
-            print("[SP-API Analytics] Admin user with SP-API disabled - using Sellerboard data only")
+            pass  # Debug print removed
             # Admin user with SP-API disabled - use Sellerboard
             try:
                 from orders_analysis import OrdersAnalysis
@@ -1446,7 +1414,7 @@ def get_orders_analytics():
                         'is_yesterday': is_date_yesterday(target_date, user_timezone)
                     }), 400
                 
-                print(f"[Dashboard Analytics] Using Sellerboard for admin user with SP-API disabled...")
+                pass  # Debug print removed
                 analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
                 
                 # Prepare user settings for COGS data fetching
@@ -1464,10 +1432,8 @@ def get_orders_analytics():
                 analysis['source'] = 'sellerboard'
                 analysis['message'] = 'Using Sellerboard data (SP-API disabled)'
                 
-                print(f"[Dashboard Analytics] Sellerboard analysis completed successfully for admin user with SP-API disabled")
                 
             except Exception as sellerboard_error:
-                print(f"[Dashboard Analytics] Sellerboard analysis failed for admin user with SP-API disabled: {sellerboard_error}")
                 
                 # Return basic error structure for admin users with SP-API disabled
                 analysis = {
@@ -1487,7 +1453,7 @@ def get_orders_analytics():
                     'source': 'sellerboard_failed'
                 }
         else:
-            print("[SP-API Analytics] Non-admin user - using Sellerboard data only")
+            pass  # Debug print removed
             # Non-admin users use Sellerboard only
             try:
                 from orders_analysis import OrdersAnalysis
@@ -1505,7 +1471,7 @@ def get_orders_analytics():
                         'is_yesterday': is_date_yesterday(target_date, user_timezone)
                     }), 400
                 
-                print(f"[Dashboard Analytics] Using Sellerboard for non-admin user...")
+                pass  # Debug print removed
                 analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
                 
                 # Prepare user settings for COGS data fetching
@@ -1523,10 +1489,8 @@ def get_orders_analytics():
                 analysis['source'] = 'sellerboard'
                 analysis['message'] = 'Using Sellerboard data'
                 
-                print(f"[Dashboard Analytics] Sellerboard analysis completed successfully for non-admin user")
                 
             except Exception as sellerboard_error:
-                print(f"[Dashboard Analytics] Sellerboard analysis failed for non-admin user: {sellerboard_error}")
                 
                 # Return basic error structure for non-admin users
                 analysis = {
@@ -1595,20 +1559,17 @@ def get_orders_analytics():
         analysis['is_yesterday'] = is_date_yesterday(target_date, user_timezone)
         analysis['user_timezone'] = user_timezone
         
-        print(f"[Dashboard Analytics] target_date: {target_date}, is_yesterday: {analysis['is_yesterday']}")
         
-        print(f"[SP-API Analytics] Analysis ready with {len(analysis)} top-level keys")
-        print(f"[SP-API Analytics] Data source: {analysis.get('source', 'unknown')}")
-        print(f"[SP-API Analytics] Sending response...")
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         response = jsonify(analysis)
         response.headers['Content-Type'] = 'application/json'
         return response
         
     except Exception as e:
-        print(f"[SP-API Analytics] Error getting analytics data: {e}")
+        pass  # Debug print removed
         import traceback
-        print(f"[SP-API Analytics] Full traceback: {traceback.format_exc()}")
         
         # Return error with more details for debugging
         return jsonify({
@@ -1709,10 +1670,6 @@ def upload_sellerboard_file():
         # since we now get files directly from S3 using proper discord_id filtering
         # This ensures each user only sees their own files
         
-        print(f"[UPLOAD] File uploaded successfully: {user_filename}")
-        if cleanup_result['deleted_count'] > 0:
-            print(f"[UPLOAD] Cleaned up {cleanup_result['deleted_count']} old files: {cleanup_result['deleted_files']}")
-        
         # Always return success since we no longer depend on user config updates for file management
         success_message = 'File uploaded successfully'
         if cleanup_result['deleted_count'] > 0:
@@ -1725,7 +1682,7 @@ def upload_sellerboard_file():
         })
             
     except Exception as e:
-        print(f"Upload error: {e}")
+        pass  # Debug print removed
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 def determine_file_type_category(filename):
@@ -1797,7 +1754,7 @@ def get_user_files_from_s3(discord_id):
         return user_files
         
     except Exception as e:
-        print(f"Error getting user files for discord_id {discord_id}: {e}")
+        pass  # Debug print removed
         return user_files
 
 def detect_duplicate_files_for_user(discord_id):
@@ -1831,10 +1788,6 @@ def detect_duplicate_files_for_user(discord_id):
     
     # Debug logging
     # Files by type retrieved
-    for file_type, files in files_by_type.items():
-        print(f"  {file_type}: {len(files)} files")
-        for file_info in files:
-            print(f"    - {file_info['filename']} (category: {file_info.get('file_type_category')})")
     
     if duplicates:
         # Duplicates found
@@ -1868,9 +1821,9 @@ def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
             try:
                 s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_info['s3_key'])
                 deleted_files.append(file_info['filename'])
-                print(f"[CLEANUP] Deleted old {new_file_type} file: {file_info['filename']}")
+                pass  # Debug print removed
             except Exception as e:
-                print(f"[CLEANUP ERROR] Failed to delete {file_info['s3_key']}: {e}")
+                pass  # Error deleting file
         
         return {
             'deleted_count': len(deleted_files),
@@ -1878,7 +1831,7 @@ def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
         }
         
     except Exception as e:
-        print(f"[CLEANUP ERROR] Error during cleanup for user {discord_id}: {e}")
+        pass  # Debug print removed
         return {
             'deleted_count': 0,
             'deleted_files': []
@@ -1913,7 +1866,7 @@ def list_sellerboard_files():
         })
         
     except Exception as e:
-        print(f"Error in list_sellerboard_files: {e}")
+        pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/files/cleanup-duplicates', methods=['POST'])
@@ -1951,9 +1904,9 @@ def cleanup_user_duplicates():
                     s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_info['s3_key'])
                     all_deleted_files.append(file_info['filename'])
                     total_deleted += 1
-                    print(f"[CLEANUP] Deleted duplicate {file_type} file: {file_info['filename']}")
+                    pass  # Debug print removed
                 except Exception as e:
-                    print(f"[CLEANUP ERROR] Failed to delete {file_info['s3_key']}: {e}")
+                    pass  # Error deleting duplicate
         
         return jsonify({
             'success': True,
@@ -1963,7 +1916,7 @@ def cleanup_user_duplicates():
         })
         
     except Exception as e:
-        print(f"Error in cleanup_user_duplicates: {e}")
+        pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/migrate-all-files', methods=['POST'])
@@ -2114,7 +2067,6 @@ def admin_cleanup_all_updated_files():
             total_removed += removed_count
             
             if removed_count > 0:
-                print(f"Cleaned {removed_count} _updated files from user {user.get('discord_username', user.get('discord_id'))}")
         
         if update_users_config(users):
             return jsonify({
@@ -2337,9 +2289,8 @@ def migrate_existing_files():
                 try:
                     s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_to_delete['s3_key'])
                     deleted_count += 1
-                    print(f"Deleted duplicate file from S3: {file_to_delete['s3_key']}")
+                    pass  # Debug print removed
                 except Exception as e:
-                    print(f"Error deleting duplicate file {file_to_delete['s3_key']}: {e}")
             
             # Update users config
             users = get_users_config()
@@ -2411,21 +2362,19 @@ def delete_sellerboard_file(file_key):
         discord_id = session['discord_id']
         original_file_key = file_key
         file_key = unquote(file_key)  # Decode URL encoding
-        print(f"[DELETE] Delete request from user {discord_id}")
-        print(f"[DELETE] Original file key: {original_file_key}")
-        print(f"[DELETE] Decoded file key: {file_key}")
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         users = get_users_config()
         user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
         
         if not user_record or 'uploaded_files' not in user_record:
-            print(f"[DELETE ERROR] No user record or uploaded_files for {discord_id}")
+            pass  # Debug print removed
             return jsonify({'error': 'User record not found'}), 404
         
-        print(f"[DELETE] User has {len(user_record['uploaded_files'])} files")
-        print(f"[DELETE] Available S3 keys:")
+        pass  # Debug print removed
+        pass  # Debug print removed
         for i, f in enumerate(user_record['uploaded_files']):
-            print(f"[DELETE]   {i}: '{f.get('s3_key', 'NO_KEY')}' - {f.get('filename', 'NO_FILENAME')}")
         
         # Find and remove the file - try multiple matching strategies
         file_to_delete = None
@@ -2436,7 +2385,7 @@ def delete_sellerboard_file(file_key):
             if file_info.get('s3_key') == file_key:
                 file_to_delete = file_info
                 file_index = i
-                print(f"[DELETE] Found exact match at index {i}: {file_info}")
+                pass  # Debug print removed
                 break
         
         # Strategy 2: Try without URL decoding if exact match failed
@@ -2446,7 +2395,7 @@ def delete_sellerboard_file(file_key):
                     file_to_delete = file_info
                     file_index = i
                     file_key = original_file_key  # Use original for S3 deletion
-                    print(f"[DELETE] Found match with original encoding at index {i}: {file_info}")
+                    pass  # Debug print removed
                     break
         
         # Strategy 3: Try partial match (in case of encoding differences)
@@ -2458,11 +2407,11 @@ def delete_sellerboard_file(file_key):
                     file_to_delete = file_info
                     file_index = i
                     file_key = s3_key  # Use the actual S3 key for deletion
-                    print(f"[DELETE] Found partial match at index {i}: {file_info}")
+                    pass  # Debug print removed
                     break
         
         if not file_to_delete:
-            print(f"[DELETE ERROR] File not found with any matching strategy")
+            pass  # Debug print removed
             return jsonify({
                 'error': 'File not found', 
                 'debug': {
@@ -2474,36 +2423,33 @@ def delete_sellerboard_file(file_key):
         
         # Remove file from user record
         user_record['uploaded_files'].pop(file_index)
-        print(f"[DELETE] Removed file from user record")
         
         # Delete from S3 (S3 delete_object is idempotent - no need to check if file exists first)
         s3_client = get_s3_client()
-        print(f"[DELETE] Attempting S3 deletion: bucket={CONFIG_S3_BUCKET}, key={file_key}")
         
         try:
             s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
-            print(f"[DELETE] S3 deletion completed successfully")
+            pass  # Debug print removed
         except Exception as e:
-            print(f"[DELETE] S3 deletion error (continuing anyway): {e}")
         
         # Update user config with retry logic
         max_retries = 3
         for retry in range(max_retries):
             try:
                 if update_users_config(users):
-                    print(f"[DELETE] User config updated successfully on attempt {retry + 1}")
+                    pass  # Debug print removed
                     response = jsonify({'message': 'File deleted successfully'})
                     response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
                     response.headers.add('Access-Control-Allow-Credentials', 'true')
                     return response
                 else:
-                    print(f"[DELETE] Failed to update user config on attempt {retry + 1}")
+                    pass  # Debug print removed
                     if retry < max_retries - 1:
                         import time
                         time.sleep(0.1)  # Reduced wait time
                     continue
             except Exception as config_error:
-                print(f"[DELETE] Config update error on attempt {retry + 1}: {config_error}")
+                pass  # Debug print removed
                 if retry < max_retries - 1:
                     import time
                     time.sleep(0.1)  # Reduced wait time
@@ -2511,14 +2457,14 @@ def delete_sellerboard_file(file_key):
                 raise config_error
         
         # If we get here, all config update attempts failed
-        print(f"[DELETE ERROR] Failed to update user config after {max_retries} attempts")
+        pass  # Debug print removed
         return jsonify({
             'error': 'File deleted from storage but failed to update configuration. Please refresh the page.',
             'partial_success': True
         }), 500
             
     except Exception as e:
-        print(f"[DELETE ERROR] Unexpected error: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Delete operation failed: {str(e)}'}), 500
@@ -2572,8 +2518,7 @@ def admin_update_user(user_id):
     """Update a specific user's data"""
     try:
         data = request.json
-        print(f"[ADMIN UPDATE] Received request for user_id: {user_id}")
-        print(f"[ADMIN UPDATE] Request data: {data}")
+        pass  # Debug print removed
         
         users = get_users_config()
         
@@ -2585,13 +2530,12 @@ def admin_update_user(user_id):
                 break
         
         if user_index is None:
-            print(f"[ADMIN UPDATE] User not found in users list: {user_id}")
+            pass  # Debug print removed
             return jsonify({'error': 'User not found'}), 404
         
         user_record = users[user_index]
-        print(f"[ADMIN UPDATE] Found user record at index {user_index}: {user_record.get('discord_username', 'Unknown')}")
-        print(f"[ADMIN UPDATE] Before update - enable_source_links: {user_record.get('enable_source_links')}")
-        print(f"[ADMIN UPDATE] Before update - search_all_worksheets: {user_record.get('search_all_worksheets')}")
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         # Update allowed fields directly in the users list
         allowed_fields = [
@@ -2604,22 +2548,20 @@ def admin_update_user(user_id):
             if field in data:
                 old_value = user_record.get(field)
                 users[user_index][field] = data[field]
-                print(f"[ADMIN UPDATE] Updated {field}: {old_value} -> {data[field]}")
         
-        print(f"[ADMIN UPDATE] After update - enable_source_links: {users[user_index].get('enable_source_links')}")
-        print(f"[ADMIN UPDATE] After update - search_all_worksheets: {users[user_index].get('search_all_worksheets')}")
-        print(f"[ADMIN UPDATE] About to save users list with {len(users)} users")
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         # Save changes
         if update_users_config(users):
-            print(f"[ADMIN UPDATE] Successfully saved user config")
+            pass  # Debug print removed
             return jsonify({'message': 'User updated successfully'})
         else:
-            print(f"[ADMIN UPDATE] Failed to save user config")
+            pass  # Debug print removed
             return jsonify({'error': 'Failed to update user'}), 500
             
     except Exception as e:
-        print(f"[ADMIN UPDATE] Exception: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -2662,18 +2604,16 @@ def admin_delete_user(user_id):
 def admin_impersonate_user(user_id):
     """Temporarily impersonate a user for dashboard viewing"""
     try:
-        print(f"[ADMIN IMPERSONATE] Starting impersonation for user_id: {user_id}")
         
         # Find the user
         user_record = get_user_record(user_id)
         if not user_record:
-            print(f"[ADMIN IMPERSONATE] User not found: {user_id}")
+            pass  # Debug print removed
             return jsonify({'error': 'User not found'}), 404
         
-        print(f"[ADMIN IMPERSONATE] Found user record: {user_record.get('discord_username', 'Unknown')}")
-        print(f"[ADMIN IMPERSONATE] User has profile: {user_record is not None}")
-        print(f"[ADMIN IMPERSONATE] User has google_tokens: {user_record.get('google_tokens') is not None}")
-        print(f"[ADMIN IMPERSONATE] User has sheet_id: {user_record.get('sheet_id') is not None}")
+        pass  # Debug print removed
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         # Store original admin session
         session['admin_impersonating'] = {
@@ -2686,7 +2626,6 @@ def admin_impersonate_user(user_id):
         session['discord_id'] = user_record['discord_id']
         session['discord_username'] = user_record.get('discord_username', 'Unknown User')
         
-        print(f"[ADMIN IMPERSONATE] Session updated - now impersonating: {session['discord_id']}")
         
         return jsonify({
             'message': f'Now viewing as {user_record.get("discord_username", "Unknown User")}',
@@ -2698,7 +2637,7 @@ def admin_impersonate_user(user_id):
         })
         
     except Exception as e:
-        print(f"[ADMIN IMPERSONATE] Error: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -2725,7 +2664,7 @@ def admin_stop_impersonate():
         })
         
     except Exception as e:
-        print(f"[ADMIN STOP IMPERSONATE] Error: {e}")
+        pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users/bulk', methods=['PUT'])
@@ -3008,14 +2947,13 @@ def get_my_invitations():
                 # Check if user with this email actually exists
                 user_exists = any(u.get('email') == inv.get('email') for u in users)
                 if user_exists:
-                    print(f"[Cleanup] Removing orphaned accepted invitation for {inv.get('email')}")
+                    pass  # Debug print removed
                     continue  # Skip this invitation (remove it)
             cleaned_invitations.append(inv)
         
         # Update config if we cleaned up any invitations
         if len(cleaned_invitations) < initial_count:
             update_invitations_config(cleaned_invitations)
-            print(f"[Cleanup] Removed {initial_count - len(cleaned_invitations)} orphaned accepted invitations")
         
         # Find all invitations from this user (use cleaned list)
         my_invitations = [
@@ -3187,7 +3125,7 @@ def get_script_configs():
                 'status': 'found'
             }
         except Exception as e:
-            print(f"[SCRIPT CONFIG] Error reading amznUploadConfig: {e}")
+            pass  # Debug print removed
             configs['amznUploadConfig'] = {
                 'last_processed_date': '',
                 'status': 'not_found',
@@ -3216,7 +3154,7 @@ def get_script_configs():
                 'status': 'found'
             }
         except Exception as e:
-            print(f"[SCRIPT CONFIG] Error reading config.json: {e}")
+            pass  # Debug print removed
             configs['config'] = {
                 'last_processed_date': '',
                 'status': 'not_found',
@@ -3226,7 +3164,7 @@ def get_script_configs():
         return jsonify(configs)
         
     except Exception as e:
-        print(f"[SCRIPT CONFIG] Error fetching script configs: {e}")
+        pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/script-configs', methods=['POST'])
@@ -3238,7 +3176,6 @@ def update_script_configs():
         s3_client = get_s3_client()
         results = {}
         
-        print(f"[SCRIPT CONFIG] Updating configs: {data}")
         
         # Update amznUploadConfig if provided
         if 'amznUploadConfig' in data:
@@ -3267,10 +3204,9 @@ def update_script_configs():
                     'status': 'updated',
                     'last_processed_date': new_config['last_processed_date']
                 }
-                print(f"[SCRIPT CONFIG] Updated amznUploadConfig: {new_config}")
                 
             except Exception as e:
-                print(f"[SCRIPT CONFIG] Error updating amznUploadConfig: {e}")
+                pass  # Debug print removed
                 results['amznUploadConfig'] = {
                     'status': 'error',
                     'error': str(e)
@@ -3303,10 +3239,9 @@ def update_script_configs():
                     'status': 'updated',  
                     'last_processed_date': new_config['last_processed_date']
                 }
-                print(f"[SCRIPT CONFIG] Updated config.json: {new_config}")
                 
             except Exception as e:
-                print(f"[SCRIPT CONFIG] Error updating config.json: {e}")
+                pass  # Debug print removed
                 results['config'] = {
                     'status': 'error',
                     'error': str(e)
@@ -3318,7 +3253,7 @@ def update_script_configs():
         })
         
     except Exception as e:
-        print(f"[SCRIPT CONFIG] Error updating script configs: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -3332,7 +3267,6 @@ def trigger_script():
         data = request.json
         script_type = data.get('script_type')  # 'listing_loader' or 'prep_uploader'
         
-        print(f"[SCRIPT TRIGGER] Triggering {script_type} Lambda function")
         
         if script_type == 'listing_loader':
             lambda_name = os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload')
@@ -3346,9 +3280,8 @@ def trigger_script():
             # Debug AWS credentials and region
             aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
             aws_region = os.getenv('AWS_REGION', 'us-east-1')
-            print(f"[SCRIPT TRIGGER] AWS Region: {aws_region}")
-            print(f"[SCRIPT TRIGGER] AWS Access Key configured: {'Yes' if aws_access_key else 'No'}")
-            print(f"[SCRIPT TRIGGER] Lambda function name: {lambda_name}")
+            pass  # Debug print removed
+            pass  # Debug print removed
             
             lambda_client = boto3.client(
                 'lambda',
@@ -3360,14 +3293,14 @@ def trigger_script():
             # Test if Lambda function exists first
             try:
                 lambda_client.get_function(FunctionName=lambda_name)
-                print(f"[SCRIPT TRIGGER] Lambda function {lambda_name} exists")
+                pass  # Debug print removed
             except lambda_client.exceptions.ResourceNotFoundException:
-                print(f"[SCRIPT TRIGGER] ERROR: Lambda function {lambda_name} not found")
+                pass  # Debug print removed
                 return jsonify({
                     'error': f'Lambda function {lambda_name} not found. Please check the function name and region.'
                 }), 404
             except Exception as get_error:
-                print(f"[SCRIPT TRIGGER] ERROR checking Lambda function existence: {get_error}")
+                pass  # Debug print removed
                 return jsonify({
                     'error': f'Failed to verify Lambda function {lambda_name}: {str(get_error)}'
                 }), 500
@@ -3377,8 +3310,7 @@ def trigger_script():
                 InvocationType='Event',  # Async invocation
                 Payload=json.dumps({})
             )
-            print(f"[SCRIPT TRIGGER] Successfully invoked Lambda function {lambda_name}")
-            print(f"[SCRIPT TRIGGER] Lambda response StatusCode: {response.get('StatusCode')}")
+            pass  # Debug print removed
             
             return jsonify({
                 'message': f'{script_type} Lambda function ({lambda_name}) invoked successfully',
@@ -3389,13 +3321,13 @@ def trigger_script():
             })
             
         except Exception as lambda_error:
-            print(f"[SCRIPT TRIGGER] Failed to invoke Lambda {lambda_name}: {lambda_error}")
+            pass  # Debug print removed
             return jsonify({
                 'error': f'Failed to invoke Lambda function {lambda_name}: {str(lambda_error)}'
             }), 500
             
     except Exception as e:
-        print(f"[SCRIPT TRIGGER] Error: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -3478,7 +3410,6 @@ def get_lambda_logs():
         start_timestamp = int(start_time.timestamp() * 1000)
         end_timestamp = int(end_time.timestamp() * 1000)
         
-        print(f"[LAMBDA LOGS] Fetching logs for {function_name} from {start_time} to {end_time}")
         
         # Get log events
         response = logs_client.filter_log_events(
@@ -3514,7 +3445,7 @@ def get_lambda_logs():
         })
         
     except Exception as e:
-        print(f"[LAMBDA LOGS] Error: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -3673,7 +3604,7 @@ def get_asin_purchase_sources(asin):
         })
         
     except Exception as e:
-        print(f"[ERROR] Failed to get purchase sources for {asin}: {e}")
+        pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
 def extract_website_name(source_url):
@@ -4117,22 +4048,20 @@ if __name__ == '__main__':
         port = int(os.environ.get('PORT', 5000))
         debug_mode = os.environ.get('FLASK_ENV') == 'development'
         
-        print(f"[STARTUP] Starting Flask app on port {port}, debug={debug_mode}")
-        print(f"[STARTUP] Environment variables: PORT={os.environ.get('PORT')}, FLASK_ENV={os.environ.get('FLASK_ENV')}")
-        print(f"[STARTUP] Host: 0.0.0.0, Port: {port}")
+        pass  # Debug print removed
+        pass  # Debug print removed
         
         # Check critical environment variables
         critical_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'CONFIG_S3_BUCKET']
         missing_vars = [var for var in critical_vars if not os.environ.get(var)]
         
         if missing_vars:
-            print(f"[STARTUP WARNING] Missing environment variables: {missing_vars}")
-            print(f"[STARTUP WARNING] Some features may not work properly")
+            pass  # Debug print removed
+            pass  # Debug print removed
         else:
-            print(f"[STARTUP] All critical environment variables are set")
         
         # Railway expects the app to be available on 0.0.0.0 and the PORT env var
-        print(f"[STARTUP] Starting Flask server...")
+        pass  # Debug print removed
         app.run(
             host='0.0.0.0', 
             port=port, 
@@ -4142,7 +4071,7 @@ if __name__ == '__main__':
         )
         
     except Exception as e:
-        print(f"[STARTUP ERROR] Failed to start Flask app: {e}")
+        pass  # Debug print removed
         import traceback
         traceback.print_exc()
         raise

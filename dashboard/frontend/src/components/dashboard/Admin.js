@@ -435,7 +435,7 @@ const Admin = () => {
       setUsers(response.data.users);
       setRawUserData(JSON.stringify(response.data.users, null, 2));
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      
       setError(error.response?.data?.error || 'Failed to fetch users');
     } finally {
       setLoading(false);
@@ -447,7 +447,7 @@ const Admin = () => {
       const response = await axios.get('/api/admin/stats', { withCredentials: true });
       setSystemStats(response.data);
     } catch (error) {
-      console.error('Failed to fetch system stats:', error);
+      
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -458,7 +458,7 @@ const Admin = () => {
       const pendingInvitations = response.data.invitations.filter(inv => inv.status === 'pending');
       setInvitations(pendingInvitations);
     } catch (error) {
-      console.error('Failed to fetch invitations:', error);
+      
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -612,7 +612,7 @@ const Admin = () => {
       const response = await axios.get('/api/admin/script-configs', { withCredentials: true });
       setScriptConfigs(response.data);
     } catch (error) {
-      console.error('Failed to fetch script configs:', error);
+      
       setError('Failed to fetch script configurations');
     } finally {
       setScriptLoading(false);
@@ -654,33 +654,25 @@ const Admin = () => {
     }
   };
 
-
   const handleUpdateUser = async (userId, userData) => {
     try {
       setError('');
       setSuccess('');
-      
-      console.log('[ADMIN UPDATE] Updating user:', userId);
-      console.log('[ADMIN UPDATE] User data:', userData);
-      console.log('[ADMIN UPDATE] Source Links:', userData.enable_source_links);
-      console.log('[ADMIN UPDATE] Search All Worksheets:', userData.search_all_worksheets);
-      
+
       const response = await axios.put(`/api/admin/users/${userId}`, userData, { withCredentials: true });
-      console.log('[ADMIN UPDATE] Response:', response.data);
-      
+
       setSuccess('User updated successfully');
       setEditingUser(null);
       
       // Small delay to ensure backend has persisted the changes
-      console.log('[ADMIN UPDATE] Waiting for backend to persist changes...');
-      await new Promise(resolve => setTimeout(resolve, 200));
       
-      console.log('[ADMIN UPDATE] Refreshing user list...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+
       try {
         await fetchUsers();
-        console.log('[ADMIN UPDATE] User list refreshed successfully');
+        
       } catch (fetchError) {
-        console.error('[ADMIN UPDATE] fetchUsers failed:', fetchError);
+        
         // Manual state update as fallback
         setUsers(prevUsers => 
           prevUsers.map(u => 
@@ -689,11 +681,10 @@ const Admin = () => {
               : u
           )
         );
-        console.log('[ADMIN UPDATE] Used manual state update as fallback');
+        
       }
     } catch (error) {
-      console.error('[ADMIN UPDATE] Error:', error);
-      console.error('[ADMIN UPDATE] Error response:', error.response?.data);
+
       setError(error.response?.data?.error || 'Failed to update user');
     }
   };
@@ -727,7 +718,7 @@ const Admin = () => {
       window.location.href = '/dashboard/overview';
       
     } catch (error) {
-      console.error('Failed to start impersonation:', error);
+      
       setError(`Failed to start impersonation: ${error.response?.data?.error || error.message}`);
     }
   };
@@ -754,9 +745,7 @@ const Admin = () => {
       setError('');
       setSuccess('');
       setScriptLoading(true);
-      
-      console.log('[SCRIPT CONFIG] Updating configs:', configData);
-      
+
       const response = await axios.post('/api/admin/script-configs', configData, { withCredentials: true });
       
       setSuccess('Script configurations updated successfully');
@@ -771,7 +760,7 @@ const Admin = () => {
       setShowScriptModal(false);
       
     } catch (error) {
-      console.error('Script config update error:', error);
+      
       setError(error.response?.data?.error || 'Failed to update script configurations');
     } finally {
       setScriptLoading(false);
@@ -840,7 +829,7 @@ const Admin = () => {
       }
       
     } catch (error) {
-      console.error('Script trigger error:', error);
+      
       setError(error.response?.data?.error || `Failed to trigger ${scriptType} script`);
     } finally {
       setScriptLoading(false);
@@ -859,7 +848,7 @@ const Admin = () => {
         [functionName]: response.data
       }));
     } catch (error) {
-      console.error(`Failed to fetch ${functionName} logs:`, error);
+      
       setError(`Failed to fetch ${functionName} logs`);
     } finally {
       setLogsLoading(false);
@@ -1052,14 +1041,12 @@ const Admin = () => {
               </button>
               <button
                 onClick={async () => {
-                  console.log('[MODAL] Save button clicked');
-                  console.log('[MODAL] User ID:', user.discord_id);
-                  console.log('[MODAL] Edit data:', editData);
+
                   try {
                     await onSave(user.discord_id, editData);
-                    console.log('[MODAL] Save completed successfully');
+                    
                   } catch (error) {
-                    console.error('[MODAL] Save failed:', error);
+                    
                   }
                 }}
                 className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700"
@@ -1176,7 +1163,6 @@ const Admin = () => {
       </div>
     );
   }
-
 
   return (
     <div className="space-y-6">

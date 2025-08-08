@@ -57,18 +57,17 @@ const Analytics = () => {
         '/api/analytics/orders';
       
       const response = await axios.get(url, { withCredentials: true });
-      console.log('Analytics data received:', response.data);
-      console.log('Enhanced analytics count:', Object.keys(response.data?.enhanced_analytics || {}).length);
-      console.log('Today sales count:', Object.keys(response.data?.today_sales || {}).length);
-      console.log('Available data keys:', Object.keys(response.data || {}));
+      
+      .length);
+      .length);
+      );
       setAnalytics(response.data);
       
       if (response.data.error) {
         setError(response.data.error);
       }
     } catch (error) {
-      console.error('Error fetching analytics:', error);
-      
+
       // Check if this is a setup requirement error
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
@@ -111,7 +110,7 @@ const Analytics = () => {
   const getStockRiskData = () => {
     // Fallback to basic analytics if enhanced analytics is empty
     if (!analytics?.enhanced_analytics || Object.keys(analytics.enhanced_analytics).length === 0) {
-      console.log('Using fallback basic analytics for stock risk data');
+      
       if (!analytics?.today_sales || !analytics?.velocity) return [];
       
       return Object.entries(analytics.today_sales)

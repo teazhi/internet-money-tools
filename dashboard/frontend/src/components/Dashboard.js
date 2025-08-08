@@ -204,7 +204,7 @@ const Dashboard = () => {
       </div>
 
       {/* Desktop sidebar */}
-      <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} md:flex-col transition-all duration-300`}>
+      <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-56'} md:flex-col transition-all duration-300`}>
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
           <div className="flex items-center flex-shrink-0 px-4 justify-between">
             <div className="flex items-center">

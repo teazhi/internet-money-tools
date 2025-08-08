@@ -122,10 +122,10 @@ const Dashboard = () => {
       {user?.admin_impersonating && (
         <div className="bg-yellow-100 border-b border-yellow-200 px-4 py-3">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Eye className="h-5 w-5 text-yellow-600" />
+            <div className="flex items-center space-x-2">
+              <Eye className="h-4 w-4 text-yellow-600" />
               <div>
-                <p className="text-sm font-medium text-yellow-800">
+                <p className="text-xs font-medium text-yellow-800">
                   Admin View: Viewing as {user?.discord_username || 'Unknown User'}
                 </p>
                 <p className="text-xs text-yellow-700">
@@ -135,9 +135,9 @@ const Dashboard = () => {
             </div>
             <button
               onClick={handleReturnFromImpersonation}
-              className="inline-flex items-center px-3 py-1 border border-yellow-300 rounded-md text-sm font-medium text-yellow-800 bg-yellow-50 hover:bg-yellow-100 transition-colors"
+              className="inline-flex items-center px-2 py-1 border border-yellow-300 rounded-md text-xs font-medium text-yellow-800 bg-yellow-50 hover:bg-yellow-100 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4 mr-1" />
+              <ArrowLeft className="h-3 w-3 mr-1" />
               Return to Admin
             </button>
           </div>
@@ -172,8 +172,8 @@ const Dashboard = () => {
           
           <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
             <div className="flex items-center flex-shrink-0 px-4">
-              <ShoppingCart className="h-8 w-8 text-builders-500" />
-              <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>
+              <ShoppingCart className="h-6 w-6 text-builders-500" />
+              <span className="ml-2 text-lg font-bold text-gray-900">DMS</span>
             </div>
             <nav className="mt-5 px-2 space-y-1">
               {navigation.map((item) => {
@@ -187,12 +187,12 @@ const Dashboard = () => {
                       item.current
                         ? 'bg-builders-100 border-builders-500 text-builders-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center px-2 py-2 text-base font-medium border-l-4 transition-all duration-200`}
+                    } group flex items-center px-2 py-2 text-sm font-medium border-l-4 transition-all duration-200`}
                   >
                     <Icon
                       className={`${
                         item.current ? 'text-builders-500' : 'text-gray-400 group-hover:text-gray-500'
-                      } mr-4 h-6 w-6`}
+                      } mr-3 h-5 w-5`}
                     />
                     {item.name}
                   </Link>
@@ -208,8 +208,8 @@ const Dashboard = () => {
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
           <div className="flex items-center flex-shrink-0 px-4 justify-between">
             <div className="flex items-center">
-              <ShoppingCart className="h-8 w-8 text-builders-500" />
-              {!sidebarCollapsed && <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>}
+              <ShoppingCart className="h-6 w-6 text-builders-500" />
+              {!sidebarCollapsed && <span className="ml-2 text-lg font-bold text-gray-900">DMS</span>}
             </div>
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -235,13 +235,13 @@ const Dashboard = () => {
                       item.current
                         ? 'bg-builders-100 border-builders-500 text-builders-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center ${sidebarCollapsed ? 'justify-center px-3' : 'px-2'} py-2 text-sm font-medium border-l-4 transition-all duration-200`}
+                    } group flex items-center ${sidebarCollapsed ? 'justify-center px-3' : 'px-2'} py-1.5 text-xs font-medium border-l-4 transition-all duration-200`}
                     title={sidebarCollapsed ? item.name : undefined}
                   >
                     <Icon
                       className={`${
                         item.current ? 'text-builders-500' : 'text-gray-400 group-hover:text-gray-500'
-                      } ${sidebarCollapsed ? '' : 'mr-3'} h-5 w-5`}
+                      } ${sidebarCollapsed ? '' : 'mr-2'} h-4 w-4`}
                     />
                     {!sidebarCollapsed && item.name}
                   </Link>
@@ -267,32 +267,32 @@ const Dashboard = () => {
                   <span className="sr-only">Open sidebar</span>
                   <Menu className="h-6 w-6" />
                 </button>
-                <h1 className="text-2xl font-semibold text-gray-900 ml-3 md:ml-0">
+                <h1 className="text-lg font-semibold text-gray-900 ml-3 md:ml-0">
                   {navigation.find(item => item.current)?.name || 'Dashboard'}
                 </h1>
               </div>
               
               <div className="flex items-center space-x-4">
                 {/* Status Badge */}
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor()}`}>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor()}`}>
                   {getStatusText()}
                 </span>
                 
                 {/* User Menu */}
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{user?.discord_username}</p>
+                    <p className="text-xs font-medium text-gray-900">{user?.discord_username}</p>
                     <p className="text-xs text-gray-500">Discord User</p>
                   </div>
                   {user?.discord_avatar ? (
                     <img
-                      className="h-8 w-8 rounded-full"
+                      className="h-6 w-6 rounded-full"
                       src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
                       alt="User avatar"
                     />
                   ) : (
-                    <div className="h-8 w-8 rounded-full bg-builders-500 flex items-center justify-center">
-                      <User className="h-5 w-5 text-white" />
+                    <div className="h-6 w-6 rounded-full bg-builders-500 flex items-center justify-center">
+                      <User className="h-4 w-4 text-white" />
                     </div>
                   )}
                   <button
@@ -300,7 +300,7 @@ const Dashboard = () => {
                     className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
                     title="Logout"
                   >
-                    <LogOut className="h-5 w-5" />
+                    <LogOut className="h-4 w-4" />
                   </button>
                 </div>
               </div>

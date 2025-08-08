@@ -349,10 +349,10 @@ const EnhancedAnalytics = () => {
   return (
     <div className="space-y-6">
       {/* Header with Date Selector */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Enhanced Analytics</h1>
-          <p className="text-gray-600">
+          <h1 className="text-lg font-bold text-gray-900">Enhanced Analytics</h1>
+          <p className="text-xs text-gray-600">
             AI-powered inventory insights for {getReportDate()} {analytics?.is_yesterday && '(Yesterday)'}
           </p>
         </div>
@@ -379,22 +379,22 @@ const EnhancedAnalytics = () => {
               }
               return new Date(Date.now() - 86400000).toISOString().split('T')[0];
             })()}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
             title={analytics?.user_timezone ? `Dates shown in ${analytics.user_timezone}` : 'Dates shown in system timezone'}
           />
           <button
             onClick={fetchAnalytics}
             disabled={loading}
-            className="flex items-center px-3 py-2 bg-builders-500 text-white rounded-md hover:bg-builders-600 disabled:opacity-50"
+            className="flex items-center px-2 py-1.5 text-xs bg-builders-500 text-white rounded-md hover:bg-builders-600 disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
             onClick={exportAnalytics}
-            className="flex items-center px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+            className="flex items-center px-2 py-1.5 text-xs bg-gray-500 text-white rounded-md hover:bg-gray-600"
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="h-3 w-3 mr-1" />
             Export
           </button>
         </div>
@@ -402,33 +402,33 @@ const EnhancedAnalytics = () => {
 
       {/* Enhanced Analytics Stats */}
       {analytics?.enhanced_analytics && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg shadow p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center">
-              <BarChart3 className="h-8 w-8 text-blue-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Products Analyzed</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.total_products_analyzed}</p>
+              <BarChart3 className="h-6 w-6 text-blue-500" />
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Products Analyzed</p>
+                <p className="text-lg font-bold text-gray-900">{analytics.total_products_analyzed}</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center">
-              <AlertTriangle className="h-8 w-8 text-red-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Critical Alerts</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.critical_alerts?.length || 0}</p>
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">Critical Alerts</p>
+                <p className="text-lg font-bold text-gray-900">{analytics.critical_alerts?.length || 0}</p>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white rounded-lg shadow p-4">
             <div className="flex items-center">
-              <Target className="h-8 w-8 text-builders-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">High Priority</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.high_priority_count}</p>
+              <Target className="h-6 w-6 text-builders-500" />
+              <div className="ml-3">
+                <p className="text-xs font-medium text-gray-600">High Priority</p>
+                <p className="text-lg font-bold text-gray-900">{analytics.high_priority_count}</p>
               </div>
             </div>
           </div>

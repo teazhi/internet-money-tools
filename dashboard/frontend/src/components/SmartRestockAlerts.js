@@ -348,8 +348,12 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     
     let filtered = Object.values(restock_alerts);
     
-    // Filter out items with 0 suggested quantity
-    filtered = filtered.filter(alert => alert.suggested_quantity > 0);
+    // Filter out items with 0 or null suggested quantity
+    filtered = filtered.filter(alert => 
+      alert.suggested_quantity && 
+      alert.suggested_quantity > 0 && 
+      !isNaN(alert.suggested_quantity)
+    );
     
     // Apply search filter
     if (searchQuery) {

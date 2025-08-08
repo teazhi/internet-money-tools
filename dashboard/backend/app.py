@@ -2067,6 +2067,7 @@ def admin_cleanup_all_updated_files():
             total_removed += removed_count
             
             if removed_count > 0:
+                pass  # Files removed
         
         if update_users_config(users):
             return jsonify({
@@ -2291,6 +2292,7 @@ def migrate_existing_files():
                     deleted_count += 1
                     pass  # Debug print removed
                 except Exception as e:
+                    pass  # Error deleting file
             
             # Update users config
             users = get_users_config()
@@ -2374,8 +2376,6 @@ def delete_sellerboard_file(file_key):
         
         pass  # Debug print removed
         pass  # Debug print removed
-        for i, f in enumerate(user_record['uploaded_files']):
-        
         # Find and remove the file - try multiple matching strategies
         file_to_delete = None
         file_index = None
@@ -2431,6 +2431,7 @@ def delete_sellerboard_file(file_key):
             s3_client.delete_object(Bucket=CONFIG_S3_BUCKET, Key=file_key)
             pass  # Debug print removed
         except Exception as e:
+            pass  # S3 deletion error
         
         # Update user config with retry logic
         max_retries = 3
@@ -4059,6 +4060,7 @@ if __name__ == '__main__':
             pass  # Debug print removed
             pass  # Debug print removed
         else:
+            pass  # All environment variables are set
         
         # Railway expects the app to be available on 0.0.0.0 and the PORT env var
         pass  # Debug print removed

@@ -22,7 +22,8 @@ import {
   Upload,
   Eye,
   EyeOff,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../../config/api';

@@ -29,9 +29,13 @@ import {
   Cog,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Mail,
+  Bell,
+  Percent
 } from 'lucide-react';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../../config/api';
 
 const InviteModal = ({ inviteEmail, setInviteEmail, onSave, onCancel }) => {
   return (
@@ -425,6 +429,8 @@ const Admin = () => {
   const [lambdaLogs, setLambdaLogs] = useState({});
   const [logsLoading, setLogsLoading] = useState(false);
   const [showLogs, setShowLogs] = useState({});
+  const [discountMonitoring, setDiscountMonitoring] = useState(null);
+  const [discountLoading, setDiscountLoading] = useState(false);
 
   // Hook definitions must come before any early returns
   const fetchUsers = useCallback(async () => {
@@ -591,6 +597,7 @@ const Admin = () => {
       fetchSystemStats();
       fetchInvitations();
       fetchScriptConfigs();
+      fetchDiscountMonitoring();
     }
   }, [isAdmin, fetchUsers, fetchSystemStats, fetchInvitations]);
 
@@ -616,6 +623,37 @@ const Admin = () => {
       setError('Failed to fetch script configurations');
     } finally {
       setScriptLoading(false);
+    }
+  };
+
+  const fetchDiscountMonitoring = async () => {
+    try {
+      setDiscountLoading(true);
+      const response = await axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true });
+      setDiscountMonitoring(response.data);
+    } catch (error) {
+      
+      setError('Failed to fetch discount monitoring status');
+    } finally {
+      setDiscountLoading(false);
+    }
+  };
+
+  const testDiscountMonitoring = async () => {
+    try {
+      setDiscountLoading(true);
+      setError('');
+      setSuccess('');
+      const response = await axios.post(API_ENDPOINTS.DISCOUNT_MONITORING_TEST, {}, { withCredentials: true });
+      if (response.data.success) {
+        setSuccess(response.data.message);
+      } else {
+        setError(response.data.error);
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to test discount monitoring');
+    } finally {
+      setDiscountLoading(false);
     }
   };
 
@@ -1342,6 +1380,134 @@ const Admin = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Discount Monitoring Section */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900">
+              Discount Monitoring
+            </h3>
+            <button
+              onClick={testDiscountMonitoring}
+              disabled={discountLoading}
+              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              <CheckCircle className={`h-4 w-4 mr-2 ${discountLoading ? 'animate-pulse' : ''}`} />
+              Test Connection
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          {discountLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+              <p className="text-gray-600 text-sm">Loading discount monitoring status...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Configuration Status */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center mb-3">
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center mr-3 ${
+                    discountMonitoring?.email_configured ? 'bg-green-100' : 'bg-red-100'
+                  }`}>
+                    <Mail className={`h-4 w-4 ${
+                      discountMonitoring?.email_configured ? 'text-green-600' : 'text-red-600'
+                    }`} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">Email Configuration</h4>
+                    <p className="text-xs text-gray-500">Admin-only discount monitoring</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span className={`font-medium ${
+                      discountMonitoring?.email_configured ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {discountMonitoring?.status === 'active' ? 'Active' : 'Not Configured'}
+                    </span>
+                  </div>
+                  {discountMonitoring?.email_configured && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Monitor Email:</span>
+                      <span className="font-medium text-gray-900">
+                        {discountMonitoring.monitor_email}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Keywords:</span>
+                    <span className="font-medium text-gray-900">
+                      {discountMonitoring?.keywords?.length || 0} configured
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Keywords List */}
+              {discountMonitoring?.keywords && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center mb-3">
+                    <div className="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+                      <Bell className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">Monitoring Keywords</h4>
+                      <p className="text-xs text-gray-500">Triggers for discount detection</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {discountMonitoring.keywords.map((keyword, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800"
+                      >
+                        <Percent className="h-3 w-3 mr-1" />
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Info Box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900 mb-1">How Discount Monitoring Works</p>
+                    <div className="text-blue-800 space-y-1">
+                      <p>• Admin email monitors for discount notifications from suppliers and retailers</p>
+                      <p>• Keywords trigger analysis of current discount opportunities</p>
+                      <p>• Users see personalized discount opportunities in their Smart Restock tab</p>
+                      <p>• No user email configuration required - all monitoring is admin-managed</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {!discountMonitoring?.email_configured && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium text-yellow-900 mb-1">Configuration Required</p>
+                      <p className="text-yellow-800">
+                        Set the <code className="bg-yellow-100 px-1 rounded">DISCOUNT_MONITOR_EMAIL</code> environment variable 
+                        to enable discount monitoring functionality.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

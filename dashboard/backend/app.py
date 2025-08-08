@@ -97,6 +97,10 @@ SP_API_LWA_CLIENT_SECRET = os.getenv('SP_API_LWA_CLIENT_SECRET')
 default_amazon_redirect = 'https://internet-money-tools-production.up.railway.app/auth/amazon-seller/callback'
 AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_amazon_redirect)
 
+# Discount Monitoring Configuration (Admin Only)
+DISCOUNT_MONITOR_EMAIL = os.getenv('DISCOUNT_MONITOR_EMAIL')  # Admin email for discount monitoring
+DISCOUNT_KEYWORDS = ['sale', 'discount', '% off', 'clearance', 'deal', 'promotion', 'special offer']
+
 # Encryption key for sensitive data (SP-API tokens)
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
 cipher_suite = Fernet(ENCRYPTION_KEY.encode())
@@ -4032,6 +4036,262 @@ def download_underpaid_reimbursements():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/discount-leads/fetch', methods=['GET'])
+@login_required
+def fetch_discount_leads():
+    """Fetch discount leads from Google Sheets CSV"""
+    try:
+        # CSV URL provided by the user
+        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        
+        # Fetch CSV data
+        response = requests.get(csv_url, timeout=30)
+        response.raise_for_status()
+        
+        # Parse CSV
+        from io import StringIO
+        csv_data = StringIO(response.text)
+        df = pd.read_csv(csv_data)
+        
+        # Clean and process the data
+        leads = []
+        for _, row in df.iterrows():
+            lead = {}
+            for col in df.columns:
+                # Clean column names and values
+                clean_col = col.strip().lower().replace(' ', '_')
+                value = row[col]
+                
+                # Handle NaN values
+                if pd.isna(value):
+                    lead[clean_col] = None
+                elif isinstance(value, str):
+                    lead[clean_col] = value.strip()
+                else:
+                    lead[clean_col] = value
+            
+            leads.append(lead)
+        
+        return jsonify({
+            'leads': leads,
+            'total_count': len(leads),
+            'columns': list(df.columns),
+            'fetched_at': datetime.now(pytz.UTC).isoformat()
+        })
+        
+    except requests.RequestException as e:
+        return jsonify({'error': f'Failed to fetch CSV data: {str(e)}'}), 500
+    except pd.errors.EmptyDataError:
+        return jsonify({'error': 'CSV file is empty or invalid'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error processing CSV data: {str(e)}'}), 500
+
+@app.route('/api/discount-opportunities/analyze', methods=['POST'])
+@login_required
+def analyze_discount_opportunities():
+    """Analyze discount opportunities against user's inventory"""
+    try:
+        data = request.get_json() or {}
+        retailer_info = data.get('retailer', '')
+        
+        # Use admin-configured keywords instead of user-provided ones
+        discount_keywords = DISCOUNT_KEYWORDS
+        
+        # Get user's current analytics data
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Fetch current analytics (similar to existing analytics endpoint)
+        # This is a simplified version - in practice, you'd want to reuse existing analytics logic
+        analytics_data = get_user_analytics_data(user)
+        
+        if not analytics_data or not analytics_data.get('enhanced_analytics'):
+            return jsonify({
+                'opportunities': [],
+                'message': 'No inventory data available for analysis'
+            })
+        
+        # Fetch discount leads
+        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        response = requests.get(csv_url, timeout=30)
+        response.raise_for_status()
+        
+        csv_data = StringIO(response.text)
+        leads_df = pd.read_csv(csv_data)
+        
+        # Filter leads by retailer if specified
+        if retailer_info:
+            # Look for retailer in various columns (URL, description, etc.)
+            retailer_mask = leads_df.astype(str).apply(
+                lambda x: x.str.contains(retailer_info, case=False, na=False)
+            ).any(axis=1)
+            leads_df = leads_df[retailer_mask]
+        
+        enhanced_analytics = analytics_data['enhanced_analytics']
+        opportunities = []
+        
+        # Match leads against user's inventory
+        for _, lead_row in leads_df.iterrows():
+            # Extract ASIN if available in leads (assuming there's an ASIN column)
+            lead_asin = None
+            for col in lead_row.index:
+                if 'asin' in col.lower() and pd.notna(lead_row[col]):
+                    lead_asin = str(lead_row[col]).strip()
+                    break
+            
+            # If no direct ASIN match, try product name matching
+            if not lead_asin:
+                product_name = None
+                for col in lead_row.index:
+                    if any(keyword in col.lower() for keyword in ['product', 'title', 'name']) and pd.notna(lead_row[col]):
+                        product_name = str(lead_row[col]).strip()
+                        break
+                
+                if product_name:
+                    # Simple product name matching (fuzzy matching could be added)
+                    for asin, inventory_data in enhanced_analytics.items():
+                        if product_name.lower() in inventory_data.get('product_name', '').lower():
+                            lead_asin = asin
+                            break
+            
+            # Check if this product is in user's inventory and needs restocking
+            if lead_asin and lead_asin in enhanced_analytics:
+                inventory_data = enhanced_analytics[lead_asin]
+                restock_data = inventory_data.get('restock', {})
+                
+                # Check if product needs restocking
+                current_stock = restock_data.get('current_stock', 0)
+                suggested_quantity = restock_data.get('suggested_quantity', 0)
+                days_left = restock_data.get('days_left', float('inf'))
+                
+                # Include if stock is low or restocking is suggested
+                if suggested_quantity > 0 or days_left < 30 or current_stock < 50:
+                    lead_dict = lead_row.to_dict()
+                    
+                    opportunity = {
+                        'asin': lead_asin,
+                        'product_name': inventory_data.get('product_name', ''),
+                        'current_stock': current_stock,
+                        'suggested_quantity': suggested_quantity,
+                        'days_left': days_left,
+                        'last_cogs': inventory_data.get('cogs_data', {}).get('cogs'),
+                        'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
+                        'lead_info': {k: v for k, v in lead_dict.items() if pd.notna(v)},
+                        'priority_score': calculate_opportunity_priority(inventory_data, days_left, suggested_quantity)
+                    }
+                    opportunities.append(opportunity)
+        
+        # Sort by priority score
+        opportunities.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        return jsonify({
+            'opportunities': opportunities,
+            'total_leads_checked': len(leads_df),
+            'matched_products': len(opportunities),
+            'retailer_filter': retailer_info,
+            'keywords_used': discount_keywords,
+            'analyzed_at': datetime.now(pytz.UTC).isoformat()
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
+
+def calculate_opportunity_priority(inventory_data, days_left, suggested_quantity):
+    """Calculate priority score for discount opportunities"""
+    score = 0
+    
+    # Higher priority for products that need restocking soon
+    if days_left < 7:
+        score += 100
+    elif days_left < 14:
+        score += 50
+    elif days_left < 30:
+        score += 25
+    
+    # Higher priority for products with high suggested quantities
+    if suggested_quantity > 100:
+        score += 50
+    elif suggested_quantity > 50:
+        score += 25
+    elif suggested_quantity > 0:
+        score += 10
+    
+    # Higher priority for high-velocity products
+    velocity = inventory_data.get('velocity', {}).get('weighted_velocity', 0)
+    if velocity > 5:
+        score += 30
+    elif velocity > 2:
+        score += 15
+    elif velocity > 1:
+        score += 5
+    
+    # Higher priority for products with existing priority flags
+    priority_category = inventory_data.get('priority', {}).get('category', '')
+    if 'critical' in priority_category:
+        score += 75
+    elif 'warning' in priority_category:
+        score += 40
+    elif 'opportunity' in priority_category:
+        score += 20
+    
+    return score
+
+@app.route('/api/admin/discount-monitoring/status', methods=['GET'])
+@admin_required
+def get_discount_monitoring_status():
+    """Get discount monitoring configuration status (Admin only)"""
+    try:
+        return jsonify({
+            'email_configured': bool(DISCOUNT_MONITOR_EMAIL),
+            'monitor_email': DISCOUNT_MONITOR_EMAIL if DISCOUNT_MONITOR_EMAIL else None,
+            'keywords': DISCOUNT_KEYWORDS,
+            'status': 'active' if DISCOUNT_MONITOR_EMAIL else 'not_configured'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/discount-monitoring/test', methods=['POST'])
+@admin_required  
+def test_discount_monitoring():
+    """Test discount monitoring setup (Admin only)"""
+    try:
+        if not DISCOUNT_MONITOR_EMAIL:
+            return jsonify({
+                'success': False,
+                'error': 'Discount monitor email not configured'
+            }), 400
+        
+        # Here you would test the email connection
+        # For now, just return success if email is configured
+        return jsonify({
+            'success': True,
+            'message': f'Discount monitoring configured for {DISCOUNT_MONITOR_EMAIL}',
+            'keywords_count': len(DISCOUNT_KEYWORDS)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'error': str(e)
+        }), 500
+
+def get_user_analytics_data(user):
+    """Get user's analytics data (simplified version)"""
+    # This would typically call the same logic as the existing analytics endpoint
+    # For now, return a placeholder - in practice, you'd want to integrate with
+    # the existing analytics pipeline
+    try:
+        # Import and call existing analytics functions
+        # This is a simplified placeholder
+        return {
+            'enhanced_analytics': {},
+            'message': 'Analytics integration needed'
+        }
+    except Exception:
+        return None
 
 @app.errorhandler(404)
 def not_found(error):

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -21,7 +22,9 @@ import {
   Filter,
   Search,
   GripVertical,
-  RotateCcw
+  RotateCcw,
+  Percent,
+  RefreshCw
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
@@ -38,6 +41,12 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  
+  // State for discount opportunities
+  const [discountOpportunities, setDiscountOpportunities] = useState([]);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
+  const [opportunitiesError, setOpportunitiesError] = useState(null);
+  const [lastAnalyzed, setLastAnalyzed] = useState(null);
   
   // State for column ordering
   const [draggedColumn, setDraggedColumn] = useState(null);
@@ -481,6 +490,27 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     }
   };
 
+  // Function to analyze discount opportunities
+  const analyzeDiscountOpportunities = async (retailer = '') => {
+    setOpportunitiesLoading(true);
+    setOpportunitiesError(null);
+    
+    try {
+      const response = await axios.post(API_ENDPOINTS.DISCOUNT_OPPORTUNITIES, {
+        retailer: retailer,
+        keywords: ['discount', 'sale', 'clearance', 'deal']
+      }, { withCredentials: true });
+      
+      setDiscountOpportunities(response.data.opportunities || []);
+      setLastAnalyzed(new Date().toISOString());
+    } catch (error) {
+      console.error('Error analyzing discount opportunities:', error);
+      setOpportunitiesError(error.response?.data?.error || 'Failed to analyze discount opportunities');
+    } finally {
+      setOpportunitiesLoading(false);
+    }
+  };
+
   // Function to extract URLs from a text string (handles multiple URLs in one cell)
   const extractUrlsFromText = (text) => {
     if (!text) return [];
@@ -739,6 +769,12 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         count: sortedAlerts.length
       },
       {
+        id: 'opportunities',
+        name: 'Discount Opportunities',
+        description: 'Products in your inventory that match current discount offers',
+        count: discountOpportunities.length
+      },
+      {
         id: 'analytics',
         name: 'All Products Analytics', 
         description: 'Complete analysis of your inventory',
@@ -820,6 +856,17 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                   </select>
                 </>
               )}
+              {activeTab === 'opportunities' && (
+                <button
+                  onClick={() => analyzeDiscountOpportunities()}
+                  disabled={opportunitiesLoading}
+                  className="flex items-center px-2 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Analyze current discount opportunities"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${opportunitiesLoading ? 'animate-spin' : ''}`} />
+                  {opportunitiesLoading ? 'Analyzing...' : 'Analyze Opportunities'}
+                </button>
+              )}
               <button
                 onClick={() => resetColumnOrder(activeTab)}
                 className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-builders-500"
@@ -900,6 +947,147 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Discount Opportunities Tab */}
+          {activeTab === 'opportunities' && (
+            <div className="space-y-4">
+              {opportunitiesError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <span className="text-sm text-red-800">{opportunitiesError}</span>
+                  </div>
+                </div>
+              )}
+              
+              {lastAnalyzed && (
+                <div className="text-xs text-gray-500">
+                  Last analyzed: {new Date(lastAnalyzed).toLocaleString()}
+                </div>
+              )}
+
+              {opportunitiesLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-600">Analyzing discount opportunities...</p>
+                  <p className="text-xs text-gray-500 mt-1">Matching leads against your inventory</p>
+                </div>
+              ) : discountOpportunities.length > 0 ? (
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Product
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Current Stock
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Suggested Order
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Days Left
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Last COGS
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Discount Info
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Priority
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {discountOpportunities.map((opportunity, index) => (
+                        <tr key={`${opportunity.asin}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            <div>
+                              <div className="text-xs font-medium text-gray-900">
+                                {opportunity.product_name.length > 40 
+                                  ? opportunity.product_name.substring(0, 40) + '...'
+                                  : opportunity.product_name
+                                }
+                              </div>
+                              <div className="text-xs text-gray-500">{opportunity.asin}</div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                            {Math.round(opportunity.current_stock)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="text-sm font-bold text-builders-600">
+                              {opportunity.suggested_quantity}
+                            </div>
+                            <div className="text-xs text-gray-500">units</div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                            {formatDaysLeft(opportunity.days_left)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-xs">
+                            {opportunity.last_cogs ? (
+                              <span className="text-green-700 font-medium">
+                                {formatCurrency(opportunity.last_cogs)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="space-y-1">
+                              {opportunity.lead_info && Object.entries(opportunity.lead_info)
+                                .slice(0, 3)
+                                .map(([key, value]) => (
+                                  <div key={key} className="text-xs">
+                                    <span className="font-medium text-gray-700">
+                                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                    </span>
+                                    <span className="text-gray-600 ml-1">
+                                      {String(value).length > 30 
+                                        ? String(value).substring(0, 30) + '...'
+                                        : String(value)
+                                      }
+                                    </span>
+                                  </div>
+                                ))
+                              }
+                              <div className="flex items-center space-x-1 mt-1">
+                                <Percent className="h-3 w-3 text-blue-500" />
+                                <span className="text-xs text-blue-600 font-medium">Discount Available</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="text-sm font-bold text-red-600">
+                              {opportunity.priority_score}
+                            </div>
+                            <div className="text-xs text-gray-500">Priority</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : !opportunitiesLoading && (
+                <div className="text-center py-12">
+                  <Percent className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Discount Opportunities</h3>
+                  <p className="text-gray-500 mb-4">
+                    Click "Analyze Opportunities" to check for current discount offers that match your inventory needs.
+                  </p>
+                  <button
+                    onClick={() => analyzeDiscountOpportunities()}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Analyze Opportunities
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

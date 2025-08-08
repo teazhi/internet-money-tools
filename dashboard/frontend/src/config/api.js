@@ -24,6 +24,12 @@ export const API_ENDPOINTS = {
   // Analytics endpoints
   ANALYTICS_ORDERS: `${API_BASE_URL}/api/analytics/orders`,
   
+  // Discount leads endpoints
+  DISCOUNT_LEADS: `${API_BASE_URL}/api/discount-leads/fetch`,
+  DISCOUNT_OPPORTUNITIES: `${API_BASE_URL}/api/discount-opportunities/analyze`,
+  DISCOUNT_MONITORING_STATUS: `${API_BASE_URL}/api/admin/discount-monitoring/status`,
+  DISCOUNT_MONITORING_TEST: `${API_BASE_URL}/api/admin/discount-monitoring/test`,
+  
   // Settings endpoints
   SETTINGS: `${API_BASE_URL}/api/user/settings`,
   

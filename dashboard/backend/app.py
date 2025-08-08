@@ -4099,19 +4099,66 @@ def analyze_discount_opportunities():
         discount_keywords = DISCOUNT_KEYWORDS
         
         # Get user's current analytics data
-        user = get_current_user()
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Fetch current analytics (similar to existing analytics endpoint)
-        # This is a simplified version - in practice, you'd want to reuse existing analytics logic
-        analytics_data = get_user_analytics_data(user)
-        
-        if not analytics_data or not analytics_data.get('enhanced_analytics'):
+        # Call the existing analytics endpoint to get enhanced analytics data
+        try:
+            # Import the analytics functions that the main endpoint uses
+            from orders_analysis import EnhancedOrdersAnalysis
+            
+            # Get user config for analytics
+            config_user_record = user
+            if user and user.get('user_type') == 'subuser':
+                parent_user_id = user.get('parent_user_id')
+                if parent_user_id:
+                    parent_record = get_user_record(parent_user_id)
+                    if parent_record:
+                        config_user_record = parent_record
+            
+            # Get the user's timezone
+            user_timezone = user.get('timezone') if user else None
+            
+            # Use today's date for analysis
+            if user_timezone:
+                try:
+                    user_tz = pytz.timezone(user_timezone)
+                    today = datetime.now(user_tz).date()
+                except:
+                    today = datetime.now(pytz.UTC).date()
+            else:
+                today = datetime.now(pytz.UTC).date()
+            
+            # Get the enhanced analytics data
+            orders_analysis = EnhancedOrdersAnalysis(
+                user_record=config_user_record,
+                target_date=today,
+                user_timezone=user_timezone,
+                discord_id=discord_id
+            )
+            
+            analysis = orders_analysis.generate_analysis()
+            
+            if not analysis or not analysis.get('enhanced_analytics'):
+                return jsonify({
+                    'opportunities': [],
+                    'message': 'No inventory data available for analysis'
+                })
+            
+            analytics_data = analysis
+            
+        except ImportError as e:
             return jsonify({
                 'opportunities': [],
-                'message': 'No inventory data available for analysis'
-            })
+                'message': 'Analytics module not available'
+            }), 500
+        except Exception as e:
+            return jsonify({
+                'opportunities': [],
+                'message': f'Failed to generate analytics: {str(e)}'
+            }), 500
         
         # Fetch discount leads
         csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
@@ -4278,20 +4325,6 @@ def test_discount_monitoring():
             'error': str(e)
         }), 500
 
-def get_user_analytics_data(user):
-    """Get user's analytics data (simplified version)"""
-    # This would typically call the same logic as the existing analytics endpoint
-    # For now, return a placeholder - in practice, you'd want to integrate with
-    # the existing analytics pipeline
-    try:
-        # Import and call existing analytics functions
-        # This is a simplified placeholder
-        return {
-            'enhanced_analytics': {},
-            'message': 'Analytics integration needed'
-        }
-    except Exception:
-        return None
 
 @app.errorhandler(404)
 def not_found(error):

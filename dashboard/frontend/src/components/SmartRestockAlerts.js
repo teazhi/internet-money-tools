@@ -19,7 +19,9 @@ import {
   ArrowUp,
   ArrowDown,
   Filter,
-  Search
+  Search,
+  GripVertical,
+  RotateCcw
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
@@ -36,6 +38,20 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  
+  // State for column ordering
+  const [draggedColumn, setDraggedColumn] = useState(null);
+  const [columnOrders, setColumnOrders] = useState({
+    recommendations: JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null') || [
+      'product', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'
+    ],
+    analytics: JSON.parse(localStorage.getItem('smart-restock-column-order-analytics') || 'null') || [
+      'product', 'current_stock', 'velocity', 'trend', 'days_left', 'last_cogs', 'last_2_months', 'suggested_order', 'priority'
+    ],
+    detailed: JSON.parse(localStorage.getItem('smart-restock-column-order-detailed') || 'null') || [
+      'product', 'velocity_analysis', 'stock_status', 'restock_recommendation', 'priority'
+    ]
+  });
   
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
@@ -57,6 +73,273 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     return sortConfig.direction === 'asc' 
       ? <ArrowUp className="h-3 w-3 text-gray-600" />
       : <ArrowDown className="h-3 w-3 text-gray-600" />;
+  };
+
+  // Column definitions
+  const columnDefinitions = {
+    recommendations: {
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+      priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true },
+      reasoning: { key: 'reasoning', label: 'Reasoning', sortKey: null, draggable: true },
+      current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
+      days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
+      velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
+      trend: { key: 'trend', label: 'Trend', sortKey: null, draggable: true },
+      last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'cogs', draggable: true },
+      already_ordered: { key: 'already_ordered', label: 'Already Ordered', sortKey: null, draggable: true },
+      suggested_order: { key: 'suggested_order', label: 'Suggested Order', sortKey: 'suggested_quantity', draggable: true },
+      actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false }
+    },
+    analytics: {
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+      current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
+      velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
+      trend: { key: 'trend', label: 'Trend', sortKey: null, draggable: true },
+      days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
+      last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'cogs', draggable: true },
+      last_2_months: { key: 'last_2_months', label: 'Last 2 Months', sortKey: null, draggable: true },
+      suggested_order: { key: 'suggested_order', label: 'Suggested Order', sortKey: 'suggested_quantity', draggable: true },
+      priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true }
+    },
+    detailed: {
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+      velocity_analysis: { key: 'velocity_analysis', label: 'Velocity Analysis', sortKey: 'velocity', draggable: true },
+      stock_status: { key: 'stock_status', label: 'Stock Status', sortKey: 'current_stock', draggable: true },
+      restock_recommendation: { key: 'restock_recommendation', label: 'Restock Recommendation', sortKey: 'suggested_quantity', draggable: true },
+      priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true }
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e, columnKey, tableType) => {
+    setDraggedColumn({ key: columnKey, tableType });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetColumnKey, tableType) => {
+    e.preventDefault();
+    
+    if (!draggedColumn || draggedColumn.tableType !== tableType) {
+      setDraggedColumn(null);
+      return;
+    }
+
+    const newOrder = [...columnOrders[tableType]];
+    const draggedIndex = newOrder.indexOf(draggedColumn.key);
+    const targetIndex = newOrder.indexOf(targetColumnKey);
+
+    if (draggedIndex !== -1 && targetIndex !== -1 && draggedIndex !== targetIndex) {
+      // Remove dragged item
+      const [draggedItem] = newOrder.splice(draggedIndex, 1);
+      // Insert at new position
+      newOrder.splice(targetIndex, 0, draggedItem);
+
+      // Update state
+      setColumnOrders(prev => ({
+        ...prev,
+        [tableType]: newOrder
+      }));
+
+      // Save to localStorage
+      localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(newOrder));
+    }
+    
+    setDraggedColumn(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedColumn(null);
+  };
+
+  // Reset column order to default
+  const resetColumnOrder = (tableType) => {
+    const defaultOrders = {
+      recommendations: ['product', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'],
+      analytics: ['product', 'current_stock', 'velocity', 'trend', 'days_left', 'last_cogs', 'last_2_months', 'suggested_order', 'priority'],
+      detailed: ['product', 'velocity_analysis', 'stock_status', 'restock_recommendation', 'priority']
+    };
+    
+    setColumnOrders(prev => ({
+      ...prev,
+      [tableType]: defaultOrders[tableType]
+    }));
+    
+    localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(defaultOrders[tableType]));
+  };
+
+  // Render cell content for recommendations table
+  const renderRecommendationCell = (columnKey, alert) => {
+    switch (columnKey) {
+      case 'product':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <div>
+              <div className="text-sm font-medium text-gray-900">
+                {alert.product_name.length > 60 
+                  ? alert.product_name.substring(0, 60) + '...'
+                  : alert.product_name
+                }
+              </div>
+              <div className="text-sm text-gray-500">
+                {alert.asin}
+                {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
+                  enhanced_analytics?.[alert.asin]?.stock_info?.source ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.link ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
+                  enhanced_analytics?.[alert.asin]?.stock_info?.url) && (
+                  <>
+                    {' • '}
+                    <a 
+                      href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
+                            enhanced_analytics[alert.asin]?.stock_info?.source ||
+                            enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
+                            enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
+                            enhanced_analytics[alert.asin]?.stock_info?.Link ||
+                            enhanced_analytics[alert.asin]?.stock_info?.link ||
+                            enhanced_analytics[alert.asin]?.stock_info?.URL ||
+                            enhanced_analytics[alert.asin]?.stock_info?.url ||
+                            `https://www.amazon.com/dp/${alert.asin}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800"
+                      title="View source"
+                    >
+                      <ExternalLink className="inline h-3 w-3" />
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          </td>
+        );
+      case 'priority':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              alert.category.includes('critical') 
+                ? 'bg-red-100 text-red-800'
+                : alert.category.includes('warning')
+                ? 'bg-builders-100 text-builders-800'
+                : alert.category.includes('opportunity')
+                ? 'bg-green-100 text-green-800'
+                : 'bg-gray-100 text-gray-800'
+            }`}>
+              {alert.emoji} {getCategoryLabel(alert.category)}
+            </span>
+            <div className="text-xs text-gray-500 mt-1">
+              Score: {alert.priority_score.toFixed(2)}
+            </div>
+          </td>
+        );
+      case 'reasoning':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <div className="text-sm text-gray-700 min-w-[300px] max-w-md">
+              {alert.reasoning}
+            </div>
+          </td>
+        );
+      case 'current_stock':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+            {Math.round(alert.current_stock)}
+          </td>
+        );
+      case 'days_left':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+            {formatDaysLeft(alert.days_left)}
+          </td>
+        );
+      case 'velocity':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+            {alert.velocity.toFixed(1)}/day
+          </td>
+        );
+      case 'trend':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center space-x-1">
+              {getTrendIcon(alert.trend)}
+              <span className="text-sm text-gray-900 capitalize">
+                {alert.trend}
+              </span>
+            </div>
+          </td>
+        );
+      case 'last_cogs':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm">
+            {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs ? (
+              <div>
+                <div className="text-green-700 font-medium">
+                  {formatCurrency(enhanced_analytics[alert.asin].cogs_data.cogs)}
+                </div>
+                {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
+                  <div className="text-xs text-gray-500">
+                    {formatDate(enhanced_analytics[alert.asin].cogs_data.last_purchase_date)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-400">N/A</span>
+            )}
+          </td>
+        );
+      case 'already_ordered':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm">
+            {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 ? (
+              <div className="flex items-center space-x-1">
+                <ShoppingCart className="h-3 w-3 text-purple-600" />
+                <span className="text-purple-700 font-medium">
+                  {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment}
+                </span>
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </td>
+        );
+      case 'suggested_order':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+            <div className="text-xl font-bold text-builders-600">
+              {alert.suggested_quantity}
+            </div>
+            <div className="text-xs text-gray-500">
+              units
+            </div>
+          </td>
+        );
+      case 'actions':
+        return (
+          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+            {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs && (
+              <button
+                onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
+                className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={sourcesLoading}
+                title="Open restock source"
+              >
+                <ShoppingCart className="h-4 w-4 mr-1" />
+                Restock
+              </button>
+            )}
+          </td>
+        );
+      default:
+        return <td key={columnKey}></td>;
+    }
   };
 
   // Filter and sort alerts
@@ -520,21 +803,31 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
               />
             </div>
-            {activeTab === 'recommendations' && (
-              <div className="flex items-center space-x-2">
-                <Filter className="h-4 w-4 text-gray-400" />
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
-                >
-                  <option value="all">All Priorities</option>
-                  <option value="critical">Critical Only</option>
-                  <option value="warning">High Priority Only</option>
-                  <option value="opportunity">Opportunities Only</option>
-                </select>
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              {activeTab === 'recommendations' && (
+                <>
+                  <Filter className="h-4 w-4 text-gray-400" />
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+                  >
+                    <option value="all">All Priorities</option>
+                    <option value="critical">Critical Only</option>
+                    <option value="warning">High Priority Only</option>
+                    <option value="opportunity">Opportunities Only</option>
+                  </select>
+                </>
+              )}
+              <button
+                onClick={() => resetColumnOrder(activeTab)}
+                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                title="Reset column order"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset Columns
+              </button>
+            </div>
           </div>
 
           {/* Smart Restock Recommendations Tab */}
@@ -543,221 +836,57 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('product_name')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Product</span>
-                        {getSortIcon('product_name')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('priority_score')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Priority</span>
-                        {getSortIcon('priority_score')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Reasoning
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('current_stock')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Current Stock</span>
-                        {getSortIcon('current_stock')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('days_left')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Days Left</span>
-                        {getSortIcon('days_left')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('velocity')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Velocity</span>
-                        {getSortIcon('velocity')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Trend
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('cogs')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Last COGS</span>
-                        {getSortIcon('cogs')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Already Ordered
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <button
-                        onClick={() => handleSort('suggested_quantity')}
-                        className="flex items-center space-x-1 hover:text-gray-700"
-                      >
-                        <span>Suggested Order</span>
-                        {getSortIcon('suggested_quantity')}
-                      </button>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    {columnOrders.recommendations.map((columnKey) => {
+                      const column = columnDefinitions.recommendations[columnKey];
+                      if (!column) return null;
+                      
+                      return (
+                        <th 
+                          key={columnKey}
+                          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                            column.draggable ? 'cursor-move' : ''
+                          } ${
+                            draggedColumn?.key === columnKey ? 'opacity-50' : ''
+                          }`}
+                          draggable={column.draggable}
+                          onDragStart={(e) => column.draggable && handleDragStart(e, columnKey, 'recommendations')}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, columnKey, 'recommendations')}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <div className="flex items-center space-x-1">
+                            {column.draggable && (
+                              <GripVertical className="h-3 w-3 text-gray-400" />
+                            )}
+                            {column.sortKey ? (
+                              <button
+                                onClick={() => handleSort(column.sortKey)}
+                                className="flex items-center space-x-1 hover:text-gray-700"
+                              >
+                                <span>{column.label}</span>
+                                {getSortIcon(column.sortKey)}
+                              </button>
+                            ) : (
+                              <span>{column.label}</span>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {sortedAlerts.length > 0 ? (
                     sortedAlerts.map((alert) => (
                       <tr key={alert.asin} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {alert.product_name.length > 60 
-                                ? alert.product_name.substring(0, 60) + '...'
-                                : alert.product_name
-                              }
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {alert.asin}
-                              {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
-                                enhanced_analytics?.[alert.asin]?.stock_info?.source ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.link ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
-                                enhanced_analytics?.[alert.asin]?.stock_info?.url) && (
-                                <>
-                                  {' • '}
-                                  <a 
-                                    href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.source ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.Link ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.link ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.URL ||
-                                          enhanced_analytics[alert.asin]?.stock_info?.url ||
-                                          `https://www.amazon.com/dp/${alert.asin}`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800"
-                                    title="View source"
-                                  >
-                                    <ExternalLink className="inline h-3 w-3" />
-                                  </a>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            alert.category.includes('critical') 
-                              ? 'bg-red-100 text-red-800'
-                              : alert.category.includes('warning')
-                              ? 'bg-builders-100 text-builders-800'
-                              : alert.category.includes('opportunity')
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {alert.emoji} {getCategoryLabel(alert.category)}
-                          </span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Score: {alert.priority_score.toFixed(2)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-700 min-w-[300px] max-w-md">
-                            {alert.reasoning}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {Math.round(alert.current_stock)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDaysLeft(alert.days_left)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {alert.velocity.toFixed(1)}/day
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-1">
-                            {getTrendIcon(alert.trend)}
-                            <span className="text-sm text-gray-900 capitalize">
-                              {alert.trend}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs ? (
-                            <div>
-                              <div className="text-green-700 font-medium">
-                                {formatCurrency(enhanced_analytics[alert.asin].cogs_data.cogs)}
-                              </div>
-                              {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
-                                <div className="text-xs text-gray-500">
-                                  {formatDate(enhanced_analytics[alert.asin].cogs_data.last_purchase_date)}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 ? (
-                            <div className="flex items-center space-x-1">
-                              <ShoppingCart className="h-3 w-3 text-purple-600" />
-                              <span className="text-purple-700 font-medium">
-                                {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-xl font-bold text-builders-600">
-                            {alert.suggested_quantity}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            units
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs && (
-                            <button
-                              onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
-                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                              disabled={sourcesLoading}
-                              title="Open restock source"
-                            >
-                              <ShoppingCart className="h-4 w-4 mr-1" />
-                              Restock
-                            </button>
-                          )}
-                        </td>
+                        {columnOrders.recommendations.map((columnKey) => 
+                          renderRecommendationCell(columnKey, alert)
+                        )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="11" className="px-6 py-12 text-center">
+                      <td colSpan={columnOrders.recommendations.length} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <Package className="h-12 w-12 text-gray-400 mb-3" />
                           <h3 className="text-sm font-medium text-gray-900 mb-1">No Priority Alerts</h3>

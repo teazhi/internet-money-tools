@@ -18,7 +18,8 @@ import {
   TrendingDown,
   Menu,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -144,7 +145,65 @@ const Dashboard = () => {
       )}
       
       <div className="flex min-h-screen">
-      {/* Sidebar */}
+      {/* Mobile sidebar */}
+      <div className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity ${
+            sidebarOpen ? 'opacity-100' : 'opacity-0'
+          }`} 
+          onClick={() => setSidebarOpen(false)}
+        />
+        
+        {/* Sidebar panel */}
+        <div className={`relative flex-1 flex flex-col max-w-xs w-full bg-white transform transition-transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
+          <div className="absolute top-0 right-0 -mr-12 pt-2">
+            <button
+              type="button"
+              className="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <span className="sr-only">Close sidebar</span>
+              <X className="h-6 w-6 text-white" />
+            </button>
+          </div>
+          
+          <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
+            <div className="flex items-center flex-shrink-0 px-4">
+              <ShoppingCart className="h-8 w-8 text-builders-500" />
+              <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>
+            </div>
+            <nav className="mt-5 px-2 space-y-1">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`${
+                      item.current
+                        ? 'bg-builders-100 border-builders-500 text-builders-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    } group flex items-center px-2 py-2 text-base font-medium border-l-4 transition-all duration-200`}
+                  >
+                    <Icon
+                      className={`${
+                        item.current ? 'text-builders-500' : 'text-gray-400 group-hover:text-gray-500'
+                      } mr-4 h-6 w-6`}
+                    />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop sidebar */}
       <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} md:flex-col transition-all duration-300`}>
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
           <div className="flex items-center flex-shrink-0 px-4 justify-between">
@@ -202,15 +261,13 @@ const Dashboard = () => {
               <div className="flex items-center">
                 <button
                   type="button"
-                  className="md:hidden -ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900"
+                  className="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-builders-500"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                 >
                   <span className="sr-only">Open sidebar</span>
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
+                  <Menu className="h-6 w-6" />
                 </button>
-                <h1 className="text-2xl font-semibold text-gray-900 ml-4 md:ml-0">
+                <h1 className="text-2xl font-semibold text-gray-900 ml-3 md:ml-0">
                   {navigation.find(item => item.current)?.name || 'Dashboard'}
                 </h1>
               </div>

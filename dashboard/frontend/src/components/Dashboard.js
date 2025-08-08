@@ -15,7 +15,10 @@ import {
   Eye,
   ArrowLeft,
   Users,
-  TrendingDown
+  TrendingDown,
+  Menu,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -33,6 +36,7 @@ const Dashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Check if current user is admin
   const isAdmin = user?.discord_id === '712147636463075389';
@@ -141,11 +145,24 @@ const Dashboard = () => {
       
       <div className="flex min-h-screen">
       {/* Sidebar */}
-      <div className="hidden md:flex md:w-64 md:flex-col">
+      <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} md:flex-col transition-all duration-300`}>
         <div className="flex flex-col flex-grow pt-5 pb-4 overflow-y-auto bg-white border-r border-gray-200">
-          <div className="flex items-center flex-shrink-0 px-4">
-            <ShoppingCart className="h-8 w-8 text-builders-500" />
-            <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>
+          <div className="flex items-center flex-shrink-0 px-4 justify-between">
+            <div className="flex items-center">
+              <ShoppingCart className="h-8 w-8 text-builders-500" />
+              {!sidebarCollapsed && <span className="ml-2 text-xl font-bold text-gray-900">DMS</span>}
+            </div>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </button>
           </div>
           <div className="mt-5 flex-grow flex flex-col">
             <nav className="flex-1 px-2 space-y-1">
@@ -159,14 +176,15 @@ const Dashboard = () => {
                       item.current
                         ? 'bg-builders-100 border-builders-500 text-builders-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center px-2 py-2 text-sm font-medium border-l-4 transition-colors duration-200`}
+                    } group flex items-center ${sidebarCollapsed ? 'justify-center px-3' : 'px-2'} py-2 text-sm font-medium border-l-4 transition-all duration-200`}
+                    title={sidebarCollapsed ? item.name : undefined}
                   >
                     <Icon
                       className={`${
                         item.current ? 'text-builders-500' : 'text-gray-400 group-hover:text-gray-500'
-                      } mr-3 h-5 w-5`}
+                      } ${sidebarCollapsed ? '' : 'mr-3'} h-5 w-5`}
                     />
-                    {item.name}
+                    {!sidebarCollapsed && item.name}
                   </Link>
                 );
               })}

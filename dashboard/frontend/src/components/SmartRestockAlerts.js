@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
+  // State for tabs
+  const [activeTab, setActiveTab] = useState('recommendations');
+  
   // State for restock sources modal
   const [showSourcesModal, setShowSourcesModal] = useState(false);
   const [modalAsin, setModalAsin] = useState('');
@@ -298,16 +301,66 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   };
 
   try {
+    // Tab configuration
+    const tabs = [
+      {
+        id: 'recommendations',
+        name: 'Smart Restock Recommendations',
+        description: 'AI-powered restocking suggestions based on velocity, trends, and seasonality',
+        count: sortedAlerts.length
+      },
+      {
+        id: 'analytics',
+        name: 'All Products Analytics',
+        description: 'Complete analysis of your inventory',
+        count: enhanced_analytics ? Object.keys(enhanced_analytics).length : 0
+      }
+    ];
+
     return (
       <div className="space-y-6">
-        {/* Restock Alerts */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Smart Restock Recommendations</h3>
-          <p className="text-sm text-gray-600">AI-powered restocking suggestions based on velocity, trends, and seasonality</p>
+        <div className="bg-white rounded-lg shadow">
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200">
+          <div className="px-6 py-4">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Smart Restocking</h2>
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-builders-500 text-builders-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab.name}
+                  {tab.count > 0 && (
+                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs font-medium ${
+                      activeTab === tab.id
+                        ? 'bg-builders-100 text-builders-600'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
-        
-        <div className="h-96 overflow-y-auto divide-y divide-gray-200">
+
+        {/* Tab Content */}
+        <div className="px-6 py-4">
+          {/* Tab Description */}
+          <p className="text-sm text-gray-600 mb-6">
+            {tabs.find(tab => tab.id === activeTab)?.description}
+          </p>
+
+          {/* Smart Restock Recommendations Tab */}
+          {activeTab === 'recommendations' && (
+            <div className="h-96 overflow-y-auto divide-y divide-gray-200 border border-gray-200 rounded-lg">
           {sortedAlerts.length > 0 ? (
             sortedAlerts.map((alert) => (
               <div key={alert.asin} className={`p-4 border-l-4 ${getCategoryStyle(alert.category)}`}>
@@ -474,18 +527,12 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
               </div>
             </div>
           )}
-        </div>
-      </div>
+            </div>
+          )}
 
-      {/* Enhanced Analytics Summary */}
-      {enhanced_analytics && Object.keys(enhanced_analytics).length > 0 && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">All Products Analytics</h3>
-            <p className="text-sm text-gray-600">Complete analysis of your inventory</p>
-          </div>
-          
-          <div className="overflow-x-auto">
+          {/* All Products Analytics Tab */}
+          {activeTab === 'analytics' && enhanced_analytics && Object.keys(enhanced_analytics).length > 0 && (
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -606,11 +653,29 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                   )) : []}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      {/* Purchase Sources Modal */}
+          {/* Show message when no data for active tab */}
+          {activeTab === 'recommendations' && sortedAlerts.length === 0 && (
+            <div className="text-center py-12">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Restock Recommendations</h3>
+              <p className="text-gray-500">All products have adequate stock levels or sufficient lead time</p>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (!enhanced_analytics || Object.keys(enhanced_analytics).length === 0) && (
+            <div className="text-center py-12">
+              <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Analytics Data</h3>
+              <p className="text-gray-500">Analytics data will appear here once your inventory data is processed</p>
+            </div>
+          )}
+        </div>
+        </div>
+
+        {/* Purchase Sources Modal */}
       {showSourcesModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-96 overflow-y-auto">
@@ -679,8 +744,8 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
           </div>
         </div>
       )}
-    </div>
-  );
+      </div>
+    );
   } catch (error) {
     
     return (

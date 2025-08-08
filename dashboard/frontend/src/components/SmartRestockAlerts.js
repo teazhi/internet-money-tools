@@ -365,173 +365,190 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
 
           {/* Smart Restock Recommendations Tab */}
           {activeTab === 'recommendations' && (
-            <div className="h-96 overflow-y-auto divide-y divide-gray-200 border border-gray-200 rounded-lg">
-          {sortedAlerts.length > 0 ? (
-            sortedAlerts.map((alert) => (
-              <div key={alert.asin} className={`p-4 border-l-4 ${getCategoryStyle(alert.category)}`}>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-lg">{alert.emoji}</span>
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        {getCategoryLabel(alert.category)}
-                      </span>
-                    </div>
-                    
-                    <h4 className="text-base font-medium text-gray-900 mb-1">
-                      {alert.product_name.length > 80 ? alert.product_name.substring(0, 80) + '...' : alert.product_name}
-                    </h4>
-                    
-                    <p className="text-sm text-gray-600 mb-2">
-                      ASIN: {alert.asin}
-                      {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
-                        enhanced_analytics?.[alert.asin]?.stock_info?.source ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.link ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
-                        enhanced_analytics?.[alert.asin]?.stock_info?.url ||
-                        alert.asin) && (
-                        <>
-                          {' • '}
-                          <a 
-                            href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.source ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.Link ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.link ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.URL ||
-                                  enhanced_analytics[alert.asin]?.stock_info?.url ||
-                                  `https://www.amazon.com/dp/${alert.asin}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 underline"
-                          >
-                            {enhanced_analytics[alert.asin]?.stock_info?.Source ||
-                             enhanced_analytics[alert.asin]?.stock_info?.source ||
-                             enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
-                             enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
-                             enhanced_analytics[alert.asin]?.stock_info?.Link ||
-                             enhanced_analytics[alert.asin]?.stock_info?.link ||
-                             enhanced_analytics[alert.asin]?.stock_info?.URL ||
-                             enhanced_analytics[alert.asin]?.stock_info?.url 
-                             ? 'View Source' : 'View on Amazon'}
-                          </a>
-                        </>
-                      )}
-                    </p>
-                    
-                    <p className="text-sm text-gray-700 mb-3">
-                      {alert.reasoning}
-                    </p>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                      <div className="flex items-center space-x-1">
-                        <Package className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-600">Current:</span>
-                        <span className="font-medium">{Math.round(alert.current_stock)}</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-600">Days left:</span>
-                        <span className="font-medium">{formatDaysLeft(alert.days_left)}</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-1">
-                        <Zap className="h-4 w-4 text-gray-400" />
-                        <span className="text-gray-600">Velocity:</span>
-                        <span className="font-medium">{alert.velocity.toFixed(1)}/day</span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-1">
-                        {getTrendIcon(alert.trend)}
-                        <span className="text-gray-600">Trend:</span>
-                        <span className="font-medium capitalize">{alert.trend}</span>
-                      </div>
-                    </div>
-
-                    {/* Monthly Purchase Adjustment Display */}
-                    {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 && (
-                      <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-md">
-                        <div className="flex items-center text-sm">
-                          <ShoppingCart className="h-4 w-4 text-purple-600 mr-2" />
-                          <span className="text-purple-700">
-                            <strong>Already purchased (last 2 months):</strong> {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment} units
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Product
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Priority
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Current Stock
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Days Left
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Velocity
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Trend
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last COGS
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Already Ordered
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Suggested Order
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {sortedAlerts.length > 0 ? (
+                    sortedAlerts.map((alert) => (
+                      <tr key={alert.asin} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {alert.product_name.length > 60 
+                                ? alert.product_name.substring(0, 60) + '...'
+                                : alert.product_name
+                              }
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {alert.asin}
+                              {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
+                                enhanced_analytics?.[alert.asin]?.stock_info?.source ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.link ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
+                                enhanced_analytics?.[alert.asin]?.stock_info?.url) && (
+                                <>
+                                  {' • '}
+                                  <a 
+                                    href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.source ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.Link ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.link ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.URL ||
+                                          enhanced_analytics[alert.asin]?.stock_info?.url ||
+                                          `https://www.amazon.com/dp/${alert.asin}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="View source"
+                                  >
+                                    <ExternalLink className="inline h-3 w-3" />
+                                  </a>
+                                </>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              {alert.reasoning}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            alert.category.includes('critical') 
+                              ? 'bg-red-100 text-red-800'
+                              : alert.category.includes('warning')
+                              ? 'bg-builders-100 text-builders-800'
+                              : alert.category.includes('opportunity')
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {alert.emoji} {getCategoryLabel(alert.category)}
                           </span>
-                        </div>
-                        <div className="text-xs text-purple-600 mt-1">
-                          Restock recommendation reduced by this amount (due to 2-month Amazon lead time)
-                        </div>
-                      </div>
-                    )}
-
-                    {/* COGS and Restock Information */}
-                    {}
-                    {enhanced_analytics?.[alert.asin]?.cogs_data && enhanced_analytics[alert.asin].cogs_data.cogs && (
-                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4 text-sm">
-                            <div className="flex items-center space-x-1">
-                              <DollarSign className="h-4 w-4 text-green-600" />
-                              <span className="text-gray-600">Last COGS:</span>
-                              <span className="font-medium text-green-700">
+                          <div className="text-xs text-gray-500 mt-1">
+                            Score: {alert.priority_score.toFixed(2)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {Math.round(alert.current_stock)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDaysLeft(alert.days_left)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {alert.velocity.toFixed(1)}/day
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-1">
+                            {getTrendIcon(alert.trend)}
+                            <span className="text-sm text-gray-900 capitalize">
+                              {alert.trend}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs ? (
+                            <div>
+                              <div className="text-green-700 font-medium">
                                 {formatCurrency(enhanced_analytics[alert.asin].cogs_data.cogs)}
+                              </div>
+                              {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
+                                <div className="text-xs text-gray-500">
+                                  {formatDate(enhanced_analytics[alert.asin].cogs_data.last_purchase_date)}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 ? (
+                            <div className="flex items-center space-x-1">
+                              <ShoppingCart className="h-3 w-3 text-purple-600" />
+                              <span className="text-purple-700 font-medium">
+                                {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment}
                               </span>
                             </div>
-                            {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
-                              <div className="flex items-center space-x-1">
-                                <Clock className="h-4 w-4 text-gray-400" />
-                                <span className="text-gray-600">Last purchased:</span>
-                                <span className="font-medium">
-                                  {formatDate(enhanced_analytics[alert.asin].cogs_data.last_purchase_date)}
-                                </span>
-                              </div>
-                            )}
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-xl font-bold text-builders-600">
+                            {alert.suggested_quantity}
                           </div>
-                          
-                          {/* Always show Restock Here button - handle multiple source links */}
-                          <button
-                            onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
-                            className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                            disabled={sourcesLoading}
-                          >
-                            <ShoppingCart className="h-4 w-4 mr-1" />
-                            {sourcesLoading ? 'Loading...' : 'Restock Here'}
-                            <Globe className="h-3 w-3 ml-1" />
-                          </button>
+                          <div className="text-xs text-gray-500">
+                            units
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs && (
+                            <button
+                              onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
+                              className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                              disabled={sourcesLoading}
+                              title="Open restock source"
+                            >
+                              <ShoppingCart className="h-4 w-4 mr-1" />
+                              Restock
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="10" className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center">
+                          <Package className="h-12 w-12 text-gray-400 mb-3" />
+                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Priority Alerts</h3>
+                          <p className="text-sm text-gray-500">
+                            All products have adequate stock levels or sufficient lead time
+                          </p>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="ml-6 text-right">
-                    <div className="text-xl font-bold text-builders-600 mb-1">
-                      {alert.suggested_quantity}
-                    </div>
-                    <div className="text-xs text-gray-500 mb-2">
-                      units to order
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      Priority: {alert.priority_score.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <h3 className="text-sm font-medium text-gray-900 mb-1">No Priority Alerts</h3>
-                <p className="text-sm text-gray-500">
-                  All products have adequate stock levels or sufficient lead time
-                </p>
-              </div>
-            </div>
-          )}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
 

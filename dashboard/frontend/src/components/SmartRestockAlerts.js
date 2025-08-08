@@ -683,7 +683,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-gray-700 max-w-xs">
+                          <div className="text-sm text-gray-700 min-w-[300px] max-w-md">
                             {alert.reasoning}
                           </div>
                         </td>

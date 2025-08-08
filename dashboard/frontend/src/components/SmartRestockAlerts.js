@@ -177,15 +177,15 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     switch (columnKey) {
       case 'product':
         return (
-          <td key={columnKey} className="px-6 py-4">
+          <td key={columnKey} className="px-3 py-2">
             <div>
-              <div className="text-sm font-medium text-gray-900">
-                {alert.product_name.length > 60 
-                  ? alert.product_name.substring(0, 60) + '...'
+              <div className="text-xs font-medium text-gray-900">
+                {alert.product_name.length > 50 
+                  ? alert.product_name.substring(0, 50) + '...'
                   : alert.product_name
                 }
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="text-xs text-gray-500">
                 {alert.asin}
                 {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
                   enhanced_analytics?.[alert.asin]?.stock_info?.source ||
@@ -212,7 +212,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       className="text-blue-600 hover:text-blue-800"
                       title="View source"
                     >
-                      <ExternalLink className="inline h-3 w-3" />
+                      <ExternalLink className="inline h-2 w-2" />
                     </a>
                   </>
                 )}
@@ -222,8 +222,8 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         );
       case 'priority':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
               alert.category.includes('critical') 
                 ? 'bg-red-100 text-red-800'
                 : alert.category.includes('warning')
@@ -234,43 +234,43 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
             }`}>
               {alert.emoji} {getCategoryLabel(alert.category)}
             </span>
-            <div className="text-xs text-gray-500 mt-1">
-              Score: {alert.priority_score.toFixed(2)}
+            <div className="text-xs text-gray-500 mt-0.5">
+              {alert.priority_score.toFixed(2)}
             </div>
           </td>
         );
       case 'reasoning':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <div className="text-sm text-gray-700 min-w-[300px] max-w-md">
+          <td key={columnKey} className="px-3 py-2">
+            <div className="text-xs text-gray-700 min-w-[250px] max-w-sm">
               {alert.reasoning}
             </div>
           </td>
         );
       case 'current_stock':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
             {Math.round(alert.current_stock)}
           </td>
         );
       case 'days_left':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
             {formatDaysLeft(alert.days_left)}
           </td>
         );
       case 'velocity':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
             {alert.velocity.toFixed(1)}/day
           </td>
         );
       case 'trend':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
             <div className="flex items-center space-x-1">
               {getTrendIcon(alert.trend)}
-              <span className="text-sm text-gray-900 capitalize">
+              <span className="text-xs text-gray-900 capitalize">
                 {alert.trend}
               </span>
             </div>
@@ -278,10 +278,10 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         );
       case 'last_cogs':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs">
             {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs ? (
               <div>
-                <div className="text-green-700 font-medium">
+                <div className="text-green-700 font-medium text-xs">
                   {formatCurrency(enhanced_analytics[alert.asin].cogs_data.cogs)}
                 </div>
                 {enhanced_analytics[alert.asin].cogs_data.last_purchase_date && (
@@ -291,29 +291,29 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                 )}
               </div>
             ) : (
-              <span className="text-gray-400">N/A</span>
+              <span className="text-gray-400 text-xs">N/A</span>
             )}
           </td>
         );
       case 'already_ordered':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap text-sm">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs">
             {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 ? (
               <div className="flex items-center space-x-1">
                 <ShoppingCart className="h-3 w-3 text-purple-600" />
-                <span className="text-purple-700 font-medium">
+                <span className="text-purple-700 font-medium text-xs">
                   {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment}
                 </span>
               </div>
             ) : (
-              <span className="text-gray-400">-</span>
+              <span className="text-gray-400 text-xs">-</span>
             )}
           </td>
         );
       case 'suggested_order':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
-            <div className="text-xl font-bold text-builders-600">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            <div className="text-lg font-bold text-builders-600">
               {alert.suggested_quantity}
             </div>
             <div className="text-xs text-gray-500">
@@ -323,15 +323,15 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         );
       case 'actions':
         return (
-          <td key={columnKey} className="px-6 py-4 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
             {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs && (
               <button
                 onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
-                className="inline-flex items-center px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                 disabled={sourcesLoading}
                 title="Open restock source"
               >
-                <ShoppingCart className="h-4 w-4 mr-1" />
+                <ShoppingCart className="h-3 w-3 mr-1" />
                 Restock
               </button>
             )}
@@ -787,30 +787,30 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         {/* Tab Content */}
         <div className="px-6 py-4">
           {/* Tab Description */}
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-xs text-gray-600 mb-3">
             {tabs.find(tab => tab.id === activeTab)?.description}
           </p>
 
           {/* Filter Controls */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search products, ASINs, or descriptions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+                className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
               />
             </div>
             <div className="flex items-center space-x-2">
               {activeTab === 'recommendations' && (
                 <>
-                  <Filter className="h-4 w-4 text-gray-400" />
+                  <Filter className="h-3 w-3 text-gray-400" />
                   <select
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+                    className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
                   >
                     <option value="all">All Priorities</option>
                     <option value="critical">Critical Only</option>
@@ -821,10 +821,10 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
               )}
               <button
                 onClick={() => resetColumnOrder(activeTab)}
-                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-builders-500"
                 title="Reset column order"
               >
-                <RotateCcw className="h-4 w-4 mr-2" />
+                <RotateCcw className="h-3 w-3 mr-1" />
                 Reset Columns
               </button>
             </div>
@@ -843,7 +843,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                       return (
                         <th 
                           key={columnKey}
-                          className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                          className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide ${
                             column.draggable ? 'cursor-move' : ''
                           } ${
                             draggedColumn?.key === columnKey ? 'opacity-50' : ''
@@ -861,13 +861,13 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                             {column.sortKey ? (
                               <button
                                 onClick={() => handleSort(column.sortKey)}
-                                className="flex items-center space-x-1 hover:text-gray-700"
+                                className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                               >
                                 <span>{column.label}</span>
                                 {getSortIcon(column.sortKey)}
                               </button>
                             ) : (
-                              <span>{column.label}</span>
+                              <span className="text-xs">{column.label}</span>
                             )}
                           </div>
                         </th>
@@ -886,11 +886,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={columnOrders.recommendations.length} className="px-6 py-12 text-center">
+                      <td colSpan={columnOrders.recommendations.length} className="px-3 py-8 text-center">
                         <div className="flex flex-col items-center">
-                          <Package className="h-12 w-12 text-gray-400 mb-3" />
-                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Priority Alerts</h3>
-                          <p className="text-sm text-gray-500">
+                          <Package className="h-8 w-8 text-gray-400 mb-2" />
+                          <h3 className="text-xs font-medium text-gray-900 mb-1">No Priority Alerts</h3>
+                          <p className="text-xs text-gray-500">
                             All products have adequate stock levels or sufficient lead time
                           </p>
                         </div>
@@ -908,70 +908,70 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('product_name')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Product</span>
                       {getSortIcon('product_name')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('current_stock')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Current Stock</span>
                       {getSortIcon('current_stock')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('velocity')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Velocity</span>
                       {getSortIcon('velocity')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Trend
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    <span className="text-xs">Trend</span>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('days_left')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Days Left</span>
                       {getSortIcon('days_left')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('cogs')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Last COGS</span>
                       {getSortIcon('cogs')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last 2 Months
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    <span className="text-xs">Last 2 Months</span>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('suggested_quantity')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Suggested Order</span>
                       {getSortIcon('suggested_quantity')}
                     </button>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                     <button
                       onClick={() => handleSort('priority_score')}
-                      className="flex items-center space-x-1 hover:text-gray-700"
+                      className="flex items-center space-x-1 hover:text-gray-700 text-xs"
                     >
                       <span>Priority</span>
                       {getSortIcon('priority_score')}
@@ -984,38 +984,38 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                   .slice(0, 20) // Show top 20
                   .map(([asin, data]) => (
                     <tr key={asin} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {data.product_name.length > 50 
-                              ? data.product_name.substring(0, 50) + '...'
+                          <div className="text-xs font-medium text-gray-900">
+                            {data.product_name.length > 40 
+                              ? data.product_name.substring(0, 40) + '...'
                               : data.product_name
                             }
                           </div>
-                          <div className="text-sm text-gray-500">{asin}</div>
+                          <div className="text-xs text-gray-500">{asin}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {Math.round(data.restock.current_stock)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {data.velocity.weighted_velocity.toFixed(1)}/day
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <div className="flex items-center space-x-1">
                           {getTrendIcon(data.velocity.trend_direction)}
-                          <span className="text-sm text-gray-900 capitalize">
+                          <span className="text-xs text-gray-900 capitalize">
                             {data.velocity.trend_direction}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {formatDaysLeft(getDaysLeftFromStock(data.stock_info))}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {data.cogs_data?.cogs ? (
                           <div className="flex items-center space-x-1">
-                            <span className="text-green-700 font-medium">
+                            <span className="text-green-700 font-medium text-xs">
                               {formatCurrency(data.cogs_data.cogs)}
                             </span>
                             {data.cogs_data.source_link && (
@@ -1026,31 +1026,31 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                                 className="text-blue-600 hover:text-blue-800"
                                 title="Restock here"
                               >
-                                <ExternalLink className="h-3 w-3" />
+                                <ExternalLink className="h-2 w-2" />
                               </a>
                             )}
                           </div>
                         ) : (
-                          <span className="text-gray-400">N/A</span>
+                          <span className="text-gray-400 text-xs">N/A</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {data.restock?.monthly_purchase_adjustment > 0 ? (
                           <div className="flex items-center space-x-1">
                             <ShoppingCart className="h-3 w-3 text-purple-600" />
-                            <span className="text-purple-700 font-medium">
+                            <span className="text-purple-700 font-medium text-xs">
                               {data.restock.monthly_purchase_adjustment}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-gray-400 text-xs">-</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-builders-600">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs font-medium text-builders-600">
                         {data.restock.suggested_quantity}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
                           data.priority.category.includes('critical') 
                             ? 'bg-red-100 text-red-800'
                             : data.priority.category.includes('warning')

@@ -1213,6 +1213,7 @@ class EnhancedOrdersAnalysis:
                         else:
                             pass  # Debug print removed
                     except Exception as e:
+                        pass  # Error getting hyperlinks
                 
                 # Process text-based source value
                 if source_value and not pd.isna(source_value):
@@ -1344,7 +1345,7 @@ class EnhancedOrdersAnalysis:
                         )
                         pass  # Debug print removed
                     else:
-                        
+                        pass  # No sheet data available for purchase analytics
                 else:
                     pass  # Debug print removed
             except Exception as e:

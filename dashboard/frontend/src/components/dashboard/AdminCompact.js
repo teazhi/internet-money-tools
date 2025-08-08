@@ -41,6 +41,7 @@ const AdminCompact = () => {
   const [discountMonitoring, setDiscountMonitoring] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [filteredUsers, setFilteredUsers] = useState([]);
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -61,12 +62,26 @@ const AdminCompact = () => {
         axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true })
       ]);
       
-      setUsers(usersRes.data.users);
+      const users = usersRes.data.users;
+      setUsers(users);
       setSystemStats(statsRes.data);
       setInvitations(invitesRes.data.invitations || []);
       setScriptConfigs(scriptsRes.data);
       setEditingConfigs(scriptsRes.data);
       setDiscountMonitoring(discountRes.data);
+      
+      // Organize users hierarchically
+      const mainUsers = users.filter(user => user.user_type !== 'subuser');
+      const subUsers = users.filter(user => user.user_type === 'subuser');
+      
+      const hierarchicalUsers = [];
+      mainUsers.forEach(mainUser => {
+        hierarchicalUsers.push(mainUser);
+        const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
+        hierarchicalUsers.push(...userSubUsers);
+      });
+      
+      setFilteredUsers(hierarchicalUsers);
     } catch (error) {
       setError('Failed to load admin data');
     } finally {
@@ -129,13 +144,58 @@ const AdminCompact = () => {
   }
 
   const tabs = [
-    { id: 'users', name: 'Users', icon: Users, count: users.length },
+    { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
     { id: 'scripts', name: 'Scripts', icon: Cog, count: null },
     { id: 'discount', name: 'Discounts', icon: Percent, count: null }
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Admin Panel Header - Top Priority */}
+      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-4 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold">Admin Panel</h1>
+            <p className="text-sm text-builders-100">System Management</p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={fetchData}
+              className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="flex items-center px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-sm"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Invite
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="flex items-center">
+            <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
+            <span className="text-sm text-red-800">{error}</span>
+          </div>
+        </div>
+      )}
+      
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center">
+            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+            <span className="text-sm text-green-800">{success}</span>
+          </div>
+        </div>
+      )}
+
       {/* System Stats */}
       {systemStats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -235,50 +295,6 @@ const AdminCompact = () => {
         )}
       </div>
 
-      {/* Compact Header */}
-      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-4 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">Admin Panel</h1>
-            <p className="text-sm text-builders-100">System Management</p>
-          </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={fetchData}
-              className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Refresh
-            </button>
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="flex items-center px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-sm"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Invite
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
-            <span className="text-sm text-red-800">{error}</span>
-          </div>
-        </div>
-      )}
-      
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-            <span className="text-sm text-green-800">{success}</span>
-          </div>
-        </div>
-      )}
 
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow">
@@ -336,16 +352,21 @@ const AdminCompact = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {users.slice(0, 10).map((user) => {
+                        {filteredUsers.slice(0, 20).map((user) => {
                           const isSubuser = user.user_type === 'subuser';
                           const isActive = isSubuser 
                             ? true // Subusers inherit setup from parent
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
                           
                           return (
-                            <tr key={user.discord_id} className="hover:bg-gray-50">
+                            <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-gray-25' : ''}`}>
                               <td className="px-4 py-2">
                                 <div className="flex items-center">
+                                  {isSubuser && (
+                                    <div className="w-6 flex justify-center mr-2">
+                                      <div className="w-px h-6 bg-gray-300"></div>
+                                    </div>
+                                  )}
                                   {user.discord_avatar ? (
                                     <img
                                       className="h-6 w-6 rounded-full mr-2"

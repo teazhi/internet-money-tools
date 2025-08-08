@@ -4132,15 +4132,32 @@ def analyze_discount_opportunities():
             else:
                 today = datetime.now(pytz.UTC).date()
             
-            # Get the enhanced analytics data
+            # Get the enhanced analytics data using the correct initialization
+            orders_url = config_user_record.get('sellerboard_orders_url')
+            stock_url = config_user_record.get('sellerboard_stock_url')
+            
+            if not orders_url or not stock_url:
+                return jsonify({
+                    'opportunities': [],
+                    'message': 'Sellerboard URLs not configured. Please configure in Settings.'
+                })
+            
             orders_analysis = EnhancedOrdersAnalysis(
-                user_record=config_user_record,
-                target_date=today,
-                user_timezone=user_timezone,
-                discord_id=discord_id
+                orders_url=orders_url,
+                stock_url=stock_url
             )
             
-            analysis = orders_analysis.generate_analysis()
+            analysis = orders_analysis.analyze(
+                for_date=today,
+                user_timezone=user_timezone,
+                user_settings={
+                    'enable_source_links': config_user_record.get('enable_source_links', False),
+                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                    'discord_id': discord_id
+                }
+            )
             
             if not analysis or not analysis.get('enhanced_analytics'):
                 return jsonify({

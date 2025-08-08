@@ -14,7 +14,12 @@ import {
   ExternalLink,
   DollarSign,
   X,
-  Globe
+  Globe,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  Search
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
@@ -27,13 +32,150 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [purchaseSources, setPurchaseSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   
+  // State for filtering and sorting
+  const [searchQuery, setSearchQuery] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts, critical_alerts, high_priority_count } = analytics || {};
 
-  // Sort alerts by priority score - handle null/undefined restock_alerts
+  // Sorting function
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  // Get sort icon
+  const getSortIcon = (columnKey) => {
+    if (sortConfig.key !== columnKey) {
+      return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUp className="h-3 w-3 text-gray-600" />
+      : <ArrowDown className="h-3 w-3 text-gray-600" />;
+  };
+
+  // Filter and sort alerts
   const sortedAlerts = useMemo(() => {
-    return restock_alerts ? Object.values(restock_alerts).sort((a, b) => b.priority_score - a.priority_score) : [];
-  }, [restock_alerts]);
+    if (!restock_alerts) return [];
+    
+    let filtered = Object.values(restock_alerts);
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(alert => 
+        alert.product_name.toLowerCase().includes(query) ||
+        alert.asin.toLowerCase().includes(query) ||
+        alert.reasoning.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply priority filter
+    if (priorityFilter !== 'all') {
+      filtered = filtered.filter(alert => {
+        if (priorityFilter === 'critical') return alert.category.includes('critical');
+        if (priorityFilter === 'warning') return alert.category.includes('warning');
+        if (priorityFilter === 'opportunity') return alert.category.includes('opportunity');
+        return true;
+      });
+    }
+    
+    // Apply sorting
+    if (sortConfig.key) {
+      filtered.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+        
+        // Handle nested properties
+        if (sortConfig.key === 'cogs') {
+          aValue = enhanced_analytics?.[a.asin]?.cogs_data?.cogs || 0;
+          bValue = enhanced_analytics?.[b.asin]?.cogs_data?.cogs || 0;
+        }
+        
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      // Default sort by priority score
+      filtered.sort((a, b) => b.priority_score - a.priority_score);
+    }
+    
+    return filtered;
+  }, [restock_alerts, searchQuery, priorityFilter, sortConfig, enhanced_analytics]);
+
+  // Filter and sort enhanced analytics
+  const sortedAnalytics = useMemo(() => {
+    if (!enhanced_analytics) return [];
+    
+    let entries = Object.entries(enhanced_analytics);
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      entries = entries.filter(([asin, data]) => 
+        data.product_name.toLowerCase().includes(query) ||
+        asin.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply sorting
+    if (sortConfig.key) {
+      entries.sort(([asinA, dataA], [asinB, dataB]) => {
+        let aValue, bValue;
+        
+        switch (sortConfig.key) {
+          case 'product_name':
+            aValue = dataA.product_name;
+            bValue = dataB.product_name;
+            break;
+          case 'current_stock':
+            aValue = dataA.restock?.current_stock || 0;
+            bValue = dataB.restock?.current_stock || 0;
+            break;
+          case 'velocity':
+            aValue = dataA.velocity?.weighted_velocity || 0;
+            bValue = dataB.velocity?.weighted_velocity || 0;
+            break;
+          case 'days_left':
+            aValue = getDaysLeftFromStock(dataA.stock_info);
+            bValue = getDaysLeftFromStock(dataB.stock_info);
+            if (typeof aValue !== 'number') aValue = 999999;
+            if (typeof bValue !== 'number') bValue = 999999;
+            break;
+          case 'cogs':
+            aValue = dataA.cogs_data?.cogs || 0;
+            bValue = dataB.cogs_data?.cogs || 0;
+            break;
+          case 'suggested_quantity':
+            aValue = dataA.restock?.suggested_quantity || 0;
+            bValue = dataB.restock?.suggested_quantity || 0;
+            break;
+          case 'priority_score':
+            aValue = dataA.priority?.score || 0;
+            bValue = dataB.priority?.score || 0;
+            break;
+          default:
+            aValue = 0;
+            bValue = 0;
+        }
+        
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      // Default sort by priority score
+      entries.sort(([,a], [,b]) => (b.priority?.score || 0) - (a.priority?.score || 0));
+    }
+    
+    return entries;
+  }, [enhanced_analytics, searchQuery, sortConfig]);
 
   // Function to fetch purchase sources for an ASIN
   const fetchPurchaseSources = async (asin) => {
@@ -359,9 +501,38 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
         {/* Tab Content */}
         <div className="px-6 py-4">
           {/* Tab Description */}
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-gray-600 mb-4">
             {tabs.find(tab => tab.id === activeTab)?.description}
           </p>
+
+          {/* Filter Controls */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search products, ASINs, or descriptions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+              />
+            </div>
+            {activeTab === 'recommendations' && (
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-gray-400" />
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="critical">Critical Only</option>
+                  <option value="warning">High Priority Only</option>
+                  <option value="opportunity">Opportunities Only</option>
+                </select>
+              </div>
+            )}
+          </div>
 
           {/* Smart Restock Recommendations Tab */}
           {activeTab === 'recommendations' && (
@@ -370,34 +541,76 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Product
+                      <button
+                        onClick={() => handleSort('product_name')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Product</span>
+                        {getSortIcon('product_name')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Priority
+                      <button
+                        onClick={() => handleSort('priority_score')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Priority</span>
+                        {getSortIcon('priority_score')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Reasoning
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Current Stock
+                      <button
+                        onClick={() => handleSort('current_stock')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Current Stock</span>
+                        {getSortIcon('current_stock')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Days Left
+                      <button
+                        onClick={() => handleSort('days_left')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Days Left</span>
+                        {getSortIcon('days_left')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Velocity
+                      <button
+                        onClick={() => handleSort('velocity')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Velocity</span>
+                        {getSortIcon('velocity')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Trend
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last COGS
+                      <button
+                        onClick={() => handleSort('cogs')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Last COGS</span>
+                        {getSortIcon('cogs')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Already Ordered
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Suggested Order
+                      <button
+                        onClick={() => handleSort('suggested_quantity')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Suggested Order</span>
+                        {getSortIcon('suggested_quantity')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -564,37 +777,78 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Product
+                    <button
+                      onClick={() => handleSort('product_name')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Product</span>
+                      {getSortIcon('product_name')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Current Stock
+                    <button
+                      onClick={() => handleSort('current_stock')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Current Stock</span>
+                      {getSortIcon('current_stock')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Velocity
+                    <button
+                      onClick={() => handleSort('velocity')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Velocity</span>
+                      {getSortIcon('velocity')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Trend
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Days Left
+                    <button
+                      onClick={() => handleSort('days_left')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Days Left</span>
+                      {getSortIcon('days_left')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last COGS
+                    <button
+                      onClick={() => handleSort('cogs')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Last COGS</span>
+                      {getSortIcon('cogs')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Last 2 Months
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Suggested Order
+                    <button
+                      onClick={() => handleSort('suggested_quantity')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Suggested Order</span>
+                      {getSortIcon('suggested_quantity')}
+                    </button>
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
+                    <button
+                      onClick={() => handleSort('priority_score')}
+                      className="flex items-center space-x-1 hover:text-gray-700"
+                    >
+                      <span>Priority</span>
+                      {getSortIcon('priority_score')}
+                    </button>
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {enhanced_analytics ? Object.entries(enhanced_analytics)
-                  .sort(([,a], [,b]) => b.priority.score - a.priority.score)
+                {sortedAnalytics.length > 0 ? sortedAnalytics
                   .slice(0, 20) // Show top 20
                   .map(([asin, data]) => (
                     <tr key={asin} className="hover:bg-gray-50">
@@ -677,7 +931,19 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                         </span>
                       </td>
                     </tr>
-                  )) : []}
+                  )) : (
+                    <tr>
+                      <td colSpan="9" className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center">
+                          <BarChart3 className="h-12 w-12 text-gray-400 mb-3" />
+                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Products Found</h3>
+                          <p className="text-sm text-gray-500">
+                            No products match your search criteria
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
               </tbody>
             </table>
             </div>
@@ -690,24 +956,54 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Product
+                      <button
+                        onClick={() => handleSort('product_name')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Product</span>
+                        {getSortIcon('product_name')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Velocity Analysis
+                      <button
+                        onClick={() => handleSort('velocity')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Velocity Analysis</span>
+                        {getSortIcon('velocity')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Stock Status
+                      <button
+                        onClick={() => handleSort('current_stock')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Stock Status</span>
+                        {getSortIcon('current_stock')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Restock Recommendation
+                      <button
+                        onClick={() => handleSort('suggested_quantity')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Restock Recommendation</span>
+                        {getSortIcon('suggested_quantity')}
+                      </button>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Priority
+                      <button
+                        onClick={() => handleSort('priority_score')}
+                        className="flex items-center space-x-1 hover:text-gray-700"
+                      >
+                        <span>Priority</span>
+                        {getSortIcon('priority_score')}
+                      </button>
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {Object.entries(enhanced_analytics).map(([asin, data]) => (
+                  {sortedAnalytics.length > 0 ? sortedAnalytics.map(([asin, data]) => (
                     <tr key={asin} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div>
@@ -827,7 +1123,19 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan="5" className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center">
+                          <Package className="h-12 w-12 text-gray-400 mb-3" />
+                          <h3 className="text-sm font-medium text-gray-900 mb-1">No Products Found</h3>
+                          <p className="text-sm text-gray-500">
+                            No products match your search criteria
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

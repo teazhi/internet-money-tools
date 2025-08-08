@@ -43,6 +43,10 @@ const AdminCompact = () => {
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
+  const [scriptModalOpen, setScriptModalOpen] = useState(false);
+  const [editingConfigs, setEditingConfigs] = useState({});
+  const [savingConfigs, setSavingConfigs] = useState(false);
+
   const fetchData = useCallback(async () => {
     if (!isAdmin) return;
     
@@ -60,6 +64,7 @@ const AdminCompact = () => {
       setSystemStats(statsRes.data);
       setInvitations(invitesRes.data.invitations || []);
       setScriptConfigs(scriptsRes.data);
+      setEditingConfigs(scriptsRes.data);
       setDiscountMonitoring(discountRes.data);
     } catch (error) {
       setError('Failed to load admin data');
@@ -86,6 +91,30 @@ const AdminCompact = () => {
     }
   };
 
+  const handleSaveScriptConfigs = async () => {
+    setSavingConfigs(true);
+    try {
+      await axios.post('/api/admin/script-configs', editingConfigs, { withCredentials: true });
+      setScriptConfigs(editingConfigs);
+      setSuccess('Script configurations updated successfully!');
+      setScriptModalOpen(false);
+    } catch (error) {
+      setError('Failed to save script configurations');
+    } finally {
+      setSavingConfigs(false);
+    }
+  };
+
+  const handleConfigChange = (configKey, field, value) => {
+    setEditingConfigs(prev => ({
+      ...prev,
+      [configKey]: {
+        ...prev[configKey],
+        [field]: value
+      }
+    }));
+  };
+
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -100,14 +129,111 @@ const AdminCompact = () => {
 
   const tabs = [
     { id: 'users', name: 'Users', icon: Users, count: users.length },
-    { id: 'system', name: 'System', icon: Activity, count: null },
     { id: 'scripts', name: 'Scripts', icon: Cog, count: null },
-    { id: 'discount', name: 'Discounts', icon: Percent, count: null },
-    { id: 'invites', name: 'Invites', icon: UserPlus, count: invitations.length }
+    { id: 'discount', name: 'Discounts', icon: Percent, count: null }
   ];
 
   return (
     <div className="space-y-4">
+      {/* System Stats */}
+      {systemStats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-center">
+              <Users className="h-6 w-6 text-blue-500 mr-2" />
+              <div>
+                <p className="text-xs text-blue-600">Total Users</p>
+                <p className="text-lg font-bold text-blue-900">{systemStats.total_users}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg">
+            <div className="flex items-center">
+              <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
+              <div>
+                <p className="text-xs text-green-600">Active</p>
+                <p className="text-lg font-bold text-green-900">{systemStats.active_users}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-yellow-50 p-4 rounded-lg">
+            <div className="flex items-center">
+              <Clock className="h-6 w-6 text-yellow-500 mr-2" />
+              <div>
+                <p className="text-xs text-yellow-600">Pending</p>
+                <p className="text-lg font-bold text-yellow-900">{systemStats.pending_users}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg">
+            <div className="flex items-center">
+              <Activity className="h-6 w-6 text-purple-500 mr-2" />
+              <div>
+                <p className="text-xs text-purple-600">Status</p>
+                <p className="text-sm font-bold text-green-900">Operational</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invitations Section */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <UserPlus className="h-5 w-5 mr-2 text-builders-500" />
+            Pending Invitations
+          </h3>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center px-3 py-2 bg-builders-600 text-white rounded-md text-sm hover:bg-builders-700"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Send Invitation
+          </button>
+        </div>
+        
+        {invitations.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sent</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {invitations.map((invitation) => (
+                  <tr key={invitation.token} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-sm text-gray-900">{invitation.email}</td>
+                    <td className="px-4 py-2">
+                      <span className="inline-flex px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                        Pending
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-500">
+                      {new Date(invitation.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-2">
+                      <button className="text-red-600 hover:text-red-800">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <UserPlus className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No pending invitations</p>
+          </div>
+        )}
+      </div>
+
       {/* Compact Header */}
       <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-4 text-white">
         <div className="flex items-center justify-between">
@@ -209,100 +335,83 @@ const AdminCompact = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {users.slice(0, 10).map((user) => (
-                          <tr key={user.discord_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2">
-                              <div className="flex items-center">
-                                {user.discord_avatar ? (
-                                  <img
-                                    className="h-6 w-6 rounded-full mr-2"
-                                    src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
-                                    alt=""
-                                  />
-                                ) : (
-                                  <div className="h-6 w-6 bg-gray-300 rounded-full mr-2"></div>
-                                )}
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">{user.discord_username}</div>
-                                  <div className="text-xs text-gray-500">{user.email}</div>
+                        {users.slice(0, 10).map((user) => {
+                          const isSubuser = user.user_type === 'subuser';
+                          const isActive = isSubuser 
+                            ? true // Subusers inherit setup from parent
+                            : (user.profile_configured && user.google_linked && user.sheet_configured);
+                          
+                          return (
+                            <tr key={user.discord_id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2">
+                                <div className="flex items-center">
+                                  {user.discord_avatar ? (
+                                    <img
+                                      className="h-6 w-6 rounded-full mr-2"
+                                      src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
+                                      alt=""
+                                    />
+                                  ) : (
+                                    <div className="h-6 w-6 bg-gray-300 rounded-full mr-2"></div>
+                                  )}
+                                  <div>
+                                    <div className="flex items-center">
+                                      <span className="text-sm font-medium text-gray-900">{user.discord_username}</span>
+                                      {isSubuser && (
+                                        <span className="ml-2 inline-flex px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                                          VA
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-gray-500">{user.email}</div>
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                user.google_tokens && user.sheet_id 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {user.google_tokens && user.sheet_id ? 'Active' : 'Setup Required'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-xs text-gray-500">
-                              {user.last_activity ? new Date(user.last_activity).toLocaleDateString() : 'Never'}
-                            </td>
-                            <td className="px-4 py-2">
-                              <div className="flex space-x-2">
-                                <button className="text-blue-600 hover:text-blue-800">
-                                  <Edit3 className="h-4 w-4" />
-                                </button>
-                                <button className="text-red-600 hover:text-red-800">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                                  isActive 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {isActive ? 'Active' : 'Setup Required'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-xs text-gray-500">
+                                {user.last_activity ? new Date(user.last_activity).toLocaleDateString() : 'Never'}
+                              </td>
+                              <td className="px-4 py-2">
+                                <div className="flex space-x-2">
+                                  <button className="text-blue-600 hover:text-blue-800">
+                                    <Edit3 className="h-4 w-4" />
+                                  </button>
+                                  <button className="text-red-600 hover:text-red-800">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
               )}
 
-              {/* System Tab */}
-              {activeTab === 'system' && systemStats && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="flex items-center">
-                      <Users className="h-6 w-6 text-blue-500 mr-2" />
-                      <div>
-                        <p className="text-xs text-blue-600">Total Users</p>
-                        <p className="text-lg font-bold text-blue-900">{systemStats.total_users}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="flex items-center">
-                      <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
-                      <div>
-                        <p className="text-xs text-green-600">Active</p>
-                        <p className="text-lg font-bold text-green-900">{systemStats.active_users}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-yellow-50 p-4 rounded-lg">
-                    <div className="flex items-center">
-                      <Clock className="h-6 w-6 text-yellow-500 mr-2" />
-                      <div>
-                        <p className="text-xs text-yellow-600">Pending</p>
-                        <p className="text-lg font-bold text-yellow-900">{systemStats.pending_users}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <div className="flex items-center">
-                      <Activity className="h-6 w-6 text-purple-500 mr-2" />
-                      <div>
-                        <p className="text-xs text-purple-600">Status</p>
-                        <p className="text-sm font-bold text-green-900">Operational</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Scripts Tab */}
               {activeTab === 'scripts' && (
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Script Configuration</h3>
+                    <button
+                      onClick={() => setScriptModalOpen(true)}
+                      className="flex items-center px-3 py-2 bg-builders-600 text-white rounded-md text-sm hover:bg-builders-700"
+                    >
+                      <Settings className="h-4 w-4 mr-1" />
+                      Configure
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="border rounded-lg p-4">
                       <div className="flex items-center mb-3">
@@ -335,7 +444,7 @@ const AdminCompact = () => {
                         <span className="text-xs text-gray-600">
                           Last: {scriptConfigs?.config?.last_processed_date || 'Not set'}
                         </span>
-                        <button className="flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">
+                        <button className="flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:blue-700">
                           <Play className="h-3 w-3 mr-1" />
                           Run
                         </button>
@@ -400,51 +509,6 @@ const AdminCompact = () => {
                 </div>
               )}
 
-              {/* Invitations Tab */}
-              {activeTab === 'invites' && (
-                <div className="space-y-4">
-                  {invitations.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sent</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {invitations.map((invitation) => (
-                            <tr key={invitation.token} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 text-sm text-gray-900">{invitation.email}</td>
-                              <td className="px-4 py-2">
-                                <span className="inline-flex px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                                  Pending
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-xs text-gray-500">
-                                {new Date(invitation.created_at).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-2">
-                                <button className="text-red-600 hover:text-red-800">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Pending Invitations</h3>
-                      <p className="text-gray-500">Invite new users to get started.</p>
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -492,6 +556,83 @@ const AdminCompact = () => {
                   Send Invitation
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Script Configuration Modal */}
+      {scriptModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">Script Configuration</h3>
+              <button
+                onClick={() => setScriptModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Amazon Upload Config */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <Database className="h-5 w-5 mr-2 text-green-500" />
+                  Amazon Listing Loader Configuration
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Processed Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editingConfigs?.amznUploadConfig?.last_processed_date || ''}
+                      onChange={(e) => handleConfigChange('amznUploadConfig', 'last_processed_date', e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Prep Center Config */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <Upload className="h-5 w-5 mr-2 text-blue-500" />
+                  Prep Center Configuration
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Processed Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editingConfigs?.config?.last_processed_date || ''}
+                      onChange={(e) => handleConfigChange('config', 'last_processed_date', e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+              
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setScriptModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveScriptConfigs}
+                disabled={savingConfigs}
+                className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50"
+              >
+                {savingConfigs ? 'Saving...' : 'Save Configuration'}
+              </button>
             </div>
           </div>
         </div>

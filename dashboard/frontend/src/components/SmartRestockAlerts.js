@@ -663,160 +663,151 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
 
           {/* Detailed Product Analytics Tab */}
           {activeTab === 'detailed' && enhanced_analytics && Object.keys(enhanced_analytics).length > 0 && (
-            <div className="space-y-4">
-              {Object.entries(enhanced_analytics)
-                .filter(([asin, data]) => data?.velocity)
-                .map(([asin, data]) => (
-                  <div key={asin} className="border border-gray-200 rounded-lg p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <h4 className="text-lg font-medium text-gray-900 mb-2">
-                          {data.product_name || `Product ${asin}`}
-                        </h4>
-                        <p className="text-sm text-gray-500 mb-1">ASIN: {asin}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          data.priority?.category?.includes('critical') 
-                            ? 'bg-red-100 text-red-800'
-                            : data.priority?.category?.includes('warning')
-                            ? 'bg-builders-100 text-builders-800'
-                            : data.priority?.category?.includes('opportunity')
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {data.priority?.emoji} {getCategoryLabel(data.priority?.category)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {/* Velocity Metrics */}
-                      <div className="bg-blue-50 rounded-lg p-4">
-                        <h5 className="font-medium text-blue-900 mb-3">Velocity Analysis</h5>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-blue-700">7-day velocity:</span>
-                            <span className="font-medium text-blue-900">{data.velocity?.['7d']?.toFixed(1) || '0'}/day</span>
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Product
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Velocity Analysis
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Stock Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Restock Recommendation
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Priority
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {Object.entries(enhanced_analytics).map(([asin, data]) => (
+                    <tr key={asin} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {data?.product_name && data.product_name.length > 60 
+                              ? data.product_name.substring(0, 60) + '...'
+                              : data?.product_name || 'Unknown Product'
+                            }
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-blue-700">14-day velocity:</span>
-                            <span className="font-medium text-blue-900">{data.velocity?.['14d']?.toFixed(1) || '0'}/day</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-blue-700">30-day velocity:</span>
-                            <span className="font-medium text-blue-900">{data.velocity?.['30d']?.toFixed(1) || '0'}/day</span>
-                          </div>
-                          <div className="flex justify-between border-t border-blue-200 pt-2">
-                            <span className="text-blue-700">Trend factor:</span>
-                            <span className={`font-medium ${
-                              data.velocity?.trend_factor > 1.2 ? 'text-green-600' :
-                              data.velocity?.trend_factor < 0.8 ? 'text-red-600' : 'text-blue-900'
-                            }`}>
-                              {data.velocity?.trend_factor?.toFixed(2) || 'N/A'}
+                          <div className="text-sm text-gray-500">{asin}</div>
+                          {(data?.stock_info?.Source || 
+                            data?.stock_info?.source ||
+                            data?.stock_info?.['Source Link'] ||
+                            data?.stock_info?.['source link'] ||
+                            data?.stock_info?.Link ||
+                            data?.stock_info?.link ||
+                            data?.stock_info?.URL ||
+                            data?.stock_info?.url ||
+                            asin) && (
+                            <div className="mt-1">
+                              <a 
+                                href={data.stock_info.Source ||
+                                      data.stock_info.source ||
+                                      data.stock_info['Source Link'] ||
+                                      data.stock_info['source link'] ||
+                                      data.stock_info.Link ||
+                                      data.stock_info.link ||
+                                      data.stock_info.URL ||
+                                      data.stock_info.url ||
+                                      `https://www.amazon.com/dp/${asin}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {data.stock_info.Source ||
+                                 data.stock_info.source ||
+                                 data.stock_info['Source Link'] ||
+                                 data.stock_info['source link'] ||
+                                 data.stock_info.Link ||
+                                 data.stock_info.link ||
+                                 data.stock_info.URL ||
+                                 data.stock_info.url 
+                                 ? 'View Source' : 'View on Amazon'}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-gray-900">
+                              {data?.velocity?.weighted_velocity?.toFixed(1) || '0'}/day
+                            </span>
+                            {data?.velocity?.trend_direction === 'accelerating' && <TrendingUp className="h-4 w-4 text-green-500" />}
+                            {data?.velocity?.trend_direction === 'declining' && <TrendingDown className="h-4 w-4 text-red-500" />}
+                            {data?.velocity?.trend_direction === 'stable' && <Minus className="h-4 w-4 text-gray-400" />}
+                            <span className="text-xs text-gray-500 capitalize">
+                              {data?.velocity?.trend_direction || 'stable'}
                             </span>
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Stock Information */}
-                      <div className="bg-green-50 rounded-lg p-4">
-                        <h5 className="font-medium text-green-900 mb-3">Stock Status</h5>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-green-700">Current stock:</span>
-                            <span className="font-medium text-green-900">{data.stock_info?.current_stock || '0'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-green-700">Days of supply:</span>
-                            <span className="font-medium text-green-900">{data.stock_info?.days_of_supply || '0'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-green-700">Stock risk:</span>
-                            <span className={`font-medium ${
-                              data.stock_info?.stock_risk === 'High' ? 'text-red-600' :
-                              data.stock_info?.stock_risk === 'Medium' ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
-                              {data.stock_info?.stock_risk || 'Low'}
-                            </span>
+                          <div className="text-xs text-gray-500">
+                            7d: {data?.velocity?.period_data?.['7d']?.toFixed(1) || '0'} | 
+                            30d: {data?.velocity?.period_data?.['30d']?.toFixed(1) || '0'} |
+                            Confidence: {(data?.velocity?.confidence ? (data.velocity.confidence * 100).toFixed(0) : '0')}%
                           </div>
                         </div>
-                      </div>
-
-                      {/* Restock Recommendations */}
-                      <div className="bg-purple-50 rounded-lg p-4">
-                        <h5 className="font-medium text-purple-900 mb-3">Restock Analysis</h5>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-purple-700">Suggested quantity:</span>
-                            <span className="font-medium text-purple-900">{data.restock?.suggested_quantity || '0'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            {Math.round(data?.restock?.current_stock || 0)} units
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-purple-700">Target coverage:</span>
-                            <span className="font-medium text-purple-900">{data.restock?.target_coverage_days || '0'} days</span>
+                          <div className="text-xs text-gray-500">
+                            {(() => {
+                              // Find the days left column (handle spacing variations)
+                              const daysLeftValue = data?.stock_info?.['Days of stock left'] || 
+                                                   data?.stock_info?.['Days  of stock  left'] || 
+                                                   data?.stock_info?.['Days of stock  left'] ||
+                                                   data?.stock_info?.['Days  of stock left'];
+                              return typeof daysLeftValue === 'number' 
+                                ? `${daysLeftValue.toFixed(1)} days left`
+                                : daysLeftValue || 'Unknown';
+                            })()}
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-purple-700">Lead time:</span>
-                            <span className="font-medium text-purple-900">{data.restock?.lead_time_days || '0'} days</span>
-                          </div>
-                          {data.cogs_data?.cogs && (
-                            <div className="flex justify-between border-t border-purple-200 pt-2">
-                              <span className="text-purple-700">Est. investment:</span>
-                              <span className="font-medium text-purple-900">
-                                ${((data.restock?.suggested_quantity || 0) * data.cogs_data.cogs).toFixed(2)}
-                              </span>
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Additional Metrics */}
-                    {(data.cogs_data || data.purchase_analytics) && (
-                      <div className="mt-6 pt-6 border-t border-gray-200">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {data.cogs_data && (
-                            <div>
-                              <h6 className="font-medium text-gray-900 mb-2">Cost Information</h6>
-                              <div className="text-sm text-gray-600 space-y-1">
-                                <div className="flex justify-between">
-                                  <span>COGS:</span>
-                                  <span className="font-medium">${data.cogs_data.cogs}</span>
-                                </div>
-                                {data.cogs_data.purchase_date && (
-                                  <div className="flex justify-between">
-                                    <span>Last purchased:</span>
-                                    <span className="font-medium">{new Date(data.cogs_data.purchase_date).toLocaleDateString()}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {data.purchase_analytics && (
-                            <div>
-                              <h6 className="font-medium text-gray-900 mb-2">Purchase History</h6>
-                              <div className="text-sm text-gray-600 space-y-1">
-                                {data.purchase_analytics.recent_purchases && (
-                                  <div className="flex justify-between">
-                                    <span>Recent purchases:</span>
-                                    <span className="font-medium">{data.purchase_analytics.recent_purchases}</span>
-                                  </div>
-                                )}
-                                {data.purchase_analytics.average_quantity && (
-                                  <div className="flex justify-between">
-                                    <span>Avg. order size:</span>
-                                    <span className="font-medium">{data.purchase_analytics.average_quantity}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-builders-600">
+                            {data?.restock?.suggested_quantity || 0} units
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {data?.restock?.estimated_coverage_days?.toFixed(1) || '0'} days coverage
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {data?.restock?.reasoning || 'No data'}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            data?.priority?.category?.includes('critical') 
+                              ? 'bg-red-100 text-red-800'
+                              : data?.priority?.category?.includes('warning')
+                              ? 'bg-builders-100 text-builders-800'
+                              : data?.priority?.category?.includes('opportunity')
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {data?.priority?.emoji || '📊'} {data?.priority?.category?.replace('_', ' ')?.toUpperCase() || 'UNKNOWN'}
+                          </span>
+                          <div className="text-xs text-gray-500">
+                            Score: {data?.priority?.score?.toFixed(2) || '0.00'}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -837,11 +828,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
             </div>
           )}
 
-          {activeTab === 'detailed' && (!enhanced_analytics || Object.keys(enhanced_analytics).filter(asin => enhanced_analytics[asin]?.velocity).length === 0) && (
+          {activeTab === 'detailed' && (!enhanced_analytics || Object.keys(enhanced_analytics).length === 0) && (
             <div className="text-center py-12">
-              <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Detailed Analytics</h3>
-              <p className="text-gray-500">Detailed product analytics will appear here once velocity data is available</p>
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
+              <p className="text-gray-500">Detailed analytics will appear here once your inventory data is processed</p>
             </div>
           )}
         </div>

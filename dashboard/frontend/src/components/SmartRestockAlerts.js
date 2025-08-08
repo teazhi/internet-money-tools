@@ -268,11 +268,8 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       case 'trend':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center justify-center" title={alert.trend}>
               {getTrendIcon(alert.trend)}
-              <span className="text-xs text-gray-900 capitalize">
-                {alert.trend}
-              </span>
             </div>
           </td>
         );
@@ -1006,11 +1003,8 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                         {data.velocity.weighted_velocity.toFixed(1)}/day
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center justify-center" title={data.velocity.trend_direction}>
                           {getTrendIcon(data.velocity.trend_direction)}
-                          <span className="text-xs text-gray-900 capitalize">
-                            {data.velocity.trend_direction}
-                          </span>
                         </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
@@ -1194,12 +1188,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                             <span className="text-sm font-medium text-gray-900">
                               {data?.velocity?.weighted_velocity?.toFixed(1) || '0'}/day
                             </span>
-                            {data?.velocity?.trend_direction === 'accelerating' && <TrendingUp className="h-4 w-4 text-green-500" />}
-                            {data?.velocity?.trend_direction === 'declining' && <TrendingDown className="h-4 w-4 text-red-500" />}
-                            {data?.velocity?.trend_direction === 'stable' && <Minus className="h-4 w-4 text-gray-400" />}
-                            <span className="text-xs text-gray-500 capitalize">
-                              {data?.velocity?.trend_direction || 'stable'}
-                            </span>
+                            <div title={data?.velocity?.trend_direction || 'stable'}>
+                              {data?.velocity?.trend_direction === 'accelerating' && <TrendingUp className="h-4 w-4 text-green-500" />}
+                              {data?.velocity?.trend_direction === 'declining' && <TrendingDown className="h-4 w-4 text-red-500" />}
+                              {data?.velocity?.trend_direction === 'stable' && <Minus className="h-4 w-4 text-gray-400" />}
+                            </div>
                           </div>
                           <div className="text-xs text-gray-500">
                             7d: {data?.velocity?.period_data?.['7d']?.toFixed(1) || '0'} | 

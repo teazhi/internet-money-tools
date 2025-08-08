@@ -1009,10 +1009,14 @@ def update_profile():
     if 'amazon_lead_time_days' in data:
         # Validate lead time is within reasonable bounds
         lead_time = data['amazon_lead_time_days']
-        if isinstance(lead_time, (int, float)) and 30 <= lead_time <= 180:
-            user_record['amazon_lead_time_days'] = int(lead_time)
-        else:
-            return jsonify({'error': 'Amazon lead time must be between 30 and 180 days'}), 400
+        try:
+            lead_time_int = int(lead_time)
+            if 30 <= lead_time_int <= 180:
+                user_record['amazon_lead_time_days'] = lead_time_int
+            else:
+                return jsonify({'error': 'Amazon lead time must be between 30 and 180 days'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Amazon lead time must be a valid number between 30 and 180 days'}), 400
     
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})

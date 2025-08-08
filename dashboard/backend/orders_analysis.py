@@ -108,11 +108,40 @@ class EnhancedOrdersAnalysis:
         
         # Try to download with better error handling
         try:
-            response = requests.get(url, timeout=30, allow_redirects=True)
-            print(f"[DEBUG] Response status code: {response.status_code}")
-            print(f"[DEBUG] Final URL after redirects: {response.url}")
-            if response.history:
-                print(f"[DEBUG] Redirect history: {[r.status_code for r in response.history]}")
+            # Create a session to handle cookies properly
+            session = requests.Session()
+            
+            # Add headers that might be expected by Sellerboard
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/csv,application/csv,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+            }
+            
+            # First, try to get the initial response without following redirects
+            initial_response = session.get(url, timeout=30, allow_redirects=False, headers=headers)
+            print(f"[DEBUG] Initial response status: {initial_response.status_code}")
+            
+            if initial_response.status_code == 302:
+                # Handle redirect manually to see what's happening
+                redirect_url = initial_response.headers.get('Location')
+                print(f"[DEBUG] Redirect URL: {redirect_url}")
+                
+                # Check if the redirect URL is a download URL
+                if redirect_url and 'download-report' in redirect_url:
+                    print(f"[DEBUG] Attempting to download from redirect URL: {redirect_url}")
+                    # Try to follow the redirect with the session cookies
+                    response = session.get(redirect_url, timeout=30, headers=headers)
+                else:
+                    # Follow redirects normally
+                    response = session.get(url, timeout=30, allow_redirects=True, headers=headers)
+            else:
+                response = initial_response
+                
+            print(f"[DEBUG] Final response status code: {response.status_code}")
+            print(f"[DEBUG] Final URL: {response.url}")
             
             # Check for authentication errors specifically
             if response.status_code == 401:

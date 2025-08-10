@@ -23,7 +23,8 @@ import {
   Eye,
   EyeOff,
   X,
-  Settings
+  Settings,
+  ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../../config/api';
@@ -84,12 +85,6 @@ const AdminCompact = () => {
       });
       
       setFilteredUsers(hierarchicalUsers);
-      
-      // Temporary debug to see if VAs are being found
-      if (subUsers.length > 0) {
-        console.log('Found VAs:', subUsers.map(u => u.discord_username));
-        console.log('Final hierarchy count:', hierarchicalUsers.length);
-      }
     } catch (error) {
       setError('Failed to load admin data');
     } finally {
@@ -129,6 +124,23 @@ const AdminCompact = () => {
       fetchData();
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to delete invitation');
+    }
+  };
+
+  const handleViewUserDashboard = async (userId) => {
+    try {
+      setError('');
+      
+      // Start impersonation and then navigate to Overview
+      await axios.post(`/api/admin/impersonate/${userId}`, {}, { 
+        withCredentials: true 
+      });
+      
+      // Navigate to dashboard overview - impersonation will show in banner
+      window.location.href = '/dashboard/overview';
+      
+    } catch (error) {
+      setError(`Failed to start impersonation: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -439,7 +451,14 @@ const AdminCompact = () => {
                               </td>
                               <td className="px-4 py-2">
                                 <div className="flex space-x-2">
-                                  <button className="text-blue-600 hover:text-blue-800">
+                                  <button 
+                                    onClick={() => handleViewUserDashboard(user.discord_id)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="View User's Dashboard"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                  </button>
+                                  <button className="text-gray-400 hover:text-gray-600">
                                     <Edit3 className="h-4 w-4" />
                                   </button>
                                   <button className="text-red-600 hover:text-red-800">

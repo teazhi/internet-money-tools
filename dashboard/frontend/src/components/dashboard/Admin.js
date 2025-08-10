@@ -431,6 +431,8 @@ const Admin = () => {
   const [showLogs, setShowLogs] = useState({});
   const [discountMonitoring, setDiscountMonitoring] = useState(null);
   const [discountLoading, setDiscountLoading] = useState(false);
+  const [editingDaysBack, setEditingDaysBack] = useState(false);
+  const [daysBackValue, setDaysBackValue] = useState(7);
   const [activeTab, setActiveTab] = useState('users');
 
   // Hook definitions must come before any early returns
@@ -632,6 +634,7 @@ const Admin = () => {
       setDiscountLoading(true);
       const response = await axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true });
       setDiscountMonitoring(response.data);
+      setDaysBackValue(response.data.days_back || 7);
     } catch (error) {
       
       setError('Failed to fetch discount monitoring status');
@@ -653,6 +656,30 @@ const Admin = () => {
       }
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to test discount monitoring');
+    } finally {
+      setDiscountLoading(false);
+    }
+  };
+
+  const updateDaysBackSetting = async (newDaysBack) => {
+    try {
+      setDiscountLoading(true);
+      setError('');
+      setSuccess('');
+      
+      const response = await axios.put('/api/admin/discount-monitoring/settings', {
+        days_back: parseInt(newDaysBack)
+      }, { withCredentials: true });
+      
+      if (response.data.success) {
+        setSuccess(`Updated email check range to ${newDaysBack} days back`);
+        setDiscountMonitoring(prev => ({ ...prev, days_back: parseInt(newDaysBack) }));
+        setEditingDaysBack(false);
+      } else {
+        setError(response.data.error || 'Failed to update setting');
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to update days back setting');
     } finally {
       setDiscountLoading(false);
     }
@@ -1521,6 +1548,52 @@ const Admin = () => {
                     <span className="font-medium text-gray-900">
                       {discountMonitoring?.keywords?.length || 0} configured
                     </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Email Check Range:</span>
+                    {editingDaysBack ? (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={daysBackValue}
+                          onChange={(e) => setDaysBackValue(e.target.value)}
+                          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-builders-500"
+                        />
+                        <span className="text-sm text-gray-600">days</span>
+                        <button
+                          onClick={() => updateDaysBackSetting(daysBackValue)}
+                          disabled={discountLoading || !daysBackValue || daysBackValue < 1 || daysBackValue > 30}
+                          className="text-green-600 hover:text-green-800 p-1 disabled:opacity-50"
+                        >
+                          <Save className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingDaysBack(false);
+                            setDaysBackValue(discountMonitoring?.days_back || 7);
+                          }}
+                          className="text-gray-600 hover:text-gray-800 p-1"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-900">
+                          {discountMonitoring?.days_back || 7} days back
+                        </span>
+                        {discountMonitoring?.email_configured && (
+                          <button
+                            onClick={() => setEditingDaysBack(true)}
+                            className="text-gray-600 hover:text-gray-800 p-1"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

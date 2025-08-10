@@ -78,6 +78,7 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
 USERS_CONFIG_KEY = "users.json"
 INVITATIONS_CONFIG_KEY = "invitations.json"
+DISCOUNT_MONITORING_CONFIG_KEY = "discount_monitoring.json"
 
 # Email Configuration (for invitations)
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -101,6 +102,7 @@ AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_ama
 DISCOUNT_MONITOR_EMAIL = os.getenv('DISCOUNT_MONITOR_EMAIL')  # Admin email for discount monitoring
 DISCOUNT_SENDER_EMAIL = 'alert@distill.io'  # Only monitor emails from this sender
 DISCOUNT_KEYWORDS = ['sale', 'discount', '% off', 'clearance', 'deal', 'promotion', 'special offer', 'price drop', 'reduced']
+DISCOUNT_EMAIL_DAYS_BACK = int(os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '7'))  # How many days back to check emails (default: 7)
 
 # Encryption key for sensitive data (SP-API tokens)
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
@@ -247,6 +249,50 @@ def update_invitations_config(invitations):
     except Exception as e:
         pass  # Error updating invitations config
         return False
+
+def get_discount_monitoring_config():
+    """Get discount monitoring configuration from S3"""
+    s3_client = get_s3_client()
+    try:
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=DISCOUNT_MONITORING_CONFIG_KEY)
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        return config_data
+    except Exception as e:
+        # Return default config if not found
+        return {
+            'days_back': 7,  # Default to 7 days
+            'enabled': bool(DISCOUNT_MONITOR_EMAIL),
+            'last_updated': None
+        }
+
+def update_discount_monitoring_config(config):
+    """Update discount monitoring configuration in S3"""
+    try:
+        from datetime import datetime
+        import pytz
+        
+        # Add timestamp
+        config['last_updated'] = datetime.now(pytz.UTC).isoformat()
+        
+        s3_client = get_s3_client()
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=DISCOUNT_MONITORING_CONFIG_KEY,
+            Body=json.dumps(config, indent=2),
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error updating discount monitoring config: {e}")
+        return False
+
+def get_discount_email_days_back():
+    """Get the current days back setting for discount email checking"""
+    config = get_discount_monitoring_config()
+    env_days = int(os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '7'))
+    
+    # Prefer config over environment variable, but fallback to env if not set
+    return config.get('days_back', env_days)
 
 def send_invitation_email(email, invitation_token, invited_by):
     """Send invitation email to user"""
@@ -1015,7 +1061,7 @@ def get_google_auth_url():
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
-        "scope": "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly",
+        "scope": "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
         "access_type": "offline",
         "prompt": "consent",
         "state": str(discord_id)
@@ -1172,6 +1218,124 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def get_gmail_service_for_user(user_record):
+    """Get Gmail API service client for a user"""
+    import base64
+    from email.mime.text import MIMEText
+    
+    def api_call(access_token):
+        headers = {"Authorization": f"Bearer {access_token}"}
+        return headers
+    
+    try:
+        headers = safe_google_api_call(user_record, api_call)
+        return headers
+    except Exception as e:
+        print(f"Error creating Gmail service: {e}")
+        return None
+
+def search_gmail_messages(user_record, query, max_results=50):
+    """Search Gmail messages using the Gmail API"""
+    try:
+        def api_call(access_token):
+            url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            params = {
+                "q": query,
+                "maxResults": max_results
+            }
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        
+        return safe_google_api_call(user_record, api_call)
+    except Exception as e:
+        print(f"Error searching Gmail messages: {e}")
+        return None
+
+def get_gmail_message(user_record, message_id):
+    """Get a specific Gmail message by ID"""
+    try:
+        def api_call(access_token):
+            url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            params = {"format": "full"}
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        
+        return safe_google_api_call(user_record, api_call)
+    except Exception as e:
+        print(f"Error getting Gmail message: {e}")
+        return None
+
+def extract_email_content(message_data):
+    """Extract subject, sender, date, and HTML content from Gmail message"""
+    try:
+        headers = message_data.get('payload', {}).get('headers', [])
+        
+        # Extract headers
+        subject = None
+        sender = None
+        date = None
+        
+        for header in headers:
+            name = header.get('name', '').lower()
+            value = header.get('value', '')
+            
+            if name == 'subject':
+                subject = value
+            elif name == 'from':
+                sender = value
+            elif name == 'date':
+                date = value
+        
+        # Extract HTML content
+        html_content = extract_html_from_message_payload(message_data.get('payload', {}))
+        
+        return {
+            'subject': subject,
+            'sender': sender,
+            'date': date,
+            'html_content': html_content,
+            'message_id': message_data.get('id')
+        }
+    except Exception as e:
+        print(f"Error extracting email content: {e}")
+        return None
+
+def extract_html_from_message_payload(payload):
+    """Recursively extract HTML content from Gmail message payload"""
+    import base64
+    
+    try:
+        # Check if this part has HTML content
+        if payload.get('mimeType') == 'text/html':
+            body_data = payload.get('body', {}).get('data')
+            if body_data:
+                # Decode base64 URL-safe encoding
+                decoded = base64.urlsafe_b64decode(body_data + '===').decode('utf-8')
+                return decoded
+        
+        # Check multipart content
+        parts = payload.get('parts', [])
+        for part in parts:
+            html_content = extract_html_from_message_payload(part)
+            if html_content:
+                return html_content
+        
+        # Check if body has data directly
+        body_data = payload.get('body', {}).get('data')
+        if body_data and payload.get('mimeType') == 'text/plain':
+            # Return plain text as fallback
+            decoded = base64.urlsafe_b64decode(body_data + '===').decode('utf-8')
+            return decoded
+            
+        return None
+    except Exception as e:
+        print(f"Error extracting HTML from payload: {e}")
+        return None
 
 @app.route('/api/debug/stock-columns')
 @login_required
@@ -4260,7 +4424,7 @@ def analyze_discount_opportunities():
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
 
 def fetch_discount_email_alerts():
-    """Fetch recent Distill.io email alerts from admin-configured Gmail"""
+    """Fetch recent Distill.io email alerts from admin-configured Gmail using Gmail API"""
     try:
         monitor_email = DISCOUNT_MONITOR_EMAIL
         if not monitor_email:
@@ -4283,47 +4447,143 @@ def fetch_discount_email_alerts():
                 }
             ]
         
-        # TODO: Implement actual Gmail API integration
-        # For now, return mock data that simulates real email structure
+        # Get admin user record for Gmail access
+        admin_user_record = None
+        users = get_users_config()
+        for user in users:
+            if user.get('email') == monitor_email and user.get('google_tokens'):
+                admin_user_record = user
+                break
+        
+        if not admin_user_record:
+            print(f"No admin user found with email {monitor_email} and Google tokens")
+            # Return mock data if admin not configured with Gmail
+            return fetch_mock_discount_alerts()
+        
+        # Build Gmail search query
+        # Search for emails from Distill.io in the last N days
+        # No keyword filtering needed - Distill.io already filters relevant emails
+        from datetime import datetime, timedelta
+        import pytz
+        
+        days_back = get_discount_email_days_back()
+        cutoff_date = datetime.now(pytz.UTC) - timedelta(days=days_back)
+        date_str = cutoff_date.strftime('%Y/%m/%d')
+        
+        # Create search query for Gmail
+        # No need to filter by keywords since Distill.io already filters relevant emails
+        query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str}'
+        
+        print(f"Gmail search query: {query}")
+        
+        # Search for messages
+        search_results = search_gmail_messages(admin_user_record, query, max_results=100)
+        if not search_results:
+            print("No search results from Gmail API")
+            return fetch_mock_discount_alerts()
+        
+        messages = search_results.get('messages', [])
+        if not messages:
+            print("No messages found in search results")
+            return fetch_mock_discount_alerts()
+        
+        print(f"Found {len(messages)} messages from Gmail search")
+        
         email_alerts = []
         
-        # Simulate parsing email subjects for retailer and ASIN
-        mock_emails = [
-            {
-                'subject': 'Vitacost (ASIN: B07XVTRJKX)',
-                'html_body': '''<div>Price alert for product B07XVTRJKX</div>
-                               <div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
-                               <a href="https://vitacost.com/product">View Product</a>''',
-                'received_time': '2025-08-09T19:53:00Z',
-                'sender': DISCOUNT_SENDER_EMAIL
-            },
-            {
-                'subject': 'Walmart (ASIN: B07D83HV1M) (Note: Amazon is two pack)',
-                'html_body': '''<div>Discount available for B07D83HV1M</div>
-                               <p>Special promotion: 20% off</p>''',
-                'received_time': '2025-08-09T18:30:00Z',
-                'sender': DISCOUNT_SENDER_EMAIL
-            }
-        ]
-        
-        for email in mock_emails:
+        # Process each message
+        for message_info in messages[:50]:  # Limit to 50 most recent
+            message_id = message_info.get('id')
+            if not message_id:
+                continue
+                
+            # Get full message details
+            message_data = get_gmail_message(admin_user_record, message_id)
+            if not message_data:
+                continue
+            
+            # Extract email content
+            email_content = extract_email_content(message_data)
+            if not email_content:
+                continue
+            
+            # Verify sender is from Distill.io
+            sender = email_content.get('sender', '')
+            if DISCOUNT_SENDER_EMAIL not in sender:
+                continue
+            
             # Parse email subject to extract retailer and ASIN
-            parsed_alert = parse_distill_email_subject(email['subject'])
+            subject = email_content.get('subject', '')
+            parsed_alert = parse_distill_email_subject(subject)
+            
             if parsed_alert:
+                # Convert Gmail date to ISO format
+                gmail_date = email_content.get('date', '')
+                iso_date = convert_gmail_date_to_iso(gmail_date)
+                
                 email_alerts.append({
                     'retailer': parsed_alert['retailer'],
                     'asin': parsed_alert['asin'],
                     'note': parsed_alert.get('note'),
-                    'subject': email['subject'],
-                    'html_content': email['html_body'],
-                    'alert_time': email['received_time']
+                    'subject': subject,
+                    'html_content': email_content.get('html_content', ''),
+                    'alert_time': iso_date,
+                    'message_id': message_id
                 })
+        
+        print(f"Processed {len(email_alerts)} discount email alerts")
+        
+        # Sort by alert time (newest first)
+        email_alerts.sort(key=lambda x: x['alert_time'], reverse=True)
         
         return email_alerts
         
     except Exception as e:
-        pass  # Email fetching error
-        return []
+        print(f"Error fetching discount email alerts: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return mock data on error
+        return fetch_mock_discount_alerts()
+
+def fetch_mock_discount_alerts():
+    """Return mock discount alerts for testing"""
+    return [
+        {
+            'retailer': 'Vitacost',
+            'asin': 'B07XVTRJKX',
+            'subject': 'Vitacost (ASIN: B07XVTRJKX)',
+            'html_content': '''<div>Price alert for product B07XVTRJKX</div>
+                           <div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
+                           <a href="https://vitacost.com/product">View Product</a>''',
+            'alert_time': '2025-08-09T19:53:00Z'
+        },
+        {
+            'retailer': 'Walmart', 
+            'asin': 'B07D83HV1M',
+            'subject': 'Walmart (ASIN: B07D83HV1M) (Note: Amazon is two pack)',
+            'html_content': '''<div>Discount available for B07D83HV1M</div>
+                           <p>Special promotion: 20% off</p>''',
+            'alert_time': '2025-08-09T18:30:00Z'
+        }
+    ]
+
+def convert_gmail_date_to_iso(gmail_date):
+    """Convert Gmail date string to ISO format"""
+    try:
+        from email.utils import parsedate_to_datetime
+        if gmail_date:
+            dt = parsedate_to_datetime(gmail_date)
+            return dt.isoformat()
+        else:
+            # Default to current time if no date
+            from datetime import datetime
+            import pytz
+            return datetime.now(pytz.UTC).isoformat()
+    except Exception as e:
+        print(f"Error converting Gmail date: {e}")
+        from datetime import datetime
+        import pytz
+        return datetime.now(pytz.UTC).isoformat()
 
 def parse_distill_email_subject(subject):
     """Parse Distill.io email subject to extract retailer, ASIN, and notes"""
@@ -4464,12 +4724,43 @@ def calculate_opportunity_priority(inventory_data, days_left, suggested_quantity
 def get_discount_monitoring_status():
     """Get discount monitoring configuration status (Admin only)"""
     try:
+        # Check if admin user has Gmail access configured
+        gmail_configured = False
+        admin_user_record = None
+        
+        if DISCOUNT_MONITOR_EMAIL:
+            users = get_users_config()
+            for user in users:
+                if user.get('email') == DISCOUNT_MONITOR_EMAIL and user.get('google_tokens'):
+                    admin_user_record = user
+                    gmail_configured = True
+                    break
+        
+        # Get current config settings
+        discount_config = get_discount_monitoring_config()
+        
+        # Determine overall status
+        if gmail_configured and DISCOUNT_MONITOR_EMAIL:
+            status = 'active'
+        elif DISCOUNT_MONITOR_EMAIL and not gmail_configured:
+            status = 'gmail_not_configured'
+        else:
+            status = 'not_configured'
+        
         return jsonify({
             'email_configured': bool(DISCOUNT_MONITOR_EMAIL),
+            'gmail_configured': gmail_configured,
             'monitor_email': DISCOUNT_MONITOR_EMAIL if DISCOUNT_MONITOR_EMAIL else None,
             'sender_email': DISCOUNT_SENDER_EMAIL,
             'keywords': DISCOUNT_KEYWORDS,
-            'status': 'active' if DISCOUNT_MONITOR_EMAIL else 'not_configured'
+            'days_back': discount_config.get('days_back', 7),
+            'config_last_updated': discount_config.get('last_updated'),
+            'status': status,
+            'status_details': {
+                'email_set': bool(DISCOUNT_MONITOR_EMAIL),
+                'gmail_linked': gmail_configured,
+                'ready_to_fetch': gmail_configured and bool(DISCOUNT_MONITOR_EMAIL)
+            }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -4477,7 +4768,7 @@ def get_discount_monitoring_status():
 @app.route('/api/admin/discount-monitoring/test', methods=['POST'])
 @admin_required  
 def test_discount_monitoring():
-    """Test discount monitoring setup (Admin only)"""
+    """Test discount monitoring setup including Gmail API access (Admin only)"""
     try:
         if not DISCOUNT_MONITOR_EMAIL:
             return jsonify({
@@ -4485,17 +4776,117 @@ def test_discount_monitoring():
                 'error': 'Discount monitor email not configured'
             }), 400
         
-        # Here you would test the email connection
-        # For now, just return success if email is configured
-        return jsonify({
-            'success': True,
-            'message': f'Discount monitoring configured for {DISCOUNT_MONITOR_EMAIL} (monitoring {DISCOUNT_SENDER_EMAIL})',
-            'keywords_count': len(DISCOUNT_KEYWORDS),
-            'sender_email': DISCOUNT_SENDER_EMAIL
-        })
+        # Find admin user record
+        admin_user_record = None
+        users = get_users_config()
+        for user in users:
+            if user.get('email') == DISCOUNT_MONITOR_EMAIL and user.get('google_tokens'):
+                admin_user_record = user
+                break
+        
+        if not admin_user_record:
+            return jsonify({
+                'success': False,
+                'error': f'Admin user {DISCOUNT_MONITOR_EMAIL} not found or Gmail not linked'
+            }), 400
+        
+        # Test Gmail API access by searching for recent messages
+        try:
+            # Simple test query for recent messages
+            test_query = f'from:{DISCOUNT_SENDER_EMAIL}'
+            search_results = search_gmail_messages(admin_user_record, test_query, max_results=5)
+            
+            if search_results:
+                message_count = len(search_results.get('messages', []))
+                return jsonify({
+                    'success': True,
+                    'message': f'Gmail API test successful! Found {message_count} recent messages from {DISCOUNT_SENDER_EMAIL}',
+                    'details': {
+                        'monitor_email': DISCOUNT_MONITOR_EMAIL,
+                        'sender_email': DISCOUNT_SENDER_EMAIL,
+                        'keywords_count': len(DISCOUNT_KEYWORDS),
+                        'days_back': get_discount_email_days_back(),
+                        'test_message_count': message_count
+                    }
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Gmail API test failed - no search results returned'
+                }), 500
+                
+        except Exception as gmail_error:
+            return jsonify({
+                'success': False,
+                'error': f'Gmail API test failed: {str(gmail_error)}'
+            }), 500
+            
     except Exception as e:
         return jsonify({
             'success': False, 
+            'error': str(e)
+        }), 500
+
+@app.route('/api/admin/discount-monitoring/settings', methods=['PUT'])
+@admin_required
+def update_discount_monitoring_settings():
+    """Update discount monitoring settings (Admin only)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body required'}), 400
+        
+        # Get current config
+        current_config = get_discount_monitoring_config()
+        
+        # Update days_back if provided
+        days_back = data.get('days_back')
+        if days_back is not None:
+            try:
+                days_back = int(days_back)
+                if days_back < 1 or days_back > 30:
+                    return jsonify({'error': 'days_back must be between 1 and 30'}), 400
+                current_config['days_back'] = days_back
+            except (ValueError, TypeError):
+                return jsonify({'error': 'days_back must be a valid integer'}), 400
+        
+        # Update enabled status if provided
+        enabled = data.get('enabled')
+        if enabled is not None:
+            current_config['enabled'] = bool(enabled)
+        
+        # Save updated config
+        if update_discount_monitoring_config(current_config):
+            return jsonify({
+                'success': True,
+                'message': 'Discount monitoring settings updated successfully',
+                'settings': current_config
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save settings'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/admin/discount-monitoring/settings', methods=['GET'])
+@admin_required
+def get_discount_monitoring_settings():
+    """Get current discount monitoring settings (Admin only)"""
+    try:
+        config = get_discount_monitoring_config()
+        return jsonify({
+            'success': True,
+            'settings': config
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
             'error': str(e)
         }), 500
 

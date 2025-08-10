@@ -319,7 +319,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       case 'suggested_order':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <div className="text-base font-bold text-builders-600">
+            <div className="text-sm font-bold text-builders-600">
               {alert.suggested_quantity}
             </div>
             <div className="text-xs text-gray-500">
@@ -577,7 +577,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   if (!analytics) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-base font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
         <p className="text-gray-500">Loading analytics data...</p>
       </div>
     );
@@ -587,7 +587,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   if (analytics.fallback_mode) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-base font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
         <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
           <p className="text-yellow-800">⚠️ {analytics.message || 'Analytics running in basic mode. Enhanced restock features unavailable.'}</p>
           <p className="text-yellow-700 text-sm mt-2">Please check your report URLs in Settings to enable enhanced analytics.</p>
@@ -600,7 +600,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   if (analytics.basic_mode) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-base font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
           <p className="text-blue-800">📊 {analytics.message}</p>
         </div>
@@ -611,7 +611,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   if (!analytics.enhanced_analytics || Object.keys(analytics.enhanced_analytics).length === 0) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-base font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
         <div className="text-center py-8">
           <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 mb-2">No enhanced analytics data available</p>
@@ -1093,7 +1093,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
               ) : !opportunitiesLoading && (
                 <div className="text-center py-12">
                   <Percent className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-base font-medium text-gray-900 mb-2">No Discount Opportunities</h3>
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">No Discount Opportunities</h3>
                   <p className="text-gray-500 mb-4">
                     Click "Analyze Opportunities" to check for current discount offers that match your inventory needs.
                   </p>
@@ -1480,7 +1480,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
           {activeTab === 'recommendations' && sortedAlerts.length === 0 && (
             <div className="text-center py-12">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-base font-medium text-gray-900 mb-2">No Restock Recommendations</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-2">No Restock Recommendations</h3>
               <p className="text-gray-500">All products have adequate stock levels or sufficient lead time</p>
             </div>
           )}
@@ -1488,7 +1488,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
           {activeTab === 'analytics' && (!enhanced_analytics || Object.keys(enhanced_analytics).length === 0) && (
             <div className="text-center py-12">
               <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-base font-medium text-gray-900 mb-2">No Analytics Data</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-2">No Analytics Data</h3>
               <p className="text-gray-500">Analytics data will appear here once your inventory data is processed</p>
             </div>
           )}
@@ -1496,7 +1496,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
           {activeTab === 'detailed' && (!enhanced_analytics || Object.keys(enhanced_analytics).length === 0) && (
             <div className="text-center py-12">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-base font-medium text-gray-900 mb-2">No products found</h3>
+              <h3 className="text-sm font-medium text-gray-900 mb-2">No products found</h3>
               <p className="text-gray-500">Detailed analytics will appear here once your inventory data is processed</p>
             </div>
           )}
@@ -1509,7 +1509,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
           <div className="bg-white rounded-lg max-w-md w-full mx-4 max-h-96 overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-medium text-gray-900">Choose Restock Source</h3>
+                <h3 className="text-sm font-medium text-gray-900">Choose Restock Source</h3>
                 <button
                   onClick={() => setShowSourcesModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -1578,7 +1578,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-base font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Alerts</h3>
         <p className="text-red-500">Error loading analytics data. Please try refreshing the page.</p>
         <details className="mt-2">
           <summary className="text-sm text-gray-500 cursor-pointer">Error details</summary>

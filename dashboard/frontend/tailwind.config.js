@@ -5,16 +5,6 @@ module.exports = {
   ],
   theme: {
     extend: {
-      fontSize: {
-        // Override default font sizes to be larger
-        'xs': ['0.8rem', { lineHeight: '1rem' }],     // was 0.75rem
-        'sm': ['0.9rem', { lineHeight: '1.25rem' }],  // was 0.875rem  
-        'base': ['1.1rem', { lineHeight: '1.5rem' }], // was 1rem
-        'lg': ['1.2rem', { lineHeight: '1.75rem' }],  // was 1.125rem
-        'xl': ['1.35rem', { lineHeight: '1.75rem' }], // was 1.25rem
-        '2xl': ['1.6rem', { lineHeight: '2rem' }],    // was 1.5rem
-        '3xl': ['2rem', { lineHeight: '2.25rem' }],   // was 1.875rem
-      },
       colors: {
         builders: {
           50: '#fffbeb',

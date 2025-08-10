@@ -3,10 +3,6 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    font-size: 18px; /* Increase base font size from 16px to 18px */
-  }
-
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -14,7 +10,7 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    @apply bg-gray-50 text-sm; /* Set default body text to match sidebar size */
+    @apply bg-gray-50 text-xs; /* Set default body text to match sidebar size */
   }
 
   code {
@@ -25,57 +21,57 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-builders-500 hover:bg-builders-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm;
+    @apply bg-builders-500 hover:bg-builders-600 text-white font-medium py-1.5 px-3 rounded-md transition-colors duration-200 text-xs;
   }
   
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm;
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1.5 px-3 rounded-md transition-colors duration-200 text-xs;
   }
   
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
   }
   
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-sm;
+    @apply w-full px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-xs;
   }
   
   .select-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-sm;
+    @apply w-full px-2 py-1.5 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-xs;
   }
 
   /* Enhanced readability for common interface elements - matching sidebar consistency */
   .table-text {
-    @apply text-xs; /* Tables can be slightly smaller for data density */
+    @apply text-xs; /* Tables use compact text */
   }
   
   .nav-text {
-    @apply text-sm font-medium; /* Navigation matches sidebar */
+    @apply text-xs font-medium; /* Navigation matches sidebar */
   }
   
   .label-text {
-    @apply text-xs font-medium text-gray-700; /* Form labels slightly smaller */
+    @apply text-xs font-medium text-gray-700; /* Form labels */
   }
   
   .badge-text {
-    @apply text-xs font-medium; /* Status badges compact but readable */
+    @apply text-xs font-medium; /* Status badges */
   }
   
   .heading-sm {
-    @apply text-base font-semibold; /* Small headings - one step up from body */
+    @apply text-sm font-semibold; /* Small headings */
   }
   
   .heading-md {
-    @apply text-lg font-semibold; /* Medium headings stand out */
+    @apply text-base font-semibold; /* Medium headings */
   }
   
   .heading-lg {
-    @apply text-xl font-bold; /* Large headings are prominent */
+    @apply text-lg font-bold; /* Large headings */
   }
   
   /* Standard text sizes for consistency */
   .body-text {
-    @apply text-sm; /* Main content text matches sidebar */
+    @apply text-xs; /* Main content text matches sidebar */
   }
   
   .caption-text {
@@ -83,6 +79,6 @@
   }
   
   .emphasis-text {
-    @apply text-sm font-semibold; /* Emphasized content */
+    @apply text-xs font-semibold; /* Emphasized content */
   }
 }

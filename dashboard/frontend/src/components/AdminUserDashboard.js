@@ -110,7 +110,7 @@ const AdminUserDashboard = () => {
         <div className="bg-white rounded-lg shadow p-6 max-w-md w-full mx-4">
           <div className="flex items-center space-x-3 mb-4">
             <AlertTriangle className="h-8 w-8 text-red-500" />
-            <h3 className="text-lg font-medium text-gray-900">Impersonation Failed</h3>
+            <h3 className="text-base font-medium text-gray-900">Impersonation Failed</h3>
           </div>
           <p className="text-gray-600 mb-4">{error}</p>
           <button

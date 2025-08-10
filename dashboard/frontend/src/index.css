@@ -14,7 +14,7 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    @apply bg-gray-50;
+    @apply bg-gray-50 text-sm; /* Set default body text to match sidebar size */
   }
 
   code {
@@ -25,51 +25,64 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-builders-500 hover:bg-builders-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-base;
+    @apply bg-builders-500 hover:bg-builders-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm;
   }
   
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 px-4 rounded-lg transition-colors duration-200 text-base;
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200 text-sm;
   }
   
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-base;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
   }
   
   .input-field {
-    @apply w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-base;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-sm;
   }
   
   .select-field {
-    @apply w-full px-3 py-2.5 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-base;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent text-sm;
   }
 
-  /* Enhanced readability for common interface elements */
+  /* Enhanced readability for common interface elements - matching sidebar consistency */
   .table-text {
-    @apply text-sm; /* Tables use smaller text but still readable */
+    @apply text-xs; /* Tables can be slightly smaller for data density */
   }
   
   .nav-text {
-    @apply text-base font-medium; /* Navigation items are prominent */
+    @apply text-sm font-medium; /* Navigation matches sidebar */
   }
   
   .label-text {
-    @apply text-sm font-medium text-gray-700; /* Form labels are clear */
+    @apply text-xs font-medium text-gray-700; /* Form labels slightly smaller */
   }
   
   .badge-text {
-    @apply text-sm font-medium; /* Status badges are readable */
+    @apply text-xs font-medium; /* Status badges compact but readable */
   }
   
   .heading-sm {
-    @apply text-lg font-semibold; /* Small headings are more prominent */
+    @apply text-base font-semibold; /* Small headings - one step up from body */
   }
   
   .heading-md {
-    @apply text-xl font-semibold; /* Medium headings stand out */
+    @apply text-lg font-semibold; /* Medium headings stand out */
   }
   
   .heading-lg {
-    @apply text-2xl font-bold; /* Large headings are prominent */
+    @apply text-xl font-bold; /* Large headings are prominent */
+  }
+  
+  /* Standard text sizes for consistency */
+  .body-text {
+    @apply text-sm; /* Main content text matches sidebar */
+  }
+  
+  .caption-text {
+    @apply text-xs text-gray-600; /* Supporting/secondary text */
+  }
+  
+  .emphasis-text {
+    @apply text-sm font-semibold; /* Emphasized content */
   }
 }

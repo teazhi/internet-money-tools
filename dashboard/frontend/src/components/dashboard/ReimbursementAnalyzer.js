@@ -147,7 +147,7 @@ const ReimbursementAnalyzer = () => {
         <div className="flex items-center space-x-3">
           <TrendingDown className="h-8 w-8 text-red-500" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reimbursement Analyzer</h1>
+            <h1 className="text-base font-bold text-gray-900">Reimbursement Analyzer</h1>
             <p className="text-gray-600">Find underpaid Amazon reimbursements by comparing against your COGS data</p>
           </div>
         </div>
@@ -173,7 +173,7 @@ const ReimbursementAnalyzer = () => {
 
       {/* Upload Area */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload Reimbursement CSV</h3>
+        <h3 className="text-base font-semibold text-gray-900 mb-4">Upload Reimbursement CSV</h3>
         
         <div
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
@@ -187,7 +187,7 @@ const ReimbursementAnalyzer = () => {
         >
           <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <div className="space-y-2">
-            <p className="text-lg font-medium text-gray-900">
+            <p className="text-base font-medium text-gray-900">
               {dragOver ? 'Drop file here' : 'Upload reimbursement CSV'}
             </p>
             <p className="text-sm text-gray-500">
@@ -244,7 +244,7 @@ const ReimbursementAnalyzer = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-red-100">Underpaid Reimbursements</p>
-                <p className="text-2xl font-bold">{results.underpaid_count}</p>
+                <p className="text-base font-bold">{results.underpaid_count}</p>
               </div>
               <TrendingDown className="h-8 w-8 text-red-200" />
             </div>
@@ -254,7 +254,7 @@ const ReimbursementAnalyzer = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-orange-100">Total Shortfall</p>
-                <p className="text-2xl font-bold">${results.total_shortfall}</p>
+                <p className="text-base font-bold">${results.total_shortfall}</p>
               </div>
               <DollarSign className="h-8 w-8 text-orange-200" />
             </div>
@@ -264,7 +264,7 @@ const ReimbursementAnalyzer = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-blue-100">COGS Records Found</p>
-                <p className="text-2xl font-bold">{results.max_cogs_count}</p>
+                <p className="text-base font-bold">{results.max_cogs_count}</p>
               </div>
               <Activity className="h-8 w-8 text-blue-200" />
             </div>
@@ -276,7 +276,7 @@ const ReimbursementAnalyzer = () => {
       {results && results.underpaid_reimbursements && results.underpaid_reimbursements.length > 0 && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Underpaid Reimbursements</h3>
+            <h3 className="text-base font-semibold text-gray-900">Underpaid Reimbursements</h3>
             <button
               onClick={downloadResults}
               className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors duration-200"

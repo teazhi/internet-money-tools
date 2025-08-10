@@ -412,12 +412,6 @@ const Admin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Debug: Alert when component mounts
-  useEffect(() => {
-    alert('ADMIN PANEL LOADED - DEBUG MODE ACTIVE');
-    console.log('Admin component mounted with user:', user);
-  }, []);
   const [filterStatus, setFilterStatus] = useState('all');
   const [editingUser, setEditingUser] = useState(null);
   const [showRawData, setShowRawData] = useState(false);
@@ -549,11 +543,6 @@ const Admin = () => {
         level: 0
       });
     });
-
-    // Debug hierarchical structure
-    console.log('Final hierarchical users array:', hierarchicalUsers.length);
-    console.log('Main users count:', hierarchicalUsers.filter(u => u.isMainUser).length);  
-    console.log('Sub users count:', hierarchicalUsers.filter(u => u.isSubUser).length);
 
     return hierarchicalUsers;
   }, [users, searchTerm, filterStatus]);
@@ -1298,12 +1287,6 @@ const Admin = () => {
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => alert('DEBUG TEST - Admin panel is working! Version: ' + Date.now())}
-              className="flex items-center px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
-            >
-              🐛 DEBUG
-            </button>
-            <button
               onClick={fetchUsers}
               className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm transition-colors"
             >
@@ -1764,11 +1747,7 @@ const Admin = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => {
-                          alert('DEBUG: Trash button clicked for token: ' + invitation.token);
-                          console.log('Trash button clicked for token:', invitation.token);
-                          handleDeleteInvitation(invitation.token);
-                        }}
+                        onClick={() => handleDeleteInvitation(invitation.token)}
                         className="text-red-600 hover:text-red-900"
                       >
                         <Trash2 className="h-4 w-4" />

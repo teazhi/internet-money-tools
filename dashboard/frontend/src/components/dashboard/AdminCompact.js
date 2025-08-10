@@ -31,12 +31,6 @@ import { API_ENDPOINTS } from '../../config/api';
 const AdminCompact = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
-  
-  // Debug: Alert when component mounts
-  useEffect(() => {
-    alert('ADMIN COMPACT PANEL LOADED - DEBUG MODE ACTIVE');
-    console.log('AdminCompact component mounted with user:', user);
-  }, []);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,19 +74,15 @@ const AdminCompact = () => {
       const mainUsers = users.filter(user => user.user_type !== 'subuser');
       const subUsers = users.filter(user => user.user_type === 'subuser');
       
-      console.log('DEBUG AdminCompact - Total users:', users.length);
-      console.log('DEBUG AdminCompact - Main users:', mainUsers.length);
-      console.log('DEBUG AdminCompact - Sub users:', subUsers.length);
-      
       const hierarchicalUsers = [];
       mainUsers.forEach(mainUser => {
-        hierarchicalUsers.push(mainUser);
+        hierarchicalUsers.push({...mainUser, isMainUser: true});
         const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
-        console.log(`DEBUG - Sub users for ${mainUser.discord_username}:`, userSubUsers.length);
-        hierarchicalUsers.push(...userSubUsers);
+        userSubUsers.forEach(subUser => {
+          hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
+        });
       });
       
-      console.log('DEBUG AdminCompact - Final hierarchical count:', hierarchicalUsers.length);
       setFilteredUsers(hierarchicalUsers);
     } catch (error) {
       setError('Failed to load admin data');
@@ -127,15 +117,11 @@ const AdminCompact = () => {
     try {
       setError('');
       setSuccess('');
-      console.log('Deleting invitation with token:', token);
-      alert('DEBUG: Deleting invitation for token: ' + token);
       
-      const response = await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
-      console.log('Delete response:', response.data);
+      await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
       setSuccess('Invitation deleted successfully');
       fetchData();
     } catch (error) {
-      console.error('Delete invitation error:', error);
       setError(error.response?.data?.error || 'Failed to delete invitation');
     }
   };
@@ -395,12 +381,13 @@ const AdminCompact = () => {
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
                           
                           return (
-                            <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-gray-25' : ''}`}>
+                            <tr key={user.discord_id} className={`hover:bg-gray-50 ${user.isSubUser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>
                               <td className="px-4 py-2">
                                 <div className="flex items-center">
-                                  {isSubuser && (
-                                    <div className="w-6 flex justify-center mr-2">
-                                      <div className="w-px h-6 bg-gray-300"></div>
+                                  {user.isSubUser && (
+                                    <div className="w-8 flex justify-center mr-2">
+                                      <div className="w-px h-6 bg-blue-300 mr-1"></div>
+                                      <div className="text-blue-500 text-xs">└─</div>
                                     </div>
                                   )}
                                   {user.discord_avatar ? (
@@ -415,13 +402,20 @@ const AdminCompact = () => {
                                   <div>
                                     <div className="flex items-center">
                                       <span className="text-sm font-medium text-gray-900">{user.discord_username}</span>
-                                      {isSubuser && (
-                                        <span className="ml-2 inline-flex px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                                      {user.isSubUser && (
+                                        <span className="ml-2 inline-flex px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                                           VA
                                         </span>
                                       )}
                                     </div>
-                                    <div className="text-xs text-gray-500">{user.email}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {user.email}
+                                      {user.isSubUser && user.parentUser && (
+                                        <span className="ml-2 text-blue-600">
+                                          → {user.parentUser.discord_username}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </td>

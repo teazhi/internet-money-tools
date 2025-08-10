@@ -1753,7 +1753,7 @@ const Admin = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => {
-                          alert('Trash button clicked for token: ' + invitation.token);
+                          alert('DEBUG: Trash button clicked for token: ' + invitation.token);
                           console.log('Trash button clicked for token:', invitation.token);
                           handleDeleteInvitation(invitation.token);
                         }}

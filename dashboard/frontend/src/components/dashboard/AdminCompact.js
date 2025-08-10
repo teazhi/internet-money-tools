@@ -92,10 +92,22 @@ const AdminCompact = () => {
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push({...mainUser, isMainUser: true});
         const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
-        console.log(`DEBUG: Sub users for ${mainUser.discord_username}:`, userSubUsers.length);
+        console.log(`DEBUG: Sub users for ${mainUser.discord_username} (ID: ${mainUser.discord_id}):`, userSubUsers.length);
+        if (userSubUsers.length > 0) {
+          console.log('DEBUG: Found matching subuser:', userSubUsers[0]);
+        }
         userSubUsers.forEach(subUser => {
           hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
         });
+      });
+      
+      // Also add any orphaned subusers (subusers whose parent isn't in mainUsers)
+      const orphanedSubs = subUsers.filter(sub => 
+        !mainUsers.some(main => main.discord_id === sub.parent_discord_id)
+      );
+      console.log('DEBUG: Orphaned subusers:', orphanedSubs.length);
+      orphanedSubs.forEach(subUser => {
+        hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: null});
       });
       
       console.log('DEBUG: Final hierarchical users:', hierarchicalUsers.length);
@@ -413,14 +425,13 @@ const AdminCompact = () => {
                             ? true // Subusers inherit setup from parent
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
                           
-                          if (index === 0) {
-                            console.log('DEBUG: First rendered user:', {
-                              username: user.discord_username,
-                              user_type: user.user_type,
-                              isSubUser: user.isSubUser,
-                              isSubuser: isSubuser
-                            });
-                          }
+                          console.log(`DEBUG: Rendering user ${index + 1}:`, {
+                            username: user.discord_username,
+                            user_type: user.user_type,
+                            isSubUser: user.isSubUser,
+                            isSubuser: isSubuser,
+                            parent_discord_id: user.parent_discord_id
+                          });
                           
                           return (
                             <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>

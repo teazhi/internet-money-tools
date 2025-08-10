@@ -4235,6 +4235,7 @@ def analyze_discount_opportunities():
                         'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
                         'source_link': source_link,
                         'promo_message': promo_message,
+                        'note': email_alert.get('note'),
                         'alert_time': email_alert['alert_time'],
                         'priority_score': calculate_opportunity_priority(inventory_data, days_left, suggested_quantity),
                         'restock_priority': inventory_data.get('priority', {}).get('category', 'normal')
@@ -4289,7 +4290,7 @@ def fetch_discount_email_alerts():
         # Simulate parsing email subjects for retailer and ASIN
         mock_emails = [
             {
-                'subject': 'Distill Monitor Alert: Vitacost - B07XVTRJKX Price Drop',
+                'subject': 'Vitacost (ASIN: B07XVTRJKX)',
                 'html_body': '''<div>Price alert for product B07XVTRJKX</div>
                                <div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
                                <a href="https://vitacost.com/product">View Product</a>''',
@@ -4297,8 +4298,8 @@ def fetch_discount_email_alerts():
                 'sender': DISCOUNT_SENDER_EMAIL
             },
             {
-                'subject': 'Distill Alert: Walmart B08NDRQR5K Discount',
-                'html_body': '''<div>Discount available for B08NDRQR5K</div>
+                'subject': 'Walmart (ASIN: B07D83HV1M) (Note: Amazon is two pack)',
+                'html_body': '''<div>Discount available for B07D83HV1M</div>
                                <p>Special promotion: 20% off</p>''',
                 'received_time': '2025-08-09T18:30:00Z',
                 'sender': DISCOUNT_SENDER_EMAIL
@@ -4312,6 +4313,7 @@ def fetch_discount_email_alerts():
                 email_alerts.append({
                     'retailer': parsed_alert['retailer'],
                     'asin': parsed_alert['asin'],
+                    'note': parsed_alert.get('note'),
                     'subject': email['subject'],
                     'html_content': email['html_body'],
                     'alert_time': email['received_time']
@@ -4324,10 +4326,23 @@ def fetch_discount_email_alerts():
         return []
 
 def parse_distill_email_subject(subject):
-    """Parse Distill.io email subject to extract retailer and ASIN"""
+    """Parse Distill.io email subject to extract retailer, ASIN, and notes"""
     import re
     
-    # Common patterns for Distill.io email subjects
+    # Pattern to match: Retailer (ASIN: XXXXXXXXXX) (Note: additional info)
+    # Example: Walmart (ASIN: B07D83HV1M) (Note: Amazon is two pack)
+    pattern = r'([A-Za-z]+)\s*\(ASIN:\s*([B-Z][0-9A-Z]{9})\)(?:\s*\(Note:\s*([^)]+)\))?'
+    match = re.search(pattern, subject)
+    
+    if match:
+        retailer, asin, note = match.groups()
+        return {
+            'retailer': retailer.strip(),
+            'asin': asin.strip(),
+            'note': note.strip() if note else None
+        }
+    
+    # Fallback patterns for other email formats
     patterns = [
         r'.*?([A-Za-z]+).*?([B-Z][0-9A-Z]{9})',  # Retailer followed by ASIN
         r'.*?([B-Z][0-9A-Z]{9}).*?([A-Za-z]+)',  # ASIN followed by retailer
@@ -4346,22 +4361,26 @@ def parse_distill_email_subject(subject):
             if any(retailer in part1.lower() for retailer in retailers):
                 return {
                     'retailer': part1.strip(),
-                    'asin': part2.strip()
+                    'asin': part2.strip(),
+                    'note': None
                 }
             elif any(retailer in part2.lower() for retailer in retailers):
                 return {
                     'retailer': part2.strip(),
-                    'asin': part1.strip()
+                    'asin': part1.strip(),
+                    'note': None
                 }
             elif re.match(r'^[B-Z][0-9A-Z]{9}$', part1.strip()):
                 return {
                     'retailer': part2.strip(),
-                    'asin': part1.strip()
+                    'asin': part1.strip(),
+                    'note': None
                 }
             elif re.match(r'^[B-Z][0-9A-Z]{9}$', part2.strip()):
                 return {
                     'retailer': part1.strip(),
-                    'asin': part2.strip()
+                    'asin': part2.strip(),
+                    'note': None
                 }
     
     return None

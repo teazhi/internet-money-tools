@@ -1048,6 +1048,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                                   <span className="text-xs text-blue-600 font-medium">Discount Available</span>
                                 </div>
                               )}
+                              {opportunity.note && (
+                                <div className="text-xs text-gray-600 font-medium">
+                                  📝 {opportunity.note}
+                                </div>
+                              )}
                               <div className="text-xs text-gray-500">
                                 Alert: {new Date(opportunity.alert_time).toLocaleDateString()}
                               </div>

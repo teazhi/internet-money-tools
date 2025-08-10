@@ -31,6 +31,12 @@ import { API_ENDPOINTS } from '../../config/api';
 const AdminCompact = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
+  
+  // Debug: Alert when component mounts
+  useEffect(() => {
+    alert('ADMIN COMPACT PANEL LOADED - DEBUG MODE ACTIVE');
+    console.log('AdminCompact component mounted with user:', user);
+  }, []);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -74,13 +80,19 @@ const AdminCompact = () => {
       const mainUsers = users.filter(user => user.user_type !== 'subuser');
       const subUsers = users.filter(user => user.user_type === 'subuser');
       
+      console.log('DEBUG AdminCompact - Total users:', users.length);
+      console.log('DEBUG AdminCompact - Main users:', mainUsers.length);
+      console.log('DEBUG AdminCompact - Sub users:', subUsers.length);
+      
       const hierarchicalUsers = [];
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push(mainUser);
         const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
+        console.log(`DEBUG - Sub users for ${mainUser.discord_username}:`, userSubUsers.length);
         hierarchicalUsers.push(...userSubUsers);
       });
       
+      console.log('DEBUG AdminCompact - Final hierarchical count:', hierarchicalUsers.length);
       setFilteredUsers(hierarchicalUsers);
     } catch (error) {
       setError('Failed to load admin data');
@@ -104,6 +116,27 @@ const AdminCompact = () => {
       fetchData();
     } catch (error) {
       setError('Failed to send invitation');
+    }
+  };
+
+  const handleDeleteInvitation = async (token) => {
+    if (!window.confirm('Are you sure you want to delete this invitation?')) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      console.log('Deleting invitation with token:', token);
+      alert('DEBUG: Deleting invitation for token: ' + token);
+      
+      const response = await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
+      console.log('Delete response:', response.data);
+      setSuccess('Invitation deleted successfully');
+      fetchData();
+    } catch (error) {
+      console.error('Delete invitation error:', error);
+      setError(error.response?.data?.error || 'Failed to delete invitation');
     }
   };
 
@@ -278,7 +311,10 @@ const AdminCompact = () => {
                       {new Date(invitation.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-2">
-                      <button className="text-red-600 hover:text-red-800">
+                      <button 
+                        onClick={() => handleDeleteInvitation(invitation.token)}
+                        className="text-red-600 hover:text-red-800"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </td>

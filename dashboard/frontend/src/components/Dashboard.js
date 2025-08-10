@@ -173,7 +173,7 @@ const Dashboard = () => {
           <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
             <div className="flex items-center flex-shrink-0 px-4">
               <ShoppingCart className="h-6 w-6 text-builders-500" />
-              <span className="ml-2 text-sm font-bold text-gray-900">DMS</span>
+              <span className="ml-2 text-base font-bold text-gray-900">DMS</span>
             </div>
             <nav className="mt-5 px-2 space-y-1">
               {navigation.map((item) => {
@@ -187,7 +187,7 @@ const Dashboard = () => {
                       item.current
                         ? 'bg-builders-100 border-builders-500 text-builders-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center px-2 py-2 text-sm font-medium border-l-4 transition-all duration-200`}
+                    } group flex items-center px-2 py-2 text-base font-medium border-l-4 transition-all duration-200`}
                   >
                     <Icon
                       className={`${
@@ -209,7 +209,7 @@ const Dashboard = () => {
           <div className="flex items-center flex-shrink-0 px-4 justify-between">
             <div className="flex items-center">
               <ShoppingCart className="h-6 w-6 text-builders-500" />
-              {!sidebarCollapsed && <span className="ml-2 text-sm font-bold text-gray-900">DMS</span>}
+              {!sidebarCollapsed && <span className="ml-2 text-base font-bold text-gray-900">DMS</span>}
             </div>
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -235,7 +235,7 @@ const Dashboard = () => {
                       item.current
                         ? 'bg-builders-100 border-builders-500 text-builders-700'
                         : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    } group flex items-center ${sidebarCollapsed ? 'justify-center px-3' : 'px-2'} py-1.5 text-xs font-medium border-l-4 transition-all duration-200`}
+                    } group flex items-center ${sidebarCollapsed ? 'justify-center px-3' : 'px-2'} py-1.5 text-sm font-medium border-l-4 transition-all duration-200`}
                     title={sidebarCollapsed ? item.name : undefined}
                   >
                     <Icon

@@ -84,6 +84,12 @@ const AdminCompact = () => {
       });
       
       setFilteredUsers(hierarchicalUsers);
+      
+      // Temporary debug to see if VAs are being found
+      if (subUsers.length > 0) {
+        console.log('Found VAs:', subUsers.map(u => u.discord_username));
+        console.log('Final hierarchy count:', hierarchicalUsers.length);
+      }
     } catch (error) {
       setError('Failed to load admin data');
     } finally {
@@ -375,16 +381,16 @@ const AdminCompact = () => {
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {filteredUsers.slice(0, 20).map((user) => {
-                          const isSubuser = user.user_type === 'subuser';
+                          const isSubuser = user.user_type === 'subuser' || user.isSubUser;
                           const isActive = isSubuser 
                             ? true // Subusers inherit setup from parent
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
                           
                           return (
-                            <tr key={user.discord_id} className={`hover:bg-gray-50 ${user.isSubUser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>
+                            <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>
                               <td className="px-4 py-2">
                                 <div className="flex items-center">
-                                  {user.isSubUser && (
+                                  {isSubuser && (
                                     <div className="w-8 flex justify-center mr-2">
                                       <div className="w-px h-6 bg-blue-300 mr-1"></div>
                                       <div className="text-blue-500 text-xs">└─</div>
@@ -402,7 +408,7 @@ const AdminCompact = () => {
                                   <div>
                                     <div className="flex items-center">
                                       <span className="text-sm font-medium text-gray-900">{user.discord_username}</span>
-                                      {user.isSubUser && (
+                                      {isSubuser && (
                                         <span className="ml-2 inline-flex px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                                           VA
                                         </span>
@@ -410,7 +416,7 @@ const AdminCompact = () => {
                                     </div>
                                     <div className="text-xs text-gray-500">
                                       {user.email}
-                                      {user.isSubUser && user.parentUser && (
+                                      {isSubuser && user.parentUser && (
                                         <span className="ml-2 text-blue-600">
                                           → {user.parentUser.discord_username}
                                         </span>

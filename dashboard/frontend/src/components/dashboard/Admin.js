@@ -441,12 +441,15 @@ const Admin = () => {
       setError('');
       setLoading(true);
       const response = await axios.get('/api/admin/users', { withCredentials: true });
-      console.log('Fetched users:', response.data.users);
-      console.log('Subusers found:', response.data.users.filter(u => u.user_type === 'subuser'));
-      setUsers(response.data.users);
-      setRawUserData(JSON.stringify(response.data.users, null, 2));
-    } catch (error) {
+      const allUsers = response.data.users;
       
+      console.log('Fetched users:', allUsers);
+      console.log('Subusers found:', allUsers.filter(u => u.user_type === 'subuser'));
+      
+      setUsers(allUsers);
+      setRawUserData(JSON.stringify(allUsers, null, 2));
+    } catch (error) {
+      console.error('Fetch users error:', error);
       setError(error.response?.data?.error || 'Failed to fetch users');
     } finally {
       setLoading(false);
@@ -719,10 +722,13 @@ const Admin = () => {
     try {
       setError('');
       setSuccess('');
-      await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
+      console.log('Deleting invitation with token:', token);
+      const response = await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
+      console.log('Delete response:', response.data);
       setSuccess('Invitation deleted successfully');
       fetchInvitations();
     } catch (error) {
+      console.error('Delete invitation error:', error);
       setError(error.response?.data?.error || 'Failed to delete invitation');
     }
   };

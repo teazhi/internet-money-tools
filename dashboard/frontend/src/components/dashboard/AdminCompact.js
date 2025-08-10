@@ -95,30 +95,59 @@ const AdminCompact = () => {
         })));
       }
       
+      // Manual assignment based on usernames (fallback for correct relationships)
+      const manualAssignments = {
+        'jhoi': 'teazhii',
+        'jayvee': 'teazhii', 
+        'xiela': 'davfong'
+      };
+
       const hierarchicalUsers = [];
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push({...mainUser, isMainUser: true});
         
-        // Match parent_discord_id with discord_id (handle both string and number comparison)
+        // First try automatic matching by parent_discord_id
         const userSubUsers = subUsers.filter(sub => 
           String(sub.parent_discord_id) === String(mainUser.discord_id)
         );
-        console.log(`DEBUG: Sub users for ${mainUser.discord_username} (ID: ${mainUser.discord_id}):`, userSubUsers.length);
-        console.log(`DEBUG: Looking for parent_discord_id matching: ${mainUser.discord_id}`);
         
-        if (userSubUsers.length > 0) {
-          console.log('DEBUG: Found matching subuser:', userSubUsers[0]);
+        // Then try manual username-based matching for known VAs
+        const manualSubUsers = subUsers.filter(sub => 
+          manualAssignments[sub.discord_username?.toLowerCase()] === mainUser.discord_username?.toLowerCase()
+        );
+        
+        // Combine both and remove duplicates
+        const allSubUsers = [...userSubUsers];
+        manualSubUsers.forEach(manualSub => {
+          if (!allSubUsers.some(existing => existing.discord_id === manualSub.discord_id)) {
+            allSubUsers.push(manualSub);
+          }
+        });
+        
+        console.log(`DEBUG: Sub users for ${mainUser.discord_username} (ID: ${mainUser.discord_id}):`, allSubUsers.length);
+        console.log(`DEBUG: Auto-matched: ${userSubUsers.length}, Manual-matched: ${manualSubUsers.length}`);
+        
+        if (allSubUsers.length > 0) {
+          console.log('DEBUG: Found subusers:', allSubUsers.map(s => s.discord_username));
         }
         
-        userSubUsers.forEach(subUser => {
+        allSubUsers.forEach(subUser => {
           hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
         });
       });
       
-      // Also add any orphaned subusers (subusers whose parent isn't in mainUsers)
+      // Add any remaining orphaned subusers (not matched by ID or manually assigned)
+      const assignedSubUserIds = new Set();
+      hierarchicalUsers.forEach(user => {
+        if (user.isSubUser) {
+          assignedSubUserIds.add(user.discord_id);
+        }
+      });
+      
       const orphanedSubs = subUsers.filter(sub => 
-        !mainUsers.some(main => String(main.discord_id) === String(sub.parent_discord_id))
+        !assignedSubUserIds.has(sub.discord_id)
       );
+      
       console.log('DEBUG: Orphaned subusers:', orphanedSubs.length);
       if (orphanedSubs.length > 0) {
         console.log('DEBUG: Orphaned subusers details:', orphanedSubs.map(s => ({

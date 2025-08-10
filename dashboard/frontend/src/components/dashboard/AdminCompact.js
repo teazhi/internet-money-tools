@@ -43,6 +43,10 @@ const AdminCompact = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [editingUser, setEditingUser] = useState(null);
+  const [assigningVA, setAssigningVA] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedParentUser, setSelectedParentUser] = useState('');
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -90,8 +94,8 @@ const AdminCompact = () => {
         console.log('DEBUG: Sub users:', subUsers.map(u => ({
           username: u.discord_username,
           user_type: u.user_type,
-          parent_discord_id: u.parent_discord_id,
-          parentType: typeof u.parent_discord_id
+          parent_user_id: u.parent_user_id,
+          parentType: typeof u.parent_user_id
         })));
       }
       
@@ -106,9 +110,9 @@ const AdminCompact = () => {
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push({...mainUser, isMainUser: true});
         
-        // First try automatic matching by parent_discord_id
+        // First try automatic matching by parent_user_id
         const userSubUsers = subUsers.filter(sub => 
-          String(sub.parent_discord_id) === String(mainUser.discord_id)
+          String(sub.parent_user_id) === String(mainUser.discord_id)
         );
         
         // Then try manual username-based matching for known VAs
@@ -152,8 +156,8 @@ const AdminCompact = () => {
       if (orphanedSubs.length > 0) {
         console.log('DEBUG: Orphaned subusers details:', orphanedSubs.map(s => ({
           username: s.discord_username,
-          parent_discord_id: s.parent_discord_id,
-          type: typeof s.parent_discord_id
+          parent_user_id: s.parent_user_id,
+          type: typeof s.parent_user_id
         })));
       }
       orphanedSubs.forEach(subUser => {
@@ -243,6 +247,148 @@ const AdminCompact = () => {
         [field]: value
       }
     }));
+  };
+
+  const handleAssignVA = async () => {
+    if (!assigningVA || !selectedParentUser) return;
+    
+    try {
+      setError('');
+      const updateData = {
+        parent_user_id: selectedParentUser
+      };
+      
+      await axios.post(`/api/admin/users/${assigningVA.discord_id}`, updateData, { withCredentials: true });
+      setSuccess('VA assigned successfully!');
+      setShowAssignModal(false);
+      setAssigningVA(null);
+      setSelectedParentUser('');
+      fetchData();
+    } catch (error) {
+      setError('Failed to assign VA');
+    }
+  };
+
+  const handleUpdateUser = async (userData) => {
+    try {
+      setError('');
+      await axios.post(`/api/admin/users/${editingUser.discord_id}`, userData, { withCredentials: true });
+      setSuccess('User updated successfully!');
+      setEditingUser(null);
+      fetchData();
+    } catch (error) {
+      setError('Failed to update user');
+    }
+  };
+
+  // UserEditModal component
+  const UserEditModal = ({ user, onSave, onCancel }) => {
+    const [editData, setEditData] = useState({
+      email: user.email || '',
+      run_scripts: user.run_scripts || false,
+      run_prep_center: user.run_prep_center || false,
+      enable_source_links: user.enable_source_links || false,
+      search_all_worksheets: user.search_all_worksheets || false,
+      listing_loader_key: user.listing_loader_key || '',
+      sb_file_key: user.sb_file_key || '',
+      sellerboard_orders_url: user.sellerboard_orders_url || '',
+      sellerboard_stock_url: user.sellerboard_stock_url || ''
+    });
+
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Edit User: {user.discord_username}
+              </h3>
+              <button
+                onClick={onCancel}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={editData.email}
+                  onChange={(e) => setEditData({...editData, email: e.target.value})}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sellerboard Orders URL</label>
+                <input
+                  type="url"
+                  value={editData.sellerboard_orders_url}
+                  onChange={(e) => setEditData({...editData, sellerboard_orders_url: e.target.value})}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sellerboard Stock URL</label>
+                <input
+                  type="url"
+                  value={editData.sellerboard_stock_url}
+                  onChange={(e) => setEditData({...editData, sellerboard_stock_url: e.target.value})}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="run_scripts"
+                  type="checkbox"
+                  checked={editData.run_scripts}
+                  onChange={(e) => setEditData({...editData, run_scripts: e.target.checked})}
+                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
+                />
+                <label htmlFor="run_scripts" className="ml-2 block text-sm text-gray-700">
+                  Amazon Listing Loader & Sellerboard automation
+                </label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="enable_source_links"
+                  type="checkbox"
+                  checked={editData.enable_source_links}
+                  onChange={(e) => setEditData({...editData, enable_source_links: e.target.checked})}
+                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
+                />
+                <label htmlFor="enable_source_links" className="ml-2 block text-sm text-gray-700">
+                  Source Links from Google Sheet
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onSave(editData)}
+                className="px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (!isAdmin) {
@@ -480,7 +626,7 @@ const AdminCompact = () => {
                             user_type: user.user_type,
                             isSubUser: user.isSubUser,
                             isSubuser: isSubuser,
-                            parent_discord_id: user.parent_discord_id
+                            parent_user_id: user.parent_user_id
                           });
                           
                           return (
@@ -543,9 +689,25 @@ const AdminCompact = () => {
                                   >
                                     <ExternalLink className="h-4 w-4" />
                                   </button>
-                                  <button className="text-gray-400 hover:text-gray-600">
+                                  <button 
+                                    onClick={() => setEditingUser(user)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                    title="Edit User"
+                                  >
                                     <Edit3 className="h-4 w-4" />
                                   </button>
+                                  {isSubuser && !user.parentUser && (
+                                    <button 
+                                      onClick={() => {
+                                        setAssigningVA(user);
+                                        setShowAssignModal(true);
+                                      }}
+                                      className="text-orange-600 hover:text-orange-800"
+                                      title="Assign to Parent User"
+                                    >
+                                      <UserPlus className="h-4 w-4" />
+                                    </button>
+                                  )}
                                   <button className="text-red-600 hover:text-red-800">
                                     <Trash2 className="h-4 w-4" />
                                   </button>
@@ -798,6 +960,83 @@ const AdminCompact = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Assign VA Modal */}
+      {showAssignModal && assigningVA && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Assign VA to Parent User
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setAssigningVA(null);
+                    setSelectedParentUser('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Assigning: <span className="font-medium">{assigningVA.discord_username}</span>
+                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Parent User
+                  </label>
+                  <select
+                    value={selectedParentUser}
+                    onChange={(e) => setSelectedParentUser(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-builders-500 focus:border-builders-500"
+                  >
+                    <option value="">Choose a parent user...</option>
+                    {users.filter(u => u.user_type !== 'subuser').map(mainUser => (
+                      <option key={mainUser.discord_id} value={mainUser.discord_id}>
+                        {mainUser.discord_username} ({mainUser.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setAssigningVA(null);
+                    setSelectedParentUser('');
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssignVA}
+                  disabled={!selectedParentUser}
+                  className="px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700 disabled:opacity-50"
+                >
+                  Assign VA
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <UserEditModal
+          user={editingUser}
+          onSave={handleUpdateUser}
+          onCancel={() => setEditingUser(null)}
+        />
       )}
     </div>
   );

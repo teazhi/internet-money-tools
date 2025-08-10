@@ -412,6 +412,12 @@ const Admin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Debug: Alert when component mounts
+  useEffect(() => {
+    alert('ADMIN PANEL LOADED - DEBUG MODE ACTIVE');
+    console.log('Admin component mounted with user:', user);
+  }, []);
   const [filterStatus, setFilterStatus] = useState('all');
   const [editingUser, setEditingUser] = useState(null);
   const [showRawData, setShowRawData] = useState(false);
@@ -1291,6 +1297,12 @@ const Admin = () => {
             <p className="text-sm text-builders-100">System management & configuration</p>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={() => alert('DEBUG TEST - Admin panel is working! Version: ' + Date.now())}
+              className="flex items-center px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
+            >
+              🐛 DEBUG
+            </button>
             <button
               onClick={fetchUsers}
               className="flex items-center px-2 py-1 bg-builders-700 hover:bg-builders-800 rounded text-sm transition-colors"

@@ -72,18 +72,33 @@ const AdminCompact = () => {
       setDiscountMonitoring(discountRes.data);
       
       // Organize users hierarchically
+      console.log('DEBUG: All users from API:', users.length);
+      console.log('DEBUG: First user sample:', users[0]);
+      
       const mainUsers = users.filter(user => user.user_type !== 'subuser');
       const subUsers = users.filter(user => user.user_type === 'subuser');
+      
+      console.log('DEBUG: Main users:', mainUsers.length);
+      console.log('DEBUG: Sub users found:', subUsers.length);
+      if (subUsers.length > 0) {
+        console.log('DEBUG: Sub users:', subUsers.map(u => ({
+          username: u.discord_username,
+          user_type: u.user_type,
+          parent_discord_id: u.parent_discord_id
+        })));
+      }
       
       const hierarchicalUsers = [];
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push({...mainUser, isMainUser: true});
         const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
+        console.log(`DEBUG: Sub users for ${mainUser.discord_username}:`, userSubUsers.length);
         userSubUsers.forEach(subUser => {
           hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
         });
       });
       
+      console.log('DEBUG: Final hierarchical users:', hierarchicalUsers.length);
       setFilteredUsers(hierarchicalUsers);
     } catch (error) {
       setError('Failed to load admin data');
@@ -392,11 +407,20 @@ const AdminCompact = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {filteredUsers.slice(0, 20).map((user) => {
+                        {filteredUsers.slice(0, 20).map((user, index) => {
                           const isSubuser = user.user_type === 'subuser' || user.isSubUser;
                           const isActive = isSubuser 
                             ? true // Subusers inherit setup from parent
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
+                          
+                          if (index === 0) {
+                            console.log('DEBUG: First rendered user:', {
+                              username: user.discord_username,
+                              user_type: user.user_type,
+                              isSubUser: user.isSubUser,
+                              isSubuser: isSubuser
+                            });
+                          }
                           
                           return (
                             <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>

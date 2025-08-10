@@ -79,23 +79,37 @@ const AdminCompact = () => {
       const subUsers = users.filter(user => user.user_type === 'subuser');
       
       console.log('DEBUG: Main users:', mainUsers.length);
+      console.log('DEBUG: Main user IDs:', mainUsers.map(u => ({
+        username: u.discord_username,
+        discord_id: u.discord_id,
+        type: typeof u.discord_id
+      })));
+      
       console.log('DEBUG: Sub users found:', subUsers.length);
       if (subUsers.length > 0) {
         console.log('DEBUG: Sub users:', subUsers.map(u => ({
           username: u.discord_username,
           user_type: u.user_type,
-          parent_discord_id: u.parent_discord_id
+          parent_discord_id: u.parent_discord_id,
+          parentType: typeof u.parent_discord_id
         })));
       }
       
       const hierarchicalUsers = [];
       mainUsers.forEach(mainUser => {
         hierarchicalUsers.push({...mainUser, isMainUser: true});
-        const userSubUsers = subUsers.filter(sub => sub.parent_discord_id === mainUser.discord_id);
+        
+        // Match parent_discord_id with discord_id (handle both string and number comparison)
+        const userSubUsers = subUsers.filter(sub => 
+          String(sub.parent_discord_id) === String(mainUser.discord_id)
+        );
         console.log(`DEBUG: Sub users for ${mainUser.discord_username} (ID: ${mainUser.discord_id}):`, userSubUsers.length);
+        console.log(`DEBUG: Looking for parent_discord_id matching: ${mainUser.discord_id}`);
+        
         if (userSubUsers.length > 0) {
           console.log('DEBUG: Found matching subuser:', userSubUsers[0]);
         }
+        
         userSubUsers.forEach(subUser => {
           hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
         });
@@ -103,9 +117,16 @@ const AdminCompact = () => {
       
       // Also add any orphaned subusers (subusers whose parent isn't in mainUsers)
       const orphanedSubs = subUsers.filter(sub => 
-        !mainUsers.some(main => main.discord_id === sub.parent_discord_id)
+        !mainUsers.some(main => String(main.discord_id) === String(sub.parent_discord_id))
       );
       console.log('DEBUG: Orphaned subusers:', orphanedSubs.length);
+      if (orphanedSubs.length > 0) {
+        console.log('DEBUG: Orphaned subusers details:', orphanedSubs.map(s => ({
+          username: s.discord_username,
+          parent_discord_id: s.parent_discord_id,
+          type: typeof s.parent_discord_id
+        })));
+      }
       orphanedSubs.forEach(subUser => {
         hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: null});
       });

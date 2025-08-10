@@ -581,7 +581,7 @@ const Analytics = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Business Health Scorecard</h1>
+          <h1 className="text-xl font-bold text-gray-900">Business Health Scorecard</h1>
           <p className="text-gray-600">
             Your Amazon business snapshot for {getReportDate()} {analytics?.is_yesterday && '(Yesterday)'}
           </p>
@@ -634,10 +634,10 @@ const Analytics = () => {
       <div className="card bg-gradient-to-br from-blue-50 to-indigo-100 border-2 border-blue-200">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-full shadow-lg mb-4">
-            <span className="text-3xl font-bold text-blue-600">{overall}</span>
+            <span className="text-2xl font-bold text-blue-600">{overall}</span>
             <span className="text-sm text-gray-500 ml-1">/100</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Business Health Score</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-2">Business Health Score</h2>
           <p className="text-gray-600">
             {overall >= 80 ? 'Excellent! Your business is performing well.' :
              overall >= 60 ? 'Good! Some areas need attention.' :
@@ -678,7 +678,7 @@ const Analytics = () => {
         {/* Today's Todo List */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">📋 Today's Action Items</h3>
+            <h3 className="text-base font-semibold text-gray-900">📋 Today's Action Items</h3>
             <span className="text-sm text-gray-500">{todoList.length} tasks</span>
           </div>
           <div className="space-y-3 max-h-80 overflow-y-auto">
@@ -689,7 +689,7 @@ const Analytics = () => {
                 'bg-green-50 border-green-200'
               }`}>
                 <div className="flex items-center space-x-3">
-                  <span className="text-xl">{todo.icon}</span>
+                  <span className="text-sm">{todo.icon}</span>
                   <div>
                     <p className="font-medium text-gray-900">{todo.action}</p>
                     <p className="text-sm text-gray-600">{todo.detail}</p>
@@ -708,7 +708,7 @@ const Analytics = () => {
 
         {/* Quick Stats */}
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Quick Stats</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">📊 Quick Stats</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">Units Sold Yesterday</span>
@@ -756,7 +756,7 @@ const Analytics = () => {
       {/* Top Movers Chart */}
       {topMovers.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Yesterday's Top Movers</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">🚀 Yesterday's Top Movers</h3>
           <div className="mb-4">
             <div className="flex flex-wrap gap-2">
               {topMovers.map((mover, index) => (
@@ -794,13 +794,13 @@ const Analytics = () => {
 
       {/* Stock Status Overview */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">📦 Inventory Status</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">📦 Inventory Status</h3>
         <div className="grid grid-cols-3 gap-4">
           <button 
             onClick={() => openModal('Critical Products', getProductsByCategory('critical'))}
             className="text-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
           >
-            <div className="text-2xl font-bold text-red-600">{stockStatus.critical}</div>
+            <div className="text-xl font-bold text-red-600">{stockStatus.critical}</div>
             <div className="text-sm text-red-700">Critical</div>
             <div className="text-xs text-gray-500">Need immediate action</div>
           </button>
@@ -808,7 +808,7 @@ const Analytics = () => {
             onClick={() => openModal('Warning Products', getProductsByCategory('warning'))}
             className="text-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
           >
-            <div className="text-2xl font-bold text-yellow-600">{stockStatus.warning}</div>
+            <div className="text-xl font-bold text-yellow-600">{stockStatus.warning}</div>
             <div className="text-sm text-yellow-700">Watch Closely</div>
             <div className="text-xs text-gray-500">Monitor for changes</div>
           </button>
@@ -816,7 +816,7 @@ const Analytics = () => {
             onClick={() => openModal('Healthy Products', getProductsByCategory('healthy'))}
             className="text-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
           >
-            <div className="text-2xl font-bold text-green-600">{stockStatus.healthy}</div>
+            <div className="text-xl font-bold text-green-600">{stockStatus.healthy}</div>
             <div className="text-sm text-green-700">Healthy</div>
             <div className="text-xs text-gray-500">No action needed</div>
           </button>
@@ -827,7 +827,7 @@ const Analytics = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-bold text-gray-900">{modalTitle}</h2>
+              <h2 className="text-sm font-bold text-gray-900">{modalTitle}</h2>
               <button 
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"

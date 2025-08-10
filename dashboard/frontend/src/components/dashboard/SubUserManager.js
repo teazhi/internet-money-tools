@@ -204,7 +204,7 @@ const SubUserManager = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">VA & Sub-User Management</h2>
+        <h2 className="text-xl font-bold text-gray-900">VA & Sub-User Management</h2>
         <button
           onClick={() => setShowInviteForm(true)}
           className="btn-primary"
@@ -399,7 +399,7 @@ const SubUserManager = () => {
       {/* Active Sub-Users */}
       <div className="card !p-0">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Active VAs ({subUsers.length})</h3>
+          <h3 className="text-base font-medium text-gray-900">Active VAs ({subUsers.length})</h3>
         </div>
         <div className="divide-y divide-gray-200">
           {subUsers.length === 0 ? (
@@ -448,7 +448,7 @@ const SubUserManager = () => {
       {/* Pending Invitations */}
       <div className="card !p-0">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">Pending Invitations ({invitations.length})</h3>
+          <h3 className="text-base font-medium text-gray-900">Pending Invitations ({invitations.length})</h3>
         </div>
         <div className="divide-y divide-gray-200">
           {invitations.length === 0 ? (

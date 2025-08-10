@@ -173,7 +173,7 @@ const Dashboard = () => {
           <div className="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
             <div className="flex items-center flex-shrink-0 px-4">
               <ShoppingCart className="h-6 w-6 text-builders-500" />
-              <span className="ml-2 text-base font-bold text-gray-900">DMS</span>
+              <span className="ml-2 text-lg font-bold text-gray-900">DMS</span>
             </div>
             <nav className="mt-5 px-2 space-y-1">
               {navigation.map((item) => {
@@ -209,7 +209,7 @@ const Dashboard = () => {
           <div className="flex items-center flex-shrink-0 px-4 justify-between">
             <div className="flex items-center">
               <ShoppingCart className="h-6 w-6 text-builders-500" />
-              {!sidebarCollapsed && <span className="ml-2 text-base font-bold text-gray-900">DMS</span>}
+              {!sidebarCollapsed && <span className="ml-2 text-lg font-bold text-gray-900">DMS</span>}
             </div>
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -267,7 +267,7 @@ const Dashboard = () => {
                   <span className="sr-only">Open sidebar</span>
                   <Menu className="h-6 w-6" />
                 </button>
-                <h1 className="text-sm font-semibold text-gray-900 ml-3 md:ml-0">
+                <h1 className="text-lg font-semibold text-gray-900 ml-3 md:ml-0">
                   {navigation.find(item => item.current)?.name || 'Dashboard'}
                 </h1>
               </div>

@@ -351,7 +351,7 @@ const EnhancedAnalytics = () => {
       {/* Header with Date Selector */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Enhanced Analytics</h1>
+          <h1 className="text-xl font-bold text-gray-900">Enhanced Analytics</h1>
           <p className="text-xs text-gray-600">
             AI-powered inventory insights for {getReportDate()} {analytics?.is_yesterday && '(Yesterday)'}
           </p>

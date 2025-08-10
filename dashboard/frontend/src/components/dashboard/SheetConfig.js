@@ -189,7 +189,7 @@ const SheetConfig = () => {
     <div className="card max-w-2xl">
       <div className="text-center mb-6">
         <LinkIcon className="h-12 w-12 text-builders-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Link Google Account</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Link Google Account</h3>
         <p className="text-gray-600">
           Connect your Google account to access your spreadsheets
         </p>
@@ -242,7 +242,7 @@ const SheetConfig = () => {
     <div className="card max-w-2xl">
       <div className="text-center mb-6">
         <FileSpreadsheet className="h-12 w-12 text-green-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Select Spreadsheet</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Select Spreadsheet</h3>
         <p className="text-gray-600">
           Choose the Google Sheet containing your purchase data
         </p>
@@ -279,7 +279,7 @@ const SheetConfig = () => {
     <div className="card max-w-2xl">
       <div className="text-center mb-6">
         <Database className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Select Worksheet</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Select Worksheet</h3>
         <p className="text-gray-600">
           Choose the specific tab/worksheet with your data
         </p>
@@ -316,7 +316,7 @@ const SheetConfig = () => {
     <div className="card">
       <div className="text-center mb-6">
         <Database className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Map Columns</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Columns</h3>
         <p className="text-gray-600">
           Map your sheet columns to the required fields
         </p>
@@ -361,7 +361,7 @@ const SheetConfig = () => {
     <div className="card max-w-2xl">
       <div className="text-center mb-6">
         <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Configuration Complete!</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Configuration Complete!</h3>
         <p className="text-gray-600">
           Your Google Sheet is now connected and configured
         </p>
@@ -404,7 +404,7 @@ const SheetConfig = () => {
       <div className="flex items-center space-x-3">
         <Database className="h-8 w-8 text-builders-500" />
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sheet Configuration</h1>
+          <h1 className="text-xl font-bold text-gray-900">Sheet Configuration</h1>
           <p className="text-gray-600">Connect and configure your Google Sheet</p>
         </div>
       </div>

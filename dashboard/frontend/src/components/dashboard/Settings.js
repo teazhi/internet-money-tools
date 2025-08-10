@@ -207,7 +207,7 @@ const Settings = () => {
       <div className="flex items-center space-x-3">
         <SettingsIcon className="h-8 w-8 text-builders-500" />
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
+          <h1 className="text-xl font-bold text-gray-900">Account Settings</h1>
           <p className="text-gray-600">Manage your profile and bot configuration</p>
         </div>
       </div>
@@ -579,7 +579,7 @@ const Settings = () => {
       <div className="card max-w-2xl">
         <div className="flex items-center space-x-3 mb-4">
           <ShoppingBag className="h-5 w-5 text-orange-500" />
-          <h3 className="text-lg font-semibold text-gray-900">Amazon Seller Connection</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Amazon Seller Connection</h3>
         </div>
         
         {amazonStatus.loading ? (
@@ -693,7 +693,7 @@ const Settings = () => {
 
       {/* Danger Zone */}
       <div className="card max-w-2xl border-red-200">
-        <h3 className="text-lg font-semibold text-red-900 mb-4">Danger Zone</h3>
+        <h3 className="text-sm font-semibold text-red-900 mb-4">Danger Zone</h3>
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex items-start space-x-3">
             <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />

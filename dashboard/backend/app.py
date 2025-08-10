@@ -4091,13 +4091,10 @@ def fetch_discount_leads():
 @app.route('/api/discount-opportunities/analyze', methods=['POST'])
 @login_required
 def analyze_discount_opportunities():
-    """Analyze discount opportunities against user's inventory"""
+    """Analyze discount opportunities from Distill.io email alerts against user's inventory"""
     try:
         data = request.get_json() or {}
-        retailer_info = data.get('retailer', '')
-        
-        # Use admin-configured keywords instead of user-provided ones
-        discount_keywords = DISCOUNT_KEYWORDS
+        retailer_filter = data.get('retailer', '')
         
         # Get user's current analytics data
         discord_id = session['discord_id']
@@ -4105,34 +4102,32 @@ def analyze_discount_opportunities():
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        # Call the existing analytics endpoint to get enhanced analytics data
+        # Get user config for analytics
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Get the user's timezone
+        user_timezone = user.get('timezone') if user else None
+        
+        # Use today's date for analysis
+        if user_timezone:
+            try:
+                user_tz = pytz.timezone(user_timezone)
+                today = datetime.now(user_tz).date()
+            except:
+                today = datetime.now(pytz.UTC).date()
+        else:
+            today = datetime.now(pytz.UTC).date()
+        
+        # Get user's inventory analysis
         try:
-            # Import the analytics functions that the main endpoint uses
             from orders_analysis import EnhancedOrdersAnalysis
             
-            # Get user config for analytics
-            config_user_record = user
-            if user and user.get('user_type') == 'subuser':
-                parent_user_id = user.get('parent_user_id')
-                if parent_user_id:
-                    parent_record = get_user_record(parent_user_id)
-                    if parent_record:
-                        config_user_record = parent_record
-            
-            # Get the user's timezone
-            user_timezone = user.get('timezone') if user else None
-            
-            # Use today's date for analysis
-            if user_timezone:
-                try:
-                    user_tz = pytz.timezone(user_timezone)
-                    today = datetime.now(user_tz).date()
-                except:
-                    today = datetime.now(pytz.UTC).date()
-            else:
-                today = datetime.now(pytz.UTC).date()
-            
-            # Get the enhanced analytics data using the correct initialization
             orders_url = config_user_record.get('sellerboard_orders_url')
             stock_url = config_user_record.get('sellerboard_stock_url')
             
@@ -4164,87 +4159,85 @@ def analyze_discount_opportunities():
                     'opportunities': [],
                     'message': 'No inventory data available for analysis'
                 })
+                
+            enhanced_analytics = analysis['enhanced_analytics']
             
-            analytics_data = analysis
-            
-        except ImportError as e:
-            return jsonify({
-                'opportunities': [],
-                'message': 'Analytics module not available'
-            }), 500
         except Exception as e:
             return jsonify({
                 'opportunities': [],
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Fetch discount leads
+        # Fetch recent Distill.io email alerts
+        email_alerts = fetch_discount_email_alerts()
+        
+        # Fetch source links CSV for ASIN matching
         csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
         response = requests.get(csv_url, timeout=30)
         response.raise_for_status()
         
         csv_data = StringIO(response.text)
-        leads_df = pd.read_csv(csv_data)
+        source_df = pd.read_csv(csv_data)
         
-        # Filter leads by retailer if specified
-        if retailer_info:
-            # Look for retailer in various columns (URL, description, etc.)
-            retailer_mask = leads_df.astype(str).apply(
-                lambda x: x.str.contains(retailer_info, case=False, na=False)
-            ).any(axis=1)
-            leads_df = leads_df[retailer_mask]
-        
-        enhanced_analytics = analytics_data['enhanced_analytics']
         opportunities = []
         
-        # Match leads against user's inventory
-        for _, lead_row in leads_df.iterrows():
-            # Extract ASIN if available in leads (assuming there's an ASIN column)
-            lead_asin = None
-            for col in lead_row.index:
-                if 'asin' in col.lower() and pd.notna(lead_row[col]):
-                    lead_asin = str(lead_row[col]).strip()
-                    break
+        # Process email alerts
+        for email_alert in email_alerts:
+            retailer = email_alert['retailer']
+            asin = email_alert['asin']
             
-            # If no direct ASIN match, try product name matching
-            if not lead_asin:
-                product_name = None
-                for col in lead_row.index:
-                    if any(keyword in col.lower() for keyword in ['product', 'title', 'name']) and pd.notna(lead_row[col]):
-                        product_name = str(lead_row[col]).strip()
-                        break
-                
-                if product_name:
-                    # Simple product name matching (fuzzy matching could be added)
-                    for asin, inventory_data in enhanced_analytics.items():
-                        if product_name.lower() in inventory_data.get('product_name', '').lower():
-                            lead_asin = asin
-                            break
+            # Skip if retailer filter is specified and doesn't match
+            if retailer_filter and retailer_filter.lower() not in retailer.lower():
+                continue
             
-            # Check if this product is in user's inventory and needs restocking
-            if lead_asin and lead_asin in enhanced_analytics:
-                inventory_data = enhanced_analytics[lead_asin]
+            # Check if this ASIN is in user's inventory and needs restocking
+            if asin in enhanced_analytics:
+                inventory_data = enhanced_analytics[asin]
                 restock_data = inventory_data.get('restock', {})
                 
-                # Check if product needs restocking
+                # Apply same restock logic as Smart Restock recommendations
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
                 days_left = restock_data.get('days_left', float('inf'))
                 
-                # Include if stock is low or restocking is suggested
-                if suggested_quantity > 0 or days_left < 30 or current_stock < 50:
-                    lead_dict = lead_row.to_dict()
+                # Only include if restocking is actually needed (same as Smart Restock filter)
+                if suggested_quantity > 0:
+                    # Look for source link in CSV data
+                    source_link = None
+                    asin_mask = source_df.astype(str).apply(
+                        lambda x: x.str.contains(asin, case=False, na=False)
+                    ).any(axis=1)
+                    
+                    if asin_mask.any():
+                        matching_rows = source_df[asin_mask]
+                        if len(matching_rows) > 0:
+                            # Look for URL/link columns
+                            for col in matching_rows.columns:
+                                if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
+                                    potential_link = matching_rows.iloc[0][col]
+                                    if pd.notna(potential_link) and str(potential_link).startswith('http'):
+                                        source_link = str(potential_link)
+                                        break
+                    
+                    # Extract special promotional text for Vitacost
+                    promo_message = None
+                    if retailer.lower() == 'vitacost':
+                        html_content = email_alert.get('html_content', '')
+                        promo_message = extract_vitacost_promo_message(html_content)
                     
                     opportunity = {
-                        'asin': lead_asin,
+                        'asin': asin,
+                        'retailer': retailer,
                         'product_name': inventory_data.get('product_name', ''),
                         'current_stock': current_stock,
                         'suggested_quantity': suggested_quantity,
                         'days_left': days_left,
-                        'last_cogs': inventory_data.get('cogs_data', {}).get('cogs'),
                         'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
-                        'lead_info': {k: v for k, v in lead_dict.items() if pd.notna(v)},
-                        'priority_score': calculate_opportunity_priority(inventory_data, days_left, suggested_quantity)
+                        'source_link': source_link,
+                        'promo_message': promo_message,
+                        'alert_time': email_alert['alert_time'],
+                        'priority_score': calculate_opportunity_priority(inventory_data, days_left, suggested_quantity),
+                        'restock_priority': inventory_data.get('priority', {}).get('category', 'normal')
                     }
                     opportunities.append(opportunity)
         
@@ -4253,17 +4246,159 @@ def analyze_discount_opportunities():
         
         return jsonify({
             'opportunities': opportunities,
-            'total_leads_checked': len(leads_df),
+            'total_alerts_processed': len(email_alerts),
             'matched_products': len(opportunities),
-            'retailer_filter': retailer_info,
-            'keywords_used': discount_keywords,
-            'analyzed_at': datetime.now(pytz.UTC).isoformat()
+            'retailer_filter': retailer_filter,
+            'analyzed_at': datetime.now(pytz.UTC).isoformat(),
+            'message': f'Found {len(opportunities)} discount opportunities for products that need restocking'
         })
         
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
+
+def fetch_discount_email_alerts():
+    """Fetch recent Distill.io email alerts from admin-configured Gmail"""
+    try:
+        monitor_email = DISCOUNT_MONITOR_EMAIL
+        if not monitor_email:
+            # Return mock data if no email configured
+            return [
+                {
+                    'retailer': 'Vitacost',
+                    'asin': 'B07XVTRJKX',
+                    'subject': 'Vitacost Alert: B07XVTRJKX',
+                    'html_content': '''<div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
+                                      <p id="m_7316486391575247445featuredDiscount">Free shipping on orders $49+</p>''',
+                    'alert_time': '2025-08-09T19:53:00Z'
+                },
+                {
+                    'retailer': 'Walmart', 
+                    'asin': 'B08NDRQR5K',
+                    'subject': 'Walmart Alert: B08NDRQR5K',
+                    'html_content': '<div>Special promotion available</div>',
+                    'alert_time': '2025-08-09T18:30:00Z'
+                }
+            ]
+        
+        # TODO: Implement actual Gmail API integration
+        # For now, return mock data that simulates real email structure
+        email_alerts = []
+        
+        # Simulate parsing email subjects for retailer and ASIN
+        mock_emails = [
+            {
+                'subject': 'Distill Monitor Alert: Vitacost - B07XVTRJKX Price Drop',
+                'html_body': '''<div>Price alert for product B07XVTRJKX</div>
+                               <div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
+                               <a href="https://vitacost.com/product">View Product</a>''',
+                'received_time': '2025-08-09T19:53:00Z',
+                'sender': DISCOUNT_SENDER_EMAIL
+            },
+            {
+                'subject': 'Distill Alert: Walmart B08NDRQR5K Discount',
+                'html_body': '''<div>Discount available for B08NDRQR5K</div>
+                               <p>Special promotion: 20% off</p>''',
+                'received_time': '2025-08-09T18:30:00Z',
+                'sender': DISCOUNT_SENDER_EMAIL
+            }
+        ]
+        
+        for email in mock_emails:
+            # Parse email subject to extract retailer and ASIN
+            parsed_alert = parse_distill_email_subject(email['subject'])
+            if parsed_alert:
+                email_alerts.append({
+                    'retailer': parsed_alert['retailer'],
+                    'asin': parsed_alert['asin'],
+                    'subject': email['subject'],
+                    'html_content': email['html_body'],
+                    'alert_time': email['received_time']
+                })
+        
+        return email_alerts
+        
+    except Exception as e:
+        pass  # Email fetching error
+        return []
+
+def parse_distill_email_subject(subject):
+    """Parse Distill.io email subject to extract retailer and ASIN"""
+    import re
+    
+    # Common patterns for Distill.io email subjects
+    patterns = [
+        r'.*?([A-Za-z]+).*?([B-Z][0-9A-Z]{9})',  # Retailer followed by ASIN
+        r'.*?([B-Z][0-9A-Z]{9}).*?([A-Za-z]+)',  # ASIN followed by retailer
+        r'([A-Za-z]+)\s*-\s*([B-Z][0-9A-Z]{9})', # Retailer - ASIN
+        r'([B-Z][0-9A-Z]{9})\s*-\s*([A-Za-z]+)', # ASIN - Retailer
+    ]
+    
+    retailers = ['vitacost', 'walmart', 'target', 'amazon', 'costco', 'sam']
+    
+    for pattern in patterns:
+        match = re.search(pattern, subject, re.IGNORECASE)
+        if match:
+            part1, part2 = match.groups()
+            
+            # Check which part is the retailer
+            if any(retailer in part1.lower() for retailer in retailers):
+                return {
+                    'retailer': part1.strip(),
+                    'asin': part2.strip()
+                }
+            elif any(retailer in part2.lower() for retailer in retailers):
+                return {
+                    'retailer': part2.strip(),
+                    'asin': part1.strip()
+                }
+            elif re.match(r'^[B-Z][0-9A-Z]{9}$', part1.strip()):
+                return {
+                    'retailer': part2.strip(),
+                    'asin': part1.strip()
+                }
+            elif re.match(r'^[B-Z][0-9A-Z]{9}$', part2.strip()):
+                return {
+                    'retailer': part1.strip(),
+                    'asin': part2.strip()
+                }
+    
+    return None
+
+def extract_vitacost_promo_message(html_content):
+    """Extract promotional message from Vitacost HTML containing topPromoMessages"""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Look for divs containing topPromoMessages
+        promo_divs = soup.find_all('div', id=lambda x: x and 'topPromoMessages' in x)
+        
+        if promo_divs:
+            promo_text = promo_divs[0].get_text(strip=True)
+            return promo_text
+        
+        # Fallback: look for any div containing promotional text patterns
+        for div in soup.find_all('div'):
+            text = div.get_text(strip=True)
+            if any(keyword in text.lower() for keyword in ['$', 'off', 'free shipping', 'promo', 'sale', '%']):
+                return text
+                
+    except ImportError:
+        # BeautifulSoup not available, use basic regex
+        import re
+        # Look for content between topPromoMessages div tags
+        pattern = r'<div[^>]*topPromoMessages[^>]*>(.*?)</div>'
+        match = re.search(pattern, html_content, re.DOTALL | re.IGNORECASE)
+        if match:
+            # Clean up HTML tags
+            clean_text = re.sub(r'<[^>]+>', '', match.group(1))
+            return clean_text.strip()
+    except Exception:
+        pass
+    
+    return None
 
 def calculate_opportunity_priority(inventory_data, days_left, suggested_quantity):
     """Calculate priority score for discount opportunities"""

@@ -983,22 +983,22 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           Product
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          Retailer
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                           Current Stock
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Suggested Order
+                          Restock Qty
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                           Days Left
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Last COGS
+                          Promotion
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Discount Info
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Priority
+                          Actions
                         </th>
                       </tr>
                     </thead>
@@ -1016,6 +1016,11 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                               <div className="text-xs text-gray-500">{opportunity.asin}</div>
                             </div>
                           </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {opportunity.retailer}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                             {Math.round(opportunity.current_stock)}
                           </td>
@@ -1028,44 +1033,52 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                             {formatDaysLeft(opportunity.days_left)}
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-xs">
-                            {opportunity.last_cogs ? (
-                              <span className="text-green-700 font-medium">
-                                {formatCurrency(opportunity.last_cogs)}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
-                          </td>
                           <td className="px-3 py-2">
                             <div className="space-y-1">
-                              {opportunity.lead_info && Object.entries(opportunity.lead_info)
-                                .slice(0, 3)
-                                .map(([key, value]) => (
-                                  <div key={key} className="text-xs">
-                                    <span className="font-medium text-gray-700">
-                                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
-                                    </span>
-                                    <span className="text-gray-600 ml-1">
-                                      {String(value).length > 30 
-                                        ? String(value).substring(0, 30) + '...'
-                                        : String(value)
-                                      }
-                                    </span>
-                                  </div>
-                                ))
-                              }
-                              <div className="flex items-center space-x-1 mt-1">
-                                <Percent className="h-3 w-3 text-blue-500" />
-                                <span className="text-xs text-blue-600 font-medium">Discount Available</span>
+                              {opportunity.promo_message ? (
+                                <div className="flex items-center space-x-1">
+                                  <Percent className="h-3 w-3 text-green-500" />
+                                  <span className="text-xs font-medium text-green-700">
+                                    {opportunity.promo_message}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-1">
+                                  <Percent className="h-3 w-3 text-blue-500" />
+                                  <span className="text-xs text-blue-600 font-medium">Discount Available</span>
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-500">
+                                Alert: {new Date(opportunity.alert_time).toLocaleDateString()}
                               </div>
                             </div>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="text-sm font-bold text-red-600">
-                              {opportunity.priority_score}
+                            <div className="flex items-center space-x-2">
+                              {opportunity.source_link && (
+                                <a
+                                  href={opportunity.source_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                  title="Buy Now"
+                                >
+                                  <ShoppingCart className="h-3 w-3 mr-1" />
+                                  Buy
+                                </a>
+                              )}
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                opportunity.restock_priority === 'critical' 
+                                  ? 'bg-red-100 text-red-800'
+                                  : opportunity.restock_priority === 'warning'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : opportunity.restock_priority === 'opportunity'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {opportunity.priority_score}
+                              </span>
                             </div>
-                            <div className="text-xs text-gray-500">Priority</div>
                           </td>
                         </tr>
                       ))}

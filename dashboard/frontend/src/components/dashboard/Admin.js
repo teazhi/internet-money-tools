@@ -441,6 +441,8 @@ const Admin = () => {
       setError('');
       setLoading(true);
       const response = await axios.get('/api/admin/users', { withCredentials: true });
+      console.log('Fetched users:', response.data.users);
+      console.log('Subusers found:', response.data.users.filter(u => u.user_type === 'subuser'));
       setUsers(response.data.users);
       setRawUserData(JSON.stringify(response.data.users, null, 2));
     } catch (error) {
@@ -499,6 +501,10 @@ const Admin = () => {
     const mainUsers = filtered.filter(user => user.user_type !== 'subuser');
     const subUsers = filtered.filter(user => user.user_type === 'subuser');
     
+    console.log('Main users:', mainUsers.length);
+    console.log('Sub users:', subUsers.length);
+    console.log('All subuser data:', subUsers);
+    
     const hierarchicalUsers = [];
     
     mainUsers.forEach(mainUser => {
@@ -511,6 +517,7 @@ const Admin = () => {
       
       // Add their subusers right after
       const userSubUsers = subUsers.filter(sub => sub.parent_user_id === mainUser.discord_id);
+      console.log(`Subusers for ${mainUser.discord_username} (${mainUser.discord_id}):`, userSubUsers);
       userSubUsers.forEach(subUser => {
         hierarchicalUsers.push({
           ...subUser,

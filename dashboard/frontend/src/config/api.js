@@ -36,6 +36,11 @@ export const API_ENDPOINTS = {
   // Debug endpoints
   DEBUG_STOCK_COLUMNS: `${API_BASE_URL}/api/debug/stock-columns`,
   
+  // Admin endpoints
+  ADMIN_USERS: `${API_BASE_URL}/api/admin/users`,
+  ADMIN_INVITATIONS: `${API_BASE_URL}/api/admin/invitations`,
+  ADMIN_DISCORD_CONFIG: `${API_BASE_URL}/api/admin/discord-monitoring/config`,
+  
   // Health check
   HEALTH: `${API_BASE_URL}/api/health`
 };

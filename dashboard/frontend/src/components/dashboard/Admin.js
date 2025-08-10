@@ -544,6 +544,11 @@ const Admin = () => {
       });
     });
 
+    // Debug hierarchical structure
+    console.log('Final hierarchical users array:', hierarchicalUsers.length);
+    console.log('Main users count:', hierarchicalUsers.filter(u => u.isMainUser).length);  
+    console.log('Sub users count:', hierarchicalUsers.filter(u => u.isSubUser).length);
+
     return hierarchicalUsers;
   }, [users, searchTerm, filterStatus]);
 
@@ -1747,7 +1752,11 @@ const Admin = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => handleDeleteInvitation(invitation.token)}
+                        onClick={() => {
+                          alert('Trash button clicked for token: ' + invitation.token);
+                          console.log('Trash button clicked for token:', invitation.token);
+                          handleDeleteInvitation(invitation.token);
+                        }}
                         className="text-red-600 hover:text-red-900"
                       >
                         <Trash2 className="h-4 w-4" />

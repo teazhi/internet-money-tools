@@ -4698,19 +4698,21 @@ def analyze_retailer_leads():
             if 'purchase_insights' in analysis:
                 actual_purchase_insights = analysis['purchase_insights']
                 print(f"DEBUG - Actual purchase_insights type: {type(actual_purchase_insights)}")
-                if hasattr(actual_purchase_insights, 'keys'):
-                    print(f"DEBUG - Actual purchase_insights keys: {list(actual_purchase_insights.keys())}")
+                print(f"DEBUG - Actual purchase_insights keys: {list(actual_purchase_insights.keys())}")
+            
+            # Debug: Check if orders data is available
+            if 'orders_df' in analysis:
+                orders_df = analysis['orders_df']
+                print(f"DEBUG - Orders DataFrame shape: {orders_df.shape if hasattr(orders_df, 'shape') else 'Not a DataFrame'}")
+                if hasattr(orders_df, 'shape') and orders_df.shape[0] > 0:
+                    print(f"DEBUG - Orders DataFrame columns: {list(orders_df.columns)}")
+                    print(f"DEBUG - First few rows of orders:")
+                    print(orders_df.head(3))
                 else:
-                    print(f"DEBUG - Purchase_insights content (first 200 chars): {str(actual_purchase_insights)[:200]}")
+                    print("DEBUG - Orders DataFrame is empty or invalid")
             
             # Debug: Check what's available in global purchase analytics
             print(f"DEBUG - Global purchase analytics keys: {list(global_purchase_analytics.keys())}")
-            if 'recent_2_months_purchases' in global_purchase_analytics:
-                recent_2_months = global_purchase_analytics['recent_2_months_purchases']
-                print(f"DEBUG - Found recent_2_months_purchases with {len(recent_2_months)} ASINs")
-                print(f"DEBUG - First few ASINs in recent_2_months: {list(recent_2_months.keys())[:5]}")
-            else:
-                print("DEBUG - No recent_2_months_purchases found in global_purchase_analytics")
                 
             # Check if the monthly_purchase_adjustment field has the data we need
             if enhanced_analytics:

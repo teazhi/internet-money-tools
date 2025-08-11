@@ -97,8 +97,7 @@ class EnhancedOrdersAnalysis:
         return parsed_series
 
     def download_csv(self, url: str) -> pd.DataFrame:
-        """Download CSV data from URL with debug logging"""
-        print(f"DEBUG: Downloading CSV from: {url[:100]}...")
+        """Download CSV data from URL"""
         
         # Check if URL has required parameters
         if 'sellerboard.com' in url and 'format=csv' not in url:
@@ -153,11 +152,6 @@ class EnhancedOrdersAnalysis:
             # Try to parse the CSV
             try:
                 df = pd.read_csv(StringIO(response.text))
-                print(f"DEBUG: CSV parsed successfully - {len(df)} rows, {len(df.columns)} columns")
-                print(f"DEBUG: CSV columns: {list(df.columns)}")
-                if len(df) > 0:
-                    print(f"DEBUG: Sample CSV data (first 3 rows):")
-                    print(df.head(3).to_string())
                 return df
             except Exception as csv_error:
                 pass  # Debug print removed
@@ -1369,23 +1363,6 @@ class EnhancedOrdersAnalysis:
         restock_alerts = {}
         critical_alerts = []
         
-        # Debug: Log stock info size
-        print(f"DEBUG: Stock info contains {len(stock_info)} products")
-        print(f"DEBUG: Today sales: {len(today_sales)} products")  
-        print(f"DEBUG: Yesterday sales: {len(yesterday_sales)} products")
-        print(f"DEBUG: Sample stock info ASINs: {list(stock_info.keys())[:10]}")
-        
-        # Special check for our target ASIN
-        target_asin = 'B014UM9N3I'
-        if target_asin in stock_info:
-            print(f"DEBUG: SPECIAL - {target_asin} found in stock_info")
-        else:
-            print(f"DEBUG: SPECIAL - {target_asin} NOT found in stock_info")
-            matching_keys = [k for k in stock_info.keys() if 'B014UM9N3I' in k.upper()]
-            if matching_keys:
-                print(f"  - But found similar keys: {matching_keys}")
-            else:
-                print(f"  - No similar keys found. Keys with B014: {[k for k in stock_info.keys() if 'B014' in k.upper()]}")
         
         # Include ALL products from stock info for comprehensive analysis
         # This is important for lead analysis to check ALL inventory, not just products with recent sales
@@ -1398,27 +1375,12 @@ class EnhancedOrdersAnalysis:
         # IMPORTANT: Also include ALL products from stock info, even without recent sales
         # This ensures lead analysis can check against complete inventory
         products_to_analyze.update(stock_info.keys())
-                
-        print(f"DEBUG: Products to analyze: {len(products_to_analyze)} (including all inventory products)")
-        print(f"DEBUG: Sample products to analyze: {list(products_to_analyze)[:10]}")
         
         # Total products to analyze calculated
         
         for asin in products_to_analyze:
             if asin not in stock_info:
-                # Special debug for missing ASIN
-                if asin == 'B014UM9N3I':
-                    print(f"DEBUG: SPECIAL - B014UM9N3I not found in stock_info")
-                    print(f"  - Stock info keys with B014: {[k for k in stock_info.keys() if 'B014' in k.upper()]}")
                 continue
-                
-            # Special debug for our target ASIN
-            if asin == 'B014UM9N3I':
-                print(f"DEBUG: SPECIAL - Processing B014UM9N3I in enhanced analytics")
-                print(f"  - Stock info data: {stock_info[asin]}")
-                print(f"  - In today sales: {asin in today_sales}")
-                print(f"  - In yesterday sales: {asin in yesterday_sales}")
-                print(f"  - About to add to enhanced_analytics...")
                 
             # Calculate enhanced velocity
             velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date, user_timezone)
@@ -1453,12 +1415,6 @@ class EnhancedOrdersAnalysis:
                 }
             }
             
-            # Special debug for B014UM9N3I
-            if asin == 'B014UM9N3I':
-                print(f"DEBUG: SPECIAL - B014UM9N3I ADDED to enhanced_analytics")
-                print(f"  - Enhanced analytics now has {len(enhanced_analytics)} items")
-                print(f"  - B014UM9N3I in enhanced_analytics: {'B014UM9N3I' in enhanced_analytics}")
-            
             # Generate alerts for high priority items (only products with velocity > 0)
             alert_categories = [
                 'critical_high_velocity', 
@@ -1489,10 +1445,6 @@ class EnhancedOrdersAnalysis:
                     critical_alerts.append(alert)
                     
         # Enhanced analytics completed
-        print(f"DEBUG: Final enhanced_analytics has {len(enhanced_analytics)} items")
-        print(f"DEBUG: B014UM9N3I in final enhanced_analytics: {'B014UM9N3I' in enhanced_analytics}")
-        if 'B014UM9N3I' not in enhanced_analytics:
-            print(f"DEBUG: B014 ASINs in final enhanced_analytics: {[k for k in enhanced_analytics.keys() if 'B014' in k.upper()]}")
 
         # Legacy velocity calculation for backward compatibility
         velocity = {}

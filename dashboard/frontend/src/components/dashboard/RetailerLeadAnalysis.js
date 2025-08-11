@@ -56,11 +56,6 @@ const RetailerLeadAnalysis = () => {
       }, { withCredentials: true });
 
       setAnalysis(response.data);
-      
-      // Log debug info to console
-      if (response.data.debug_info) {
-        console.log('Debug Info:', response.data.debug_info);
-      }
     } catch (error) {
       console.error('Analysis error:', error);
       setError(error.response?.data?.message || error.response?.data?.error || 'Failed to analyze worksheet leads');
@@ -111,9 +106,10 @@ const RetailerLeadAnalysis = () => {
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
-    const headers = ['ASIN', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Source Link'];
+    const headers = ['ASIN', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Source Link'];
     const rows = analysis.recommendations.map(item => [
       item.asin,
+      item.product_name || '',
       item.retailer || '',
       item.recommendation,
       item.reason,
@@ -235,23 +231,6 @@ const RetailerLeadAnalysis = () => {
             </div>
           </div>
 
-          {/* Debug Info (temporary) */}
-          {analysis?.debug_info && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Information:</h4>
-              <div className="text-xs text-yellow-700 space-y-1">
-                <div>Total ASINs in inventory: {analysis.debug_info.total_asins_in_inventory}</div>
-                <div>Basic mode: {analysis.debug_info.basic_mode ? 'Yes' : 'No'}</div>
-                {analysis.debug_info.all_inventory_asins && (
-                  <div>All inventory ASINs: {analysis.debug_info.all_inventory_asins.join(', ')}</div>
-                )}
-                {analysis.debug_info.sample_asins && analysis.debug_info.sample_asins.length > 0 && (
-                  <div>Sample inventory ASINs: {analysis.debug_info.sample_asins.join(', ')}</div>
-                )}
-                <div>Analysis keys: {analysis.debug_info.analysis_keys?.join(', ')}</div>
-              </div>
-            </div>
-          )}
 
           {/* Results Table */}
           <div className="bg-white rounded-lg shadow">
@@ -296,6 +275,9 @@ const RetailerLeadAnalysis = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       ASIN
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Product Name
+                    </th>
                     {analysis.worksheet === 'All Leads' && (
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Retailer
@@ -331,6 +313,20 @@ const RetailerLeadAnalysis = () => {
                           >
                             {item.asin}
                           </a>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {item.product_name ? (
+                            <span title={item.product_name}>
+                              {item.product_name.length > 80 ? 
+                                `${item.product_name.substring(0, 80)}...` : 
+                                item.product_name
+                              }
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic">No product name available</span>
+                          )}
                         </div>
                       </td>
                       {analysis.worksheet === 'All Leads' && (

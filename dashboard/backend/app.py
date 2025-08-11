@@ -4638,26 +4638,6 @@ def analyze_retailer_leads():
         stock_url = config_user_record.get('sellerboard_stock_url')
         user_timezone = config_user_record.get('timezone', 'America/New_York')
         
-        print(f"DEBUG: Using orders_url: {orders_url[:50]}..." if orders_url else "DEBUG: No orders_url")
-        print(f"DEBUG: Using stock_url: {stock_url[:50]}..." if stock_url else "DEBUG: No stock_url")
-        print(f"DEBUG: User timezone: {user_timezone}")
-        
-        # Quick test if URLs are accessible
-        if orders_url:
-            try:
-                import requests
-                test_response = requests.head(orders_url, timeout=10)
-                print(f"DEBUG: Orders URL status: {test_response.status_code}")
-            except Exception as e:
-                print(f"DEBUG: Orders URL test failed: {str(e)}")
-                
-        if stock_url:
-            try:
-                import requests
-                test_response = requests.head(stock_url, timeout=10)
-                print(f"DEBUG: Stock URL status: {test_response.status_code}")
-            except Exception as e:
-                print(f"DEBUG: Stock URL test failed: {str(e)}")
         
         from datetime import datetime
         import pytz
@@ -4667,9 +4647,7 @@ def analyze_retailer_leads():
         today = datetime.now(tz).date()
         
         try:
-            print(f"DEBUG: Starting OrdersAnalysis with orders_url: {orders_url is not None}, stock_url: {stock_url is not None}")
             orders_analysis = OrdersAnalysis(orders_url, stock_url)
-            print(f"DEBUG: OrdersAnalysis created successfully")
             
             analysis = orders_analysis.analyze(
                 for_date=today,
@@ -4682,24 +4660,16 @@ def analyze_retailer_leads():
                     'discord_id': discord_id
                 }
             )
-            print(f"DEBUG: Analysis completed")
             
             enhanced_analytics = analysis.get('enhanced_analytics', {})
-            print(f"DEBUG: Full analysis keys: {list(analysis.keys()) if analysis else 'None'}")
-            print(f"DEBUG: Enhanced analytics type and length: {type(enhanced_analytics)}, {len(enhanced_analytics) if enhanced_analytics else 0}")
             
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):
-                print(f"DEBUG: WARNING - Analysis is in basic/fallback mode")
-                print(f"DEBUG: Basic mode message: {analysis.get('message', 'No message')}")
                 return jsonify({
                     'error': 'Analytics in fallback mode',
                     'message': f'OrdersAnalysis fell back to basic mode: {analysis.get("message", "Unknown reason")}'
                 }), 500
         except Exception as e:
-            print(f"DEBUG: Exception in OrdersAnalysis: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return jsonify({
                 'error': 'Failed to fetch inventory data',
                 'message': f'Failed to generate analytics: {str(e)}'
@@ -4753,74 +4723,6 @@ def analyze_retailer_leads():
         
         recommendations = []
         
-        # Debug: Add inventory info to response for debugging
-        debug_info = {
-            'total_asins_in_inventory': len(enhanced_analytics),
-            'sample_asins': list(enhanced_analytics.keys())[:10],
-            'basic_mode': analysis.get('basic_mode', False),
-            'analysis_keys': list(analysis.keys()) if analysis else []
-        }
-        
-        # If we have ASINs, include a good sample for debugging
-        if len(enhanced_analytics) <= 50:
-            debug_info['all_inventory_asins'] = list(enhanced_analytics.keys())
-        else:
-            debug_info['sample_inventory_asins_extended'] = list(enhanced_analytics.keys())[:30]
-            
-        # Check if B014UM9N3I is in enhanced analytics
-        target_asin = 'B014UM9N3I'
-        debug_info['target_asin_in_inventory'] = target_asin in enhanced_analytics
-        if target_asin not in enhanced_analytics:
-            # Look for similar ASINs in inventory
-            similar_in_inventory = [k for k in enhanced_analytics.keys() if 'B014' in k.upper()]
-            debug_info['similar_b014_asins_in_inventory'] = similar_in_inventory
-            
-        print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
-        print(f"DEBUG: All ASINs in inventory: {list(enhanced_analytics.keys())}")
-        
-        # If we have very few ASINs, show them all with their structure
-        if len(enhanced_analytics) <= 5:
-            print(f"DEBUG: Enhanced analytics structure (showing all {len(enhanced_analytics)} items):")
-            for key, value in enhanced_analytics.items():
-                if isinstance(value, dict):
-                    print(f"  {key}: {list(value.keys())}")
-                    # Show nested structure for first item
-                    if key == list(enhanced_analytics.keys())[0]:
-                        for subkey, subvalue in value.items():
-                            if isinstance(subvalue, dict):
-                                print(f"    {subkey}: {list(subvalue.keys())}")
-                else:
-                    print(f"  {key}: {type(value)} - not dict")
-        else:
-            print(f"DEBUG: Sample ASINs in inventory: {list(enhanced_analytics.keys())[:10]}")
-            print(f"DEBUG: Enhanced analytics structure sample:")
-            for i, (key, value) in enumerate(enhanced_analytics.items()):
-                if i < 3:  # Show first 3 items
-                    print(f"  {key}: {type(value)} - {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
-                else:
-                    break
-        
-        # Debug: Show what ASINs are in the worksheet
-        worksheet_asins = []
-        for _, row in worksheet_df.iterrows():
-            raw_asin = str(row.get('ASIN', '')).strip()
-            if raw_asin and raw_asin != 'nan':
-                worksheet_asins.append(raw_asin.upper())
-        
-        print(f"DEBUG: Worksheet contains {len(worksheet_asins)} ASINs")
-        print(f"DEBUG: First 10 ASINs in worksheet: {worksheet_asins[:10]}")
-        
-        # Check for our specific ASIN
-        target_asin = 'B014UM9N3I'
-        if target_asin in worksheet_asins:
-            print(f"DEBUG: SPECIAL - {target_asin} found in worksheet ASINs")
-        else:
-            print(f"DEBUG: SPECIAL - {target_asin} NOT found in worksheet ASINs")
-            # Look for similar ASINs
-            similar = [asin for asin in worksheet_asins if 'B014' in asin]
-            if similar:
-                print(f"  - Similar ASINs with B014: {similar}")
-        
         # Analyze each lead
         for _, row in worksheet_df.iterrows():
             asin = str(row.get('ASIN', '')).strip().upper()  # Normalize to uppercase
@@ -4851,47 +4753,6 @@ def analyze_retailer_leads():
                 # Try lowercase version if uppercase didn't work
                 inventory_data = enhanced_analytics.get(asin.lower(), {})
             
-            # Debug: Log lookup results  
-            found_in_inventory = bool(inventory_data)
-            
-            # Special logging for B014 ASINs
-            if asin.startswith('B014'):
-                print(f"DEBUG: B014 ASIN {asin} found in inventory: {found_in_inventory}")
-                if asin == 'B014UM9N3I':
-                    print(f"DEBUG: *** FOUND THE TARGET ASIN B014UM9N3I - investigating further ***")
-            else:
-                print(f"DEBUG: ASIN {asin} found in inventory: {found_in_inventory}")
-            
-            # Special debug for the specific missing ASIN
-            if asin == 'B014UM9N3I':
-                print(f"DEBUG: SPECIAL - Checking B014UM9N3I specifically:")
-                print(f"  - Raw ASIN from worksheet: '{asin}'")
-                print(f"  - Length: {len(asin)}")
-                print(f"  - Looking for uppercase: {asin in enhanced_analytics}")
-                print(f"  - Looking for lowercase: {asin.lower() in enhanced_analytics}")
-                
-                # Check for exact matches and similar matches
-                exact_matches = [k for k in enhanced_analytics.keys() if k == asin]
-                similar_matches = [k for k in enhanced_analytics.keys() if 'B014UM9N3I' in k.upper()]
-                close_matches = [k for k in enhanced_analytics.keys() if 'B014' in k.upper()]
-                
-                print(f"  - Exact matches: {exact_matches}")
-                print(f"  - Similar matches (containing B014UM9N3I): {similar_matches}")
-                print(f"  - Close matches (containing B014): {close_matches}")
-                
-                # Check character by character comparison with close matches
-                if close_matches:
-                    for close_match in close_matches[:3]:  # Check first 3
-                        print(f"  - Comparing '{asin}' vs '{close_match}':")
-                        print(f"    - Same length: {len(asin) == len(close_match)}")
-                        print(f"    - Character comparison: {[c1 == c2 for c1, c2 in zip(asin, close_match)]}")
-                        if asin != close_match:
-                            print(f"    - Differences: {[(i, c1, c2) for i, (c1, c2) in enumerate(zip(asin, close_match)) if c1 != c2]}")
-                
-                if asin in enhanced_analytics:
-                    print(f"  - Found data keys: {enhanced_analytics[asin].keys()}")
-                elif asin.lower() in enhanced_analytics:
-                    print(f"  - Found lowercase data keys: {enhanced_analytics[asin.lower()].keys()}")
             
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'
@@ -4904,7 +4765,8 @@ def analyze_retailer_leads():
                 'in_inventory': bool(inventory_data),
                 'recommendation': 'SKIP',
                 'reason': '',
-                'priority_score': 0
+                'priority_score': 0,
+                'product_name': inventory_data.get('product_name', '') if inventory_data else ''
             }
             
             if inventory_data:
@@ -4969,13 +4831,6 @@ def analyze_retailer_leads():
         # Sort by priority
         recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
         
-        # Debug: Summary of B014 ASINs processed
-        b014_asins_processed = [r['asin'] for r in recommendations if r['asin'].startswith('B014')]
-        b014_asins_found_in_inventory = [r['asin'] for r in recommendations if r['asin'].startswith('B014') and r['in_inventory']]
-        
-        print(f"DEBUG: SUMMARY - B014 ASINs processed: {b014_asins_processed}")
-        print(f"DEBUG: SUMMARY - B014 ASINs found in inventory: {b014_asins_found_in_inventory}")
-        print(f"DEBUG: SUMMARY - B014UM9N3I in processed list: {'B014UM9N3I' in b014_asins_processed}")
         
         # Summary statistics
         summary = {
@@ -4990,8 +4845,7 @@ def analyze_retailer_leads():
             'worksheet': worksheet,
             'recommendations': recommendations,
             'summary': summary,
-            'analyzed_at': datetime.now(pytz.UTC).isoformat(),
-            'debug_info': debug_info  # Add debug information to the response
+            'analyzed_at': datetime.now(pytz.UTC).isoformat()
         })
         
     except Exception as e:

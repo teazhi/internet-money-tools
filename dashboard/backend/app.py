@@ -4509,44 +4509,29 @@ def get_available_worksheets():
         
         return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
 
-def get_recent_2_months_purchases_for_lead_analysis(asin: str, purchase_analytics_data: dict) -> int:
-    """Get the quantity purchased for this ASIN in the last 2 months (adapted from OrdersAnalysis)"""
-    if not purchase_analytics_data:
+def get_recent_2_months_purchases_for_lead_analysis(asin: str, global_purchase_analytics: dict) -> int:
+    """Get the quantity purchased for this ASIN in the last 2 months (using same logic as Smart Restock)"""
+    if not global_purchase_analytics:
         return 0
     
-    # The purchase analytics might be empty for many products, especially if they haven't been purchased recently
-    # Let's check multiple sources for purchase data
+    # Use the EXACT same logic as Smart Restock: Check the dedicated recent 2 months purchases data
+    recent_2_months_data = global_purchase_analytics.get('recent_2_months_purchases', {})
+    if asin in recent_2_months_data:
+        qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
+        if qty_purchased and qty_purchased > 0:
+            return int(qty_purchased)
     
-    # Try velocity_analysis first 
-    velocity_analysis = purchase_analytics_data.get('velocity_analysis', {})
+    # Fallback to velocity analysis approach (same as Smart Restock)
+    velocity_analysis = global_purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
     if velocity_analysis:
         days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
+        
+        # If purchased within the last 2 months (last 60 days), return the last purchase quantity
         if days_since_last <= 60:
-            qty = velocity_analysis.get('avg_quantity_per_purchase', 0)
-            if qty and qty > 0:
-                return int(qty)
+            qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
+            if qty > 0:
+                return qty
     
-    # Try urgency_scoring approach  
-    urgency_scoring = purchase_analytics_data.get('urgency_scoring', {})
-    if urgency_scoring:
-        days_since_last = urgency_scoring.get('days_since_last_purchase', 999)
-        if days_since_last <= 60:
-            qty = urgency_scoring.get('avg_quantity_per_purchase', 0)
-            if qty and qty > 0:
-                return int(qty)
-    
-    # Try roi_recommendations approach
-    roi_recommendations = purchase_analytics_data.get('roi_recommendations', {})
-    if roi_recommendations:
-        days_since_last = roi_recommendations.get('days_since_last_purchase', 999)
-        if days_since_last <= 60:
-            qty = roi_recommendations.get('avg_quantity_per_purchase', 0)
-            if qty and qty > 0:
-                return int(qty)
-    
-    # For now, if no recent purchase data is available, return 0
-    # This means the product either hasn't been purchased in the last 2 months
-    # or the purchase analytics doesn't have sufficient historical data
     return 0
 
 def extract_retailer_from_url(url):
@@ -4703,6 +4688,9 @@ def analyze_retailer_leads():
             
             enhanced_analytics = analysis.get('enhanced_analytics', {})
             
+            # Get the global purchase analytics for recent purchase lookups
+            global_purchase_analytics = analysis.get('purchase_insights', {})
+            
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):
                 return jsonify({
@@ -4847,9 +4835,17 @@ def analyze_retailer_leads():
                 velocity = velocity_data.get('weighted_velocity', 0)  # Use the same velocity as Smart Restock
                 
                 # Check for recent purchases (last 2 months) and adjust recommendations
-                recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, purchase_analytics_data)
+                # Use the SAME approach as Smart Restock - use global purchase analytics
+                recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
                 monthly_purchase_adjustment = restock_data.get('monthly_purchase_adjustment', 0)
                 recommendation['recent_purchases'] = recent_purchases
+                
+                # Debug: Check what purchase analytics data is available
+                print(f"DEBUG - ASIN {asin} recent_purchases result: {recent_purchases}")
+                print(f"DEBUG - ASIN {asin} monthly_purchase_adjustment: {monthly_purchase_adjustment}")
+                if global_purchase_analytics.get('recent_2_months_purchases'):
+                    recent_data = global_purchase_analytics['recent_2_months_purchases'].get(asin, {})
+                    print(f"DEBUG - ASIN {asin} global recent_2_months_data: {recent_data}")
                 
                 # Get additional data
                 cogs_data = inventory_data.get('cogs_data', {})
@@ -4907,13 +4903,7 @@ def analyze_retailer_leads():
                 
                 # Try to get purchase analytics from the analysis data (if available) 
                 # Even if product isn't in current inventory, it might have purchase history
-                global_purchase_insights = analysis.get('purchase_insights', {})
-                recent_purchases_for_new = 0
-                
-                if global_purchase_insights:
-                    recent_2_months_data = global_purchase_insights.get('recent_2_months_purchases', {})
-                    if asin in recent_2_months_data:
-                        recent_purchases_for_new = recent_2_months_data[asin].get('total_quantity_purchased', 0)
+                recent_purchases_for_new = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
                 
                 if recent_purchases_for_new > 0:
                     recommendation['recommendation'] = 'MONITOR'

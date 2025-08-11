@@ -4537,6 +4537,69 @@ def extract_retailer_from_url(url):
         return retailer_map.get(domain, domain.replace('.com', '').title())
     return None
 
+@app.route('/api/test-inventory-analysis', methods=['GET'])
+@login_required  
+def test_inventory_analysis():
+    """Test endpoint to verify OrdersAnalysis is working"""
+    try:
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        orders_url = config_user_record.get('sellerboard_orders_url')
+        stock_url = config_user_record.get('sellerboard_stock_url')
+        
+        if not orders_url or not stock_url:
+            return jsonify({'error': 'Sellerboard URLs not configured'}), 400
+            
+        from datetime import datetime
+        import pytz
+        from orders_analysis import OrdersAnalysis
+        
+        user_timezone = config_user_record.get('timezone', 'America/New_York')
+        tz = pytz.timezone(user_timezone)
+        today = datetime.now(tz).date()
+        
+        orders_analysis = OrdersAnalysis(orders_url, stock_url)
+        analysis = orders_analysis.analyze(
+            for_date=today,
+            user_timezone=user_timezone,
+            user_settings={
+                'enable_source_links': config_user_record.get('enable_source_links', False),
+                'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                'discord_id': discord_id
+            }
+        )
+        
+        enhanced_analytics = analysis.get('enhanced_analytics', {})
+        
+        return jsonify({
+            'success': True,
+            'analysis_keys': list(analysis.keys()),
+            'enhanced_analytics_count': len(enhanced_analytics),
+            'sample_asins': list(enhanced_analytics.keys())[:10],
+            'basic_mode': analysis.get('basic_mode', False),
+            'message': analysis.get('message', 'No message')
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/api/retailer-leads/analyze', methods=['POST'])
 @login_required
 def analyze_retailer_leads():
@@ -4690,7 +4753,18 @@ def analyze_retailer_leads():
         
         recommendations = []
         
-        # Debug: Log sample of enhanced_analytics keys
+        # Debug: Add inventory info to response for debugging
+        debug_info = {
+            'total_asins_in_inventory': len(enhanced_analytics),
+            'sample_asins': list(enhanced_analytics.keys())[:10],
+            'basic_mode': analysis.get('basic_mode', False),
+            'analysis_keys': list(analysis.keys()) if analysis else []
+        }
+        
+        # If we have very few ASINs, include them all for debugging
+        if len(enhanced_analytics) <= 20:
+            debug_info['all_inventory_asins'] = list(enhanced_analytics.keys())
+            
         print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
         print(f"DEBUG: All ASINs in inventory: {list(enhanced_analytics.keys())}")
         
@@ -4839,7 +4913,8 @@ def analyze_retailer_leads():
             'worksheet': worksheet,
             'recommendations': recommendations,
             'summary': summary,
-            'analyzed_at': datetime.now(pytz.UTC).isoformat()
+            'analyzed_at': datetime.now(pytz.UTC).isoformat(),
+            'debug_info': debug_info  # Add debug information to the response
         })
         
     except Exception as e:

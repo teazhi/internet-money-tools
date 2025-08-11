@@ -56,6 +56,11 @@ const RetailerLeadAnalysis = () => {
       }, { withCredentials: true });
 
       setAnalysis(response.data);
+      
+      // Log debug info to console
+      if (response.data.debug_info) {
+        console.log('Debug Info:', response.data.debug_info);
+      }
     } catch (error) {
       console.error('Analysis error:', error);
       setError(error.response?.data?.message || error.response?.data?.error || 'Failed to analyze worksheet leads');
@@ -229,6 +234,24 @@ const RetailerLeadAnalysis = () => {
               <div className="text-2xl font-bold text-gray-900">{analysis.summary.skip}</div>
             </div>
           </div>
+
+          {/* Debug Info (temporary) */}
+          {analysis?.debug_info && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Information:</h4>
+              <div className="text-xs text-yellow-700 space-y-1">
+                <div>Total ASINs in inventory: {analysis.debug_info.total_asins_in_inventory}</div>
+                <div>Basic mode: {analysis.debug_info.basic_mode ? 'Yes' : 'No'}</div>
+                {analysis.debug_info.all_inventory_asins && (
+                  <div>All inventory ASINs: {analysis.debug_info.all_inventory_asins.join(', ')}</div>
+                )}
+                {analysis.debug_info.sample_asins && analysis.debug_info.sample_asins.length > 0 && (
+                  <div>Sample inventory ASINs: {analysis.debug_info.sample_asins.join(', ')}</div>
+                )}
+                <div>Analysis keys: {analysis.debug_info.analysis_keys?.join(', ')}</div>
+              </div>
+            </div>
+          )}
 
           {/* Results Table */}
           <div className="bg-white rounded-lg shadow">

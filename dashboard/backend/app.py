@@ -4769,6 +4769,24 @@ def analyze_retailer_leads():
             if not asin or asin == 'nan' or asin == 'NAN':
                 continue
                 
+            # Get product name from CSV - check multiple possible column names
+            csv_product_name = None
+            for col_name in ['name', 'Name', 'Product Name', 'product_name', 'title', 'Title', 'Product Title', 'product_title']:
+                if col_name in row.index:
+                    potential_name = row.get(col_name, None)
+                    if pd.notna(potential_name) and str(potential_name) != 'nan' and str(potential_name).strip():
+                        csv_product_name = str(potential_name).strip()
+                        break
+            
+            # If still no product name, look for any column that might contain product names
+            if not csv_product_name:
+                for col in row.index:
+                    if any(keyword in col.lower() for keyword in ['name', 'title', 'product']):
+                        potential_name = row[col]
+                        if pd.notna(potential_name) and str(potential_name) != 'nan' and str(potential_name).strip():
+                            csv_product_name = str(potential_name).strip()
+                            break
+                
             # Get source link - check multiple possible column names
             source_link = None
             for col_name in ['source', 'Source', 'URL', 'url', 'Link', 'link']:
@@ -4797,6 +4815,13 @@ def analyze_retailer_leads():
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'
             
+            # Determine product name - prefer inventory data, fallback to CSV
+            product_name = ''
+            if inventory_data:
+                product_name = inventory_data.get('product_name', '')
+            elif csv_product_name:
+                product_name = csv_product_name
+                
             recommendation = {
                 'asin': asin,
                 'retailer': retailer_name,
@@ -4806,7 +4831,7 @@ def analyze_retailer_leads():
                 'recommendation': 'SKIP',
                 'reason': '',
                 'priority_score': 0,
-                'product_name': inventory_data.get('product_name', '') if inventory_data else '',
+                'product_name': product_name,
                 'recent_purchases': 0  # Will be filled in based on logic below
             }
             

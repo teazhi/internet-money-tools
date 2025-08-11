@@ -56,8 +56,6 @@ const RetailerLeadAnalysis = () => {
         worksheet: selectedWorksheet
       }, { withCredentials: true });
 
-      console.log('Frontend received data:', response.data);
-      console.log('First recommendation:', response.data.recommendations[0]);
       setAnalysis(response.data);
     } catch (error) {
       console.error('Analysis error:', error);
@@ -353,9 +351,14 @@ const RetailerLeadAnalysis = () => {
                                 `${item.product_name.substring(0, 80)}...` : 
                                 item.product_name
                               }
+                              {!item.in_inventory && (
+                                <span className="text-xs text-orange-500 ml-2">(New)</span>
+                              )}
                             </span>
                           ) : (
-                            <span className="text-gray-400 italic">No product name available</span>
+                            <span className="text-gray-400 italic">
+                              {item.in_inventory ? 'Product name not available' : 'New Product (name not in sheet)'}
+                            </span>
                           )}
                         </div>
                       </td>

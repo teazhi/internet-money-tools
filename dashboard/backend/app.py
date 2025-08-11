@@ -4694,32 +4694,54 @@ def analyze_retailer_leads():
             if inventory_data:
                 # Product is in inventory - check if needs restocking
                 restock_data = inventory_data.get('restock', {})
+                velocity_data = inventory_data.get('velocity', {})
+                priority_data = inventory_data.get('priority', {})
+                
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
-                velocity = inventory_data.get('units_per_day', 0)
-                cogs = inventory_data.get('cogs', 0)
-                last_price = inventory_data.get('last_price', 0)
+                velocity = velocity_data.get('weighted_velocity', 0)  # Use the same velocity as Smart Restock
                 
-                # Calculate if needs restocking
-                if suggested_quantity > 0 and current_stock < suggested_quantity * 0.5:
-                    recommendation['recommendation'] = 'BUY - RESTOCK'
-                    recommendation['reason'] = f'Low stock: {current_stock} units (need {suggested_quantity})'
-                    recommendation['priority_score'] = min(100, (suggested_quantity - current_stock) * velocity)
+                # Get additional data
+                cogs_data = inventory_data.get('cogs_data', {})
+                cogs = cogs_data.get('cogs', 0)
+                last_price = inventory_data.get('stock_info', {}).get('Price', 0)
+                
+                # Use the same logic as Smart Restock: check priority category
+                priority_category = priority_data.get('category', 'low')
+                priority_score = priority_data.get('score', 0)
+                
+                # Apply EXACT same logic as Smart Restock
+                if suggested_quantity > 0:
+                    # Check if it's in a restock alert category (same as Smart Restock)
+                    alert_categories = ['critical_immediate', 'critical_very_soon', 'urgent_restock', 'moderate_restock']
+                    
+                    if priority_category in alert_categories:
+                        recommendation['recommendation'] = 'BUY - RESTOCK'
+                        recommendation['reason'] = f'Smart Restock Alert: {priority_data.get("reasoning", "Needs restocking")}'
+                        recommendation['priority_score'] = priority_score
+                    else:
+                        recommendation['recommendation'] = 'MONITOR'
+                        recommendation['reason'] = f'Stock OK but watch levels: {current_stock} units'
+                        recommendation['priority_score'] = priority_score * 0.5
+                    
                     recommendation['inventory_details'] = {
                         'current_stock': current_stock,
                         'suggested_quantity': suggested_quantity,
                         'units_per_day': velocity,
-                        'days_of_stock': restock_data.get('days_until_stockout', 0),
+                        'days_of_stock': restock_data.get('estimated_coverage_days', 0),
                         'cogs': cogs,
-                        'last_price': last_price
+                        'last_price': last_price,
+                        'priority_category': priority_category,
+                        'confidence': restock_data.get('confidence', 'medium')
                     }
-                elif velocity > 0.5:  # Selling well
+                elif velocity > 0.1:  # Has some sales
                     recommendation['recommendation'] = 'MONITOR'
-                    recommendation['reason'] = f'Good velocity ({velocity:.1f} units/day), stock OK'
-                    recommendation['priority_score'] = velocity * 10
+                    recommendation['reason'] = f'Low/no restock needed, velocity: {velocity:.1f} units/day'
+                    recommendation['priority_score'] = velocity * 5
                 else:
                     recommendation['recommendation'] = 'SKIP'
-                    recommendation['reason'] = f'Low velocity ({velocity:.1f} units/day)'
+                    recommendation['reason'] = f'Very low velocity: {velocity:.1f} units/day'
+                    recommendation['priority_score'] = 0
             else:
                 # Product not in inventory - recommend as new opportunity
                 recommendation['recommendation'] = 'BUY - NEW'

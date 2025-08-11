@@ -4509,6 +4509,34 @@ def get_available_worksheets():
         
         return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
 
+def get_recent_2_months_purchases_for_lead_analysis(asin: str, purchase_analytics_data: dict) -> int:
+    """Get the quantity purchased for this ASIN in the last 2 months (adapted from OrdersAnalysis)"""
+    if not purchase_analytics_data:
+        return 0
+    
+    # First check the dedicated recent 2 months purchases data from purchase insights
+    # The purchase analytics data structure is nested, so we need to check the right path
+    
+    # Try velocity_analysis first (this is where the recent purchase data is often stored)
+    velocity_analysis = purchase_analytics_data.get('velocity_analysis', {})
+    if velocity_analysis:
+        days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
+        
+        # If purchased within the last 2 months (last 60 days), return the last purchase quantity
+        if days_since_last <= 60:
+            qty = velocity_analysis.get('avg_quantity_per_purchase', 0)
+            return int(qty) if qty else 0
+    
+    # Try urgency_scoring approach  
+    urgency_scoring = purchase_analytics_data.get('urgency_scoring', {})
+    if urgency_scoring:
+        days_since_last = urgency_scoring.get('days_since_last_purchase', 999)
+        if days_since_last <= 60:
+            qty = urgency_scoring.get('avg_quantity_per_purchase', 0) 
+            return int(qty) if qty else 0
+    
+    return 0
+
 def extract_retailer_from_url(url):
     """Extract retailer name from URL"""
     import re
@@ -4766,18 +4794,25 @@ def analyze_retailer_leads():
                 'recommendation': 'SKIP',
                 'reason': '',
                 'priority_score': 0,
-                'product_name': inventory_data.get('product_name', '') if inventory_data else ''
+                'product_name': inventory_data.get('product_name', '') if inventory_data else '',
+                'recent_purchases': 0  # Will be filled in based on logic below
             }
             
             if inventory_data:
                 # Product is in inventory - check if needs restocking
                 restock_data = inventory_data.get('restock', {})
+                purchase_analytics_data = inventory_data.get('purchase_analytics', {})
                 velocity_data = inventory_data.get('velocity', {})
                 priority_data = inventory_data.get('priority', {})
                 
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
                 velocity = velocity_data.get('weighted_velocity', 0)  # Use the same velocity as Smart Restock
+                
+                # Check for recent purchases (last 2 months) and adjust recommendations
+                recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, purchase_analytics_data)
+                monthly_purchase_adjustment = restock_data.get('monthly_purchase_adjustment', 0)
+                recommendation['recent_purchases'] = recent_purchases
                 
                 # Get additional data
                 cogs_data = inventory_data.get('cogs_data', {})
@@ -4788,18 +4823,27 @@ def analyze_retailer_leads():
                 priority_category = priority_data.get('category', 'low')
                 priority_score = priority_data.get('score', 0)
                 
-                # Apply EXACT same logic as Smart Restock
+                # Apply EXACT same logic as Smart Restock, factoring in recent purchases
                 if suggested_quantity > 0:
                     # Check if it's in a restock alert category (same as Smart Restock)
                     alert_categories = ['critical_immediate', 'critical_very_soon', 'urgent_restock', 'moderate_restock']
                     
                     if priority_category in alert_categories:
-                        recommendation['recommendation'] = 'BUY - RESTOCK'
-                        recommendation['reason'] = f'Smart Restock Alert: {priority_data.get("reasoning", "Needs restocking")}'
-                        recommendation['priority_score'] = priority_score
+                        # Check if we recently purchased this item
+                        if recent_purchases > 0 and monthly_purchase_adjustment > 0:
+                            recommendation['recommendation'] = 'MONITOR'  
+                            recommendation['reason'] = f'Restock needed but purchased {recent_purchases} units in last 2 months (adjusted from {suggested_quantity + monthly_purchase_adjustment} to {suggested_quantity})'
+                            recommendation['priority_score'] = priority_score * 0.7  # Lower priority due to recent purchase
+                        else:
+                            recommendation['recommendation'] = 'BUY - RESTOCK'
+                            recommendation['reason'] = f'Smart Restock Alert: {priority_data.get("reasoning", "Needs restocking")}'
+                            recommendation['priority_score'] = priority_score
                     else:
                         recommendation['recommendation'] = 'MONITOR'
-                        recommendation['reason'] = f'Stock OK but watch levels: {current_stock} units'
+                        if recent_purchases > 0:
+                            recommendation['reason'] = f'Stock OK, recently purchased {recent_purchases} units: {current_stock} units in stock'
+                        else:
+                            recommendation['reason'] = f'Stock OK but watch levels: {current_stock} units'
                         recommendation['priority_score'] = priority_score * 0.5
                     
                     recommendation['inventory_details'] = {
@@ -4821,10 +4865,29 @@ def analyze_retailer_leads():
                     recommendation['reason'] = f'Very low velocity: {velocity:.1f} units/day'
                     recommendation['priority_score'] = 0
             else:
-                # Product not in inventory - recommend as new opportunity
-                recommendation['recommendation'] = 'BUY - NEW'
-                recommendation['reason'] = 'Not in inventory - potential new product'
-                recommendation['priority_score'] = 50  # Medium priority for new products
+                # Product not in inventory - but check if we recently purchased it
+                # This could happen if we purchased it but it's not yet reflected in stock report
+                
+                # Try to get purchase analytics from the analysis data (if available) 
+                # Even if product isn't in current inventory, it might have purchase history
+                global_purchase_insights = analysis.get('purchase_insights', {})
+                recent_purchases_for_new = 0
+                
+                if global_purchase_insights:
+                    recent_2_months_data = global_purchase_insights.get('recent_2_months_purchases', {})
+                    if asin in recent_2_months_data:
+                        recent_purchases_for_new = recent_2_months_data[asin].get('total_quantity_purchased', 0)
+                
+                if recent_purchases_for_new > 0:
+                    recommendation['recommendation'] = 'MONITOR'
+                    recommendation['reason'] = f'Recently purchased {recent_purchases_for_new} units in last 2 months - monitor arrival/stock levels'  
+                    recommendation['priority_score'] = 30  # Lower priority since recently purchased
+                    recommendation['recent_purchases'] = recent_purchases_for_new
+                else:
+                    recommendation['recommendation'] = 'BUY - NEW'
+                    recommendation['reason'] = 'Not in inventory - potential new product'
+                    recommendation['priority_score'] = 50  # Medium priority for new products
+                    recommendation['recent_purchases'] = 0
             
             recommendations.append(recommendation)
         

@@ -22,6 +22,7 @@ const RetailerLeadAnalysis = () => {
   const [analysis, setAnalysis] = useState(null);
   const [filterRecommendation, setFilterRecommendation] = useState('all');
   const [worksheets, setWorksheets] = useState([]);
+  const [excludeKeywords, setExcludeKeywords] = useState('');
 
   useEffect(() => {
     fetchWorksheets();
@@ -96,17 +97,30 @@ const RetailerLeadAnalysis = () => {
   };
 
   const filteredRecommendations = analysis?.recommendations?.filter(item => {
-    if (filterRecommendation === 'all') return true;
-    if (filterRecommendation === 'buy') {
-      return item.recommendation.startsWith('BUY');
+    // Filter by recommendation type
+    let passesRecommendationFilter = true;
+    if (filterRecommendation === 'all') passesRecommendationFilter = true;
+    else if (filterRecommendation === 'buy') {
+      passesRecommendationFilter = item.recommendation.startsWith('BUY');
+    } else {
+      passesRecommendationFilter = item.recommendation === filterRecommendation;
     }
-    return item.recommendation === filterRecommendation;
+    
+    // Filter by exclude keywords
+    let passesKeywordFilter = true;
+    if (excludeKeywords.trim()) {
+      const keywords = excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
+      const productName = (item.product_name || '').toLowerCase();
+      passesKeywordFilter = !keywords.some(keyword => productName.includes(keyword));
+    }
+    
+    return passesRecommendationFilter && passesKeywordFilter;
   }) || [];
 
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
-    const headers = ['ASIN', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Source Link'];
+    const headers = ['ASIN', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Recent Purchases', 'Source Link'];
     const rows = analysis.recommendations.map(item => [
       item.asin,
       item.product_name || '',
@@ -117,6 +131,7 @@ const RetailerLeadAnalysis = () => {
       item.inventory_details?.suggested_quantity || '',
       item.inventory_details?.units_per_day?.toFixed(2) || '',
       item.inventory_details?.days_of_stock || '',
+      item.recent_purchases || 0,
       item.source_link || ''
     ]);
 
@@ -245,18 +260,28 @@ const RetailerLeadAnalysis = () => {
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">
-                  <select
-                    value={filterRecommendation}
-                    onChange={(e) => setFilterRecommendation(e.target.value)}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                  >
-                    <option value="all">All Recommendations</option>
-                    <option value="buy">Buy (All)</option>
-                    <option value="BUY - RESTOCK">Buy - Restock Only</option>
-                    <option value="BUY - NEW">Buy - New Only</option>
-                    <option value="MONITOR">Monitor Only</option>
-                    <option value="SKIP">Skip Only</option>
-                  </select>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      placeholder="Exclude keywords (e.g., Champion, Nike)"
+                      value={excludeKeywords}
+                      onChange={(e) => setExcludeKeywords(e.target.value)}
+                      className="px-3 py-1 border border-gray-300 rounded-md text-sm w-64"
+                      title="Enter keywords separated by commas to filter out products containing these words"
+                    />
+                    <select
+                      value={filterRecommendation}
+                      onChange={(e) => setFilterRecommendation(e.target.value)}
+                      className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                    >
+                      <option value="all">All Recommendations</option>
+                      <option value="buy">Buy (All)</option>
+                      <option value="BUY - RESTOCK">Buy - Restock Only</option>
+                      <option value="BUY - NEW">Buy - New Only</option>
+                      <option value="MONITOR">Monitor Only</option>
+                      <option value="SKIP">Skip Only</option>
+                    </select>
+                  </div>
                   <button
                     onClick={exportToCSV}
                     className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center text-sm"
@@ -294,6 +319,9 @@ const RetailerLeadAnalysis = () => {
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Restock Priority
+                    </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Recent Purchases
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Source
@@ -370,6 +398,12 @@ const RetailerLeadAnalysis = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
+                        <div className="text-sm">
+                          <div className="font-medium">{item.recent_purchases || 0}</div>
+                          <div className="text-xs text-gray-500">last 2 months</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
                         {item.source_link ? (
                           <a
                             href={item.source_link}
@@ -391,6 +425,17 @@ const RetailerLeadAnalysis = () => {
               {filteredRecommendations.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
                   No recommendations found matching your filter criteria.
+                </div>
+              )}
+              
+              {analysis?.recommendations && filteredRecommendations.length !== analysis.recommendations.length && (
+                <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
+                  <div className="text-sm text-blue-800">
+                    Showing {filteredRecommendations.length} of {analysis.recommendations.length} recommendations
+                    {excludeKeywords.trim() && (
+                      <span> (filtered out products containing: {excludeKeywords})</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

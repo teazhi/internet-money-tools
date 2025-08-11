@@ -4595,7 +4595,9 @@ def analyze_retailer_leads():
                     'discord_id': discord_id
                 }
             )
-            enhanced_analytics = analysis.get('analytics', {})
+            enhanced_analytics = analysis.get('enhanced_analytics', {})
+            print(f"DEBUG: Full analysis keys: {list(analysis.keys()) if analysis else 'None'}")
+            print(f"DEBUG: Enhanced analytics type and length: {type(enhanced_analytics)}, {len(enhanced_analytics) if enhanced_analytics else 0}")
         except Exception as e:
             return jsonify({
                 'error': 'Failed to fetch inventory data',
@@ -4653,6 +4655,13 @@ def analyze_retailer_leads():
         # Debug: Log sample of enhanced_analytics keys
         print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
         print(f"DEBUG: Sample ASINs in inventory: {list(enhanced_analytics.keys())[:10]}")
+        print(f"DEBUG: Enhanced analytics type: {type(enhanced_analytics)}")
+        print(f"DEBUG: Enhanced analytics structure sample:")
+        for i, (key, value) in enumerate(enhanced_analytics.items()):
+            if i < 3:  # Show first 3 items
+                print(f"  {key}: {type(value)} - {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
+            else:
+                break
         
         # Analyze each lead
         for _, row in worksheet_df.iterrows():

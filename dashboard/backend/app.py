@@ -101,7 +101,6 @@ AMAZON_SELLER_REDIRECT_URI = os.getenv('AMAZON_SELLER_REDIRECT_URI', default_ama
 # Discount Monitoring Configuration (Admin Only)
 DISCOUNT_MONITOR_EMAIL = os.getenv('DISCOUNT_MONITOR_EMAIL')  # Admin email for discount monitoring
 DISCOUNT_SENDER_EMAIL = 'alert@distill.io'  # Only monitor emails from this sender
-DISCOUNT_KEYWORDS = ['sale', 'discount', '% off', 'clearance', 'deal', 'promotion', 'special offer', 'price drop', 'reduced']
 DISCOUNT_EMAIL_DAYS_BACK = int(os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '7'))  # How many days back to check emails (default: 7)
 
 # Encryption key for sensitive data (SP-API tokens)
@@ -4752,7 +4751,6 @@ def get_discount_monitoring_status():
             'gmail_configured': gmail_configured,
             'monitor_email': DISCOUNT_MONITOR_EMAIL if DISCOUNT_MONITOR_EMAIL else None,
             'sender_email': DISCOUNT_SENDER_EMAIL,
-            'keywords': DISCOUNT_KEYWORDS,
             'days_back': discount_config.get('days_back', 7),
             'config_last_updated': discount_config.get('last_updated'),
             'status': status,
@@ -4804,7 +4802,6 @@ def test_discount_monitoring():
                     'details': {
                         'monitor_email': DISCOUNT_MONITOR_EMAIL,
                         'sender_email': DISCOUNT_SENDER_EMAIL,
-                        'keywords_count': len(DISCOUNT_KEYWORDS),
                         'days_back': get_discount_email_days_back(),
                         'test_message_count': message_count
                     }

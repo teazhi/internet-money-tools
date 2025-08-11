@@ -807,29 +807,10 @@ const AdminCompact = () => {
                           <span className="text-gray-600">Monitor Email:</span>
                           <span className="font-medium">{discountMonitoring.monitor_email}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Keywords:</span>
-                          <span className="font-medium">{discountMonitoring.keywords?.length || 0}</span>
-                        </div>
                       </div>
                     )}
                   </div>
                   
-                  {discountMonitoring.keywords && (
-                    <div className="border rounded-lg p-4">
-                      <h5 className="font-medium mb-2">Keywords</h5>
-                      <div className="flex flex-wrap gap-2">
-                        {discountMonitoring.keywords.map((keyword, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-1 rounded text-xs bg-purple-100 text-purple-800"
-                          >
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 

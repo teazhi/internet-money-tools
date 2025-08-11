@@ -4681,7 +4681,12 @@ def analyze_retailer_leads():
                     'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
                     'disable_sp_api': config_user_record.get('disable_sp_api', False),
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
-                    'discord_id': discord_id
+                    'discord_id': discord_id,
+                    # Add Google Sheet settings for purchase analytics (same as Smart Restock)
+                    'sheet_id': config_user_record.get('sheet_id'),
+                    'worksheet_title': config_user_record.get('worksheet_title'), 
+                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'column_mapping': config_user_record.get('column_mapping', {})
                 }
             )
             
@@ -4689,12 +4694,6 @@ def analyze_retailer_leads():
             
             # Get the global purchase analytics for recent purchase lookups
             global_purchase_analytics = analysis.get('purchase_insights', {})
-            
-            # Debug: Check why purchase_insights is empty
-            print(f"DEBUG - User has google_linked: {config_user_record.get('google_linked', False)}")
-            print(f"DEBUG - User has sheet_id: {bool(config_user_record.get('sheet_id'))}")
-            print(f"DEBUG - User has search_all_worksheets: {config_user_record.get('search_all_worksheets', False)}")
-            print(f"DEBUG - purchase_insights content: {global_purchase_analytics}")
             
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):

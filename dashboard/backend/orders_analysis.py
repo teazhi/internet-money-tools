@@ -1276,12 +1276,8 @@ class EnhancedOrdersAnalysis:
         cogs_data = {}
         purchase_insights = {}
         
-        print(f"DEBUG - Starting Google Sheet processing")
-        print(f"DEBUG - user_settings keys: {list(user_settings.keys()) if user_settings else 'None'}")
-        print(f"DEBUG - enable_source_links: {user_settings.get('enable_source_links') if user_settings else 'No user_settings'}")
         
         if user_settings and user_settings.get('enable_source_links'):
-            print("DEBUG - enable_source_links is True, starting Google Sheet processing")
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -1298,44 +1294,32 @@ class EnhancedOrdersAnalysis:
                 google_tokens = user_settings.get('google_tokens', {})
                 column_mapping = user_settings.get('column_mapping', {})
                 
-                print(f"DEBUG - Sheet ID exists: {bool(sheet_id)}")
-                print(f"DEBUG - Google tokens exist: {bool(google_tokens)}")
-                print(f"DEBUG - Worksheet title: {worksheet_title}")
-                print(f"DEBUG - Column mapping: {column_mapping}")
-                
                 if sheet_id and google_tokens:
-                    print("DEBUG - Sheet ID and tokens verified, proceeding with token refresh")
                     # Create a temporary user_record for the refresh function
                     temp_user_record = {'google_tokens': google_tokens}
                     access_token = refresh_google_token(temp_user_record)
                     
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
-                        print("DEBUG - Searching all worksheets for purchase data")
-                        print(f"DEBUG - Column mapping: {column_mapping}")
                         cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id, column_mapping
                         )
-                        print(f"DEBUG - All worksheets search result: cogs_data={len(cogs_data)} items, sheet_data={sheet_data.shape if hasattr(sheet_data, 'shape') else 'Not a DataFrame'}")
                         # Use the user's column mapping for purchase analytics
                         column_mapping_for_purchase = column_mapping
                         
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:
-                            print("DEBUG - All worksheets search failed, falling back to specific worksheet")
                             cogs_data, sheet_data = self.fetch_google_sheet_data(
                                 access_token, sheet_id, worksheet_title, column_mapping
                             )
                             column_mapping_for_purchase = column_mapping
                             
                     elif worksheet_title:
-                        print(f"DEBUG - Using specific worksheet: {worksheet_title}")
                         cogs_data, sheet_data = self.fetch_google_sheet_data(
                             access_token, sheet_id, worksheet_title, column_mapping
                         )
                         column_mapping_for_purchase = column_mapping
                     else:
-                        print("DEBUG - No worksheet configuration found")
                         cogs_data = {}
                         sheet_data = pd.DataFrame()
                         column_mapping_for_purchase = {}
@@ -1343,25 +1327,15 @@ class EnhancedOrdersAnalysis:
                     
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
-                        print(f"DEBUG - Sheet data shape: {sheet_data.shape}")
-                        print(f"DEBUG - Sheet data columns: {list(sheet_data.columns)}")
-                        print(f"DEBUG - Column mapping for purchase: {column_mapping_for_purchase}")
-                        print(f"DEBUG - First few rows of sheet data:")
-                        print(sheet_data.head(3))
-                        
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
                             sheet_data, column_mapping_for_purchase
                         )
-                        print(f"DEBUG - Purchase insights result: {list(purchase_insights.keys()) if purchase_insights else 'EMPTY'}")
                     else:
-                        print("DEBUG - No sheet data available for purchase analytics")
                         purchase_insights = {}
                 else:
                     pass  # Debug print removed
             except Exception as e:
-                print(f"DEBUG - Exception in Google Sheet processing: {e}")
-                import traceback
-                traceback.print_exc()
+                pass  # Debug print removed
                 cogs_data = {}
                 purchase_insights = {}
 

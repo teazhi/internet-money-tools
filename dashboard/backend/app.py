@@ -4691,6 +4691,15 @@ def analyze_retailer_leads():
             # Get the global purchase analytics for recent purchase lookups
             global_purchase_analytics = analysis.get('purchase_insights', {})
             
+            # Debug: Check what's available in global purchase analytics
+            print(f"DEBUG - Global purchase analytics keys: {list(global_purchase_analytics.keys())}")
+            if 'recent_2_months_purchases' in global_purchase_analytics:
+                recent_2_months = global_purchase_analytics['recent_2_months_purchases']
+                print(f"DEBUG - Found recent_2_months_purchases with {len(recent_2_months)} ASINs")
+                print(f"DEBUG - First few ASINs in recent_2_months: {list(recent_2_months.keys())[:5]}")
+            else:
+                print("DEBUG - No recent_2_months_purchases found in global_purchase_analytics")
+            
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):
                 return jsonify({

@@ -143,7 +143,7 @@ const RetailerLeadAnalysis = () => {
               Retailer Lead Analysis
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Analyze all leads from a specific retailer and get buying recommendations
+              Analyze all leads from a specific worksheet and get buying recommendations
             </p>
           </div>
         </div>
@@ -151,13 +151,13 @@ const RetailerLeadAnalysis = () => {
         <div className="flex items-end space-x-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Retailer
+              Select Worksheet
             </label>
             {loadingWorksheets ? (
               <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
                 <div className="flex items-center">
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin text-gray-400" />
-                  <span className="text-sm text-gray-500">Loading retailers...</span>
+                  <span className="text-sm text-gray-500">Loading worksheets...</span>
                 </div>
               </div>
             ) : (
@@ -166,7 +166,7 @@ const RetailerLeadAnalysis = () => {
                 onChange={(e) => setSelectedWorksheet(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
               >
-                <option value="">Choose a retailer...</option>
+                <option value="">Choose a worksheet...</option>
                 {worksheets.map(worksheet => (
                   <option key={worksheet} value={worksheet}>
                     {worksheet}

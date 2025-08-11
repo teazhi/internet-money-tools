@@ -4425,38 +4425,79 @@ def analyze_discount_opportunities():
 @app.route('/api/retailer-leads/worksheets', methods=['GET'])
 @login_required
 def get_available_worksheets():
-    """Get all available retailers/sources from the source links CSV"""
+    """Get all available worksheets from the Google Sheet"""
     try:
-        # Fetch source links CSV
-        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
         
-        response = requests.get(csv_url, timeout=30)
-        response.raise_for_status()
+        # Get user config for analytics
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
         
-        csv_data = StringIO(response.text)
-        source_df = pd.read_csv(csv_data)
+        # Check if user has Google tokens
+        if not config_user_record or not config_user_record.get('google_tokens'):
+            # Fallback to hardcoded list if no Google access
+            return jsonify({
+                'worksheets': ['Kohls - Flat', 'Walmart', 'Target', 'Costco', 'Sam\'s Club', 'BJ\'s', 
+                              'Home Depot', 'Lowe\'s', 'Walgreens', 'CVS', 'Best Buy', 'Macy\'s',
+                              'Nordstrom', 'Dick\'s Sporting Goods', 'Bed Bath & Beyond'],
+                'total': 15,
+                'note': 'Using default list - Google Sheets not connected'
+            })
         
-        # Extract retailers from source URLs
-        retailers = []
+        # Get the Google Sheet ID from the CSV URL
+        # Extract sheet ID from the URL pattern
+        sheet_id = '1eY-3tjEgrtqchhBHqfdkYqpKl8xO7bKx-A1h8Lxrq7M'  # This is the ID from your URL
         
-        # Get unique source domains
-        if 'source' in source_df.columns:
-            source_df['source_domain'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
-            unique_retailers = source_df['source_domain'].dropna().unique().tolist()
-            retailers.extend(unique_retailers)
-        
-        # Add "All Leads" option
-        retailers = ['All Leads'] + sorted(list(set(retailers)))
-        
-        return jsonify({
-            'worksheets': retailers,
-            'total': len(retailers)
-        })
+        try:
+            # Use existing function to get worksheet titles
+            worksheet_titles = fetch_all_sheet_titles_for_user({
+                'google_tokens': config_user_record['google_tokens'],
+                'sheet_id': sheet_id
+            })
+            
+            return jsonify({
+                'worksheets': worksheet_titles,
+                'total': len(worksheet_titles)
+            })
+            
+        except Exception as e:
+            print(f"Error fetching from Google Sheets: {e}")
+            # Fallback to trying CSV approach with different structure
+            csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+            
+            response = requests.get(csv_url, timeout=30)
+            response.raise_for_status()
+            
+            csv_data = StringIO(response.text)
+            source_df = pd.read_csv(csv_data)
+            
+            # Extract retailers from source URLs
+            retailers = []
+            
+            # Get unique source domains
+            if 'source' in source_df.columns:
+                source_df['source_domain'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
+                unique_retailers = source_df['source_domain'].dropna().unique().tolist()
+                retailers.extend(unique_retailers)
+            
+            # Add "All Leads" option
+            retailers = ['All Leads'] + sorted(list(set(retailers)))
+            
+            return jsonify({
+                'worksheets': retailers,
+                'total': len(retailers)
+            })
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Error fetching retailers: {str(e)}'}), 500
+        return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
 
 def extract_retailer_from_url(url):
     """Extract retailer name from URL"""
@@ -4551,28 +4592,43 @@ def analyze_retailer_leads():
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Fetch source links CSV
-        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        # Get Google Sheet data for the specific worksheet
+        sheet_id = '1eY-3tjEgrtqchhBHqfdkYqpKl8xO7bKx-A1h8Lxrq7M'
         
-        response = requests.get(csv_url, timeout=30)
-        response.raise_for_status()
-        
-        csv_data = StringIO(response.text)
-        source_df = pd.read_csv(csv_data)
-        
-        # Filter for the specific retailer
-        if worksheet == 'All Leads':
-            worksheet_df = source_df.copy()
-        else:
-            # Add retailer column based on source URL
-            source_df['retailer'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
-            worksheet_df = source_df[source_df['retailer'] == worksheet]
-        
-        if worksheet_df.empty:
-            return jsonify({
-                'error': f'No data found for: {worksheet}',
-                'message': f'Could not find any leads for "{worksheet}"'
-            }), 404
+        try:
+            # Try to fetch from specific worksheet using Google Sheets API
+            worksheet_df = fetch_google_sheet_as_df({
+                'google_tokens': config_user_record['google_tokens'],
+                'sheet_id': sheet_id
+            }, worksheet)
+            
+            if worksheet_df.empty:
+                raise Exception(f"No data in worksheet: {worksheet}")
+                
+        except Exception as e:
+            print(f"Error fetching worksheet data: {e}")
+            # Fallback to CSV approach
+            csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+            
+            response = requests.get(csv_url, timeout=30)
+            response.raise_for_status()
+            
+            csv_data = StringIO(response.text)
+            source_df = pd.read_csv(csv_data)
+            
+            # Filter for the specific retailer
+            if worksheet == 'All Leads':
+                worksheet_df = source_df.copy()
+            else:
+                # Add retailer column based on source URL
+                source_df['retailer'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
+                worksheet_df = source_df[source_df['retailer'] == worksheet]
+            
+            if worksheet_df.empty:
+                return jsonify({
+                    'error': f'No data found for: {worksheet}',
+                    'message': f'Could not find any leads for "{worksheet}"'
+                }), 404
         
         recommendations = []
         
@@ -4582,12 +4638,23 @@ def analyze_retailer_leads():
             if not asin or asin == 'nan':
                 continue
                 
-            # Get source link (it's in the 'source' column)
-            source_link = row.get('source', None)
-            if pd.notna(source_link) and str(source_link) != 'nan':
-                source_link = str(source_link)
-            else:
-                source_link = None
+            # Get source link - check multiple possible column names
+            source_link = None
+            for col_name in ['source', 'Source', 'URL', 'url', 'Link', 'link']:
+                if col_name in row.index:
+                    potential_link = row.get(col_name, None)
+                    if pd.notna(potential_link) and str(potential_link) != 'nan' and str(potential_link).startswith('http'):
+                        source_link = str(potential_link)
+                        break
+            
+            # If still no source link, look for any column containing URL
+            if not source_link:
+                for col in row.index:
+                    if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
+                        potential_link = row[col]
+                        if pd.notna(potential_link) and str(potential_link).startswith('http'):
+                            source_link = str(potential_link)
+                            break
             
             # Check if ASIN is in user's inventory
             inventory_data = enhanced_analytics.get(asin, {})

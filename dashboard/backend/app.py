@@ -4858,14 +4858,33 @@ def analyze_retailer_leads():
             # Special debug for the specific missing ASIN
             if asin == 'B014UM9N3I':
                 print(f"DEBUG: SPECIAL - Checking B014UM9N3I specifically:")
+                print(f"  - Raw ASIN from worksheet: '{asin}'")
+                print(f"  - Length: {len(asin)}")
                 print(f"  - Looking for uppercase: {asin in enhanced_analytics}")
                 print(f"  - Looking for lowercase: {asin.lower() in enhanced_analytics}")
-                print(f"  - Enhanced analytics keys containing 'B014UM9N3I': {[k for k in enhanced_analytics.keys() if 'B014UM9N3I' in k.upper()]}")
-                print(f"  - All enhanced analytics keys with B014: {[k for k in enhanced_analytics.keys() if 'B014' in k.upper()]}")
+                
+                # Check for exact matches and similar matches
+                exact_matches = [k for k in enhanced_analytics.keys() if k == asin]
+                similar_matches = [k for k in enhanced_analytics.keys() if 'B014UM9N3I' in k.upper()]
+                close_matches = [k for k in enhanced_analytics.keys() if 'B014' in k.upper()]
+                
+                print(f"  - Exact matches: {exact_matches}")
+                print(f"  - Similar matches (containing B014UM9N3I): {similar_matches}")
+                print(f"  - Close matches (containing B014): {close_matches}")
+                
+                # Check character by character comparison with close matches
+                if close_matches:
+                    for close_match in close_matches[:3]:  # Check first 3
+                        print(f"  - Comparing '{asin}' vs '{close_match}':")
+                        print(f"    - Same length: {len(asin) == len(close_match)}")
+                        print(f"    - Character comparison: {[c1 == c2 for c1, c2 in zip(asin, close_match)]}")
+                        if asin != close_match:
+                            print(f"    - Differences: {[(i, c1, c2) for i, (c1, c2) in enumerate(zip(asin, close_match)) if c1 != c2]}")
+                
                 if asin in enhanced_analytics:
-                    print(f"  - Found data: {enhanced_analytics[asin].keys()}")
+                    print(f"  - Found data keys: {enhanced_analytics[asin].keys()}")
                 elif asin.lower() in enhanced_analytics:
-                    print(f"  - Found lowercase data: {enhanced_analytics[asin.lower()].keys()}")
+                    print(f"  - Found lowercase data keys: {enhanced_analytics[asin.lower()].keys()}")
             
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'

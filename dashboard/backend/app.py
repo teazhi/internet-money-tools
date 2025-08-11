@@ -4853,7 +4853,14 @@ def analyze_retailer_leads():
             
             # Debug: Log lookup results  
             found_in_inventory = bool(inventory_data)
-            print(f"DEBUG: ASIN {asin} found in inventory: {found_in_inventory}")
+            
+            # Special logging for B014 ASINs
+            if asin.startswith('B014'):
+                print(f"DEBUG: B014 ASIN {asin} found in inventory: {found_in_inventory}")
+                if asin == 'B014UM9N3I':
+                    print(f"DEBUG: *** FOUND THE TARGET ASIN B014UM9N3I - investigating further ***")
+            else:
+                print(f"DEBUG: ASIN {asin} found in inventory: {found_in_inventory}")
             
             # Special debug for the specific missing ASIN
             if asin == 'B014UM9N3I':
@@ -4961,6 +4968,14 @@ def analyze_retailer_leads():
         
         # Sort by priority
         recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        # Debug: Summary of B014 ASINs processed
+        b014_asins_processed = [r['asin'] for r in recommendations if r['asin'].startswith('B014')]
+        b014_asins_found_in_inventory = [r['asin'] for r in recommendations if r['asin'].startswith('B014') and r['in_inventory']]
+        
+        print(f"DEBUG: SUMMARY - B014 ASINs processed: {b014_asins_processed}")
+        print(f"DEBUG: SUMMARY - B014 ASINs found in inventory: {b014_asins_found_in_inventory}")
+        print(f"DEBUG: SUMMARY - B014UM9N3I in processed list: {'B014UM9N3I' in b014_asins_processed}")
         
         # Summary statistics
         summary = {

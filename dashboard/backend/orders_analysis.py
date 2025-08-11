@@ -1418,14 +1418,13 @@ class EnhancedOrdersAnalysis:
                 print(f"  - Stock info data: {stock_info[asin]}")
                 print(f"  - In today sales: {asin in today_sales}")
                 print(f"  - In yesterday sales: {asin in yesterday_sales}")
+                print(f"  - About to add to enhanced_analytics...")
                 
             # Calculate enhanced velocity
             velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date, user_timezone)
             
-            # Skip products with zero velocity across all periods
-            if velocity_data.get('weighted_velocity', 0) == 0 and today_sales.get(asin, 0) == 0:
-                # Skipping product with zero velocity
-                continue
+            # For lead analysis, we need ALL products in inventory, even those with zero velocity
+            # So we DO NOT skip products with zero velocity anymore
             
             # Get priority score
             current_sales = today_sales.get(asin, 0)
@@ -1453,6 +1452,12 @@ class EnhancedOrdersAnalysis:
                     'seasonal_trends': purchase_insights.get('seasonal_purchase_trends', {}).get(asin, {})
                 }
             }
+            
+            # Special debug for B014UM9N3I
+            if asin == 'B014UM9N3I':
+                print(f"DEBUG: SPECIAL - B014UM9N3I ADDED to enhanced_analytics")
+                print(f"  - Enhanced analytics now has {len(enhanced_analytics)} items")
+                print(f"  - B014UM9N3I in enhanced_analytics: {'B014UM9N3I' in enhanced_analytics}")
             
             # Generate alerts for high priority items (only products with velocity > 0)
             alert_categories = [
@@ -1484,6 +1489,10 @@ class EnhancedOrdersAnalysis:
                     critical_alerts.append(alert)
                     
         # Enhanced analytics completed
+        print(f"DEBUG: Final enhanced_analytics has {len(enhanced_analytics)} items")
+        print(f"DEBUG: B014UM9N3I in final enhanced_analytics: {'B014UM9N3I' in enhanced_analytics}")
+        if 'B014UM9N3I' not in enhanced_analytics:
+            print(f"DEBUG: B014 ASINs in final enhanced_analytics: {[k for k in enhanced_analytics.keys() if 'B014' in k.upper()]}")
 
         # Legacy velocity calculation for backward compatibility
         velocity = {}

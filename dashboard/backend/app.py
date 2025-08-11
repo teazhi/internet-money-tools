@@ -4422,16 +4422,44 @@ def analyze_discount_opportunities():
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
 
+@app.route('/api/retailer-leads/worksheets', methods=['GET'])
+@login_required
+def get_available_worksheets():
+    """Get all available worksheets from the source links CSV"""
+    try:
+        # Fetch source links CSV
+        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        
+        response = requests.get(csv_url, timeout=30)
+        response.raise_for_status()
+        
+        csv_data = StringIO(response.text)
+        source_df = pd.read_csv(csv_data)
+        
+        # Get unique worksheet names
+        worksheets = source_df['Worksheet'].dropna().unique().tolist()
+        worksheets.sort()  # Sort alphabetically
+        
+        return jsonify({
+            'worksheets': worksheets,
+            'total': len(worksheets)
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
+
 @app.route('/api/retailer-leads/analyze', methods=['POST'])
 @login_required
 def analyze_retailer_leads():
     """Analyze all leads from a specific retailer's worksheet and provide buying recommendations"""
     try:
         data = request.get_json() or {}
-        retailer = data.get('retailer', '').strip()
+        worksheet = data.get('worksheet', '').strip()
         
-        if not retailer:
-            return jsonify({'error': 'Retailer name is required'}), 400
+        if not worksheet:
+            return jsonify({'error': 'Worksheet name is required'}), 400
         
         # Get user's current analytics data
         discord_id = session['discord_id']
@@ -4487,33 +4515,8 @@ def analyze_retailer_leads():
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Fetch source links CSV for the specific retailer
+        # Fetch source links CSV for the specific worksheet
         csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
-        
-        # Map retailer names to worksheet patterns
-        retailer_worksheet_map = {
-            'kohls': 'Kohls - Flat',
-            'kohl\'s': 'Kohls - Flat',
-            'walmart': 'Walmart',
-            'target': 'Target',
-            'costco': 'Costco',
-            'sam\'s club': 'Sam\'s Club',
-            'sams club': 'Sam\'s Club',
-            'bj\'s': 'BJ\'s',
-            'bjs': 'BJ\'s'
-        }
-        
-        # Get worksheet name for the retailer
-        worksheet_name = retailer_worksheet_map.get(retailer.lower())
-        if not worksheet_name:
-            # Try to find a matching worksheet by partial match
-            for key, value in retailer_worksheet_map.items():
-                if key in retailer.lower() or retailer.lower() in key:
-                    worksheet_name = value
-                    break
-        
-        if not worksheet_name:
-            worksheet_name = retailer  # Use retailer name as-is
         
         response = requests.get(csv_url, timeout=30)
         response.raise_for_status()
@@ -4521,20 +4524,20 @@ def analyze_retailer_leads():
         csv_data = StringIO(response.text)
         source_df = pd.read_csv(csv_data)
         
-        # Filter for the specific retailer's worksheet
-        retailer_df = source_df[source_df['Worksheet'].str.contains(worksheet_name, case=False, na=False)]
+        # Filter for the specific worksheet (exact match)
+        worksheet_df = source_df[source_df['Worksheet'] == worksheet]
         
-        if retailer_df.empty:
+        if worksheet_df.empty:
             return jsonify({
-                'error': f'No data found for retailer: {retailer}',
-                'message': f'Could not find worksheet matching "{worksheet_name}"',
+                'error': f'No data found for worksheet: {worksheet}',
+                'message': f'Could not find worksheet "{worksheet}"',
                 'available_worksheets': source_df['Worksheet'].unique().tolist()
             }), 404
         
         recommendations = []
         
         # Analyze each lead
-        for _, row in retailer_df.iterrows():
+        for _, row in worksheet_df.iterrows():
             asin = str(row.get('ASIN', '')).strip()
             if not asin or asin == 'nan':
                 continue
@@ -4553,8 +4556,7 @@ def analyze_retailer_leads():
             
             recommendation = {
                 'asin': asin,
-                'retailer': retailer,
-                'worksheet': row.get('Worksheet', worksheet_name),
+                'worksheet': worksheet,
                 'source_link': source_link,
                 'in_inventory': bool(inventory_data),
                 'recommendation': 'SKIP',
@@ -4612,8 +4614,7 @@ def analyze_retailer_leads():
         }
         
         return jsonify({
-            'retailer': retailer,
-            'worksheet': worksheet_name,
+            'worksheet': worksheet,
             'recommendations': recommendations,
             'summary': summary,
             'analyzed_at': datetime.now(pytz.UTC).isoformat()

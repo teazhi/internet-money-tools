@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   ShoppingCart, 
@@ -15,24 +15,34 @@ import {
 } from 'lucide-react';
 
 const RetailerLeadAnalysis = () => {
-  const [selectedRetailer, setSelectedRetailer] = useState('');
+  const [selectedWorksheet, setSelectedWorksheet] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingWorksheets, setLoadingWorksheets] = useState(true);
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [filterRecommendation, setFilterRecommendation] = useState('all');
+  const [worksheets, setWorksheets] = useState([]);
 
-  const retailers = [
-    { value: 'kohls', label: "Kohl's" },
-    { value: 'walmart', label: 'Walmart' },
-    { value: 'target', label: 'Target' },
-    { value: 'costco', label: 'Costco' },
-    { value: 'sams club', label: "Sam's Club" },
-    { value: 'bjs', label: "BJ's" }
-  ];
+  useEffect(() => {
+    fetchWorksheets();
+  }, []);
+
+  const fetchWorksheets = async () => {
+    try {
+      setLoadingWorksheets(true);
+      const response = await axios.get('/api/retailer-leads/worksheets', { withCredentials: true });
+      setWorksheets(response.data.worksheets || []);
+    } catch (error) {
+      console.error('Failed to fetch worksheets:', error);
+      setError('Failed to load available worksheets');
+    } finally {
+      setLoadingWorksheets(false);
+    }
+  };
 
   const handleAnalyze = async () => {
-    if (!selectedRetailer) {
-      setError('Please select a retailer');
+    if (!selectedWorksheet) {
+      setError('Please select a worksheet');
       return;
     }
 
@@ -42,13 +52,13 @@ const RetailerLeadAnalysis = () => {
 
     try {
       const response = await axios.post('/api/retailer-leads/analyze', {
-        retailer: selectedRetailer
+        worksheet: selectedWorksheet
       }, { withCredentials: true });
 
       setAnalysis(response.data);
     } catch (error) {
       console.error('Analysis error:', error);
-      setError(error.response?.data?.message || error.response?.data?.error || 'Failed to analyze retailer leads');
+      setError(error.response?.data?.message || error.response?.data?.error || 'Failed to analyze worksheet leads');
       
       // If worksheets are available, show them
       if (error.response?.data?.available_worksheets) {
@@ -117,7 +127,7 @@ const RetailerLeadAnalysis = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${selectedRetailer}_lead_analysis_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${selectedWorksheet.replace(/[^a-z0-9]/gi, '_')}_lead_analysis_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -129,10 +139,10 @@ const RetailerLeadAnalysis = () => {
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center">
               <ShoppingCart className="h-6 w-6 mr-2 text-builders-500" />
-              Retailer Lead Analysis
+              Worksheet Lead Analysis
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Analyze all leads from a retailer's worksheet and get buying recommendations
+              Analyze all leads from a specific worksheet and get buying recommendations
             </p>
           </div>
         </div>
@@ -140,24 +150,33 @@ const RetailerLeadAnalysis = () => {
         <div className="flex items-end space-x-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Retailer
+              Select Worksheet
             </label>
-            <select
-              value={selectedRetailer}
-              onChange={(e) => setSelectedRetailer(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
-            >
-              <option value="">Choose a retailer...</option>
-              {retailers.map(retailer => (
-                <option key={retailer.value} value={retailer.value}>
-                  {retailer.label}
-                </option>
-              ))}
-            </select>
+            {loadingWorksheets ? (
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
+                <div className="flex items-center">
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin text-gray-400" />
+                  <span className="text-sm text-gray-500">Loading worksheets...</span>
+                </div>
+              </div>
+            ) : (
+              <select
+                value={selectedWorksheet}
+                onChange={(e) => setSelectedWorksheet(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+              >
+                <option value="">Choose a worksheet...</option>
+                {worksheets.map(worksheet => (
+                  <option key={worksheet} value={worksheet}>
+                    {worksheet}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <button
             onClick={handleAnalyze}
-            disabled={!selectedRetailer || loading}
+            disabled={!selectedWorksheet || loading || loadingWorksheets}
             className="px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {loading ? (

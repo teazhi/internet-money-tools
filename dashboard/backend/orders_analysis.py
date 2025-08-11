@@ -1276,11 +1276,9 @@ class EnhancedOrdersAnalysis:
         cogs_data = {}
         purchase_insights = {}
         
-        pass  # Debug print removed
-        pass  # Debug print removed
-        pass  # Debug print removed
-        pass  # Debug print removed
-        pass  # Debug print removed
+        print(f"DEBUG - Starting Google Sheet processing")
+        print(f"DEBUG - user_settings keys: {list(user_settings.keys()) if user_settings else 'None'}")
+        print(f"DEBUG - enable_source_links: {user_settings.get('enable_source_links') if user_settings else 'No user_settings'}")
         
         if user_settings and user_settings.get('enable_source_links'):
             pass  # Debug print removed

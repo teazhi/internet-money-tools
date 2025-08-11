@@ -4694,6 +4694,15 @@ def analyze_retailer_leads():
             # Debug: Check what's available in the main analysis object
             print(f"DEBUG - Main analysis keys: {list(analysis.keys())}")
             
+            # Debug: Check the actual purchase_insights content
+            if 'purchase_insights' in analysis:
+                actual_purchase_insights = analysis['purchase_insights']
+                print(f"DEBUG - Actual purchase_insights type: {type(actual_purchase_insights)}")
+                if hasattr(actual_purchase_insights, 'keys'):
+                    print(f"DEBUG - Actual purchase_insights keys: {list(actual_purchase_insights.keys())}")
+                else:
+                    print(f"DEBUG - Purchase_insights content (first 200 chars): {str(actual_purchase_insights)[:200]}")
+            
             # Debug: Check what's available in global purchase analytics
             print(f"DEBUG - Global purchase analytics keys: {list(global_purchase_analytics.keys())}")
             if 'recent_2_months_purchases' in global_purchase_analytics:

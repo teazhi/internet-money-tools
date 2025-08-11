@@ -4781,6 +4781,17 @@ def analyze_retailer_leads():
                 # Try lowercase version if uppercase didn't work
                 inventory_data = enhanced_analytics.get(asin.lower(), {})
             
+            # Debug: Check what keys are available in inventory_data
+            if inventory_data:
+                print(f"DEBUG - ASIN {asin} inventory_data keys: {list(inventory_data.keys())}")
+                if 'product_name' in inventory_data:
+                    print(f"DEBUG - ASIN {asin} product_name: {inventory_data['product_name']}")
+                if 'purchase_analytics' in inventory_data:
+                    purchase_analytics_data = inventory_data.get('purchase_analytics', {})
+                    print(f"DEBUG - ASIN {asin} purchase_analytics keys: {list(purchase_analytics_data.keys())}")
+                    if 'velocity_analysis' in purchase_analytics_data:
+                        print(f"DEBUG - ASIN {asin} velocity_analysis: {purchase_analytics_data['velocity_analysis']}")
+            
             
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'

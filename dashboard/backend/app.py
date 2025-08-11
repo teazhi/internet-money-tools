@@ -4422,6 +4422,208 @@ def analyze_discount_opportunities():
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
 
+@app.route('/api/retailer-leads/analyze', methods=['POST'])
+@login_required
+def analyze_retailer_leads():
+    """Analyze all leads from a specific retailer's worksheet and provide buying recommendations"""
+    try:
+        data = request.get_json() or {}
+        retailer = data.get('retailer', '').strip()
+        
+        if not retailer:
+            return jsonify({'error': 'Retailer name is required'}), 400
+        
+        # Get user's current analytics data
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user config for analytics
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Check if user has necessary configurations
+        if not config_user_record.get('sellerboard_orders_url') or not config_user_record.get('sellerboard_stock_url'):
+            return jsonify({
+                'error': 'Sellerboard URLs not configured',
+                'message': 'Please configure your Sellerboard URLs in Settings first'
+            }), 400
+        
+        # Get current inventory analysis
+        orders_url = config_user_record.get('sellerboard_orders_url')
+        stock_url = config_user_record.get('sellerboard_stock_url')
+        user_timezone = config_user_record.get('timezone', 'America/New_York')
+        
+        from datetime import datetime
+        import pytz
+        from orders_analysis import OrdersAnalysis
+        
+        tz = pytz.timezone(user_timezone)
+        today = datetime.now(tz).date()
+        
+        try:
+            orders_analysis = OrdersAnalysis(orders_url, stock_url)
+            analysis = orders_analysis.analyze(
+                for_date=today,
+                user_timezone=user_timezone,
+                user_settings={
+                    'enable_source_links': config_user_record.get('enable_source_links', False),
+                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                    'discord_id': discord_id
+                }
+            )
+            enhanced_analytics = analysis.get('analytics', {})
+        except Exception as e:
+            return jsonify({
+                'error': 'Failed to fetch inventory data',
+                'message': f'Failed to generate analytics: {str(e)}'
+            }), 500
+        
+        # Fetch source links CSV for the specific retailer
+        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        
+        # Map retailer names to worksheet patterns
+        retailer_worksheet_map = {
+            'kohls': 'Kohls - Flat',
+            'kohl\'s': 'Kohls - Flat',
+            'walmart': 'Walmart',
+            'target': 'Target',
+            'costco': 'Costco',
+            'sam\'s club': 'Sam\'s Club',
+            'sams club': 'Sam\'s Club',
+            'bj\'s': 'BJ\'s',
+            'bjs': 'BJ\'s'
+        }
+        
+        # Get worksheet name for the retailer
+        worksheet_name = retailer_worksheet_map.get(retailer.lower())
+        if not worksheet_name:
+            # Try to find a matching worksheet by partial match
+            for key, value in retailer_worksheet_map.items():
+                if key in retailer.lower() or retailer.lower() in key:
+                    worksheet_name = value
+                    break
+        
+        if not worksheet_name:
+            worksheet_name = retailer  # Use retailer name as-is
+        
+        response = requests.get(csv_url, timeout=30)
+        response.raise_for_status()
+        
+        csv_data = StringIO(response.text)
+        source_df = pd.read_csv(csv_data)
+        
+        # Filter for the specific retailer's worksheet
+        retailer_df = source_df[source_df['Worksheet'].str.contains(worksheet_name, case=False, na=False)]
+        
+        if retailer_df.empty:
+            return jsonify({
+                'error': f'No data found for retailer: {retailer}',
+                'message': f'Could not find worksheet matching "{worksheet_name}"',
+                'available_worksheets': source_df['Worksheet'].unique().tolist()
+            }), 404
+        
+        recommendations = []
+        
+        # Analyze each lead
+        for _, row in retailer_df.iterrows():
+            asin = str(row.get('ASIN', '')).strip()
+            if not asin or asin == 'nan':
+                continue
+                
+            # Get source link
+            source_link = None
+            for col in row.index:
+                if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
+                    potential_link = row[col]
+                    if pd.notna(potential_link) and str(potential_link).startswith('http'):
+                        source_link = str(potential_link)
+                        break
+            
+            # Check if ASIN is in user's inventory
+            inventory_data = enhanced_analytics.get(asin, {})
+            
+            recommendation = {
+                'asin': asin,
+                'retailer': retailer,
+                'worksheet': row.get('Worksheet', worksheet_name),
+                'source_link': source_link,
+                'in_inventory': bool(inventory_data),
+                'recommendation': 'SKIP',
+                'reason': '',
+                'priority_score': 0
+            }
+            
+            if inventory_data:
+                # Product is in inventory - check if needs restocking
+                restock_data = inventory_data.get('restock', {})
+                current_stock = restock_data.get('current_stock', 0)
+                suggested_quantity = restock_data.get('suggested_quantity', 0)
+                velocity = inventory_data.get('units_per_day', 0)
+                cogs = inventory_data.get('cogs', 0)
+                last_price = inventory_data.get('last_price', 0)
+                
+                # Calculate if needs restocking
+                if suggested_quantity > 0 and current_stock < suggested_quantity * 0.5:
+                    recommendation['recommendation'] = 'BUY - RESTOCK'
+                    recommendation['reason'] = f'Low stock: {current_stock} units (need {suggested_quantity})'
+                    recommendation['priority_score'] = min(100, (suggested_quantity - current_stock) * velocity)
+                    recommendation['inventory_details'] = {
+                        'current_stock': current_stock,
+                        'suggested_quantity': suggested_quantity,
+                        'units_per_day': velocity,
+                        'days_of_stock': restock_data.get('days_until_stockout', 0),
+                        'cogs': cogs,
+                        'last_price': last_price
+                    }
+                elif velocity > 0.5:  # Selling well
+                    recommendation['recommendation'] = 'MONITOR'
+                    recommendation['reason'] = f'Good velocity ({velocity:.1f} units/day), stock OK'
+                    recommendation['priority_score'] = velocity * 10
+                else:
+                    recommendation['recommendation'] = 'SKIP'
+                    recommendation['reason'] = f'Low velocity ({velocity:.1f} units/day)'
+            else:
+                # Product not in inventory - recommend as new opportunity
+                recommendation['recommendation'] = 'BUY - NEW'
+                recommendation['reason'] = 'Not in inventory - potential new product'
+                recommendation['priority_score'] = 50  # Medium priority for new products
+            
+            recommendations.append(recommendation)
+        
+        # Sort by priority
+        recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        # Summary statistics
+        summary = {
+            'total_leads': len(recommendations),
+            'buy_restock': len([r for r in recommendations if r['recommendation'] == 'BUY - RESTOCK']),
+            'buy_new': len([r for r in recommendations if r['recommendation'] == 'BUY - NEW']),
+            'monitor': len([r for r in recommendations if r['recommendation'] == 'MONITOR']),
+            'skip': len([r for r in recommendations if r['recommendation'] == 'SKIP'])
+        }
+        
+        return jsonify({
+            'retailer': retailer,
+            'worksheet': worksheet_name,
+            'recommendations': recommendations,
+            'summary': summary,
+            'analyzed_at': datetime.now(pytz.UTC).isoformat()
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error analyzing retailer leads: {str(e)}'}), 500
+
 def fetch_discount_email_alerts():
     """Fetch recent Distill.io email alerts from admin-configured Gmail using Gmail API"""
     try:

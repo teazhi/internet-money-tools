@@ -30,6 +30,7 @@ import FileManager from './dashboard/FileManager';
 import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
+import RetailerLeadAnalysis from './dashboard/RetailerLeadAnalysis';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
@@ -78,6 +79,7 @@ const Dashboard = () => {
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
+    { name: 'Lead Analysis', href: '/dashboard/retailer-leads', icon: ShoppingCart, current: location.pathname === '/dashboard/retailer-leads' },
     ...(hasPermission('reimbursements_analysis') ? [{ name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' }] : []),
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
@@ -314,6 +316,7 @@ const Dashboard = () => {
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
+              <Route path="/retailer-leads" element={<RetailerLeadAnalysis />} />
               {hasPermission('reimbursements_analysis') && <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />}
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />

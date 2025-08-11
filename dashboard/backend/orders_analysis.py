@@ -1339,13 +1339,19 @@ class EnhancedOrdersAnalysis:
                     
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
-                        pass  # Debug print removed
+                        print(f"DEBUG - Sheet data shape: {sheet_data.shape}")
+                        print(f"DEBUG - Sheet data columns: {list(sheet_data.columns)}")
+                        print(f"DEBUG - Column mapping for purchase: {column_mapping_for_purchase}")
+                        print(f"DEBUG - First few rows of sheet data:")
+                        print(sheet_data.head(3))
+                        
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
                             sheet_data, column_mapping_for_purchase
                         )
-                        pass  # Debug print removed
+                        print(f"DEBUG - Purchase insights result: {list(purchase_insights.keys()) if purchase_insights else 'EMPTY'}")
                     else:
-                        pass  # No sheet data available for purchase analytics
+                        print("DEBUG - No sheet data available for purchase analytics")
+                        purchase_insights = {}
                 else:
                     pass  # Debug print removed
             except Exception as e:

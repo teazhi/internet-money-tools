@@ -99,7 +99,6 @@ class EnhancedOrdersAnalysis:
     def download_csv(self, url: str) -> pd.DataFrame:
         """Download CSV data from URL with debug logging"""
         print(f"DEBUG: Downloading CSV from: {url[:100]}...")
-        try:
         
         # Check if URL has required parameters
         if 'sellerboard.com' in url and 'format=csv' not in url:

@@ -4761,9 +4761,19 @@ def analyze_retailer_leads():
             'analysis_keys': list(analysis.keys()) if analysis else []
         }
         
-        # If we have very few ASINs, include them all for debugging
-        if len(enhanced_analytics) <= 20:
+        # If we have ASINs, include a good sample for debugging
+        if len(enhanced_analytics) <= 50:
             debug_info['all_inventory_asins'] = list(enhanced_analytics.keys())
+        else:
+            debug_info['sample_inventory_asins_extended'] = list(enhanced_analytics.keys())[:30]
+            
+        # Check if B014UM9N3I is in enhanced analytics
+        target_asin = 'B014UM9N3I'
+        debug_info['target_asin_in_inventory'] = target_asin in enhanced_analytics
+        if target_asin not in enhanced_analytics:
+            # Look for similar ASINs in inventory
+            similar_in_inventory = [k for k in enhanced_analytics.keys() if 'B014' in k.upper()]
+            debug_info['similar_b014_asins_in_inventory'] = similar_in_inventory
             
         print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
         print(f"DEBUG: All ASINs in inventory: {list(enhanced_analytics.keys())}")
@@ -4789,6 +4799,27 @@ def analyze_retailer_leads():
                     print(f"  {key}: {type(value)} - {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
                 else:
                     break
+        
+        # Debug: Show what ASINs are in the worksheet
+        worksheet_asins = []
+        for _, row in worksheet_df.iterrows():
+            raw_asin = str(row.get('ASIN', '')).strip()
+            if raw_asin and raw_asin != 'nan':
+                worksheet_asins.append(raw_asin.upper())
+        
+        print(f"DEBUG: Worksheet contains {len(worksheet_asins)} ASINs")
+        print(f"DEBUG: First 10 ASINs in worksheet: {worksheet_asins[:10]}")
+        
+        # Check for our specific ASIN
+        target_asin = 'B014UM9N3I'
+        if target_asin in worksheet_asins:
+            print(f"DEBUG: SPECIAL - {target_asin} found in worksheet ASINs")
+        else:
+            print(f"DEBUG: SPECIAL - {target_asin} NOT found in worksheet ASINs")
+            # Look for similar ASINs
+            similar = [asin for asin in worksheet_asins if 'B014' in asin]
+            if similar:
+                print(f"  - Similar ASINs with B014: {similar}")
         
         # Analyze each lead
         for _, row in worksheet_df.iterrows():

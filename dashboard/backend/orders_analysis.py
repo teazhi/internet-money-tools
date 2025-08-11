@@ -97,6 +97,9 @@ class EnhancedOrdersAnalysis:
         return parsed_series
 
     def download_csv(self, url: str) -> pd.DataFrame:
+        """Download CSV data from URL with debug logging"""
+        print(f"DEBUG: Downloading CSV from: {url[:100]}...")
+        try:
         
         # Check if URL has required parameters
         if 'sellerboard.com' in url and 'format=csv' not in url:
@@ -151,7 +154,11 @@ class EnhancedOrdersAnalysis:
             # Try to parse the CSV
             try:
                 df = pd.read_csv(StringIO(response.text))
-                pass  # Debug print removed
+                print(f"DEBUG: CSV parsed successfully - {len(df)} rows, {len(df.columns)} columns")
+                print(f"DEBUG: CSV columns: {list(df.columns)}")
+                if len(df) > 0:
+                    print(f"DEBUG: Sample CSV data (first 3 rows):")
+                    print(df.head(3).to_string())
                 return df
             except Exception as csv_error:
                 pass  # Debug print removed
@@ -1363,15 +1370,25 @@ class EnhancedOrdersAnalysis:
         restock_alerts = {}
         critical_alerts = []
         
-        # Only analyze products that have either sales today OR historical sales
+        # Debug: Log stock info size
+        print(f"DEBUG: Stock info contains {len(stock_info)} products")
+        print(f"DEBUG: Today sales: {len(today_sales)} products")  
+        print(f"DEBUG: Yesterday sales: {len(yesterday_sales)} products")
+        
+        # Include ALL products from stock info for comprehensive analysis
+        # This is important for lead analysis to check ALL inventory, not just products with recent sales
         products_to_analyze = set()
+        
+        # Add products with sales (original logic)
         products_to_analyze.update(today_sales.keys())  # Products with sales today
         products_to_analyze.update(yesterday_sales.keys())  # Products with historical sales
         
-        # Also include products from stock info that have sales in the past 7 days
-        for asin in stock_info.keys():
-            if asin in today_sales or asin in yesterday_sales:
-                products_to_analyze.add(asin)
+        # IMPORTANT: Also include ALL products from stock info, even without recent sales
+        # This ensures lead analysis can check against complete inventory
+        products_to_analyze.update(stock_info.keys())
+                
+        print(f"DEBUG: Products to analyze: {len(products_to_analyze)} (including all inventory products)")
+        print(f"DEBUG: Sample products to analyze: {list(products_to_analyze)[:10]}")
         
         # Total products to analyze calculated
         

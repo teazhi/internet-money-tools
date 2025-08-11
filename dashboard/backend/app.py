@@ -4579,6 +4579,23 @@ def analyze_retailer_leads():
         print(f"DEBUG: Using stock_url: {stock_url[:50]}..." if stock_url else "DEBUG: No stock_url")
         print(f"DEBUG: User timezone: {user_timezone}")
         
+        # Quick test if URLs are accessible
+        if orders_url:
+            try:
+                import requests
+                test_response = requests.head(orders_url, timeout=10)
+                print(f"DEBUG: Orders URL status: {test_response.status_code}")
+            except Exception as e:
+                print(f"DEBUG: Orders URL test failed: {str(e)}")
+                
+        if stock_url:
+            try:
+                import requests
+                test_response = requests.head(stock_url, timeout=10)
+                print(f"DEBUG: Stock URL status: {test_response.status_code}")
+            except Exception as e:
+                print(f"DEBUG: Stock URL test failed: {str(e)}")
+        
         from datetime import datetime
         import pytz
         from orders_analysis import OrdersAnalysis
@@ -4612,6 +4629,10 @@ def analyze_retailer_leads():
             if analysis.get('basic_mode'):
                 print(f"DEBUG: WARNING - Analysis is in basic/fallback mode")
                 print(f"DEBUG: Basic mode message: {analysis.get('message', 'No message')}")
+                return jsonify({
+                    'error': 'Analytics in fallback mode',
+                    'message': f'OrdersAnalysis fell back to basic mode: {analysis.get("message", "Unknown reason")}'
+                }), 500
         except Exception as e:
             print(f"DEBUG: Exception in OrdersAnalysis: {str(e)}")
             import traceback

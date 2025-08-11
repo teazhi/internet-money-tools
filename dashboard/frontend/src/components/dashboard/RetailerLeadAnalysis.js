@@ -56,6 +56,8 @@ const RetailerLeadAnalysis = () => {
         worksheet: selectedWorksheet
       }, { withCredentials: true });
 
+      console.log('Frontend received data:', response.data);
+      console.log('First recommendation:', response.data.recommendations[0]);
       setAnalysis(response.data);
     } catch (error) {
       console.error('Analysis error:', error);

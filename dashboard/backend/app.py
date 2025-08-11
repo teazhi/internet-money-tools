@@ -4514,27 +4514,39 @@ def get_recent_2_months_purchases_for_lead_analysis(asin: str, purchase_analytic
     if not purchase_analytics_data:
         return 0
     
-    # First check the dedicated recent 2 months purchases data from purchase insights
-    # The purchase analytics data structure is nested, so we need to check the right path
+    # The purchase analytics might be empty for many products, especially if they haven't been purchased recently
+    # Let's check multiple sources for purchase data
     
-    # Try velocity_analysis first (this is where the recent purchase data is often stored)
+    # Try velocity_analysis first 
     velocity_analysis = purchase_analytics_data.get('velocity_analysis', {})
     if velocity_analysis:
         days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
-        
-        # If purchased within the last 2 months (last 60 days), return the last purchase quantity
         if days_since_last <= 60:
             qty = velocity_analysis.get('avg_quantity_per_purchase', 0)
-            return int(qty) if qty else 0
+            if qty and qty > 0:
+                return int(qty)
     
     # Try urgency_scoring approach  
     urgency_scoring = purchase_analytics_data.get('urgency_scoring', {})
     if urgency_scoring:
         days_since_last = urgency_scoring.get('days_since_last_purchase', 999)
         if days_since_last <= 60:
-            qty = urgency_scoring.get('avg_quantity_per_purchase', 0) 
-            return int(qty) if qty else 0
+            qty = urgency_scoring.get('avg_quantity_per_purchase', 0)
+            if qty and qty > 0:
+                return int(qty)
     
+    # Try roi_recommendations approach
+    roi_recommendations = purchase_analytics_data.get('roi_recommendations', {})
+    if roi_recommendations:
+        days_since_last = roi_recommendations.get('days_since_last_purchase', 999)
+        if days_since_last <= 60:
+            qty = roi_recommendations.get('avg_quantity_per_purchase', 0)
+            if qty and qty > 0:
+                return int(qty)
+    
+    # For now, if no recent purchase data is available, return 0
+    # This means the product either hasn't been purchased in the last 2 months
+    # or the purchase analytics doesn't have sufficient historical data
     return 0
 
 def extract_retailer_from_url(url):
@@ -4780,17 +4792,6 @@ def analyze_retailer_leads():
             if not inventory_data:
                 # Try lowercase version if uppercase didn't work
                 inventory_data = enhanced_analytics.get(asin.lower(), {})
-            
-            # Debug: Check what keys are available in inventory_data
-            if inventory_data:
-                print(f"DEBUG - ASIN {asin} inventory_data keys: {list(inventory_data.keys())}")
-                if 'product_name' in inventory_data:
-                    print(f"DEBUG - ASIN {asin} product_name: {inventory_data['product_name']}")
-                if 'purchase_analytics' in inventory_data:
-                    purchase_analytics_data = inventory_data.get('purchase_analytics', {})
-                    print(f"DEBUG - ASIN {asin} purchase_analytics keys: {list(purchase_analytics_data.keys())}")
-                    if 'velocity_analysis' in purchase_analytics_data:
-                        print(f"DEBUG - ASIN {asin} velocity_analysis: {purchase_analytics_data['velocity_analysis']}")
             
             
             # Get retailer name for this specific row

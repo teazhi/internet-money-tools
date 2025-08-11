@@ -4663,7 +4663,6 @@ def analyze_retailer_leads():
         stock_url = config_user_record.get('sellerboard_stock_url')
         user_timezone = config_user_record.get('timezone', 'America/New_York')
         
-        
         from datetime import datetime
         import pytz
         from orders_analysis import OrdersAnalysis
@@ -4691,38 +4690,11 @@ def analyze_retailer_leads():
             # Get the global purchase analytics for recent purchase lookups
             global_purchase_analytics = analysis.get('purchase_insights', {})
             
-            # Debug: Check what's available in the main analysis object
-            print(f"DEBUG - Main analysis keys: {list(analysis.keys())}")
-            
-            # Debug: Check the actual purchase_insights content
-            if 'purchase_insights' in analysis:
-                actual_purchase_insights = analysis['purchase_insights']
-                print(f"DEBUG - Actual purchase_insights type: {type(actual_purchase_insights)}")
-                print(f"DEBUG - Actual purchase_insights keys: {list(actual_purchase_insights.keys())}")
-            
-            # Debug: Check if orders data is available
-            if 'orders_df' in analysis:
-                orders_df = analysis['orders_df']
-                print(f"DEBUG - Orders DataFrame shape: {orders_df.shape if hasattr(orders_df, 'shape') else 'Not a DataFrame'}")
-                if hasattr(orders_df, 'shape') and orders_df.shape[0] > 0:
-                    print(f"DEBUG - Orders DataFrame columns: {list(orders_df.columns)}")
-                    print(f"DEBUG - First few rows of orders:")
-                    print(orders_df.head(3))
-                else:
-                    print("DEBUG - Orders DataFrame is empty or invalid")
-            
-            # Debug: Check what's available in global purchase analytics
-            print(f"DEBUG - Global purchase analytics keys: {list(global_purchase_analytics.keys())}")
-                
-            # Check if the monthly_purchase_adjustment field has the data we need
-            if enhanced_analytics:
-                sample_asin = list(enhanced_analytics.keys())[0]
-                sample_data = enhanced_analytics[sample_asin]
-                print(f"DEBUG - Sample ASIN {sample_asin} enhanced_analytics keys: {list(sample_data.keys())}")
-                if 'restock' in sample_data:
-                    restock_sample = sample_data['restock']
-                    print(f"DEBUG - Sample restock keys: {list(restock_sample.keys())}")
-                    print(f"DEBUG - Sample monthly_purchase_adjustment: {restock_sample.get('monthly_purchase_adjustment', 'NOT_FOUND')}")
+            # Debug: Check why purchase_insights is empty
+            print(f"DEBUG - User has google_linked: {config_user_record.get('google_linked', False)}")
+            print(f"DEBUG - User has sheet_id: {bool(config_user_record.get('sheet_id'))}")
+            print(f"DEBUG - User has search_all_worksheets: {config_user_record.get('search_all_worksheets', False)}")
+            print(f"DEBUG - purchase_insights content: {global_purchase_analytics}")
             
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):
@@ -4879,13 +4851,6 @@ def analyze_retailer_leads():
                     recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
                 
                 recommendation['recent_purchases'] = recent_purchases
-                
-                # Debug: Check what purchase analytics data is available
-                print(f"DEBUG - ASIN {asin} recent_purchases result: {recent_purchases}")
-                print(f"DEBUG - ASIN {asin} monthly_purchase_adjustment: {monthly_purchase_adjustment}")
-                if global_purchase_analytics.get('recent_2_months_purchases'):
-                    recent_data = global_purchase_analytics['recent_2_months_purchases'].get(asin, {})
-                    print(f"DEBUG - ASIN {asin} global recent_2_months_data: {recent_data}")
                 
                 # Get additional data
                 cogs_data = inventory_data.get('cogs_data', {})

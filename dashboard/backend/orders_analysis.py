@@ -1281,7 +1281,7 @@ class EnhancedOrdersAnalysis:
         print(f"DEBUG - enable_source_links: {user_settings.get('enable_source_links') if user_settings else 'No user_settings'}")
         
         if user_settings and user_settings.get('enable_source_links'):
-            pass  # Debug print removed
+            print("DEBUG - enable_source_links is True, starting Google Sheet processing")
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -1353,7 +1353,9 @@ class EnhancedOrdersAnalysis:
                 else:
                     pass  # Debug print removed
             except Exception as e:
-                pass  # Debug print removed
+                print(f"DEBUG - Exception in Google Sheet processing: {e}")
+                import traceback
+                traceback.print_exc()
                 cogs_data = {}
                 purchase_insights = {}
 

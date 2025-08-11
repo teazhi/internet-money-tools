@@ -4820,9 +4820,21 @@ def analyze_retailer_leads():
                 # Try lowercase version if uppercase didn't work
                 inventory_data = enhanced_analytics.get(asin.lower(), {})
             
-            # Debug: Log lookup results
+            # Debug: Log lookup results  
             found_in_inventory = bool(inventory_data)
             print(f"DEBUG: ASIN {asin} found in inventory: {found_in_inventory}")
+            
+            # Special debug for the specific missing ASIN
+            if asin == 'B014UM9N3I':
+                print(f"DEBUG: SPECIAL - Checking B014UM9N3I specifically:")
+                print(f"  - Looking for uppercase: {asin in enhanced_analytics}")
+                print(f"  - Looking for lowercase: {asin.lower() in enhanced_analytics}")
+                print(f"  - Enhanced analytics keys containing 'B014UM9N3I': {[k for k in enhanced_analytics.keys() if 'B014UM9N3I' in k.upper()]}")
+                print(f"  - All enhanced analytics keys with B014: {[k for k in enhanced_analytics.keys() if 'B014' in k.upper()]}")
+                if asin in enhanced_analytics:
+                    print(f"  - Found data: {enhanced_analytics[asin].keys()}")
+                elif asin.lower() in enhanced_analytics:
+                    print(f"  - Found lowercase data: {enhanced_analytics[asin.lower()].keys()}")
             
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'

@@ -1373,6 +1373,19 @@ class EnhancedOrdersAnalysis:
         print(f"DEBUG: Stock info contains {len(stock_info)} products")
         print(f"DEBUG: Today sales: {len(today_sales)} products")  
         print(f"DEBUG: Yesterday sales: {len(yesterday_sales)} products")
+        print(f"DEBUG: Sample stock info ASINs: {list(stock_info.keys())[:10]}")
+        
+        # Special check for our target ASIN
+        target_asin = 'B014UM9N3I'
+        if target_asin in stock_info:
+            print(f"DEBUG: SPECIAL - {target_asin} found in stock_info")
+        else:
+            print(f"DEBUG: SPECIAL - {target_asin} NOT found in stock_info")
+            matching_keys = [k for k in stock_info.keys() if 'B014UM9N3I' in k.upper()]
+            if matching_keys:
+                print(f"  - But found similar keys: {matching_keys}")
+            else:
+                print(f"  - No similar keys found. Keys with B014: {[k for k in stock_info.keys() if 'B014' in k.upper()]}")
         
         # Include ALL products from stock info for comprehensive analysis
         # This is important for lead analysis to check ALL inventory, not just products with recent sales
@@ -1393,8 +1406,18 @@ class EnhancedOrdersAnalysis:
         
         for asin in products_to_analyze:
             if asin not in stock_info:
-                # Skipping product with no stock info
+                # Special debug for missing ASIN
+                if asin == 'B014UM9N3I':
+                    print(f"DEBUG: SPECIAL - B014UM9N3I not found in stock_info")
+                    print(f"  - Stock info keys with B014: {[k for k in stock_info.keys() if 'B014' in k.upper()]}")
                 continue
+                
+            # Special debug for our target ASIN
+            if asin == 'B014UM9N3I':
+                print(f"DEBUG: SPECIAL - Processing B014UM9N3I in enhanced analytics")
+                print(f"  - Stock info data: {stock_info[asin]}")
+                print(f"  - In today sales: {asin in today_sales}")
+                print(f"  - In yesterday sales: {asin in yesterday_sales}")
                 
             # Calculate enhanced velocity
             velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date, user_timezone)

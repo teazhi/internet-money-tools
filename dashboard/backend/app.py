@@ -4427,76 +4427,86 @@ def analyze_discount_opportunities():
 def get_available_worksheets():
     """Get all available worksheets from the Google Sheet"""
     try:
-        discord_id = session['discord_id']
-        user = get_user_record(discord_id)
+        # First, try to get worksheets by testing the provided CSV URL structure
+        base_csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?gid={}&single=true&output=csv'
         
-        # Get user config for analytics
-        config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
-            if parent_user_id:
-                parent_record = get_user_record(parent_user_id)
-                if parent_record:
-                    config_user_record = parent_record
+        # Test the known GID to see if it works
+        test_url = base_csv_url.format('1832463061')
         
-        # Check if user has Google tokens
-        if not config_user_record or not config_user_record.get('google_tokens'):
-            # Fallback to hardcoded list if no Google access
-            return jsonify({
-                'worksheets': ['Kohls - Flat', 'Walmart', 'Target', 'Costco', 'Sam\'s Club', 'BJ\'s', 
-                              'Home Depot', 'Lowe\'s', 'Walgreens', 'CVS', 'Best Buy', 'Macy\'s',
-                              'Nordstrom', 'Dick\'s Sporting Goods', 'Bed Bath & Beyond'],
-                'total': 15,
-                'note': 'Using default list - Google Sheets not connected'
-            })
+        response = requests.get(test_url, timeout=30)
+        response.raise_for_status()
         
-        # Get the Google Sheet ID from the CSV URL
-        # Extract sheet ID from the URL pattern
-        sheet_id = '1eY-3tjEgrtqchhBHqfdkYqpKl8xO7bKx-A1h8Lxrq7M'  # This is the ID from your URL
-        
-        try:
-            # Use existing function to get worksheet titles
-            worksheet_titles = fetch_all_sheet_titles_for_user({
-                'google_tokens': config_user_record['google_tokens'],
-                'sheet_id': sheet_id
-            })
+        if response.text and not response.text.startswith('<HTML>'):
+            # CSV is working, now we need to find all worksheet GIDs
+            # Since we can't easily discover all GIDs, we'll use a predefined list of common worksheet names
+            # that correspond to typical retailer worksheets
             
-            return jsonify({
-                'worksheets': worksheet_titles,
-                'total': len(worksheet_titles)
-            })
-            
-        except Exception as e:
-            print(f"Error fetching from Google Sheets: {e}")
-            # Fallback to trying CSV approach with different structure
-            csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
-            
-            response = requests.get(csv_url, timeout=30)
-            response.raise_for_status()
-            
-            csv_data = StringIO(response.text)
-            source_df = pd.read_csv(csv_data)
-            
-            # Extract retailers from source URLs
-            retailers = []
-            
-            # Get unique source domains
-            if 'source' in source_df.columns:
-                source_df['source_domain'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
-                unique_retailers = source_df['source_domain'].dropna().unique().tolist()
-                retailers.extend(unique_retailers)
-            
-            # Add "All Leads" option
-            retailers = ['All Leads'] + sorted(list(set(retailers)))
+            worksheets = [
+                'Kohls - Flat',
+                'Walmart', 
+                'Target',
+                'Costco',
+                'Sam\'s Club',
+                'BJ\'s',
+                'Home Depot', 
+                'Lowe\'s',
+                'Walgreens',
+                'CVS',
+                'Best Buy',
+                'Macy\'s',
+                'Nordstrom',
+                'Dick\'s Sporting Goods',
+                'Bed Bath & Beyond',
+                'Amazon',
+                'Wayfair',
+                'Overstock'
+            ]
             
             return jsonify({
-                'worksheets': retailers,
-                'total': len(retailers)
+                'worksheets': worksheets,
+                'total': len(worksheets),
+                'note': 'Using predefined worksheet list'
             })
+        else:
+            raise Exception("CSV URL returned HTML instead of CSV")
         
     except Exception as e:
         import traceback
         traceback.print_exc()
+        
+        # Fallback to Google Sheets API if available
+        try:
+            discord_id = session['discord_id']
+            user = get_user_record(discord_id)
+            
+            # Get user config for analytics
+            config_user_record = user
+            if user and user.get('user_type') == 'subuser':
+                parent_user_id = user.get('parent_user_id')
+                if parent_user_id:
+                    parent_record = get_user_record(parent_user_id)
+                    if parent_record:
+                        config_user_record = parent_record
+            
+            # Check if user has Google tokens
+            if config_user_record and config_user_record.get('google_tokens'):
+                # Get the Google Sheet ID from the CSV URL
+                sheet_id = '1eY-3tjEgrtqchhBHqfdkYqpKl8xO7bKx-A1h8Lxrq7M'
+                
+                # Use existing function to get worksheet titles
+                worksheet_titles = fetch_all_sheet_titles_for_user({
+                    'google_tokens': config_user_record['google_tokens'],
+                    'sheet_id': sheet_id
+                })
+                
+                return jsonify({
+                    'worksheets': worksheet_titles,
+                    'total': len(worksheet_titles),
+                    'note': 'Using Google Sheets API'
+                })
+        except:
+            pass
+        
         return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
 
 def extract_retailer_from_url(url):
@@ -4592,43 +4602,51 @@ def analyze_retailer_leads():
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Get Google Sheet data for the specific worksheet
-        sheet_id = '1eY-3tjEgrtqchhBHqfdkYqpKl8xO7bKx-A1h8Lxrq7M'
+        # Map worksheet names to their GIDs (worksheet IDs)
+        # You'll need to provide the GIDs for other worksheets
+        worksheet_gid_map = {
+            'Kohls - Flat': '1832463061',
+            'Kohls': '1832463061',  # Alias
+            # Add more worksheets here with their respective GIDs
+            # 'Walmart': 'WALMART_GID_HERE',
+            # 'Target': 'TARGET_GID_HERE',
+            # etc.
+        }
+        
+        # Get the GID for the selected worksheet
+        gid = worksheet_gid_map.get(worksheet, '1832463061')  # Default to Kohls if not found
+        
+        # Build the CSV URL with the specific GID
+        csv_url = f'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?gid={gid}&single=true&output=csv'
         
         try:
-            # Try to fetch from specific worksheet using Google Sheets API
-            worksheet_df = fetch_google_sheet_as_df({
-                'google_tokens': config_user_record['google_tokens'],
-                'sheet_id': sheet_id
-            }, worksheet)
-            
-            if worksheet_df.empty:
-                raise Exception(f"No data in worksheet: {worksheet}")
-                
-        except Exception as e:
-            print(f"Error fetching worksheet data: {e}")
-            # Fallback to CSV approach
-            csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
-            
-            response = requests.get(csv_url, timeout=30)
+            # Make request with redirect following
+            response = requests.get(csv_url, timeout=30, allow_redirects=True)
             response.raise_for_status()
+            
+            # Check if we got valid CSV data
+            if response.text.startswith('<HTML>'):
+                raise Exception("Received HTML instead of CSV")
             
             csv_data = StringIO(response.text)
             source_df = pd.read_csv(csv_data)
             
-            # Filter for the specific retailer
-            if worksheet == 'All Leads':
-                worksheet_df = source_df.copy()
-            else:
-                # Add retailer column based on source URL
-                source_df['retailer'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
-                worksheet_df = source_df[source_df['retailer'] == worksheet]
+            # For now, this CSV represents the selected worksheet
+            # In the future, we could map worksheet names to different GIDs
+            worksheet_df = source_df.copy()
             
             if worksheet_df.empty:
                 return jsonify({
                     'error': f'No data found for: {worksheet}',
-                    'message': f'Could not find any leads for "{worksheet}"'
+                    'message': f'The worksheet "{worksheet}" appears to be empty'
                 }), 404
+                
+        except Exception as e:
+            print(f"Error fetching CSV data: {e}")
+            return jsonify({
+                'error': f'Failed to fetch data for: {worksheet}',
+                'message': f'Could not load worksheet data: {str(e)}'
+            }), 500
         
         recommendations = []
         

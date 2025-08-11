@@ -4575,6 +4575,10 @@ def analyze_retailer_leads():
         stock_url = config_user_record.get('sellerboard_stock_url')
         user_timezone = config_user_record.get('timezone', 'America/New_York')
         
+        print(f"DEBUG: Using orders_url: {orders_url[:50]}..." if orders_url else "DEBUG: No orders_url")
+        print(f"DEBUG: Using stock_url: {stock_url[:50]}..." if stock_url else "DEBUG: No stock_url")
+        print(f"DEBUG: User timezone: {user_timezone}")
+        
         from datetime import datetime
         import pytz
         from orders_analysis import OrdersAnalysis
@@ -4583,7 +4587,10 @@ def analyze_retailer_leads():
         today = datetime.now(tz).date()
         
         try:
+            print(f"DEBUG: Starting OrdersAnalysis with orders_url: {orders_url is not None}, stock_url: {stock_url is not None}")
             orders_analysis = OrdersAnalysis(orders_url, stock_url)
+            print(f"DEBUG: OrdersAnalysis created successfully")
+            
             analysis = orders_analysis.analyze(
                 for_date=today,
                 user_timezone=user_timezone,
@@ -4595,10 +4602,20 @@ def analyze_retailer_leads():
                     'discord_id': discord_id
                 }
             )
+            print(f"DEBUG: Analysis completed")
+            
             enhanced_analytics = analysis.get('enhanced_analytics', {})
             print(f"DEBUG: Full analysis keys: {list(analysis.keys()) if analysis else 'None'}")
             print(f"DEBUG: Enhanced analytics type and length: {type(enhanced_analytics)}, {len(enhanced_analytics) if enhanced_analytics else 0}")
+            
+            # Check if we're getting fallback/basic mode
+            if analysis.get('basic_mode'):
+                print(f"DEBUG: WARNING - Analysis is in basic/fallback mode")
+                print(f"DEBUG: Basic mode message: {analysis.get('message', 'No message')}")
         except Exception as e:
+            print(f"DEBUG: Exception in OrdersAnalysis: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({
                 'error': 'Failed to fetch inventory data',
                 'message': f'Failed to generate analytics: {str(e)}'

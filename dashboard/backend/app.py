@@ -4671,14 +4671,29 @@ def analyze_retailer_leads():
         
         # Debug: Log sample of enhanced_analytics keys
         print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
-        print(f"DEBUG: Sample ASINs in inventory: {list(enhanced_analytics.keys())[:10]}")
-        print(f"DEBUG: Enhanced analytics type: {type(enhanced_analytics)}")
-        print(f"DEBUG: Enhanced analytics structure sample:")
-        for i, (key, value) in enumerate(enhanced_analytics.items()):
-            if i < 3:  # Show first 3 items
-                print(f"  {key}: {type(value)} - {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
-            else:
-                break
+        print(f"DEBUG: All ASINs in inventory: {list(enhanced_analytics.keys())}")
+        
+        # If we have very few ASINs, show them all with their structure
+        if len(enhanced_analytics) <= 5:
+            print(f"DEBUG: Enhanced analytics structure (showing all {len(enhanced_analytics)} items):")
+            for key, value in enhanced_analytics.items():
+                if isinstance(value, dict):
+                    print(f"  {key}: {list(value.keys())}")
+                    # Show nested structure for first item
+                    if key == list(enhanced_analytics.keys())[0]:
+                        for subkey, subvalue in value.items():
+                            if isinstance(subvalue, dict):
+                                print(f"    {subkey}: {list(subvalue.keys())}")
+                else:
+                    print(f"  {key}: {type(value)} - not dict")
+        else:
+            print(f"DEBUG: Sample ASINs in inventory: {list(enhanced_analytics.keys())[:10]}")
+            print(f"DEBUG: Enhanced analytics structure sample:")
+            for i, (key, value) in enumerate(enhanced_analytics.items()):
+                if i < 3:  # Show first 3 items
+                    print(f"  {key}: {type(value)} - {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
+                else:
+                    break
         
         # Analyze each lead
         for _, row in worksheet_df.iterrows():

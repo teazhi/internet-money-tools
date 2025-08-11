@@ -1307,31 +1307,31 @@ class EnhancedOrdersAnalysis:
                     
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
-                        pass  # Debug print removed
-                        pass  # Debug print removed
+                        print("DEBUG - Searching all worksheets for purchase data")
+                        print(f"DEBUG - Column mapping: {column_mapping}")
                         cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id, column_mapping
                         )
+                        print(f"DEBUG - All worksheets search result: cogs_data={len(cogs_data)} items, sheet_data={sheet_data.shape if hasattr(sheet_data, 'shape') else 'Not a DataFrame'}")
                         # Use the user's column mapping for purchase analytics
                         column_mapping_for_purchase = column_mapping
                         
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:
-                            pass  # Debug print removed
-                            pass  # Debug print removed
+                            print("DEBUG - All worksheets search failed, falling back to specific worksheet")
                             cogs_data, sheet_data = self.fetch_google_sheet_data(
                                 access_token, sheet_id, worksheet_title, column_mapping
                             )
                             column_mapping_for_purchase = column_mapping
                             
                     elif worksheet_title:
-                        pass  # Debug print removed
+                        print(f"DEBUG - Using specific worksheet: {worksheet_title}")
                         cogs_data, sheet_data = self.fetch_google_sheet_data(
                             access_token, sheet_id, worksheet_title, column_mapping
                         )
                         column_mapping_for_purchase = column_mapping
                     else:
-                        pass  # Debug print removed
+                        print("DEBUG - No worksheet configuration found")
                         cogs_data = {}
                         sheet_data = pd.DataFrame()
                         column_mapping_for_purchase = {}

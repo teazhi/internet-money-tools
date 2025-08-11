@@ -4691,6 +4691,9 @@ def analyze_retailer_leads():
             # Get the global purchase analytics for recent purchase lookups
             global_purchase_analytics = analysis.get('purchase_insights', {})
             
+            # Debug: Check what's available in the main analysis object
+            print(f"DEBUG - Main analysis keys: {list(analysis.keys())}")
+            
             # Debug: Check what's available in global purchase analytics
             print(f"DEBUG - Global purchase analytics keys: {list(global_purchase_analytics.keys())}")
             if 'recent_2_months_purchases' in global_purchase_analytics:
@@ -4699,6 +4702,16 @@ def analyze_retailer_leads():
                 print(f"DEBUG - First few ASINs in recent_2_months: {list(recent_2_months.keys())[:5]}")
             else:
                 print("DEBUG - No recent_2_months_purchases found in global_purchase_analytics")
+                
+            # Check if the monthly_purchase_adjustment field has the data we need
+            if enhanced_analytics:
+                sample_asin = list(enhanced_analytics.keys())[0]
+                sample_data = enhanced_analytics[sample_asin]
+                print(f"DEBUG - Sample ASIN {sample_asin} enhanced_analytics keys: {list(sample_data.keys())}")
+                if 'restock' in sample_data:
+                    restock_sample = sample_data['restock']
+                    print(f"DEBUG - Sample restock keys: {list(restock_sample.keys())}")
+                    print(f"DEBUG - Sample monthly_purchase_adjustment: {restock_sample.get('monthly_purchase_adjustment', 'NOT_FOUND')}")
             
             # Check if we're getting fallback/basic mode
             if analysis.get('basic_mode'):
@@ -4844,9 +4857,16 @@ def analyze_retailer_leads():
                 velocity = velocity_data.get('weighted_velocity', 0)  # Use the same velocity as Smart Restock
                 
                 # Check for recent purchases (last 2 months) and adjust recommendations
-                # Use the SAME approach as Smart Restock - use global purchase analytics
-                recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
+                # The monthly_purchase_adjustment field already contains the recent purchase data from Smart Restock calculation
                 monthly_purchase_adjustment = restock_data.get('monthly_purchase_adjustment', 0)
+                
+                # If monthly_purchase_adjustment has data, use it as recent_purchases
+                # Otherwise try to get it from global purchase analytics
+                if monthly_purchase_adjustment > 0:
+                    recent_purchases = monthly_purchase_adjustment
+                else:
+                    recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
+                
                 recommendation['recent_purchases'] = recent_purchases
                 
                 # Debug: Check what purchase analytics data is available

@@ -1298,7 +1298,13 @@ class EnhancedOrdersAnalysis:
                 google_tokens = user_settings.get('google_tokens', {})
                 column_mapping = user_settings.get('column_mapping', {})
                 
+                print(f"DEBUG - Sheet ID exists: {bool(sheet_id)}")
+                print(f"DEBUG - Google tokens exist: {bool(google_tokens)}")
+                print(f"DEBUG - Worksheet title: {worksheet_title}")
+                print(f"DEBUG - Column mapping: {column_mapping}")
+                
                 if sheet_id and google_tokens:
+                    print("DEBUG - Sheet ID and tokens verified, proceeding with token refresh")
                     # Create a temporary user_record for the refresh function
                     temp_user_record = {'google_tokens': google_tokens}
                     access_token = refresh_google_token(temp_user_record)

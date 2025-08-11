@@ -4425,7 +4425,7 @@ def analyze_discount_opportunities():
 @app.route('/api/retailer-leads/worksheets', methods=['GET'])
 @login_required
 def get_available_worksheets():
-    """Get all available worksheets from the source links CSV"""
+    """Get all available retailers/sources from the source links CSV"""
     try:
         # Fetch source links CSV
         csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
@@ -4436,19 +4436,55 @@ def get_available_worksheets():
         csv_data = StringIO(response.text)
         source_df = pd.read_csv(csv_data)
         
-        # Get unique worksheet names
-        worksheets = source_df['Worksheet'].dropna().unique().tolist()
-        worksheets.sort()  # Sort alphabetically
+        # Extract retailers from source URLs
+        retailers = []
+        
+        # Get unique source domains
+        if 'source' in source_df.columns:
+            source_df['source_domain'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
+            unique_retailers = source_df['source_domain'].dropna().unique().tolist()
+            retailers.extend(unique_retailers)
+        
+        # Add "All Leads" option
+        retailers = ['All Leads'] + sorted(list(set(retailers)))
         
         return jsonify({
-            'worksheets': worksheets,
-            'total': len(worksheets)
+            'worksheets': retailers,
+            'total': len(retailers)
         })
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Error fetching worksheets: {str(e)}'}), 500
+        return jsonify({'error': f'Error fetching retailers: {str(e)}'}), 500
+
+def extract_retailer_from_url(url):
+    """Extract retailer name from URL"""
+    import re
+    if not url or url == 'nan':
+        return None
+    
+    # Extract domain from URL
+    match = re.search(r'https?://(?:www\.)?([^/]+)', url)
+    if match:
+        domain = match.group(1).lower()
+        # Map domains to friendly names
+        retailer_map = {
+            'lowes.com': "Lowe's",
+            'homedepot.com': 'Home Depot',
+            'walmart.com': 'Walmart',
+            'target.com': 'Target',
+            'costco.com': 'Costco',
+            'samsclub.com': "Sam's Club",
+            'bjs.com': "BJ's",
+            'kohls.com': "Kohl's",
+            'bedbathandbeyond.com': 'Bed Bath & Beyond',
+            'wayfair.com': 'Wayfair',
+            'overstock.com': 'Overstock',
+            'amazon.com': 'Amazon'
+        }
+        return retailer_map.get(domain, domain.replace('.com', '').title())
+    return None
 
 @app.route('/api/retailer-leads/analyze', methods=['POST'])
 @login_required
@@ -4515,7 +4551,7 @@ def analyze_retailer_leads():
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Fetch source links CSV for the specific worksheet
+        # Fetch source links CSV
         csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
         
         response = requests.get(csv_url, timeout=30)
@@ -4524,14 +4560,18 @@ def analyze_retailer_leads():
         csv_data = StringIO(response.text)
         source_df = pd.read_csv(csv_data)
         
-        # Filter for the specific worksheet (exact match)
-        worksheet_df = source_df[source_df['Worksheet'] == worksheet]
+        # Filter for the specific retailer
+        if worksheet == 'All Leads':
+            worksheet_df = source_df.copy()
+        else:
+            # Add retailer column based on source URL
+            source_df['retailer'] = source_df['source'].apply(lambda x: extract_retailer_from_url(str(x)) if pd.notna(x) else None)
+            worksheet_df = source_df[source_df['retailer'] == worksheet]
         
         if worksheet_df.empty:
             return jsonify({
-                'error': f'No data found for worksheet: {worksheet}',
-                'message': f'Could not find worksheet "{worksheet}"',
-                'available_worksheets': source_df['Worksheet'].unique().tolist()
+                'error': f'No data found for: {worksheet}',
+                'message': f'Could not find any leads for "{worksheet}"'
             }), 404
         
         recommendations = []
@@ -4542,20 +4582,22 @@ def analyze_retailer_leads():
             if not asin or asin == 'nan':
                 continue
                 
-            # Get source link
-            source_link = None
-            for col in row.index:
-                if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
-                    potential_link = row[col]
-                    if pd.notna(potential_link) and str(potential_link).startswith('http'):
-                        source_link = str(potential_link)
-                        break
+            # Get source link (it's in the 'source' column)
+            source_link = row.get('source', None)
+            if pd.notna(source_link) and str(source_link) != 'nan':
+                source_link = str(source_link)
+            else:
+                source_link = None
             
             # Check if ASIN is in user's inventory
             inventory_data = enhanced_analytics.get(asin, {})
             
+            # Get retailer name for this specific row
+            retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'
+            
             recommendation = {
                 'asin': asin,
+                'retailer': retailer_name,
                 'worksheet': worksheet,
                 'source_link': source_link,
                 'in_inventory': bool(inventory_data),

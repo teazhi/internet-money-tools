@@ -106,9 +106,10 @@ const RetailerLeadAnalysis = () => {
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
-    const headers = ['ASIN', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Source Link'];
+    const headers = ['ASIN', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Source Link'];
     const rows = analysis.recommendations.map(item => [
       item.asin,
+      item.retailer || '',
       item.recommendation,
       item.reason,
       item.inventory_details?.current_stock || '',
@@ -139,10 +140,10 @@ const RetailerLeadAnalysis = () => {
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center">
               <ShoppingCart className="h-6 w-6 mr-2 text-builders-500" />
-              Worksheet Lead Analysis
+              Retailer Lead Analysis
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              Analyze all leads from a specific worksheet and get buying recommendations
+              Analyze all leads from a specific retailer and get buying recommendations
             </p>
           </div>
         </div>
@@ -150,13 +151,13 @@ const RetailerLeadAnalysis = () => {
         <div className="flex items-end space-x-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Worksheet
+              Select Retailer
             </label>
             {loadingWorksheets ? (
               <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
                 <div className="flex items-center">
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin text-gray-400" />
-                  <span className="text-sm text-gray-500">Loading worksheets...</span>
+                  <span className="text-sm text-gray-500">Loading retailers...</span>
                 </div>
               </div>
             ) : (
@@ -165,7 +166,7 @@ const RetailerLeadAnalysis = () => {
                 onChange={(e) => setSelectedWorksheet(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
               >
-                <option value="">Choose a worksheet...</option>
+                <option value="">Choose a retailer...</option>
                 {worksheets.map(worksheet => (
                   <option key={worksheet} value={worksheet}>
                     {worksheet}
@@ -272,6 +273,11 @@ const RetailerLeadAnalysis = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       ASIN
                     </th>
+                    {analysis.worksheet === 'All Leads' && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Retailer
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Recommendation
                     </th>
@@ -304,6 +310,11 @@ const RetailerLeadAnalysis = () => {
                           </a>
                         </div>
                       </td>
+                      {analysis.worksheet === 'All Leads' && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-600">{item.retailer}</span>
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           {getRecommendationIcon(item.recommendation)}

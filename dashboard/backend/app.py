@@ -4650,10 +4650,14 @@ def analyze_retailer_leads():
         
         recommendations = []
         
+        # Debug: Log sample of enhanced_analytics keys
+        print(f"DEBUG: Enhanced analytics contains {len(enhanced_analytics)} ASINs")
+        print(f"DEBUG: Sample ASINs in inventory: {list(enhanced_analytics.keys())[:10]}")
+        
         # Analyze each lead
         for _, row in worksheet_df.iterrows():
-            asin = str(row.get('ASIN', '')).strip()
-            if not asin or asin == 'nan':
+            asin = str(row.get('ASIN', '')).strip().upper()  # Normalize to uppercase
+            if not asin or asin == 'nan' or asin == 'NAN':
                 continue
                 
             # Get source link - check multiple possible column names
@@ -4674,8 +4678,15 @@ def analyze_retailer_leads():
                             source_link = str(potential_link)
                             break
             
-            # Check if ASIN is in user's inventory
+            # Check if ASIN is in user's inventory - try both cases
             inventory_data = enhanced_analytics.get(asin, {})
+            if not inventory_data:
+                # Try lowercase version if uppercase didn't work
+                inventory_data = enhanced_analytics.get(asin.lower(), {})
+            
+            # Debug: Log lookup results
+            found_in_inventory = bool(inventory_data)
+            print(f"DEBUG: ASIN {asin} found in inventory: {found_in_inventory}")
             
             # Get retailer name for this specific row
             retailer_name = extract_retailer_from_url(source_link) if source_link else 'Unknown'

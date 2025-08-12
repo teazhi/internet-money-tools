@@ -887,6 +887,9 @@ class EnhancedOrdersAnalysis:
     def fetch_google_sheet_cogs_data_all_worksheets(self, access_token: str, sheet_id: str, column_mapping: dict) -> tuple[Dict[str, dict], pd.DataFrame]:
         """Fetch COGS and Source links from ALL worksheets in the Google Sheet
         
+        DEBUG - Inside fetch_google_sheet_cogs_data_all_worksheets function"""
+        print(f"DEBUG - INSIDE FUNCTION: fetch_google_sheet_cogs_data_all_worksheets called with sheet_id={sheet_id}")
+        
         Args:
             access_token: Google API access token
             sheet_id: Google Sheet ID

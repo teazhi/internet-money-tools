@@ -4451,11 +4451,13 @@ def get_expected_arrivals():
         print(f"DEBUG - Missing Listings: Has access token: {bool(google_tokens.get('access_token'))}")
         
         try:
+            print("DEBUG - Missing Listings: About to call fetch_google_sheet_cogs_data_all_worksheets")
             cogs_data, combined_purchase_df = analysis.fetch_google_sheet_cogs_data_all_worksheets(
                 access_token=google_tokens['access_token'],
                 sheet_id=sheet_id,
                 column_mapping=column_mapping
             )
+            print("DEBUG - Missing Listings: Successfully returned from fetch_google_sheet_cogs_data_all_worksheets")
             print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
             if not combined_purchase_df.empty:
                 print(f"DEBUG - Missing Listings: DataFrame columns: {list(combined_purchase_df.columns)}")

@@ -898,6 +898,7 @@ class EnhancedOrdersAnalysis:
         print(f"DEBUG - INSIDE FUNCTION: fetch_google_sheet_cogs_data_all_worksheets called with sheet_id={sheet_id}")
         try:
             import requests
+            print("DEBUG - Starting Google Sheets API calls")
             
             # First, get list of all worksheets
             metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
@@ -1166,7 +1167,9 @@ class EnhancedOrdersAnalysis:
             return combined_cogs_data, combined_df
             
         except Exception as e:
-            pass  # Debug print removed
+            print(f"DEBUG - Exception in fetch_google_sheet_cogs_data_all_worksheets: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {}, pd.DataFrame()
     
     def extract_hyperlinks_from_batch_data(self, batch_data):

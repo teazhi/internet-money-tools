@@ -1088,7 +1088,36 @@ class EnhancedOrdersAnalysis:
                     
                     # Standardize columns across all DataFrames to prevent concatenation errors
                     if len(combined_dataframes) > 1:
-                        # Get all unique columns from all DataFrames
+                        # First, clean up column names in each DataFrame to avoid duplicates/empty names
+                        cleaned_dataframes = []
+                        for i, df in enumerate(combined_dataframes):
+                            df_copy = df.copy()
+                            
+                            # Clean column names - remove empty strings and handle duplicates
+                            clean_columns = []
+                            seen_columns = set()
+                            
+                            for col in df_copy.columns:
+                                # Replace empty string column names with a placeholder
+                                if col == '' or pd.isna(col):
+                                    col = f'unnamed_column_{len(clean_columns)}'
+                                
+                                # Handle duplicate column names
+                                original_col = col
+                                counter = 1
+                                while col in seen_columns:
+                                    col = f"{original_col}_{counter}"
+                                    counter += 1
+                                
+                                clean_columns.append(col)
+                                seen_columns.add(col)
+                            
+                            df_copy.columns = clean_columns
+                            cleaned_dataframes.append(df_copy)
+                        
+                        combined_dataframes = cleaned_dataframes
+                        
+                        # Get all unique columns from all cleaned DataFrames
                         all_columns = set()
                         for df in combined_dataframes:
                             all_columns.update(df.columns)
@@ -1098,19 +1127,17 @@ class EnhancedOrdersAnalysis:
                         # Standardize each DataFrame to have the same columns
                         standardized_dataframes = []
                         for i, df in enumerate(combined_dataframes):
-                            # Create a copy to avoid modifying the original DataFrame
-                            df_copy = df.copy()
-                            current_cols = set(df_copy.columns)
+                            current_cols = set(df.columns)
                             missing_cols = all_columns - current_cols
                             
                             if missing_cols:
                                 print(f"DEBUG - DataFrame {i} missing columns: {missing_cols}")
                                 # Add missing columns with empty string values
                                 for col in missing_cols:
-                                    df_copy[col] = ''
+                                    df[col] = ''
                             
-                            # Ensure columns are in the same order
-                            df_standardized = df_copy.reindex(columns=sorted(all_columns))
+                            # Ensure columns are in the same order - now safe since no duplicates
+                            df_standardized = df.reindex(columns=sorted(all_columns))
                             standardized_dataframes.append(df_standardized)
                         
                         combined_dataframes = standardized_dataframes

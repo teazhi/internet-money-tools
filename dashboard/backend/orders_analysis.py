@@ -1085,19 +1085,33 @@ class EnhancedOrdersAnalysis:
             if combined_dataframes:
                 try:
                     print(f"DEBUG - Combining {len(combined_dataframes)} DataFrames for purchase analytics")
-                    # Check for column compatibility before concatenating
+                    
+                    # Standardize columns across all DataFrames to prevent concatenation errors
                     if len(combined_dataframes) > 1:
-                        first_cols = set(combined_dataframes[0].columns)
-                        print(f"DEBUG - First DataFrame columns: {first_cols}")
-                        for i, df in enumerate(combined_dataframes[1:], 1):
+                        # Get all unique columns from all DataFrames
+                        all_columns = set()
+                        for df in combined_dataframes:
+                            all_columns.update(df.columns)
+                        
+                        print(f"DEBUG - All unique columns across worksheets: {sorted(all_columns)}")
+                        
+                        # Standardize each DataFrame to have the same columns
+                        standardized_dataframes = []
+                        for i, df in enumerate(combined_dataframes):
                             current_cols = set(df.columns)
-                            print(f"DEBUG - DataFrame {i} columns: {current_cols}")
-                            if first_cols != current_cols:
-                                print(f"DEBUG - Column mismatch between DataFrame 0 and {i}")
-                                missing_in_first = current_cols - first_cols
-                                missing_in_current = first_cols - current_cols
-                                print(f"DEBUG - Missing in first: {missing_in_first}")
-                                print(f"DEBUG - Missing in current: {missing_in_current}")
+                            missing_cols = all_columns - current_cols
+                            
+                            if missing_cols:
+                                print(f"DEBUG - DataFrame {i} missing columns: {missing_cols}")
+                                # Add missing columns with empty string values
+                                for col in missing_cols:
+                                    df[col] = ''
+                            
+                            # Ensure columns are in the same order
+                            df_standardized = df.reindex(columns=sorted(all_columns))
+                            standardized_dataframes.append(df_standardized)
+                        
+                        combined_dataframes = standardized_dataframes
                     
                     combined_df = pd.concat(combined_dataframes, ignore_index=True, sort=False)
                     print(f"DEBUG - Combined DataFrame shape: {combined_df.shape}")

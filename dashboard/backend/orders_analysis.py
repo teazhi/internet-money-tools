@@ -904,6 +904,8 @@ class EnhancedOrdersAnalysis:
             metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
             headers = {"Authorization": f"Bearer {access_token}"}
             r = requests.get(metadata_url, headers=headers)
+            
+            # Let 401 errors propagate to safe_google_api_call for token refresh
             r.raise_for_status()
             
             sheets_info = r.json().get("sheets", [])
@@ -1167,10 +1169,15 @@ class EnhancedOrdersAnalysis:
             return combined_cogs_data, combined_df
             
         except Exception as e:
-            print(f"DEBUG - Exception in fetch_google_sheet_cogs_data_all_worksheets: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {}, pd.DataFrame()
+            # Let 401 errors bubble up to safe_google_api_call for automatic token refresh
+            if "401" in str(e) or "Unauthorized" in str(e):
+                print(f"DEBUG - 401 error detected, letting it bubble up for token refresh: {str(e)}")
+                raise  # Re-raise 401 errors for token refresh handling
+            else:
+                print(f"DEBUG - Exception in fetch_google_sheet_cogs_data_all_worksheets: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return {}, pd.DataFrame()
     
     def extract_hyperlinks_from_batch_data(self, batch_data):
         """Extract hyperlinks from Google Sheets batchGet response"""

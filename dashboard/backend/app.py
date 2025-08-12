@@ -4446,6 +4446,10 @@ def get_expected_arrivals():
         analysis = OrdersAnalysis()
         
         # Get purchase data from Google Sheets
+        print(f"DEBUG - Missing Listings: Sheet ID: {sheet_id}")
+        print(f"DEBUG - Missing Listings: Column mapping: {column_mapping}")
+        print(f"DEBUG - Missing Listings: Has access token: {bool(google_tokens.get('access_token'))}")
+        
         try:
             cogs_data, combined_purchase_df = analysis.fetch_google_sheet_cogs_data_all_worksheets(
                 access_token=google_tokens['access_token'],
@@ -4454,8 +4458,14 @@ def get_expected_arrivals():
             )
             print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
             if not combined_purchase_df.empty:
+                print(f"DEBUG - Missing Listings: DataFrame columns: {list(combined_purchase_df.columns)}")
                 print(f"DEBUG - Missing Listings: Sample ASINs from purchase data: {list(combined_purchase_df['ASIN'].unique()[:5])}")
+            else:
+                print("DEBUG - Missing Listings: DataFrame is empty - no data loaded from Google Sheets")
         except Exception as e:
+            print(f"DEBUG - Missing Listings: Exception during data fetch: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500
 
         if combined_purchase_df.empty:

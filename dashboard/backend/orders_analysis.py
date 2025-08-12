@@ -1098,17 +1098,19 @@ class EnhancedOrdersAnalysis:
                         # Standardize each DataFrame to have the same columns
                         standardized_dataframes = []
                         for i, df in enumerate(combined_dataframes):
-                            current_cols = set(df.columns)
+                            # Create a copy to avoid modifying the original DataFrame
+                            df_copy = df.copy()
+                            current_cols = set(df_copy.columns)
                             missing_cols = all_columns - current_cols
                             
                             if missing_cols:
                                 print(f"DEBUG - DataFrame {i} missing columns: {missing_cols}")
                                 # Add missing columns with empty string values
                                 for col in missing_cols:
-                                    df[col] = ''
+                                    df_copy[col] = ''
                             
                             # Ensure columns are in the same order
-                            df_standardized = df.reindex(columns=sorted(all_columns))
+                            df_standardized = df_copy.reindex(columns=sorted(all_columns))
                             standardized_dataframes.append(df_standardized)
                         
                         combined_dataframes = standardized_dataframes

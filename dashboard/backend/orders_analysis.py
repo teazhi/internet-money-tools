@@ -923,7 +923,7 @@ class EnhancedOrdersAnalysis:
             
             for worksheet_name in worksheet_names:
                 try:
-                    # Processing worksheet
+                    print(f"DEBUG - Processing worksheet: '{worksheet_name}'")
                     
                     # Fetch worksheet data
                     range_ = f"'{worksheet_name}'!A1:Z"
@@ -970,7 +970,9 @@ class EnhancedOrdersAnalysis:
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        pass  # Debug print removed
+                        print(f"DEBUG - Skipping worksheet '{worksheet_name}': missing columns {missing}")
+                        print(f"DEBUG - Expected: {expected_columns}")
+                        print(f"DEBUG - Available: {available_columns}")
                         continue
                     
                     # Worksheet has correct structure
@@ -1070,7 +1072,7 @@ class EnhancedOrdersAnalysis:
                         missing_columns = mapped_purchase_columns - available_columns
                     
                     successful_sheets.append(worksheet_name)
-                    # Worksheet processed successfully
+                    print(f"DEBUG - Successfully processed worksheet: '{worksheet_name}' with {len(df)} rows")
                     
                 except Exception as e:
                     # Error processing worksheet

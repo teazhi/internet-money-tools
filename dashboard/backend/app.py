@@ -4448,9 +4448,9 @@ def get_expected_arrivals():
         # Get purchase data from Google Sheets
         try:
             cogs_data, combined_purchase_df = analysis.fetch_google_sheet_cogs_data_all_worksheets(
+                access_token=google_tokens['access_token'],
                 sheet_id=sheet_id,
-                column_mapping=column_mapping,
-                user_settings=user_record
+                column_mapping=column_mapping
             )
         except Exception as e:
             return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500

@@ -4452,6 +4452,9 @@ def get_expected_arrivals():
                 sheet_id=sheet_id,
                 column_mapping=column_mapping
             )
+            print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
+            if not combined_purchase_df.empty:
+                print(f"DEBUG - Missing Listings: Sample ASINs from purchase data: {list(combined_purchase_df['ASIN'].unique()[:5])}")
         except Exception as e:
             return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500
 
@@ -4471,6 +4474,10 @@ def get_expected_arrivals():
         )
         
         recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
+        
+        print(f"DEBUG - Missing Listings: Found {len(recent_purchases_data)} recent purchases")
+        if recent_purchases_data:
+            print(f"DEBUG - Missing Listings: Sample recent purchase ASINs: {list(recent_purchases_data.keys())[:5]}")
         
         if not recent_purchases_data:
             return jsonify({
@@ -4496,6 +4503,9 @@ def get_expected_arrivals():
             basic_analytics = inventory_analysis.get('analytics', {})
             all_known_asins.update(basic_analytics.keys())
             
+            print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs with Amazon listings")
+            print(f"DEBUG - Missing Listings: Sample Sellerboard ASINs: {list(all_known_asins)[:5]}")
+            
         except Exception as e:
             return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
 
@@ -4507,6 +4517,8 @@ def get_expected_arrivals():
         for asin, purchase_data in recent_purchases_data.items():
             # Check if this ASIN has ANY presence in Sellerboard (indicating a listing exists)
             has_listing = asin in all_known_asins
+            
+            print(f"DEBUG - Missing Listings: ASIN {asin} - Has listing: {has_listing}")
             
             if not has_listing:
                 # This item was purchased recently but has no Amazon listing created yet
@@ -4537,6 +4549,8 @@ def get_expected_arrivals():
 
         # Sort by most recent purchase date
         missing_listings.sort(key=lambda x: x.get('last_purchase_date', ''), reverse=True)
+
+        print(f"DEBUG - Missing Listings: Final result - {len(missing_listings)} missing listings found")
 
         return jsonify({
             "missing_listings": missing_listings,

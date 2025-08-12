@@ -449,7 +449,7 @@ class PurchaseAnalytics:
         return recommendations
     
     def _analyze_recent_2_months_purchases(self, df: pd.DataFrame) -> Dict:
-        """Analyze purchases from the last 2 worksheets (representing last 2 months due to Amazon lead time)"""
+        """Analyze purchases from current month and previous month worksheets (by month name)"""
         recent_purchases_data = {}
         
         try:
@@ -458,13 +458,36 @@ class PurchaseAnalytics:
                 pass  # Debug print removed
                 return self._analyze_by_date_fallback(df)
             
-            # Get the list of unique worksheets, sorted to identify the most recent ones
+            # Get the list of unique worksheets
             worksheets = df['_worksheet_source'].unique()
             
-            # Try to identify the last 2 worksheets by sorting (assuming chronological naming)
-            # Sort worksheets to get the most recent ones (assuming they're named chronologically)
-            sorted_worksheets = sorted(worksheets, reverse=True)
-            last_2_worksheets = sorted_worksheets[:2]
+            # Get current month and previous month names
+            from datetime import datetime, timedelta
+            current_date = datetime.now()
+            current_month = current_date.strftime('%B').upper()  # e.g., 'AUGUST'
+            previous_month = (current_date.replace(day=1) - timedelta(days=1)).strftime('%B').upper()  # e.g., 'JULY'
+            
+            # Find worksheets that contain the current month or previous month names
+            current_month_sheets = [ws for ws in worksheets if current_month in ws.upper()]
+            previous_month_sheets = [ws for ws in worksheets if previous_month in ws.upper()]
+            
+            # Combine current month and previous month sheets
+            last_2_months_sheets = []
+            
+            # Add current month sheets first (if any)
+            if current_month_sheets:
+                last_2_months_sheets.extend(current_month_sheets)
+            
+            # Add previous month sheets
+            if previous_month_sheets:
+                last_2_months_sheets.extend(previous_month_sheets)
+            
+            # If no month-specific sheets found, fall back to first 2 sheets (original logic)
+            if not last_2_months_sheets:
+                sorted_worksheets = sorted(worksheets, reverse=True)
+                last_2_months_sheets = sorted_worksheets[:2]
+            
+            last_2_worksheets = last_2_months_sheets
             
             
             # Filter to only data from the last 2 worksheets

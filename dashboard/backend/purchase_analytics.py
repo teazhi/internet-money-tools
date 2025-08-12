@@ -467,25 +467,43 @@ class PurchaseAnalytics:
             current_month = current_date.strftime('%B').upper()  # e.g., 'AUGUST'
             previous_month = (current_date.replace(day=1) - timedelta(days=1)).strftime('%B').upper()  # e.g., 'JULY'
             
+            print(f"DEBUG - Looking for months: current='{current_month}', previous='{previous_month}'")
+            print(f"DEBUG - Available worksheets: {list(worksheets)}")
+            
             # Find worksheets that contain the current month or previous month names
             current_month_sheets = [ws for ws in worksheets if current_month in ws.upper()]
             previous_month_sheets = [ws for ws in worksheets if previous_month in ws.upper()]
             
-            # Combine current month and previous month sheets
+            # Also check for the first worksheet (assuming it's the current month if not named with month)
+            first_worksheet = worksheets[0] if len(worksheets) > 0 else None
+            
+            # Combine sheets in the correct order
             last_2_months_sheets = []
             
-            # Add current month sheets first (if any)
+            # If we found current month sheets by name, use them
             if current_month_sheets:
                 last_2_months_sheets.extend(current_month_sheets)
+                print(f"DEBUG - Found current month ({current_month}) sheets: {current_month_sheets}")
+            # Otherwise, assume the first worksheet is current month
+            elif first_worksheet and first_worksheet not in previous_month_sheets:
+                last_2_months_sheets.append(first_worksheet)
+                print(f"DEBUG - Using first worksheet as current month: {first_worksheet}")
             
             # Add previous month sheets
             if previous_month_sheets:
                 last_2_months_sheets.extend(previous_month_sheets)
+                print(f"DEBUG - Found previous month ({previous_month}) sheets: {previous_month_sheets}")
             
-            # If no month-specific sheets found, fall back to first 2 sheets (original logic)
-            if not last_2_months_sheets:
-                sorted_worksheets = sorted(worksheets, reverse=True)
-                last_2_months_sheets = sorted_worksheets[:2]
+            # If we still don't have 2 months worth of data, add more worksheets
+            if len(last_2_months_sheets) < 2 and len(worksheets) > len(last_2_months_sheets):
+                for ws in worksheets:
+                    if ws not in last_2_months_sheets:
+                        last_2_months_sheets.append(ws)
+                        if len(last_2_months_sheets) >= 2:
+                            break
+                print(f"DEBUG - Added additional worksheets to reach 2 months")
+            
+            print(f"DEBUG - Final selected worksheets for recent purchases: {last_2_months_sheets}")
             
             last_2_worksheets = last_2_months_sheets
             

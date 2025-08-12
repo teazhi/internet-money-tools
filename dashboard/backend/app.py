@@ -4427,15 +4427,19 @@ def analyze_discount_opportunities():
 def get_expected_arrivals():
     """Get items purchased in last 2 months that don't have Amazon listings created yet"""
     try:
-        user_settings = get_user_settings(session['user_id'])
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
         
-        if not user_settings:
-            return jsonify({"error": "User settings not found"}), 404
+        if not user_record:
+            return jsonify({"error": "User not found"}), 404
 
-        # Get the leads sheet settings (we'll use this to access the purchase data)
-        leads_sheet_id = user_settings.get('leads_sheet_id')
-        if not leads_sheet_id:
-            return jsonify({"error": "Google Sheet not configured. Please set up your leads sheet first."}), 400
+        # Get the Google Sheet settings for purchase data
+        sheet_id = user_record.get('sheet_id')
+        google_tokens = user_record.get('google_tokens', {})
+        column_mapping = user_record.get('column_mapping', {})
+        
+        if not sheet_id or not google_tokens.get('access_token'):
+            return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings first."}), 400
 
         # Initialize OrdersAnalysis to get purchase data
         from orders_analysis import OrdersAnalysis
@@ -4444,9 +4448,9 @@ def get_expected_arrivals():
         # Get purchase data from Google Sheets
         try:
             cogs_data, combined_purchase_df = analysis.fetch_google_sheet_cogs_data_all_worksheets(
-                sheet_id=leads_sheet_id,
-                column_mapping=user_settings.get('column_mapping', {}),
-                user_settings=user_settings
+                sheet_id=sheet_id,
+                column_mapping=column_mapping,
+                user_settings=user_record
             )
         except Exception as e:
             return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500
@@ -4463,7 +4467,7 @@ def get_expected_arrivals():
         purchase_analytics = PurchaseAnalytics()
         purchase_insights = purchase_analytics.analyze_purchase_data(
             combined_purchase_df, 
-            user_settings.get('column_mapping', {})
+            column_mapping
         )
         
         recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
@@ -4476,7 +4480,7 @@ def get_expected_arrivals():
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = user_settings.get('sellerboard_stock_url')
+        sellerboard_url = user_record.get('sellerboard_stock_url')
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 

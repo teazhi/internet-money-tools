@@ -4510,7 +4510,10 @@ def get_expected_arrivals():
 
         try:
             # Get complete Sellerboard analysis (includes all ASINs with any history)
-            inventory_analysis = analysis.analyze_sellerboard_stock(sellerboard_url)
+            # Create a new analysis instance with the sellerboard URL
+            sellerboard_analysis = OrdersAnalysis(orders_url=sellerboard_url, stock_url=sellerboard_url)
+            from datetime import date
+            inventory_analysis = sellerboard_analysis.analyze(for_date=date.today())
             
             # Check both current inventory AND historical data for listings
             current_inventory = inventory_analysis.get('enhanced_analytics', {})

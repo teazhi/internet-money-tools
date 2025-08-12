@@ -732,6 +732,7 @@ class EnhancedOrdersAnalysis:
             )
             headers = {"Authorization": f"Bearer {access_token}"}
             r = requests.get(url, headers=headers)
+            # Let 401 errors propagate up for token refresh handling
             r.raise_for_status()
             values = r.json().get("values", [])
             
@@ -760,8 +761,12 @@ class EnhancedOrdersAnalysis:
             return cogs_data, df
             
         except Exception as e:
-            pass  # Debug print removed
-            return {}, pd.DataFrame()
+            # Let 401 errors bubble up for token refresh handling  
+            if "401" in str(e) or "Unauthorized" in str(e):
+                raise  # Re-raise 401 errors for token refresh handling
+            else:
+                pass  # Debug print removed
+                return {}, pd.DataFrame()
 
     def fetch_google_sheet_cogs_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Dict[str, dict]:
         """Fetch COGS and Source links from Google Sheet for each ASIN"""
@@ -1372,9 +1377,22 @@ class EnhancedOrdersAnalysis:
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
                         print("DEBUG - OrdersAnalysis: search_all_worksheets is TRUE, fetching all worksheets")
-                        cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
-                            access_token, sheet_id, column_mapping
-                        )
+                        
+                        # Try the API call with token refresh on 401 error
+                        try:
+                            cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
+                                access_token, sheet_id, column_mapping
+                            )
+                        except Exception as e:
+                            if "401" in str(e) or "Unauthorized" in str(e):
+                                print("DEBUG - OrdersAnalysis: 401 error, refreshing token and retrying...")
+                                # Refresh token and retry
+                                access_token = refresh_google_token(temp_user_record)
+                                cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
+                                    access_token, sheet_id, column_mapping
+                                )
+                            else:
+                                raise
                         print(f"DEBUG - OrdersAnalysis: All worksheets fetched. Sheet data shape: {sheet_data.shape if hasattr(sheet_data, 'shape') else 'Not a DataFrame'}")
                         if hasattr(sheet_data, 'columns') and '_worksheet_source' in sheet_data.columns:
                             unique_worksheets = sheet_data['_worksheet_source'].unique()
@@ -1384,15 +1402,35 @@ class EnhancedOrdersAnalysis:
                         
                         # If all worksheets search failed and we have a specific worksheet, try that instead
                         if not cogs_data and worksheet_title:
-                            cogs_data, sheet_data = self.fetch_google_sheet_data(
-                                access_token, sheet_id, worksheet_title, column_mapping
-                            )
+                            try:
+                                cogs_data, sheet_data = self.fetch_google_sheet_data(
+                                    access_token, sheet_id, worksheet_title, column_mapping
+                                )
+                            except Exception as e:
+                                if "401" in str(e) or "Unauthorized" in str(e):
+                                    print("DEBUG - OrdersAnalysis: 401 error in fallback, refreshing token and retrying...")
+                                    access_token = refresh_google_token(temp_user_record)
+                                    cogs_data, sheet_data = self.fetch_google_sheet_data(
+                                        access_token, sheet_id, worksheet_title, column_mapping
+                                    )
+                                else:
+                                    raise
                             column_mapping_for_purchase = column_mapping
                             
                     elif worksheet_title:
-                        cogs_data, sheet_data = self.fetch_google_sheet_data(
-                            access_token, sheet_id, worksheet_title, column_mapping
-                        )
+                        try:
+                            cogs_data, sheet_data = self.fetch_google_sheet_data(
+                                access_token, sheet_id, worksheet_title, column_mapping
+                            )
+                        except Exception as e:
+                            if "401" in str(e) or "Unauthorized" in str(e):
+                                print("DEBUG - OrdersAnalysis: 401 error in single worksheet fetch, refreshing token and retrying...")
+                                access_token = refresh_google_token(temp_user_record)
+                                cogs_data, sheet_data = self.fetch_google_sheet_data(
+                                    access_token, sheet_id, worksheet_title, column_mapping
+                                )
+                            else:
+                                raise
                         column_mapping_for_purchase = column_mapping
                     else:
                         cogs_data = {}

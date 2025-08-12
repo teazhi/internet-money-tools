@@ -188,12 +188,22 @@ class EnhancedOrdersAnalysis:
             except Exception as e:
                 pass  # Timezone conversion error
         
-        # Filter by date range - convert dates to pandas datetime for comparison
-        start_date_pd = pd.to_datetime(start_date)
-        end_date_pd = pd.to_datetime(end_date)
+        # Filter by date range - properly handle date comparisons
+        # Convert date objects to pandas datetime for comparison
+        if isinstance(start_date, date):
+            start_date_pd = pd.Timestamp(start_date)
+        else:
+            start_date_pd = pd.to_datetime(start_date)
+            
+        if isinstance(end_date, date):
+            end_date_pd = pd.Timestamp(end_date)
+        else:
+            end_date_pd = pd.to_datetime(end_date)
+        
         # Filter out NaT values before comparison to avoid TypeError
         valid_dates_mask = df[date_col].notna()
-        date_range_mask = (df[date_col].dt.date >= start_date_pd.date()) & (df[date_col].dt.date <= end_date_pd.date())
+        # Compare datetime64 with datetime64 (not date objects)
+        date_range_mask = (df[date_col] >= start_date_pd) & (df[date_col] <= end_date_pd + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
         mask = valid_dates_mask & date_range_mask
         filtered_df = df[mask]
         

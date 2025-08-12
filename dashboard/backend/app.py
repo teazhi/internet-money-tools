@@ -4422,6 +4422,136 @@ def analyze_discount_opportunities():
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
 
+@app.route('/api/expected-arrivals', methods=['GET'])
+@login_required
+def get_expected_arrivals():
+    """Get items purchased in last 2 months that don't have Amazon listings created yet"""
+    try:
+        user_settings = get_user_settings(session['user_id'])
+        
+        if not user_settings:
+            return jsonify({"error": "User settings not found"}), 404
+
+        # Get the leads sheet settings (we'll use this to access the purchase data)
+        leads_sheet_id = user_settings.get('leads_sheet_id')
+        if not leads_sheet_id:
+            return jsonify({"error": "Google Sheet not configured. Please set up your leads sheet first."}), 400
+
+        # Initialize OrdersAnalysis to get purchase data
+        from orders_analysis import OrdersAnalysis
+        analysis = OrdersAnalysis()
+        
+        # Get purchase data from Google Sheets
+        try:
+            cogs_data, combined_purchase_df = analysis.fetch_google_sheet_cogs_data_all_worksheets(
+                sheet_id=leads_sheet_id,
+                column_mapping=user_settings.get('column_mapping', {}),
+                user_settings=user_settings
+            )
+        except Exception as e:
+            return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500
+
+        if combined_purchase_df.empty:
+            return jsonify({
+                "missing_listings": [],
+                "summary": {"total_items": 0, "total_cost": 0},
+                "message": "No recent purchase data found"
+            }), 200
+
+        # Analyze recent purchases (last 2 months)
+        from purchase_analytics import PurchaseAnalytics
+        purchase_analytics = PurchaseAnalytics()
+        purchase_insights = purchase_analytics.analyze_purchase_data(
+            combined_purchase_df, 
+            user_settings.get('column_mapping', {})
+        )
+        
+        recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
+        
+        if not recent_purchases_data:
+            return jsonify({
+                "missing_listings": [],
+                "summary": {"total_items": 0, "total_cost": 0},
+                "message": "No recent purchases found in the last 2 months"
+            }), 200
+
+        # Get ALL Sellerboard data (not just current inventory) to check for any listings
+        sellerboard_url = user_settings.get('sellerboard_stock_url')
+        if not sellerboard_url:
+            return jsonify({"error": "Sellerboard stock URL not configured"}), 400
+
+        try:
+            # Get complete Sellerboard analysis (includes all ASINs with any history)
+            inventory_analysis = analysis.analyze_sellerboard_stock(sellerboard_url)
+            
+            # Check both current inventory AND historical data for listings
+            current_inventory = inventory_analysis.get('enhanced_analytics', {})
+            all_known_asins = set(current_inventory.keys())
+            
+            # Also check basic analytics for any ASIN that has ever appeared
+            basic_analytics = inventory_analysis.get('analytics', {})
+            all_known_asins.update(basic_analytics.keys())
+            
+        except Exception as e:
+            return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
+
+        # Find items purchased recently but have NO Amazon listing created (not in Sellerboard at all)
+        missing_listings = []
+        total_cost = 0
+        total_quantity = 0
+
+        for asin, purchase_data in recent_purchases_data.items():
+            # Check if this ASIN has ANY presence in Sellerboard (indicating a listing exists)
+            has_listing = asin in all_known_asins
+            
+            if not has_listing:
+                # This item was purchased recently but has no Amazon listing created yet
+                item_info = {
+                    "asin": asin,
+                    "quantity_purchased": purchase_data.get('total_quantity_purchased', 0),
+                    "purchase_count": purchase_data.get('purchase_count', 0),
+                    "last_purchase_date": purchase_data.get('last_purchase_date'),
+                    "first_purchase_date": purchase_data.get('first_purchase_date'),
+                    "avg_cogs": purchase_data.get('avg_cogs_recent', 0),
+                    "total_cost": purchase_data.get('avg_cogs_recent', 0) * purchase_data.get('total_quantity_purchased', 0),
+                    "source_worksheets": purchase_data.get('source_worksheets', []),
+                    "analysis_period": purchase_data.get('analysis_period', 'Last 2 months'),
+                    "product_name": "",  # Will be filled from sheet data if available
+                    "status": "No Amazon listing created"
+                }
+                
+                # Try to get product name from the purchase data
+                asin_rows = combined_purchase_df[combined_purchase_df['ASIN'] == asin]
+                if not asin_rows.empty and 'Name' in asin_rows.columns:
+                    product_name = asin_rows['Name'].iloc[-1]  # Get most recent name
+                    if pd.notna(product_name) and product_name.strip():
+                        item_info["product_name"] = str(product_name).strip()
+                
+                missing_listings.append(item_info)
+                total_cost += item_info["total_cost"]
+                total_quantity += item_info["quantity_purchased"]
+
+        # Sort by most recent purchase date
+        missing_listings.sort(key=lambda x: x.get('last_purchase_date', ''), reverse=True)
+
+        return jsonify({
+            "missing_listings": missing_listings,
+            "summary": {
+                "total_items": len(missing_listings),
+                "total_quantity": int(total_quantity),
+                "total_cost": round(total_cost, 2)
+            },
+            "analyzed_at": datetime.now().isoformat(),
+            "analysis_period": "Last 2 months",
+            "message": f"Found {len(missing_listings)} purchased items without Amazon listings"
+        })
+
+    except Exception as e:
+        app.logger.error(f"Expected arrivals error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to analyze expected arrivals: {str(e)}"}), 500
+
 @app.route('/api/retailer-leads/worksheets', methods=['GET'])
 @login_required
 def get_available_worksheets():

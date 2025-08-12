@@ -916,6 +916,8 @@ class EnhancedOrdersAnalysis:
                 mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
                 expected_columns.add(mapped_column)
             
+            print(f"DEBUG - Expected columns after mapping: {expected_columns}")
+            
             
             combined_cogs_data = {}
             combined_dataframes = []  # For purchase analytics

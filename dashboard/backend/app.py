@@ -4770,10 +4770,17 @@ def analyze_retailer_leads():
                         'message': f'The worksheet "{worksheet}" appears to be empty'
                     }), 404
                 
-                # Convert to DataFrame
+                # Convert to DataFrame - pad rows to match header length
                 headers = values[0]
                 data = values[1:]
-                worksheet_df = pd.DataFrame(data, columns=headers)
+                
+                # Pad each row to match the number of headers
+                padded_data = []
+                for row in data:
+                    padded_row = row + [''] * (len(headers) - len(row))
+                    padded_data.append(padded_row)
+                
+                worksheet_df = pd.DataFrame(padded_data, columns=headers)
                 
             if worksheet_df.empty:
                 return jsonify({

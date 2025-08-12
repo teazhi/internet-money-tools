@@ -1084,19 +1084,30 @@ class EnhancedOrdersAnalysis:
             # Combine all DataFrames for purchase analytics
             if combined_dataframes:
                 try:
-                    pass  # Debug print removed
+                    print(f"DEBUG - Combining {len(combined_dataframes)} DataFrames for purchase analytics")
                     # Check for column compatibility before concatenating
                     if len(combined_dataframes) > 1:
                         first_cols = set(combined_dataframes[0].columns)
+                        print(f"DEBUG - First DataFrame columns: {first_cols}")
                         for i, df in enumerate(combined_dataframes[1:], 1):
                             current_cols = set(df.columns)
+                            print(f"DEBUG - DataFrame {i} columns: {current_cols}")
                             if first_cols != current_cols:
-                                pass  # Column mismatch
+                                print(f"DEBUG - Column mismatch between DataFrame 0 and {i}")
+                                missing_in_first = current_cols - first_cols
+                                missing_in_current = first_cols - current_cols
+                                print(f"DEBUG - Missing in first: {missing_in_first}")
+                                print(f"DEBUG - Missing in current: {missing_in_current}")
                     
                     combined_df = pd.concat(combined_dataframes, ignore_index=True, sort=False)
-                    pass  # Debug print removed
+                    print(f"DEBUG - Combined DataFrame shape: {combined_df.shape}")
+                    if '_worksheet_source' in combined_df.columns:
+                        unique_sources = combined_df['_worksheet_source'].unique()
+                        print(f"DEBUG - Combined DataFrame worksheet sources: {list(unique_sources)}")
                 except Exception as concat_error:
-                    pass  # Debug print removed
+                    print(f"DEBUG - Error combining DataFrames: {concat_error}")
+                    import traceback
+                    traceback.print_exc()
                     # Fall back to using just the first DataFrame
                     if combined_dataframes:
                         combined_df = combined_dataframes[0].copy()

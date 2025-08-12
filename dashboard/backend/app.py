@@ -4450,17 +4450,21 @@ def get_available_worksheets():
             
         sheet_id = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'  # Your leads sheet ID
         
-        # Import here to avoid circular imports
-        import sys
-        import os
-        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if parent_dir not in sys.path:
-            sys.path.append(parent_dir)
+        # Get Google access token
+        google_tokens = config_user_record.get('google_tokens', {})
         
-        from app import refresh_google_token
+        # Create a simple access token refresh
+        refresh_data = {
+            'refresh_token': google_tokens.get('refresh_token'),
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+            'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+            'grant_type': 'refresh_token'
+        }
         
-        # Refresh access token
-        access_token = refresh_google_token(config_user_record)
+        token_response = requests.post('https://oauth2.googleapis.com/token', data=refresh_data)
+        token_response.raise_for_status()
+        token_data = token_response.json()
+        access_token = token_data['access_token']
         
         # Get list of all worksheets in the sheet
         metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
@@ -4696,17 +4700,23 @@ def analyze_retailer_leads():
             }), 400
             
         try:
-            # Import here to avoid circular imports
-            import sys
-            import os
-            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
+            # Get Google access token - use the refresh_google_token function from app.py
+            discord_id_temp = discord_id  # Store temporarily
+            google_tokens = config_user_record.get('google_tokens', {})
             
-            from app import refresh_google_token
+            # Create a simple access token refresh
+            import requests as req
+            refresh_data = {
+                'refresh_token': google_tokens.get('refresh_token'),
+                'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+                'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+                'grant_type': 'refresh_token'
+            }
             
-            # Refresh access token
-            access_token = refresh_google_token(config_user_record)
+            token_response = req.post('https://oauth2.googleapis.com/token', data=refresh_data)
+            token_response.raise_for_status()
+            token_data = token_response.json()
+            access_token = token_data['access_token']
             
             # First, get list of all worksheets in the sheet
             metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
@@ -4789,7 +4799,9 @@ def analyze_retailer_leads():
                 }), 404
                 
         except Exception as e:
+            import traceback
             print(f"Error fetching Google Sheets data: {e}")
+            traceback.print_exc()
             return jsonify({
                 'error': f'Failed to fetch data for: {worksheet}',
                 'message': f'Could not load worksheet data: {str(e)}'

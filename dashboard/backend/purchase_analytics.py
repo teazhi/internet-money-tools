@@ -474,36 +474,53 @@ class PurchaseAnalytics:
             current_month_sheets = [ws for ws in worksheets if current_month in ws.upper()]
             previous_month_sheets = [ws for ws in worksheets if previous_month in ws.upper()]
             
-            # Also check for the first worksheet (assuming it's the current month if not named with month)
-            first_worksheet = worksheets[0] if len(worksheets) > 0 else None
+            # Convert worksheets to a list for easier handling
+            worksheets_list = list(worksheets)
             
-            # Combine sheets in the correct order
+            # Strategy: Use first worksheet as current month, find July worksheet, or use first 2 worksheets
             last_2_months_sheets = []
             
-            # If we found current month sheets by name, use them
-            if current_month_sheets:
-                last_2_months_sheets.extend(current_month_sheets)
-                print(f"DEBUG - Found current month ({current_month}) sheets: {current_month_sheets}")
-            # Otherwise, assume the first worksheet is current month
-            elif first_worksheet and first_worksheet not in previous_month_sheets:
-                last_2_months_sheets.append(first_worksheet)
-                print(f"DEBUG - Using first worksheet as current month: {first_worksheet}")
+            # Always include the first worksheet (assumed to be current month)
+            if worksheets_list:
+                last_2_months_sheets.append(worksheets_list[0])
+                print(f"DEBUG - Using first worksheet as current month: {worksheets_list[0]}")
             
-            # Add previous month sheets
+            # Look for July worksheet specifically
             if previous_month_sheets:
-                last_2_months_sheets.extend(previous_month_sheets)
-                print(f"DEBUG - Found previous month ({previous_month}) sheets: {previous_month_sheets}")
-            
-            # If we still don't have 2 months worth of data, add more worksheets
-            if len(last_2_months_sheets) < 2 and len(worksheets) > len(last_2_months_sheets):
-                for ws in worksheets:
-                    if ws not in last_2_months_sheets:
-                        last_2_months_sheets.append(ws)
-                        if len(last_2_months_sheets) >= 2:
+                # Add July worksheets
+                for july_sheet in previous_month_sheets:
+                    if july_sheet not in last_2_months_sheets:
+                        last_2_months_sheets.append(july_sheet)
+                print(f"DEBUG - Found July sheets: {previous_month_sheets}")
+            else:
+                # No July worksheet found, look for other worksheets that might contain July data
+                july_variants = ['JULY', 'July', 'july', '07', 'JUL', 'Jul']
+                july_found = False
+                
+                for ws in worksheets_list:
+                    if any(variant in ws for variant in july_variants):
+                        if ws not in last_2_months_sheets:
+                            last_2_months_sheets.append(ws)
+                            july_found = True
+                            print(f"DEBUG - Found July variant worksheet: {ws}")
                             break
-                print(f"DEBUG - Added additional worksheets to reach 2 months")
+                
+                if not july_found:
+                    # Still no July found, just use the next available worksheet
+                    for ws in worksheets_list[1:]:  # Skip first worksheet (already added)
+                        if ws not in last_2_months_sheets:
+                            last_2_months_sheets.append(ws)
+                            print(f"DEBUG - No July worksheet found, using next available: {ws}")
+                            break
+            
+            # Ensure we have exactly the sheets we want (limit to 2 for now)
+            last_2_months_sheets = last_2_months_sheets[:2]
             
             print(f"DEBUG - Final selected worksheets for recent purchases: {last_2_months_sheets}")
+            
+            # If we only have 1 worksheet, that's okay - use what we have
+            if len(last_2_months_sheets) == 1:
+                print("DEBUG - Only 1 worksheet available for recent purchases analysis")
             
             last_2_worksheets = last_2_months_sheets
             

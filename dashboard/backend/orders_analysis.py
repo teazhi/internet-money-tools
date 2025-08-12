@@ -906,6 +906,7 @@ class EnhancedOrdersAnalysis:
             
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
+            print(f"DEBUG - fetch_google_sheet_cogs_data_all_worksheets: Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
             # Expected column structure based on user's column mapping
             # Get the actual column names from user's mapping (excluding source field which we'll detect dynamically)
@@ -1301,9 +1302,14 @@ class EnhancedOrdersAnalysis:
                     
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
+                        print("DEBUG - OrdersAnalysis: search_all_worksheets is TRUE, fetching all worksheets")
                         cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
                             access_token, sheet_id, column_mapping
                         )
+                        print(f"DEBUG - OrdersAnalysis: All worksheets fetched. Sheet data shape: {sheet_data.shape if hasattr(sheet_data, 'shape') else 'Not a DataFrame'}")
+                        if hasattr(sheet_data, 'columns') and '_worksheet_source' in sheet_data.columns:
+                            unique_worksheets = sheet_data['_worksheet_source'].unique()
+                            print(f"DEBUG - OrdersAnalysis: Unique worksheet sources in data: {list(unique_worksheets)}")
                         # Use the user's column mapping for purchase analytics
                         column_mapping_for_purchase = column_mapping
                         

@@ -3787,6 +3787,152 @@ def download_lambda_code(function_name):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/deploy-lambda-smart', methods=['POST'])
+@admin_required
+def deploy_lambda_smart():
+    """Smart Lambda deployment with requirements.txt support"""
+    try:
+        import zipfile
+        import tempfile
+        import os
+        import subprocess
+        import shutil
+        
+        deployment_type = request.form.get('deployment_type')
+        lambda_name = request.form.get('lambda_name')
+        
+        if not deployment_type or not lambda_name:
+            return jsonify({'error': 'deployment_type and lambda_name are required'}), 400
+            
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({'error': 'No files provided for deployment'}), 400
+        
+        # Create temporary working directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Save uploaded files to temp directory
+            uploaded_files = []
+            has_requirements = False
+            requirements_content = None
+            
+            for file in files:
+                if file.filename:
+                    file_path = os.path.join(temp_dir, file.filename)
+                    file.save(file_path)
+                    uploaded_files.append(file.filename)
+                    
+                    if file.filename == 'requirements.txt':
+                        has_requirements = True
+                        with open(file_path, 'r') as f:
+                            requirements_content = f.read()
+            
+            # Create deployment package directory
+            package_dir = os.path.join(temp_dir, 'package')
+            os.makedirs(package_dir)
+            
+            deployment_info = {
+                'files_uploaded': uploaded_files,
+                'has_requirements': has_requirements,
+                'requirements_content': requirements_content.split('\n') if requirements_content else [],
+                'dependencies_installed': [],
+                'deployment_method': 'unknown'
+            }
+            
+            if has_requirements:
+                # Smart deployment with requirements.txt
+                deployment_info['deployment_method'] = 'requirements.txt'
+                
+                # Install dependencies using pip with target directory
+                requirements_path = os.path.join(temp_dir, 'requirements.txt')
+                
+                # Install packages to package directory
+                pip_cmd = [
+                    'pip', 'install', 
+                    '-r', requirements_path,
+                    '-t', package_dir,
+                    '--no-deps',  # Don't install dependencies of dependencies
+                    '--only-binary=:all:',  # Only use wheel files for compatibility
+                ]
+                
+                try:
+                    result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=300)
+                    if result.returncode != 0:
+                        # Try without --no-deps and --only-binary flags
+                        pip_cmd = ['pip', 'install', '-r', requirements_path, '-t', package_dir]
+                        result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=300)
+                    
+                    if result.returncode == 0:
+                        deployment_info['dependencies_installed'] = result.stdout.split('\n')
+                        deployment_info['pip_output'] = result.stdout
+                    else:
+                        return jsonify({
+                            'error': f'Failed to install dependencies: {result.stderr}',
+                            'pip_stdout': result.stdout,
+                            'pip_stderr': result.stderr
+                        }), 500
+                        
+                except subprocess.TimeoutExpired:
+                    return jsonify({'error': 'Dependency installation timed out after 5 minutes'}), 500
+                except Exception as e:
+                    return jsonify({'error': f'Failed to run pip install: {str(e)}'}), 500
+            else:
+                # Manual deployment - copy all files directly
+                deployment_info['deployment_method'] = 'manual_files'
+            
+            # Copy Python files to package directory
+            for filename in uploaded_files:
+                if filename.endswith('.py') or filename.endswith('.json') or filename.endswith('.txt'):
+                    src_path = os.path.join(temp_dir, filename)
+                    dst_path = os.path.join(package_dir, filename)
+                    shutil.copy2(src_path, dst_path)
+            
+            # Create deployment zip
+            zip_path = os.path.join(temp_dir, 'deployment.zip')
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for root, dirs, files in os.walk(package_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, package_dir)
+                        zip_file.write(file_path, arc_name)
+            
+            # Read the zip file content
+            with open(zip_path, 'rb') as zip_data:
+                zip_content = zip_data.read()
+            
+            deployment_info['package_size'] = len(zip_content)
+            deployment_info['package_size_mb'] = round(len(zip_content) / 1024 / 1024, 2)
+        
+        # Deploy to Lambda
+        lambda_client = boto3.client(
+            'lambda',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Update function code
+        response = lambda_client.update_function_code(
+            FunctionName=lambda_name,
+            ZipFile=zip_content
+        )
+        
+        return jsonify({
+            'message': f'Successfully deployed to {lambda_name}',
+            'function_name': lambda_name,
+            'deployment_type': deployment_type,
+            'deployment_info': deployment_info,
+            'lambda_response': {
+                'code_size': response.get('CodeSize'),
+                'last_modified': response.get('LastModified')
+            }
+        })
+        
+    except Exception as e:
+        pass  # Debug print removed
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/analyze-lambda/<function_name>', methods=['GET'])
 @admin_required
 def analyze_lambda_structure(function_name):
@@ -3866,6 +4012,124 @@ def analyze_lambda_structure(function_name):
                 os.unlink(temp_zip_path)
                 
                 return jsonify(analysis)
+                
+            except zipfile.BadZipFile:
+                os.unlink(temp_zip_path)
+                return jsonify({'error': 'Downloaded file is not a valid zip file'}), 500
+            except Exception as e:
+                os.unlink(temp_zip_path)
+                return jsonify({'error': f'Failed to analyze zip file: {str(e)}'}), 500
+                
+        else:
+            return jsonify({'error': 'Failed to download Lambda code'}), 500
+            
+    except Exception as e:
+        pass  # Debug print removed
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/extract-requirements/<function_name>', methods=['GET'])
+@admin_required
+def extract_requirements_from_lambda(function_name):
+    """Extract requirements.txt from current Lambda deployment"""
+    try:
+        import requests
+        import zipfile
+        import tempfile
+        import os
+        import re
+        
+        lambda_client = boto3.client(
+            'lambda',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Get function information
+        function_info = lambda_client.get_function(FunctionName=function_name)
+        code_location = function_info['Code']['Location']
+        
+        # Download the zip file
+        zip_response = requests.get(code_location)
+        
+        if zip_response.status_code == 200:
+            # Create temporary file to analyze zip contents
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip:
+                temp_zip.write(zip_response.content)
+                temp_zip_path = temp_zip.name
+            
+            try:
+                package_mapping = {
+                    'dotenv': 'python-dotenv',
+                    'boto3': 'boto3',
+                    'botocore': 'botocore', 
+                    's3transfer': 's3transfer',
+                    'urllib3': 'urllib3',
+                    'certifi': 'certifi',
+                    'charset_normalizer': 'charset-normalizer',
+                    'idna': 'idna',
+                    'requests': 'requests',
+                    'openpyxl': 'openpyxl',
+                    'pandas': 'pandas',
+                    'numpy': 'numpy',
+                    'pytz': 'pytz',
+                    'dateutil': 'python-dateutil',
+                    'six': 'six',
+                    'et_xmlfile': 'et-xmlfile',
+                    'jdcal': 'jdcal'
+                }
+                
+                detected_packages = set()
+                
+                with zipfile.ZipFile(temp_zip_path, 'r') as zip_file:
+                    file_list = zip_file.namelist()
+                    
+                    # Look for package directories and dist-info folders
+                    for file_path in file_list:
+                        if '/' in file_path and not file_path.endswith('.py'):
+                            parts = file_path.split('/')
+                            potential_package = parts[0]
+                            
+                            # Check for dist-info folders to get exact package names
+                            if potential_package.endswith('.dist-info'):
+                                package_name = potential_package.replace('.dist-info', '').lower()
+                                # Try to extract version from METADATA if available
+                                metadata_path = f"{potential_package}/METADATA"
+                                if metadata_path in file_list:
+                                    try:
+                                        metadata_content = zip_file.read(metadata_path).decode('utf-8')
+                                        version_match = re.search(r'Version: ([\d\.]+)', metadata_content)
+                                        if version_match:
+                                            version = version_match.group(1)
+                                            detected_packages.add(f"{package_name}=={version}")
+                                        else:
+                                            detected_packages.add(package_name)
+                                    except:
+                                        detected_packages.add(package_name)
+                                else:
+                                    detected_packages.add(package_name)
+                            
+                            # Also check for regular package directories
+                            elif potential_package in package_mapping:
+                                detected_packages.add(package_mapping[potential_package])
+                            elif potential_package.replace('_', '-') in package_mapping.values():
+                                detected_packages.add(potential_package.replace('_', '-'))
+                
+                # Clean up temp file
+                os.unlink(temp_zip_path)
+                
+                # Sort packages alphabetically
+                requirements_list = sorted(list(detected_packages))
+                
+                return jsonify({
+                    'function_name': function_name,
+                    'detected_packages': requirements_list,
+                    'requirements_txt': '\n'.join(requirements_list),
+                    'package_count': len(requirements_list),
+                    'extraction_method': 'dist-info_analysis'
+                })
                 
             except zipfile.BadZipFile:
                 os.unlink(temp_zip_path)

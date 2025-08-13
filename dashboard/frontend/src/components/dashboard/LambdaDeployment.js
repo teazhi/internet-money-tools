@@ -32,6 +32,15 @@ const LambdaDeployment = () => {
     prepUploader: null
   });
   const [analyzingFunction, setAnalyzingFunction] = useState(null);
+  const [extractingRequirements, setExtractingRequirements] = useState(null);
+  const [extractedRequirements, setExtractedRequirements] = useState({
+    costUpdater: null,
+    prepUploader: null
+  });
+  const [deploymentMode, setDeploymentMode] = useState({
+    costUpdater: 'auto', // 'auto', 'manual', 'smart'
+    prepUploader: 'auto'
+  });
 
   useEffect(() => {
     fetchDiagnostics();
@@ -76,6 +85,10 @@ const LambdaDeployment = () => {
       setLoading(prev => ({ ...prev, [deploymentType]: true }));
       setMessage({ type: '', text: '' });
 
+      // Check if requirements.txt is included
+      const hasRequirements = Array.from(deployment.files).some(file => file.name === 'requirements.txt');
+      const mode = deploymentMode[deploymentType];
+
       // Create FormData for file upload
       const formData = new FormData();
       
@@ -90,16 +103,31 @@ const LambdaDeployment = () => {
         : lambdaDiagnostics?.prep_uploader_lambda_name || 'prepUploader'
       );
 
-      await axios.post('/api/admin/deploy-lambda', formData, {
+      // Use smart deployment if requirements.txt detected or mode is set to smart
+      const useSmartDeployment = hasRequirements || mode === 'smart';
+      const endpoint = useSmartDeployment ? '/api/admin/deploy-lambda-smart' : '/api/admin/deploy-lambda';
+
+      const response = await axios.post(endpoint, formData, {
         withCredentials: true,
         headers: {
           'Content-Type': 'multipart/form-data',
         }
       });
 
+      let successMessage = `${deploymentType === 'costUpdater' ? 'Cost Updater' : 'Prep Uploader'} deployed successfully!`;
+      
+      if (response.data.deployment_info) {
+        const info = response.data.deployment_info;
+        if (info.deployment_method === 'requirements.txt') {
+          successMessage += ` Dependencies installed automatically. Package size: ${info.package_size_mb}MB`;
+        } else {
+          successMessage += ` ${deployment.files.length} files uploaded.`;
+        }
+      }
+
       setMessage({ 
         type: 'success', 
-        text: `${deploymentType === 'costUpdater' ? 'Cost Updater' : 'Prep Uploader'} deployed successfully! Function updated with ${deployment.files.length} files.` 
+        text: successMessage
       });
 
       // Clear the file selection
@@ -175,6 +203,52 @@ const LambdaDeployment = () => {
     } finally {
       setAnalyzingFunction(null);
     }
+  };
+
+  const extractRequirements = async (deploymentType) => {
+    try {
+      setExtractingRequirements(deploymentType);
+      const lambdaName = deploymentType === 'costUpdater' 
+        ? lambdaDiagnostics?.cost_updater_lambda_name || 'amznAndSBUpload'
+        : lambdaDiagnostics?.prep_uploader_lambda_name || 'prepUploader';
+
+      const response = await axios.get(`/api/admin/extract-requirements/${lambdaName}`, {
+        withCredentials: true
+      });
+
+      setExtractedRequirements(prev => ({
+        ...prev,
+        [deploymentType]: response.data
+      }));
+
+      setMessage({ 
+        type: 'success', 
+        text: `Extracted ${response.data.package_count} dependencies from ${deploymentType === 'costUpdater' ? 'Cost Updater' : 'Prep Uploader'}` 
+      });
+
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: `Failed to extract requirements: ${error.response?.data?.error || error.message}` 
+      });
+    } finally {
+      setExtractingRequirements(null);
+    }
+  };
+
+  const downloadRequirementsTxt = (deploymentType) => {
+    const extracted = extractedRequirements[deploymentType];
+    if (!extracted) return;
+
+    const blob = new Blob([extracted.requirements_txt], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${deploymentType}-requirements.txt`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   };
 
   // If not admin, show access denied
@@ -310,6 +384,42 @@ const LambdaDeployment = () => {
           </div>
 
           <div className="space-y-4">
+            {/* Requirements.txt Extraction */}
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h5 className="text-sm font-medium text-blue-900">Switch to requirements.txt</h5>
+                  <p className="text-xs text-blue-700">Extract dependencies from current deployment</p>
+                </div>
+                <button
+                  onClick={() => extractRequirements('costUpdater')}
+                  disabled={extractingRequirements === 'costUpdater'}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {extractingRequirements === 'costUpdater' ? 'Extracting...' : 'Extract'}
+                </button>
+              </div>
+              {extractedRequirements.costUpdater && (
+                <div className="mt-3 p-2 bg-white rounded border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-700">
+                      {extractedRequirements.costUpdater.package_count} packages detected
+                    </span>
+                    <button
+                      onClick={() => downloadRequirementsTxt('costUpdater')}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Download requirements.txt
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-600 max-h-20 overflow-y-auto font-mono">
+                    {extractedRequirements.costUpdater.detected_packages.slice(0, 5).join('\n')}
+                    {extractedRequirements.costUpdater.detected_packages.length > 5 && '\n...'}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* File Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -323,10 +433,21 @@ const LambdaDeployment = () => {
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
               {deployments.costUpdater.files && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {deployments.costUpdater.files.length} file(s) selected
-                </p>
+                <div className="mt-2">
+                  <p className="text-xs text-gray-500">
+                    {deployments.costUpdater.files.length} file(s) selected
+                  </p>
+                  {Array.from(deployments.costUpdater.files).some(file => file.name === 'requirements.txt') && (
+                    <div className="text-xs text-green-600 mt-1 flex items-center">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      requirements.txt detected - Smart deployment will be used
+                    </div>
+                  )}
+                </div>
               )}
+              <p className="text-xs text-gray-500 mt-1">
+                <strong>Smart deployment:</strong> Include requirements.txt + Python files for automatic dependency installation
+              </p>
             </div>
 
             {/* Actions */}
@@ -384,6 +505,42 @@ const LambdaDeployment = () => {
           </div>
 
           <div className="space-y-4">
+            {/* Requirements.txt Extraction */}
+            <div className="bg-purple-50 border border-purple-200 rounded-md p-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h5 className="text-sm font-medium text-purple-900">Switch to requirements.txt</h5>
+                  <p className="text-xs text-purple-700">Extract dependencies from current deployment</p>
+                </div>
+                <button
+                  onClick={() => extractRequirements('prepUploader')}
+                  disabled={extractingRequirements === 'prepUploader'}
+                  className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {extractingRequirements === 'prepUploader' ? 'Extracting...' : 'Extract'}
+                </button>
+              </div>
+              {extractedRequirements.prepUploader && (
+                <div className="mt-3 p-2 bg-white rounded border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-700">
+                      {extractedRequirements.prepUploader.package_count} packages detected
+                    </span>
+                    <button
+                      onClick={() => downloadRequirementsTxt('prepUploader')}
+                      className="text-xs text-purple-600 hover:text-purple-800"
+                    >
+                      Download requirements.txt
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-600 max-h-20 overflow-y-auto font-mono">
+                    {extractedRequirements.prepUploader.detected_packages.slice(0, 5).join('\n')}
+                    {extractedRequirements.prepUploader.detected_packages.length > 5 && '\n...'}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* File Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -397,10 +554,21 @@ const LambdaDeployment = () => {
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
               />
               {deployments.prepUploader.files && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {deployments.prepUploader.files.length} file(s) selected
-                </p>
+                <div className="mt-2">
+                  <p className="text-xs text-gray-500">
+                    {deployments.prepUploader.files.length} file(s) selected
+                  </p>
+                  {Array.from(deployments.prepUploader.files).some(file => file.name === 'requirements.txt') && (
+                    <div className="text-xs text-green-600 mt-1 flex items-center">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      requirements.txt detected - Smart deployment will be used
+                    </div>
+                  )}
+                </div>
               )}
+              <p className="text-xs text-gray-500 mt-1">
+                <strong>Smart deployment:</strong> Include requirements.txt + Python files for automatic dependency installation
+              </p>
             </div>
 
             {/* Actions */}
@@ -572,13 +740,14 @@ const LambdaDeployment = () => {
         <div className="flex items-start space-x-3">
           <Code className="h-5 w-5 text-blue-500 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-blue-900">Deployment Instructions</h4>
+            <h4 className="text-sm font-medium text-blue-900">Smart Lambda Deployment</h4>
             <div className="text-sm text-blue-700 mt-2 space-y-2">
-              <p>• <strong>Select Multiple Files:</strong> Choose all Python files, dependencies, and config files for your Lambda function</p>
-              <p>• <strong>Auto-Zip & Deploy:</strong> Files are automatically zipped and deployed to the Lambda function</p>
-              <p>• <strong>Download Current:</strong> Use the download button to get the current deployed code</p>
-              <p>• <strong>No Manual Zipping:</strong> The system handles packaging and deployment automatically</p>
-              <p>• <strong>Instant Updates:</strong> Changes are live immediately after successful deployment</p>
+              <p>• <strong>Extract Dependencies:</strong> Click "Extract" to create requirements.txt from your current deployment</p>
+              <p>• <strong>Smart Deployment:</strong> Upload requirements.txt + Python files for automatic dependency installation</p>
+              <p>• <strong>Manual Deployment:</strong> Upload all files directly (old method still supported)</p>
+              <p>• <strong>Smaller Packages:</strong> requirements.txt deployments are much smaller and faster</p>
+              <p>• <strong>Version Control:</strong> Easily manage and update specific package versions</p>
+              <p>• <strong>Automatic Detection:</strong> System detects requirements.txt and switches to smart deployment</p>
             </div>
           </div>
         </div>

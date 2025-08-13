@@ -1404,7 +1404,16 @@ def debug_stock_columns():
         if not user_record:
             return jsonify({'error': 'User record not found'}), 404
         
-        stock_url = user_record.get('sellerboard_stock_url')
+        # Get user config for Sellerboard access (use parent config for subusers)
+        config_user_record = user_record
+        if user_record and user_record.get('user_type') == 'subuser':
+            parent_user_id = user_record.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        stock_url = config_user_record.get('sellerboard_stock_url')
         if not stock_url:
             return jsonify({'error': 'Stock URL not configured'}), 400
         
@@ -4569,7 +4578,7 @@ def get_expected_arrivals():
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = user_record.get('sellerboard_stock_url')
+        sellerboard_url = config_user_record.get('sellerboard_stock_url')
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 

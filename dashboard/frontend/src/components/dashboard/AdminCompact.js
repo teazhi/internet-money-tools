@@ -38,7 +38,6 @@ const AdminCompact = () => {
   const [success, setSuccess] = useState('');
   const [systemStats, setSystemStats] = useState(null);
   const [invitations, setInvitations] = useState([]);
-  const [scriptConfigs, setScriptConfigs] = useState({});
   const [discountMonitoring, setDiscountMonitoring] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -50,20 +49,15 @@ const AdminCompact = () => {
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
-  const [scriptModalOpen, setScriptModalOpen] = useState(false);
-  const [editingConfigs, setEditingConfigs] = useState({});
-  const [savingConfigs, setSavingConfigs] = useState(false);
-
   const fetchData = useCallback(async () => {
     if (!isAdmin) return;
     
     try {
       setLoading(true);
-      const [usersRes, statsRes, invitesRes, scriptsRes, discountRes] = await Promise.all([
+      const [usersRes, statsRes, invitesRes, discountRes] = await Promise.all([
         axios.get('/api/admin/users', { withCredentials: true }),
         axios.get('/api/admin/stats', { withCredentials: true }),
         axios.get('/api/admin/invitations', { withCredentials: true }),
-        axios.get('/api/admin/script-configs', { withCredentials: true }),
         axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true })
       ]);
       
@@ -71,8 +65,6 @@ const AdminCompact = () => {
       setUsers(users);
       setSystemStats(statsRes.data);
       setInvitations(invitesRes.data.invitations || []);
-      setScriptConfigs(scriptsRes.data);
-      setEditingConfigs(scriptsRes.data);
       setDiscountMonitoring(discountRes.data);
       
       // Organize users hierarchically
@@ -225,29 +217,6 @@ const AdminCompact = () => {
     }
   };
 
-  const handleSaveScriptConfigs = async () => {
-    setSavingConfigs(true);
-    try {
-      await axios.post('/api/admin/script-configs', editingConfigs, { withCredentials: true });
-      setScriptConfigs(editingConfigs);
-      setSuccess('Script configurations updated successfully!');
-      setScriptModalOpen(false);
-    } catch (error) {
-      setError('Failed to save script configurations');
-    } finally {
-      setSavingConfigs(false);
-    }
-  };
-
-  const handleConfigChange = (configKey, field, value) => {
-    setEditingConfigs(prev => ({
-      ...prev,
-      [configKey]: {
-        ...prev[configKey],
-        [field]: value
-      }
-    }));
-  };
 
   const handleAssignVA = async () => {
     if (!assigningVA || !selectedParentUser) return;
@@ -404,9 +373,7 @@ const AdminCompact = () => {
   }
 
   const tabs = [
-    { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
-    { id: 'scripts', name: 'Scripts', icon: Cog, count: null },
-    { id: 'discount', name: 'Discounts', icon: Percent, count: null }
+    { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length }
   ];
 
   return (
@@ -723,96 +690,6 @@ const AdminCompact = () => {
               )}
 
 
-              {/* Scripts Tab */}
-              {activeTab === 'scripts' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Script Configuration</h3>
-                    <button
-                      onClick={() => setScriptModalOpen(true)}
-                      className="flex items-center px-3 py-2 bg-builders-600 text-white rounded-md text-sm hover:bg-builders-700"
-                    >
-                      <Settings className="h-4 w-4 mr-1" />
-                      Configure
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="border rounded-lg p-4">
-                      <div className="flex items-center mb-3">
-                        <Database className="h-6 w-6 text-green-500 mr-2" />
-                        <div>
-                          <h4 className="font-medium">Listing Loader</h4>
-                          <p className="text-xs text-gray-500">Amazon orders processing</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">
-                          Last: {scriptConfigs?.amznUploadConfig?.last_processed_date || 'Not set'}
-                        </span>
-                        <button className="flex items-center px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">
-                          <Play className="h-3 w-3 mr-1" />
-                          Run
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="border rounded-lg p-4">
-                      <div className="flex items-center mb-3">
-                        <Upload className="h-6 w-6 text-blue-500 mr-2" />
-                        <div>
-                          <h4 className="font-medium">Prep Uploader</h4>
-                          <p className="text-xs text-gray-500">Prep center automation</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">
-                          Last: {scriptConfigs?.config?.last_processed_date || 'Not set'}
-                        </span>
-                        <button className="flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:blue-700">
-                          <Play className="h-3 w-3 mr-1" />
-                          Run
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Discount Tab */}
-              {activeTab === 'discount' && discountMonitoring && (
-                <div className="space-y-4">
-                  <div className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center">
-                        <Mail className={`h-6 w-6 mr-2 ${
-                          discountMonitoring.email_configured ? 'text-green-500' : 'text-red-500'
-                        }`} />
-                        <div>
-                          <h4 className="font-medium">Distill.io Monitoring</h4>
-                          <p className="text-xs text-gray-500">Email: {discountMonitoring.sender_email}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        discountMonitoring.status === 'active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {discountMonitoring.status === 'active' ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    
-                    {discountMonitoring.email_configured && (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Monitor Email:</span>
-                          <span className="font-medium">{discountMonitoring.monitor_email}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                </div>
-              )}
 
             </>
           )}
@@ -866,82 +743,6 @@ const AdminCompact = () => {
         </div>
       )}
 
-      {/* Script Configuration Modal */}
-      {scriptModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Script Configuration</h3>
-              <button
-                onClick={() => setScriptModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {/* Amazon Upload Config */}
-              <div className="border rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                  <Database className="h-5 w-5 mr-2 text-green-500" />
-                  Amazon Listing Loader Configuration
-                </h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Processed Date
-                    </label>
-                    <input
-                      type="date"
-                      value={editingConfigs?.amznUploadConfig?.last_processed_date || ''}
-                      onChange={(e) => handleConfigChange('amznUploadConfig', 'last_processed_date', e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Prep Center Config */}
-              <div className="border rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                  <Upload className="h-5 w-5 mr-2 text-blue-500" />
-                  Prep Center Configuration
-                </h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Processed Date
-                    </label>
-                    <input
-                      type="date"
-                      value={editingConfigs?.config?.last_processed_date || ''}
-                      onChange={(e) => handleConfigChange('config', 'last_processed_date', e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-              
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setScriptModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveScriptConfigs}
-                disabled={savingConfigs}
-                className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50"
-              >
-                {savingConfigs ? 'Saving...' : 'Save Configuration'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Assign VA Modal */}
       {showAssignModal && assigningVA && (

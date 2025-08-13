@@ -10,7 +10,11 @@ import {
   Package,
   Code,
   Activity,
-  Download
+  Download,
+  Database,
+  Play,
+  Settings,
+  X
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -41,9 +45,15 @@ const LambdaDeployment = () => {
     costUpdater: 'auto', // 'auto', 'manual', 'smart'
     prepUploader: 'auto'
   });
+  const [scriptConfigs, setScriptConfigs] = useState({});
+  const [scriptModalOpen, setScriptModalOpen] = useState(false);
+  const [editingConfigs, setEditingConfigs] = useState({});
+  const [savingConfigs, setSavingConfigs] = useState(false);
+  const [runningScript, setRunningScript] = useState(null);
 
   useEffect(() => {
     fetchDiagnostics();
+    fetchScriptConfigs();
   }, []);
 
   const fetchDiagnostics = async () => {
@@ -59,6 +69,16 @@ const LambdaDeployment = () => {
       });
     } finally {
       setLoading(prev => ({ ...prev, diagnostics: false }));
+    }
+  };
+
+  const fetchScriptConfigs = async () => {
+    try {
+      const response = await axios.get('/api/admin/script-configs', { withCredentials: true });
+      setScriptConfigs(response.data);
+      setEditingConfigs(response.data);
+    } catch (error) {
+      console.error('Failed to fetch script configs:', error);
     }
   };
 
@@ -249,6 +269,62 @@ const LambdaDeployment = () => {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  };
+
+  const handleSaveScriptConfigs = async () => {
+    setSavingConfigs(true);
+    try {
+      await axios.post('/api/admin/script-configs', editingConfigs, { withCredentials: true });
+      setScriptConfigs(editingConfigs);
+      setMessage({ 
+        type: 'success', 
+        text: 'Script configurations updated successfully!' 
+      });
+      setScriptModalOpen(false);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to save script configurations' 
+      });
+    } finally {
+      setSavingConfigs(false);
+    }
+  };
+
+  const handleConfigChange = (configKey, field, value) => {
+    setEditingConfigs(prev => ({
+      ...prev,
+      [configKey]: {
+        ...prev[configKey],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleRunScript = async (scriptType) => {
+    setRunningScript(scriptType);
+    try {
+      const scriptName = scriptType === 'costUpdater' ? 'listing_loader' : 'prep_uploader';
+      
+      const response = await axios.post('/api/admin/trigger-script', {
+        script_type: scriptName
+      }, { withCredentials: true });
+      
+      setMessage({ 
+        type: 'success', 
+        text: `${scriptType === 'costUpdater' ? 'Listing Loader' : 'Prep Uploader'} script started successfully!` 
+      });
+      
+      // Refresh configs after running
+      setTimeout(fetchScriptConfigs, 2000);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: `Failed to run script: ${error.response?.data?.error || error.message}` 
+      });
+    } finally {
+      setRunningScript(null);
+    }
   };
 
   // If not admin, show access denied
@@ -735,6 +811,89 @@ const LambdaDeployment = () => {
         </div>
       )}
 
+      {/* Script Configuration Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <Settings className="h-5 w-5 mr-2" />
+            Script Configuration
+          </h3>
+          <button
+            onClick={() => setScriptModalOpen(true)}
+            className="flex items-center px-3 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700"
+          >
+            <Settings className="h-4 w-4 mr-1" />
+            Configure
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center mb-3">
+              <Database className="h-6 w-6 text-green-500 mr-2" />
+              <div>
+                <h4 className="font-medium">Listing Loader</h4>
+                <p className="text-xs text-gray-500">Amazon orders processing</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">
+                Last: {scriptConfigs?.amznUploadConfig?.last_processed_date || 'Not set'}
+              </span>
+              <button 
+                onClick={() => handleRunScript('costUpdater')}
+                disabled={runningScript === 'costUpdater'}
+                className="flex items-center px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50"
+              >
+                {runningScript === 'costUpdater' ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Run
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center mb-3">
+              <Upload className="h-6 w-6 text-blue-500 mr-2" />
+              <div>
+                <h4 className="font-medium">Prep Uploader</h4>
+                <p className="text-xs text-gray-500">Prep center automation</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">
+                Last: {scriptConfigs?.config?.last_processed_date || 'Not set'}
+              </span>
+              <button 
+                onClick={() => handleRunScript('prepUploader')}
+                disabled={runningScript === 'prepUploader'}
+                className="flex items-center px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+              >
+                {runningScript === 'prepUploader' ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Run
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
         <div className="flex items-start space-x-3">
@@ -764,6 +923,83 @@ const LambdaDeployment = () => {
           <span>Refresh Status</span>
         </button>
       </div>
+
+      {/* Script Configuration Modal */}
+      {scriptModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">Script Configuration</h3>
+              <button
+                onClick={() => setScriptModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Amazon Upload Config */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <Database className="h-5 w-5 mr-2 text-green-500" />
+                  Amazon Listing Loader Configuration
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Processed Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editingConfigs?.amznUploadConfig?.last_processed_date || ''}
+                      onChange={(e) => handleConfigChange('amznUploadConfig', 'last_processed_date', e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Prep Center Config */}
+              <div className="border rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <Upload className="h-5 w-5 mr-2 text-blue-500" />
+                  Prep Center Configuration
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Last Processed Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editingConfigs?.config?.last_processed_date || ''}
+                      onChange={(e) => handleConfigChange('config', 'last_processed_date', e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+              
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setScriptModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveScriptConfigs}
+                disabled={savingConfigs}
+                className="px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50"
+              >
+                {savingConfigs ? 'Saving...' : 'Save Configuration'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -351,6 +351,7 @@ const Settings = () => {
                 </p>
               </div>
           </>
+          )}
 
           {/* Timezone Selector */}
           <div>

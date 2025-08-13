@@ -101,7 +101,7 @@ const LambdaDeployment = () => {
     
     setLoadingLogs(prev => ({ ...prev, [deploymentType]: true }));
     try {
-      const response = await axios.get(`/api/admin/lambda-logs?function=${functionName}&hours=24`, {
+      const response = await axios.get(`/api/admin/lambda-logs-latest?function=${functionName}`, {
         withCredentials: true
       });
       
@@ -670,7 +670,7 @@ const LambdaDeployment = () => {
             {showLogs.costUpdater && (
               <div className="mt-4 border-t pt-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
+                  <h5 className="text-sm font-medium text-gray-900">Latest Execution Logs</h5>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => downloadLogs('costUpdater')}
@@ -698,7 +698,7 @@ const LambdaDeployment = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="text-gray-500">No logs found in the last 24 hours</div>
+                    <div className="text-gray-500">No recent executions found</div>
                   )}
                 </div>
               </div>
@@ -840,7 +840,7 @@ const LambdaDeployment = () => {
             {showLogs.prepUploader && (
               <div className="mt-4 border-t pt-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
+                  <h5 className="text-sm font-medium text-gray-900">Latest Execution Logs</h5>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => downloadLogs('prepUploader')}
@@ -868,7 +868,7 @@ const LambdaDeployment = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="text-gray-500">No logs found in the last 24 hours</div>
+                    <div className="text-gray-500">No recent executions found</div>
                   )}
                 </div>
               </div>

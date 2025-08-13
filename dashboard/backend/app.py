@@ -3684,6 +3684,84 @@ def get_lambda_logs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/lambda-logs-latest', methods=['GET'])
+@admin_required
+def get_latest_lambda_logs():
+    """Get logs from the most recent Lambda execution"""
+    try:
+        lambda_function = request.args.get('function')  # 'cost_updater' or 'prep_uploader'
+        
+        # Map function names to actual Lambda function names
+        lambda_functions = {
+            'cost_updater': os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload'),
+            'prep_uploader': os.getenv('PREP_UPLOADER_LAMBDA_NAME', 'prepUploader')
+        }
+        
+        if lambda_function not in lambda_functions:
+            return jsonify({'error': 'Invalid lambda function specified'}), 400
+        
+        function_name = lambda_functions[lambda_function]
+        log_group_name = f'/aws/lambda/{function_name}'
+        
+        # Create CloudWatch Logs client
+        logs_client = boto3.client(
+            'logs',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Get the most recent log stream first
+        streams_response = logs_client.describe_log_streams(
+            logGroupName=log_group_name,
+            orderBy='LastEventTime',
+            descending=True,
+            limit=1
+        )
+        
+        if not streams_response.get('logStreams'):
+            return jsonify({
+                'function': lambda_function,
+                'function_name': function_name,
+                'logs': [],
+                'count': 0,
+                'message': 'No recent executions found'
+            })
+        
+        latest_stream = streams_response['logStreams'][0]
+        stream_name = latest_stream['logStreamName']
+        
+        # Get logs from the latest stream
+        events_response = logs_client.get_log_events(
+            logGroupName=log_group_name,
+            logStreamName=stream_name
+        )
+        
+        # Format log events
+        logs = []
+        for event in events_response.get('events', []):
+            logs.append({
+                'timestamp': datetime.fromtimestamp(event['timestamp'] / 1000).isoformat(),
+                'message': event['message'].strip()
+            })
+        
+        # Sort by timestamp (chronological order for single execution)
+        logs.sort(key=lambda x: x['timestamp'])
+        
+        return jsonify({
+            'function': lambda_function,
+            'function_name': function_name,
+            'log_stream': stream_name,
+            'logs': logs,
+            'count': len(logs),
+            'execution_time': latest_stream.get('lastEventTime')
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/deploy-lambda', methods=['POST'])
 @admin_required
 def deploy_lambda():

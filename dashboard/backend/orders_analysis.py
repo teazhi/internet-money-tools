@@ -201,18 +201,24 @@ class EnhancedOrdersAnalysis:
             end_date_pd = pd.to_datetime(end_date)
         
         # Handle timezone-aware comparisons
-        if not df[date_col].empty and df[date_col].dtype.tz is not None:
-            # Data is timezone-aware, make comparison timestamps timezone-aware too
-            data_tz = df[date_col].dtype.tz
-            if start_date_pd.tz is None:
-                start_date_pd = start_date_pd.tz_localize(data_tz)
-            else:
-                start_date_pd = start_date_pd.tz_convert(data_tz)
-            
-            if end_date_pd.tz is None:
-                end_date_pd = end_date_pd.tz_localize(data_tz)
-            else:
-                end_date_pd = end_date_pd.tz_convert(data_tz)
+        if not df[date_col].empty:
+            try:
+                # Check if data is timezone-aware using .dt.tz accessor
+                data_tz = df[date_col].dt.tz
+                if data_tz is not None:
+                    # Data is timezone-aware, make comparison timestamps timezone-aware too
+                    if start_date_pd.tz is None:
+                        start_date_pd = start_date_pd.tz_localize(data_tz)
+                    else:
+                        start_date_pd = start_date_pd.tz_convert(data_tz)
+                    
+                    if end_date_pd.tz is None:
+                        end_date_pd = end_date_pd.tz_localize(data_tz)
+                    else:
+                        end_date_pd = end_date_pd.tz_convert(data_tz)
+            except (AttributeError, TypeError):
+                # If timezone info is not available or accessible, proceed without timezone handling
+                pass
         
         # Filter out NaT values before comparison to avoid TypeError
         valid_dates_mask = df[date_col].notna()

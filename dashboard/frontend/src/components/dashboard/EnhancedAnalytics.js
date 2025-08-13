@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import SmartRestockRecommendations from './SmartRestockRecommendations';
 import RetailerLeadAnalysis from './RetailerLeadAnalysis';
+import DiscountOpportunities from './DiscountOpportunities';
+import AllProductAnalytics from './AllProductAnalytics';
 
 const EnhancedAnalytics = () => {
   const [selectedAnalytic, setSelectedAnalytic] = useState(null);
@@ -35,7 +37,7 @@ const EnhancedAnalytics = () => {
       description: 'Find products with pricing opportunities and profit margins',
       icon: Target,
       color: 'bg-purple-500',
-      component: null // Will implement later
+      component: DiscountOpportunities
     },
     {
       id: 'all-product-analytics',
@@ -43,7 +45,7 @@ const EnhancedAnalytics = () => {
       description: 'Comprehensive analytics dashboard for all your products',
       icon: BarChart3,
       color: 'bg-orange-500',
-      component: null // Will implement later
+      component: AllProductAnalytics
     }
   ];
 

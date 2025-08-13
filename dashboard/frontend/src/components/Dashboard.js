@@ -73,9 +73,9 @@ const Dashboard = () => {
     // Main users and admins have access to everything
     if (isMainUser || isAdmin) return true;
     
-    // Check permissions array for sub-users
-    if (!user?.permissions) return false;
-    return user.permissions.includes('all') || user.permissions.includes(permission);
+    // Subusers now have full access to everything their parent has
+    // This allows VAs to perform all tasks for their main user
+    return true;
   };
 
   const navigation = [
@@ -83,7 +83,7 @@ const Dashboard = () => {
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
     { name: 'Lead Analysis', href: '/dashboard/retailer-leads', icon: ShoppingCart, current: location.pathname === '/dashboard/retailer-leads' },
     { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
-    ...(hasPermission('reimbursements_analysis') ? [{ name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' }] : []),
+    { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
@@ -321,7 +321,7 @@ const Dashboard = () => {
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
               <Route path="/retailer-leads" element={<RetailerLeadAnalysis />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
-              {hasPermission('reimbursements_analysis') && <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />}
+              <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />

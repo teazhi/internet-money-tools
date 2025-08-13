@@ -367,7 +367,12 @@ def has_permission(discord_id, permission):
     if user_type == 'main' or 'all' in user_permissions or is_admin_user(discord_id):
         return True
     
-    # Check specific permission
+    # Subusers now have full access to all features
+    # This allows VAs to perform all tasks for their main user
+    if user_type == 'subuser':
+        return True
+    
+    # Check specific permission (this line should never be reached now)
     return permission in user_permissions
 
 def get_parent_user_record(sub_user_discord_id):
@@ -1008,6 +1013,21 @@ def update_profile():
         user_record = {"discord_id": discord_id}
         users.append(user_record)
     
+    # Check if user is a subuser - they can only update their timezone
+    if user_record.get('user_type') == 'subuser':
+        # Only allow timezone updates for subusers
+        if 'timezone' in data:
+            user_record['timezone'] = data['timezone']
+        user_record['last_activity'] = datetime.now().isoformat()
+        if 'discord_username' in session:
+            user_record['discord_username'] = session['discord_username']
+        
+        if update_users_config(users):
+            return jsonify({'message': 'Timezone updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update timezone'}), 500
+    
+    # For main users, allow all updates
     # Always update Discord username and last activity from session when available
     if 'discord_username' in session:
         user_record['discord_username'] = session['discord_username']

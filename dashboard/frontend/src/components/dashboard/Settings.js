@@ -155,14 +155,22 @@ const Settings = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await axios.post('/api/user/profile', formData, { withCredentials: true });
-      setMessage({ type: 'success', text: 'Settings updated successfully!' });
+      // For subusers, only send timezone update
+      const dataToSend = user?.user_type === 'subuser' 
+        ? { timezone: formData.timezone }
+        : formData;
+        
+      const response = await axios.post('/api/user/profile', dataToSend, { withCredentials: true });
+      setMessage({ 
+        type: 'success', 
+        text: user?.user_type === 'subuser' ? 'Timezone updated successfully!' : 'Settings updated successfully!' 
+      });
       
       // Update user context
       updateUser({
         user_record: {
           ...user.user_record,
-          ...formData
+          ...dataToSend
         }
       });
     } catch (error) {
@@ -196,7 +204,7 @@ const Settings = () => {
                 Assistant Account: Settings are managed by the main account holder
               </p>
               <p className="text-xs text-blue-700">
-                You can only modify your timezone preference. All other settings are inherited.
+                You can only modify your timezone preference. All other settings are inherited from the main account.
               </p>
             </div>
           </div>
@@ -236,6 +244,9 @@ const Settings = () => {
             <label htmlFor="email" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
               <Mail className="h-4 w-4" />
               <span>Email Address</span>
+              {user?.user_type === 'subuser' && (
+                <span className="text-xs text-gray-500 italic">(Managed by main user)</span>
+              )}
             </label>
             <input
               type="email"
@@ -243,7 +254,8 @@ const Settings = () => {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className="input-field"
+              disabled={user?.user_type === 'subuser'}
+              className={`input-field ${user?.user_type === 'subuser' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               placeholder="your-email@example.com"
               required
             />
@@ -338,14 +350,16 @@ const Settings = () => {
                   The automation URL for your Sellerboard stock report (includes inventory and stock data)
                 </p>
               </div>
-            </>
-          )}
+          </>
 
           {/* Timezone Selector */}
           <div>
             <label htmlFor="timezone" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
               <Clock className="h-4 w-4" />
               <span>Timezone</span>
+              {user?.user_type === 'subuser' && (
+                <span className="text-xs text-green-600 italic">(You can edit this)</span>
+              )}
             </label>
             <select
               id="timezone"
@@ -466,8 +480,7 @@ const Settings = () => {
                   Pull COGS and Source links from your Google Sheet for restock recommendations (disabled by default for privacy)
                 </p>
               </div>
-            </>
-          )}
+          </>
 
           {/* Search All Worksheets Toggle - only show when source links are enabled and user is not subuser */}
           {user?.user_type !== 'subuser' && formData.enable_source_links && (
@@ -530,7 +543,7 @@ const Settings = () => {
               className="btn-primary flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="h-4 w-4" />
-              <span>{loading ? 'Saving...' : 'Save Settings'}</span>
+              <span>{loading ? 'Saving...' : (user?.user_type === 'subuser' ? 'Save Timezone' : 'Save Settings')}</span>
             </button>
           </div>
         </form>

@@ -1138,7 +1138,19 @@ def list_spreadsheets():
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
-    if not user_record or not user_record.get('google_tokens'):
+    if not user_record:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get user config for Google access (use parent config for subusers)
+    config_user_record = user_record
+    if user_record and user_record.get('user_type') == 'subuser':
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+    
+    if not config_user_record.get('google_tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -1154,7 +1166,7 @@ def list_spreadsheets():
             else:
                 raise Exception(f"Error listing spreadsheets: {response.text}")
         
-        files = safe_google_api_call(user_record, api_call)
+        files = safe_google_api_call(config_user_record, api_call)
         return jsonify({'spreadsheets': files})
         
     except Exception as e:
@@ -1166,7 +1178,19 @@ def list_worksheets(spreadsheet_id):
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
-    if not user_record or not user_record.get('google_tokens'):
+    if not user_record:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get user config for Google access (use parent config for subusers)
+    config_user_record = user_record
+    if user_record and user_record.get('user_type') == 'subuser':
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+    
+    if not config_user_record.get('google_tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -1179,7 +1203,7 @@ def list_worksheets(spreadsheet_id):
             sheets = r.json().get("sheets", [])
             return [s["properties"] for s in sheets]
         
-        worksheets = safe_google_api_call(user_record, api_call)
+        worksheets = safe_google_api_call(config_user_record, api_call)
         return jsonify({'worksheets': worksheets})
         
     except Exception as e:
@@ -1219,7 +1243,19 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
-    if not user_record or not user_record.get('google_tokens'):
+    if not user_record:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get user config for Google access (use parent config for subusers)
+    config_user_record = user_record
+    if user_record and user_record.get('user_type') == 'subuser':
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+    
+    if not config_user_record.get('google_tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -1232,7 +1268,7 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
             values = response.json().get("values", [])
             return values[0] if values else []
         
-        headers = safe_google_api_call(user_record, api_call)
+        headers = safe_google_api_call(config_user_record, api_call)
         return jsonify({'headers': headers})
         
     except Exception as e:
@@ -1248,7 +1284,7 @@ def get_gmail_service_for_user(user_record):
         return headers
     
     try:
-        headers = safe_google_api_call(user_record, api_call)
+        headers = safe_google_api_call(config_user_record, api_call)
         return headers
     except Exception as e:
         print(f"Error creating Gmail service: {e}")
@@ -4453,10 +4489,19 @@ def get_expected_arrivals():
         if not user_record:
             return jsonify({"error": "User not found"}), 404
 
+        # Get user config for Google access (use parent config for subusers)
+        config_user_record = user_record
+        if user_record and user_record.get('user_type') == 'subuser':
+            parent_user_id = user_record.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+
         # Get the Google Sheet settings for purchase data
-        sheet_id = user_record.get('sheet_id')
-        google_tokens = user_record.get('google_tokens', {})
-        column_mapping = user_record.get('column_mapping', {})
+        sheet_id = config_user_record.get('sheet_id')
+        google_tokens = config_user_record.get('google_tokens', {})
+        column_mapping = config_user_record.get('column_mapping', {})
         
         if not sheet_id or not google_tokens.get('access_token'):
             return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings first."}), 400
@@ -4481,7 +4526,7 @@ def get_expected_arrivals():
                     column_mapping=column_mapping
                 )
             
-            cogs_data, combined_purchase_df = safe_google_api_call(user_record, api_call)
+            cogs_data, combined_purchase_df = safe_google_api_call(config_user_record, api_call)
             print("DEBUG - Missing Listings: Successfully returned from fetch_google_sheet_cogs_data_all_worksheets")
             print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
             if not combined_purchase_df.empty:

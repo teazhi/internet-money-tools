@@ -258,9 +258,8 @@ const RetailerLeadAnalysis = () => {
             </div>
           </div>
         )}
-      </div>
 
-      {analysis && (
+        {analysis && (
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -486,7 +485,7 @@ const RetailerLeadAnalysis = () => {
             </div>
           </div>
         </>
-      )}
+        )}
         </div>
       )}
 

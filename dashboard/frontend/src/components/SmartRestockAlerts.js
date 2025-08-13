@@ -28,8 +28,7 @@ import {
 } from 'lucide-react';
 
 const SmartRestockAlerts = React.memo(({ analytics }) => {
-  // State for tabs
-  const [activeTab, setActiveTab] = useState('recommendations');
+  // Removed tab state - SmartRestockAlerts now only shows recommendations
   
   // State for restock sources modal
   const [showSourcesModal, setShowSourcesModal] = useState(false);
@@ -760,33 +759,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   };
 
   try {
-    // Tab configuration
-    const tabs = [
-      {
-        id: 'recommendations',
-        name: 'Smart Restock Recommendations',
-        description: 'AI-powered restocking suggestions based on velocity, trends, and seasonality',
-        count: sortedAlerts.length
-      },
-      {
-        id: 'opportunities',
-        name: 'Discount Opportunities',
-        description: 'Products in your inventory that match current discount offers',
-        count: discountOpportunities.length
-      },
-      {
-        id: 'analytics',
-        name: 'All Products Analytics', 
-        description: 'Complete analysis of your inventory',
-        count: enhanced_analytics ? Object.keys(enhanced_analytics).length : 0
-      },
-      {
-        id: 'detailed',
-        name: 'Detailed Product Analytics',
-        description: 'In-depth analysis of individual products with advanced metrics',
-        count: enhanced_analytics ? Object.keys(enhanced_analytics).filter(asin => enhanced_analytics[asin]?.velocity).length : 0
-      }
-    ];
+    // Simplified: Only show Smart Restock Recommendations (no tabs)
 
     return (
       <div className="space-y-6">

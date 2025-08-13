@@ -3791,6 +3791,11 @@ def download_lambda_code(function_name):
 @admin_required
 def analyze_lambda_structure(function_name):
     """Analyze Lambda function structure and dependencies"""
+    import requests
+    import zipfile
+    import tempfile
+    import os
+    
     try:
         lambda_client = boto3.client(
             'lambda',
@@ -3804,12 +3809,6 @@ def analyze_lambda_structure(function_name):
         
         # Get the download URL for the code
         code_location = function_info['Code']['Location']
-        
-        # Download and analyze the zip file
-        import requests
-        import zipfile
-        import tempfile
-        import os
         
         zip_response = requests.get(code_location)
         

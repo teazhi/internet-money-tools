@@ -33,7 +33,7 @@ import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import ExpectedArrivals from './dashboard/ExpectedArrivals';
-import AutomationTools from './dashboard/AutomationTools';
+import LambdaDeployment from './dashboard/LambdaDeployment';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
@@ -84,11 +84,11 @@ const Dashboard = () => {
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
     { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
     { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
-    { name: 'Automation Tools', href: '/dashboard/automation', icon: Zap, current: location.pathname === '/dashboard/automation' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
     ...(isAdmin ? [{ name: 'Admin', href: '/dashboard/admin', icon: Shield, current: location.pathname === '/dashboard/admin' }] : []),
+    ...(isAdmin ? [{ name: 'Lambda Deploy', href: '/dashboard/automation', icon: Zap, current: location.pathname === '/dashboard/automation' }] : []),
     { name: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, current: location.pathname === '/dashboard/settings' },
   ];
 
@@ -322,12 +322,12 @@ const Dashboard = () => {
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
               <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
-              <Route path="/automation" element={<AutomationTools />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
               {isMainUser && <Route path="/subusers" element={<SubUserManager />} />}
               {isAdmin && <Route path="/admin" element={<AdminCompact />} />}
+              {isAdmin && <Route path="/automation" element={<LambdaDeployment />} />}
             </Routes>
           </div>
         </main>

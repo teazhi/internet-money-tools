@@ -3684,6 +3684,109 @@ def get_lambda_logs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/deploy-lambda', methods=['POST'])
+@admin_required
+def deploy_lambda():
+    """Deploy code to Lambda function by uploading files and creating zip"""
+    try:
+        import zipfile
+        import tempfile
+        import os
+        
+        deployment_type = request.form.get('deployment_type')
+        lambda_name = request.form.get('lambda_name')
+        
+        if not deployment_type or not lambda_name:
+            return jsonify({'error': 'deployment_type and lambda_name are required'}), 400
+            
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({'error': 'No files provided for deployment'}), 400
+        
+        # Create a temporary zip file
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip:
+            with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for file in files:
+                    if file.filename:
+                        # Save file content to zip
+                        zip_file.writestr(file.filename, file.read())
+            
+            # Read the zip file content
+            with open(temp_zip.name, 'rb') as zip_data:
+                zip_content = zip_data.read()
+            
+            # Clean up temp file
+            os.unlink(temp_zip.name)
+        
+        # Deploy to Lambda
+        lambda_client = boto3.client(
+            'lambda',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Update function code
+        response = lambda_client.update_function_code(
+            FunctionName=lambda_name,
+            ZipFile=zip_content
+        )
+        
+        return jsonify({
+            'message': f'Successfully deployed {len(files)} files to {lambda_name}',
+            'function_name': lambda_name,
+            'deployment_type': deployment_type,
+            'files_deployed': [f.filename for f in files if f.filename],
+            'code_size': response.get('CodeSize'),
+            'last_modified': response.get('LastModified')
+        })
+        
+    except Exception as e:
+        pass  # Debug print removed
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/download-lambda-code/<function_name>', methods=['GET'])
+@admin_required
+def download_lambda_code(function_name):
+    """Download current Lambda function code as zip"""
+    try:
+        lambda_client = boto3.client(
+            'lambda',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Get function information
+        response = lambda_client.get_function(FunctionName=function_name)
+        
+        # Get the download URL for the code
+        code_location = response['Code']['Location']
+        
+        # Download the zip file
+        import requests
+        zip_response = requests.get(code_location)
+        
+        if zip_response.status_code == 200:
+            from flask import Response
+            return Response(
+                zip_response.content,
+                mimetype='application/zip',
+                headers={
+                    'Content-Disposition': f'attachment; filename={function_name}-code.zip'
+                }
+            )
+        else:
+            return jsonify({'error': 'Failed to download Lambda code'}), 500
+            
+    except Exception as e:
+        pass  # Debug print removed
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint for Railway"""

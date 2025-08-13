@@ -3787,6 +3787,103 @@ def download_lambda_code(function_name):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/analyze-lambda/<function_name>', methods=['GET'])
+@admin_required
+def analyze_lambda_structure(function_name):
+    """Analyze Lambda function structure and dependencies"""
+    try:
+        lambda_client = boto3.client(
+            'lambda',
+            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
+        
+        # Get function information
+        function_info = lambda_client.get_function(FunctionName=function_name)
+        
+        # Get the download URL for the code
+        code_location = function_info['Code']['Location']
+        
+        # Download and analyze the zip file
+        import requests
+        import zipfile
+        import tempfile
+        import os
+        
+        zip_response = requests.get(code_location)
+        
+        if zip_response.status_code == 200:
+            analysis = {
+                'function_name': function_name,
+                'code_size': function_info['Configuration']['CodeSize'],
+                'runtime': function_info['Configuration']['Runtime'],
+                'handler': function_info['Configuration']['Handler'],
+                'last_modified': function_info['Configuration']['LastModified'],
+                'files': [],
+                'dependencies': [],
+                'has_requirements_txt': False,
+                'python_files': [],
+                'config_files': [],
+                'package_directories': []
+            }
+            
+            # Create temporary file to analyze zip contents
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip:
+                temp_zip.write(zip_response.content)
+                temp_zip_path = temp_zip.name
+            
+            try:
+                with zipfile.ZipFile(temp_zip_path, 'r') as zip_file:
+                    file_list = zip_file.namelist()
+                    
+                    for file_path in file_list:
+                        analysis['files'].append({
+                            'name': file_path,
+                            'is_directory': file_path.endswith('/'),
+                            'size': zip_file.getinfo(file_path).file_size if not file_path.endswith('/') else 0
+                        })
+                        
+                        # Categorize files
+                        if file_path.endswith('.py'):
+                            analysis['python_files'].append(file_path)
+                        elif file_path == 'requirements.txt':
+                            analysis['has_requirements_txt'] = True
+                            # Try to read requirements.txt content
+                            try:
+                                requirements_content = zip_file.read(file_path).decode('utf-8')
+                                analysis['requirements_content'] = requirements_content.strip().split('\n')
+                            except:
+                                analysis['requirements_content'] = ['Could not read requirements.txt']
+                        elif file_path.endswith(('.json', '.yml', '.yaml', '.ini', '.cfg', '.conf')):
+                            analysis['config_files'].append(file_path)
+                        elif '/' in file_path and not file_path.endswith('.py'):
+                            # This might be a package directory
+                            dir_name = file_path.split('/')[0]
+                            if dir_name not in analysis['package_directories']:
+                                analysis['package_directories'].append(dir_name)
+                
+                # Clean up temp file
+                os.unlink(temp_zip_path)
+                
+                return jsonify(analysis)
+                
+            except zipfile.BadZipFile:
+                os.unlink(temp_zip_path)
+                return jsonify({'error': 'Downloaded file is not a valid zip file'}), 500
+            except Exception as e:
+                os.unlink(temp_zip_path)
+                return jsonify({'error': f'Failed to analyze zip file: {str(e)}'}), 500
+                
+        else:
+            return jsonify({'error': 'Failed to download Lambda code'}), 500
+            
+    except Exception as e:
+        pass  # Debug print removed
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple health check endpoint for Railway"""

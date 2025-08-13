@@ -27,6 +27,11 @@ const LambdaDeployment = () => {
     prepUploader: { files: null, uploading: false }
   });
   const [lambdaDiagnostics, setLambdaDiagnostics] = useState(null);
+  const [analysis, setAnalysis] = useState({
+    costUpdater: null,
+    prepUploader: null
+  });
+  const [analyzingFunction, setAnalyzingFunction] = useState(null);
 
   useEffect(() => {
     fetchDiagnostics();
@@ -143,6 +148,32 @@ const LambdaDeployment = () => {
         type: 'error', 
         text: `Failed to download current code: ${error.response?.data?.error || error.message}` 
       });
+    }
+  };
+
+  const analyzeFunction = async (deploymentType) => {
+    try {
+      setAnalyzingFunction(deploymentType);
+      const lambdaName = deploymentType === 'costUpdater' 
+        ? lambdaDiagnostics?.cost_updater_lambda_name || 'amznAndSBUpload'
+        : lambdaDiagnostics?.prep_uploader_lambda_name || 'prepUploader';
+
+      const response = await axios.get(`/api/admin/analyze-lambda/${lambdaName}`, {
+        withCredentials: true
+      });
+
+      setAnalysis(prev => ({
+        ...prev,
+        [deploymentType]: response.data
+      }));
+
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: `Failed to analyze function: ${error.response?.data?.error || error.message}` 
+      });
+    } finally {
+      setAnalyzingFunction(null);
     }
   };
 
@@ -320,8 +351,21 @@ const LambdaDeployment = () => {
               <button
                 onClick={() => downloadCurrentCode('costUpdater')}
                 className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                title="Download current code"
               >
                 <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => analyzeFunction('costUpdater')}
+                disabled={analyzingFunction === 'costUpdater'}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                title="Analyze current structure"
+              >
+                {analyzingFunction === 'costUpdater' ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -381,13 +425,147 @@ const LambdaDeployment = () => {
               <button
                 onClick={() => downloadCurrentCode('prepUploader')}
                 className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                title="Download current code"
               >
                 <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => analyzeFunction('prepUploader')}
+                disabled={analyzingFunction === 'prepUploader'}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                title="Analyze current structure"
+              >
+                {analyzingFunction === 'prepUploader' ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Analysis Results */}
+      {(analysis.costUpdater || analysis.prepUploader) && (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-gray-900">Current Lambda Structure Analysis</h3>
+          
+          {analysis.costUpdater && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900">Cost Updater Analysis</h4>
+                  <p className="text-sm text-gray-500">
+                    {analysis.costUpdater.runtime} • {(analysis.costUpdater.code_size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Python Files</div>
+                  <div className="text-2xl font-bold text-blue-600">{analysis.costUpdater.python_files?.length || 0}</div>
+                  {analysis.costUpdater.python_files?.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {analysis.costUpdater.python_files.slice(0, 3).join(', ')}
+                      {analysis.costUpdater.python_files.length > 3 && '...'}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Dependencies</div>
+                  <div className="text-2xl font-bold text-purple-600">{analysis.costUpdater.package_directories?.length || 0}</div>
+                  {analysis.costUpdater.package_directories?.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {analysis.costUpdater.package_directories.slice(0, 3).join(', ')}
+                      {analysis.costUpdater.package_directories.length > 3 && '...'}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Total Files</div>
+                  <div className="text-2xl font-bold text-gray-600">{analysis.costUpdater.files?.length || 0}</div>
+                  <div className={`text-xs mt-1 ${analysis.costUpdater.has_requirements_txt ? 'text-green-600' : 'text-red-600'}`}>
+                    {analysis.costUpdater.has_requirements_txt ? '✓ Has requirements.txt' : '✗ No requirements.txt'}
+                  </div>
+                </div>
+              </div>
+
+              {analysis.costUpdater.has_requirements_txt && analysis.costUpdater.requirements_content && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <div className="text-sm font-medium text-blue-900 mb-2">Requirements.txt Contents:</div>
+                  <div className="text-xs font-mono text-blue-800 space-y-1">
+                    {analysis.costUpdater.requirements_content.map((req, idx) => (
+                      <div key={idx}>{req}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {analysis.prepUploader && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Package className="h-4 w-4 text-purple-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900">Prep Uploader Analysis</h4>
+                  <p className="text-sm text-gray-500">
+                    {analysis.prepUploader.runtime} • {(analysis.prepUploader.code_size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Python Files</div>
+                  <div className="text-2xl font-bold text-blue-600">{analysis.prepUploader.python_files?.length || 0}</div>
+                  {analysis.prepUploader.python_files?.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {analysis.prepUploader.python_files.slice(0, 3).join(', ')}
+                      {analysis.prepUploader.python_files.length > 3 && '...'}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Dependencies</div>
+                  <div className="text-2xl font-bold text-purple-600">{analysis.prepUploader.package_directories?.length || 0}</div>
+                  {analysis.prepUploader.package_directories?.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {analysis.prepUploader.package_directories.slice(0, 3).join(', ')}
+                      {analysis.prepUploader.package_directories.length > 3 && '...'}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-gray-900">Total Files</div>
+                  <div className="text-2xl font-bold text-gray-600">{analysis.prepUploader.files?.length || 0}</div>
+                  <div className={`text-xs mt-1 ${analysis.prepUploader.has_requirements_txt ? 'text-green-600' : 'text-red-600'}`}>
+                    {analysis.prepUploader.has_requirements_txt ? '✓ Has requirements.txt' : '✗ No requirements.txt'}
+                  </div>
+                </div>
+              </div>
+
+              {analysis.prepUploader.has_requirements_txt && analysis.prepUploader.requirements_content && (
+                <div className="bg-purple-50 border border-purple-200 rounded-md p-3">
+                  <div className="text-sm font-medium text-purple-900 mb-2">Requirements.txt Contents:</div>
+                  <div className="text-xs font-mono text-purple-800 space-y-1">
+                    {analysis.prepUploader.requirements_content.map((req, idx) => (
+                      <div key={idx}>{req}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">

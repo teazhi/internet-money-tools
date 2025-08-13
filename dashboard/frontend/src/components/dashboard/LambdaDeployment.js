@@ -14,7 +14,9 @@ import {
   Database,
   Play,
   Settings,
-  X
+  X,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -50,6 +52,18 @@ const LambdaDeployment = () => {
   const [editingConfigs, setEditingConfigs] = useState({});
   const [savingConfigs, setSavingConfigs] = useState(false);
   const [runningScript, setRunningScript] = useState(null);
+  const [logs, setLogs] = useState({
+    costUpdater: [],
+    prepUploader: []
+  });
+  const [loadingLogs, setLoadingLogs] = useState({
+    costUpdater: false,
+    prepUploader: false
+  });
+  const [showLogs, setShowLogs] = useState({
+    costUpdater: false,
+    prepUploader: false
+  });
 
   useEffect(() => {
     fetchDiagnostics();
@@ -79,6 +93,43 @@ const LambdaDeployment = () => {
       setEditingConfigs(response.data);
     } catch (error) {
       console.error('Failed to fetch script configs:', error);
+    }
+  };
+
+  const fetchLogs = async (deploymentType) => {
+    const functionName = deploymentType === 'costUpdater' ? 'cost_updater' : 'prep_uploader';
+    
+    setLoadingLogs(prev => ({ ...prev, [deploymentType]: true }));
+    try {
+      const response = await axios.get(`/api/admin/lambda-logs?function=${functionName}&hours=24`, {
+        withCredentials: true
+      });
+      
+      setLogs(prev => ({
+        ...prev,
+        [deploymentType]: response.data.logs || []
+      }));
+    } catch (error) {
+      console.error(`Failed to fetch logs for ${deploymentType}:`, error);
+      setMessage({
+        type: 'error',
+        text: `Failed to fetch logs: ${error.response?.data?.error || error.message}`
+      });
+    } finally {
+      setLoadingLogs(prev => ({ ...prev, [deploymentType]: false }));
+    }
+  };
+
+  const toggleLogs = (deploymentType) => {
+    const currentlyShown = showLogs[deploymentType];
+    setShowLogs(prev => ({
+      ...prev,
+      [deploymentType]: !currentlyShown
+    }));
+
+    // If showing logs for the first time, fetch them
+    if (!currentlyShown && logs[deploymentType].length === 0) {
+      fetchLogs(deploymentType);
     }
   };
 
@@ -315,8 +366,12 @@ const LambdaDeployment = () => {
         text: `${scriptType === 'costUpdater' ? 'Listing Loader' : 'Prep Uploader'} script started successfully!` 
       });
       
-      // Refresh configs after running
-      setTimeout(fetchScriptConfigs, 2000);
+      // Refresh configs after running and show logs
+      setTimeout(() => {
+        fetchScriptConfigs();
+        fetchLogs(scriptType);
+        setShowLogs(prev => ({ ...prev, [scriptType]: true }));
+      }, 2000);
     } catch (error) {
       setMessage({ 
         type: 'error', 
@@ -564,7 +619,47 @@ const LambdaDeployment = () => {
                   <Activity className="h-4 w-4" />
                 )}
               </button>
+              <button
+                onClick={() => toggleLogs('costUpdater')}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                title="View logs"
+              >
+                {showLogs.costUpdater ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
+
+            {/* Logs Section */}
+            {showLogs.costUpdater && (
+              <div className="mt-4 border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
+                  <button
+                    onClick={() => fetchLogs('costUpdater')}
+                    disabled={loadingLogs.costUpdater}
+                    className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                  >
+                    {loadingLogs.costUpdater ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="bg-black text-green-400 p-3 rounded-md text-xs font-mono max-h-60 overflow-y-auto">
+                  {loadingLogs.costUpdater ? (
+                    <div>Loading logs...</div>
+                  ) : logs.costUpdater.length > 0 ? (
+                    logs.costUpdater.map((log, index) => (
+                      <div key={index} className="mb-1">
+                        <span className="text-gray-500">[{new Date(log.timestamp).toLocaleString()}]</span> {log.message}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500">No logs found in the last 24 hours</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -685,7 +780,47 @@ const LambdaDeployment = () => {
                   <Activity className="h-4 w-4" />
                 )}
               </button>
+              <button
+                onClick={() => toggleLogs('prepUploader')}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                title="View logs"
+              >
+                {showLogs.prepUploader ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
+
+            {/* Logs Section */}
+            {showLogs.prepUploader && (
+              <div className="mt-4 border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
+                  <button
+                    onClick={() => fetchLogs('prepUploader')}
+                    disabled={loadingLogs.prepUploader}
+                    className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                  >
+                    {loadingLogs.prepUploader ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="bg-black text-green-400 p-3 rounded-md text-xs font-mono max-h-60 overflow-y-auto">
+                  {loadingLogs.prepUploader ? (
+                    <div>Loading logs...</div>
+                  ) : logs.prepUploader.length > 0 ? (
+                    logs.prepUploader.map((log, index) => (
+                      <div key={index} className="mb-1">
+                        <span className="text-gray-500">[{new Date(log.timestamp).toLocaleString()}]</span> {log.message}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-gray-500">No logs found in the last 24 hours</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

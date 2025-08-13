@@ -133,6 +133,40 @@ const LambdaDeployment = () => {
     }
   };
 
+  const downloadLogs = (deploymentType) => {
+    const functionLogs = logs[deploymentType];
+    if (!functionLogs || functionLogs.length === 0) {
+      setMessage({
+        type: 'error',
+        text: 'No logs available to download'
+      });
+      return;
+    }
+
+    const functionName = deploymentType === 'costUpdater' ? 'Cost Updater' : 'Prep Uploader';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    
+    // Format logs for download
+    const logContent = functionLogs.map(log => 
+      `[${new Date(log.timestamp).toISOString()}] ${log.message}`
+    ).join('\n');
+    
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${deploymentType}-logs-${timestamp}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    setMessage({
+      type: 'success',
+      text: `${functionName} logs downloaded successfully`
+    });
+  };
+
   const handleFileSelection = (deploymentType, event) => {
     const files = Array.from(event.target.files);
     setDeployments(prev => ({
@@ -637,13 +671,22 @@ const LambdaDeployment = () => {
               <div className="mt-4 border-t pt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
-                  <button
-                    onClick={() => fetchLogs('costUpdater')}
-                    disabled={loadingLogs.costUpdater}
-                    className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                  >
-                    {loadingLogs.costUpdater ? 'Refreshing...' : 'Refresh'}
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => downloadLogs('costUpdater')}
+                      disabled={logs.costUpdater.length === 0}
+                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:text-gray-400"
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={() => fetchLogs('costUpdater')}
+                      disabled={loadingLogs.costUpdater}
+                      className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                    >
+                      {loadingLogs.costUpdater ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-black text-green-400 p-3 rounded-md text-xs font-mono max-h-60 overflow-y-auto">
                   {loadingLogs.costUpdater ? (
@@ -798,13 +841,22 @@ const LambdaDeployment = () => {
               <div className="mt-4 border-t pt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-sm font-medium text-gray-900">Recent Logs (24h)</h5>
-                  <button
-                    onClick={() => fetchLogs('prepUploader')}
-                    disabled={loadingLogs.prepUploader}
-                    className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                  >
-                    {loadingLogs.prepUploader ? 'Refreshing...' : 'Refresh'}
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => downloadLogs('prepUploader')}
+                      disabled={logs.prepUploader.length === 0}
+                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:text-gray-400"
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={() => fetchLogs('prepUploader')}
+                      disabled={loadingLogs.prepUploader}
+                      className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50"
+                    >
+                      {loadingLogs.prepUploader ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-black text-green-400 p-3 rounded-md text-xs font-mono max-h-60 overflow-y-auto">
                   {loadingLogs.prepUploader ? (

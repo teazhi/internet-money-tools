@@ -20,7 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Package
+  Package,
+  Zap
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -32,6 +33,7 @@ import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import ExpectedArrivals from './dashboard/ExpectedArrivals';
+import AutomationTools from './dashboard/AutomationTools';
 import Onboarding from './Onboarding';
 
 const Dashboard = () => {
@@ -82,6 +84,7 @@ const Dashboard = () => {
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
     { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
     { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
+    { name: 'Automation Tools', href: '/dashboard/automation', icon: Zap, current: location.pathname === '/dashboard/automation' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
@@ -319,6 +322,7 @@ const Dashboard = () => {
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
               <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
+              <Route path="/automation" element={<AutomationTools />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />

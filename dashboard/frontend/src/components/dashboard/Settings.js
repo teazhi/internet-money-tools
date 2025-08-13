@@ -482,6 +482,7 @@ const Settings = () => {
                 </p>
               </div>
           </>
+          )}
 
           {/* Search All Worksheets Toggle - only show when source links are enabled and user is not subuser */}
           {user?.user_type !== 'subuser' && formData.enable_source_links && (

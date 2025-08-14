@@ -34,13 +34,31 @@ const SmartRestockRecommendations = () => {
         `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
         API_ENDPOINTS.ANALYTICS_ORDERS;
       
-      const response = await axios.get(url, { withCredentials: true });
+      let response;
+      try {
+        response = await axios.get(url, { withCredentials: true });
+      } catch (axiosError) {
+        // Re-throw with better error handling
+        console.error('Axios error:', axiosError);
+        throw axiosError;
+      }
+      
       setAnalytics(response.data);
       
       if (response.data.error) {
         setError(response.data.error);
       }
     } catch (error) {
+      // Handle the TypeError first
+      if (error.message && error.message.includes('isCheckout')) {
+        console.error('isCheckout error caught:', error);
+        // This might be an error from middleware or interceptor
+        // Try to extract the actual error
+        if (error.response) {
+          error = error.response;
+        }
+      }
+      
       console.error('Error fetching analytics:', error);
       console.error('Error response:', error.response);
       console.error('Error status:', error.response?.status);
@@ -55,7 +73,7 @@ const SmartRestockRecommendations = () => {
           message: error.response.data.message || 'Please configure your report URLs in Settings before accessing analytics.',
           title: 'Setup Required'
         });
-      } else if (error.response?.status === 401) {
+      } else if (error.response?.status === 401 || error.status === 401) {
         console.error('401 Authentication error - user needs to login');
         setError({
           type: 'auth_required',
@@ -66,9 +84,11 @@ const SmartRestockRecommendations = () => {
         // Show more detailed error information
         const errorMessage = error.response?.data?.message || 
                            error.response?.data?.error || 
+                           error.data?.message ||
+                           error.data?.error ||
                            error.message || 
                            'Failed to fetch analytics data';
-        const statusText = error.response?.status ? ` (Status: ${error.response.status})` : '';
+        const statusText = error.response?.status || error.status ? ` (Status: ${error.response?.status || error.status})` : '';
         
         setError({
           type: 'general',

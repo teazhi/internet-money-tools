@@ -121,9 +121,10 @@ const RetailerLeadAnalysis = () => {
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
-    const headers = ['ASIN', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Recent Purchases', 'Source Link'];
+    const headers = ['ASIN', 'Source Link', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Recent Purchases'];
     const rows = analysis.recommendations.map(item => [
       item.asin,
+      item.source_link || '',
       item.product_name || '',
       item.retailer || '',
       item.recommendation,
@@ -132,8 +133,7 @@ const RetailerLeadAnalysis = () => {
       item.inventory_details?.suggested_quantity || '',
       item.inventory_details?.units_per_day?.toFixed(2) || '',
       item.inventory_details?.days_of_stock || '',
-      item.recent_purchases || 0,
-      item.source_link || ''
+      item.recent_purchases || 0
     ]);
 
     const csvContent = [
@@ -339,6 +339,9 @@ const RetailerLeadAnalysis = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       ASIN
                     </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Source
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Product Name
                     </th>
@@ -362,9 +365,6 @@ const RetailerLeadAnalysis = () => {
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Recent Purchases
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Source
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -381,6 +381,20 @@ const RetailerLeadAnalysis = () => {
                             {item.asin}
                           </a>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {item.source_link ? (
+                          <a
+                            href={item.source_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
@@ -446,20 +460,6 @@ const RetailerLeadAnalysis = () => {
                           <div className="font-medium">{item.recent_purchases || 0}</div>
                           <div className="text-xs text-gray-500">last 2 months</div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {item.source_link ? (
-                          <a
-                            href={item.source_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
                       </td>
                     </tr>
                   ))}

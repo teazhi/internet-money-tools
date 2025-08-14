@@ -36,7 +36,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [columnOrders, setColumnOrders] = useState({
     recommendations: JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null') || [
-      'product', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'
+      'product', 'actions', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order'
     ]
   });
   
@@ -128,7 +128,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   // Reset column order to default
   const resetColumnOrder = (tableType) => {
     const defaultOrders = {
-      recommendations: ['product', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions']
+      recommendations: ['product', 'actions', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order']
     };
     
     setColumnOrders(prev => ({

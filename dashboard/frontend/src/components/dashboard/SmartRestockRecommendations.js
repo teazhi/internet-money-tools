@@ -26,11 +26,12 @@ const SmartRestockRecommendations = () => {
   const [selectedDate, setSelectedDate] = useState('');
 
   const fetchAnalytics = useCallback(async () => {
+    let url;
     try {
       setError(null);
       setLoading(true);
       
-      const url = selectedDate ? 
+      url = selectedDate ? 
         `${API_ENDPOINTS.ANALYTICS_ORDERS}?date=${selectedDate}` : 
         API_ENDPOINTS.ANALYTICS_ORDERS;
       
@@ -64,7 +65,7 @@ const SmartRestockRecommendations = () => {
       console.error('Error status:', error.response?.status);
       console.error('Error data:', error.response?.data);
       console.error('User authenticated:', !!user);
-      console.error('API URL:', url);
+      console.error('API URL:', url || 'URL not yet defined');
       
       // Check if this is a setup requirement error
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {

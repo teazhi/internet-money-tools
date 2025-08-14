@@ -121,14 +121,13 @@ const RetailerLeadAnalysis = () => {
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
-    const headers = ['ASIN', 'Source Link', 'Product Name', 'Retailer', 'Recommendation', 'Reason', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Recent Purchases'];
+    const headers = ['ASIN', 'Source Link', 'Product Name', 'Retailer', 'Recommendation', 'Current Stock', 'Suggested Qty', 'Units/Day', 'Days of Stock', 'Recent Purchases'];
     const rows = analysis.recommendations.map(item => [
       item.asin,
       item.source_link || '',
       item.product_name || '',
       item.retailer || '',
       item.recommendation,
-      item.reason,
       item.inventory_details?.current_stock || '',
       item.inventory_details?.suggested_quantity || '',
       item.inventory_details?.units_per_day?.toFixed(2) || '',
@@ -353,9 +352,6 @@ const RetailerLeadAnalysis = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Recommendation
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Reason
-                    </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Stock Info
                     </th>
@@ -427,9 +423,6 @@ const RetailerLeadAnalysis = () => {
                             {item.recommendation}
                           </span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{item.reason}</div>
                       </td>
                       <td className="px-6 py-4 text-center">
                         {item.inventory_details ? (

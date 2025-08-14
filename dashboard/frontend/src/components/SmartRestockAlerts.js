@@ -36,7 +36,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [columnOrders, setColumnOrders] = useState({
     recommendations: JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null') || [
-      'product', 'actions', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order'
+      'product', 'actions', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order'
     ]
   });
   
@@ -67,7 +67,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
     recommendations: {
       product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
       priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true },
-      reasoning: { key: 'reasoning', label: 'Reasoning', sortKey: null, draggable: true },
       current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
       days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
       velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
@@ -128,7 +127,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   // Reset column order to default
   const resetColumnOrder = (tableType) => {
     const defaultOrders = {
-      recommendations: ['product', 'actions', 'priority', 'reasoning', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order']
+      recommendations: ['product', 'actions', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order']
     };
     
     setColumnOrders(prev => ({
@@ -203,14 +202,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
             </span>
             <div className="text-xs text-gray-500 mt-0.5">
               {alert.priority_score.toFixed(2)}
-            </div>
-          </td>
-        );
-      case 'reasoning':
-        return (
-          <td key={columnKey} className="px-3 py-2">
-            <div className="text-xs text-gray-700 min-w-[250px] max-w-sm">
-              {alert.reasoning}
             </div>
           </td>
         );
@@ -324,8 +315,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(alert => 
         alert.product_name.toLowerCase().includes(query) ||
-        alert.asin.toLowerCase().includes(query) ||
-        alert.reasoning.toLowerCase().includes(query)
+        alert.asin.toLowerCase().includes(query)
       );
     }
     

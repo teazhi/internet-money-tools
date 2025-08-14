@@ -42,6 +42,11 @@ const SmartRestockRecommendations = () => {
       }
     } catch (error) {
       console.error('Error fetching analytics:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
+      console.error('User authenticated:', !!user);
+      console.error('API URL:', url);
       
       // Check if this is a setup requirement error
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {
@@ -51,15 +56,23 @@ const SmartRestockRecommendations = () => {
           title: 'Setup Required'
         });
       } else if (error.response?.status === 401) {
+        console.error('401 Authentication error - user needs to login');
         setError({
           type: 'auth_required',
           message: 'Please log in with Discord to access your analytics dashboard.',
           title: 'Authentication Required'
         });
       } else {
+        // Show more detailed error information
+        const errorMessage = error.response?.data?.message || 
+                           error.response?.data?.error || 
+                           error.message || 
+                           'Failed to fetch analytics data';
+        const statusText = error.response?.status ? ` (Status: ${error.response.status})` : '';
+        
         setError({
           type: 'general',
-          message: 'Failed to fetch analytics data',
+          message: `${errorMessage}${statusText}`,
           title: 'Error'
         });
       }

@@ -5784,6 +5784,307 @@ def analyze_retailer_leads():
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing retailer leads: {str(e)}'}), 500
 
+@app.route('/api/retailer-leads/sync-to-sheets', methods=['POST'])
+@login_required
+def sync_leads_to_sheets():
+    """Sync leads from user's leads sheet to appropriate worksheets in the target spreadsheet"""
+    try:
+        data = request.get_json() or {}
+        # We don't need the leads parameter anymore - we'll fetch from user's sheet
+        
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user config
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Check if user has configured their leads sheet
+        user_sheet_id = config_user_record.get('sheet_id')
+        user_worksheet_title = config_user_record.get('worksheet_title')
+        
+        if not user_sheet_id or not user_worksheet_title:
+            return jsonify({
+                'error': 'Leads sheet not configured',
+                'message': 'Please configure your leads sheet in Settings first'
+            }), 400
+        
+        # Check if user has Google tokens for API access
+        if not config_user_record.get('google_tokens'):
+            return jsonify({
+                'error': 'Google account not linked',
+                'message': 'Please link your Google account in Settings to access the leads sheet'
+            }), 400
+        
+        # Get Google access token
+        google_tokens = config_user_record.get('google_tokens', {})
+        
+        import requests as req
+        refresh_data = {
+            'refresh_token': google_tokens.get('refresh_token'),
+            'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+            'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+            'grant_type': 'refresh_token'
+        }
+        
+        token_response = req.post('https://oauth2.googleapis.com/token', data=refresh_data)
+        token_response.raise_for_status()
+        token_data = token_response.json()
+        access_token = token_data['access_token']
+        
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        # First, fetch all leads from user's connected sheet
+        user_leads = []
+        try:
+            # Get column mapping
+            column_mapping = config_user_record.get('column_mapping', {})
+            
+            # Fetch data from user's sheet
+            range_ = f"'{user_worksheet_title}'!A1:Z"
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}/values/{range_}"
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            
+            values = response.json().get("values", [])
+            if not values or len(values) < 2:
+                return jsonify({
+                    'error': 'No leads found',
+                    'message': 'Your leads sheet appears to be empty'
+                }), 404
+            
+            headers_row = values[0]
+            data_rows = values[1:]
+            
+            # Process each row
+            for row in data_rows:
+                # Pad row to match headers length
+                padded_row = row + [''] * (len(headers_row) - len(row))
+                row_dict = dict(zip(headers_row, padded_row))
+                
+                # Extract ASIN, name, and source using column mapping
+                asin = None
+                name = None
+                source = None
+                
+                # Get ASIN
+                asin_col = column_mapping.get('asin_column')
+                if asin_col and asin_col in row_dict:
+                    asin = str(row_dict[asin_col]).strip().upper()
+                
+                # Get name
+                name_col = column_mapping.get('name_column')
+                if name_col and name_col in row_dict:
+                    name = str(row_dict[name_col]).strip()
+                
+                # Get source
+                source_col = column_mapping.get('source_column')
+                if source_col and source_col in row_dict:
+                    source = str(row_dict[source_col]).strip()
+                
+                # Get cost if available
+                cost_col = column_mapping.get('cost_column')
+                cost = ''
+                if cost_col and cost_col in row_dict:
+                    cost = str(row_dict[cost_col]).strip()
+                
+                if asin and asin != 'nan' and asin != 'NAN':
+                    user_leads.append({
+                        'asin': asin,
+                        'name': name or '',
+                        'source': source or '',
+                        'cost': cost or ''
+                    })
+            
+        except Exception as e:
+            return jsonify({
+                'error': 'Failed to fetch user leads',
+                'message': f'Could not read from your leads sheet: {str(e)}'
+            }), 500
+        
+        if not user_leads:
+            return jsonify({
+                'error': 'No valid leads found',
+                'message': 'No leads with valid ASINs found in your sheet'
+            }), 404
+        
+        # Target spreadsheet where we'll add missing leads
+        target_sheet_id = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'
+        
+        # Function to map source URL to worksheet name
+        def get_worksheet_name_from_source(source_link):
+            if not source_link:
+                return None
+            
+            source_lower = source_link.lower()
+            if 'walmart.com' in source_lower:
+                return 'Walmart - Flat'
+            elif 'amazon.com' in source_lower:
+                return 'Amazon - Flat' 
+            elif 'target.com' in source_lower:
+                return 'Target - Flat'
+            elif 'bestbuy.com' in source_lower:
+                return 'Best Buy - Flat'
+            elif 'homedepot.com' in source_lower:
+                return 'Home Depot - Flat'
+            elif 'lowes.com' in source_lower:
+                return 'Lowes - Flat'
+            # Add more mappings as needed
+            return None
+        
+        # Get list of existing worksheets in target spreadsheet
+        metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}?fields=sheets.properties"
+        metadata_response = requests.get(metadata_url, headers=headers)
+        metadata_response.raise_for_status()
+        sheets_info = metadata_response.json().get("sheets", [])
+        existing_worksheets = [sheet["properties"]["title"] for sheet in sheets_info]
+        
+        sync_results = {
+            'added': 0,
+            'skipped': 0,
+            'errors': 0,
+            'already_existed': 0,
+            'details': []
+        }
+        
+        # Get all ASINs from all worksheets in target spreadsheet first
+        all_existing_asins = {}  # worksheet_name -> set of ASINs
+        
+        for worksheet_name in existing_worksheets:
+            try:
+                range_ = f"'{worksheet_name}'!A1:Z"
+                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}"
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+                
+                values = response.json().get("values", [])
+                if values and len(values) > 1:
+                    headers_row = values[0]
+                    existing_data = values[1:]
+                    
+                    # Find ASIN column
+                    asin_col_index = None
+                    for i, header in enumerate(headers_row):
+                        if header.upper() == 'ASIN':
+                            asin_col_index = i
+                            break
+                    
+                    if asin_col_index is not None:
+                        worksheet_asins = set()
+                        for row in existing_data:
+                            if len(row) > asin_col_index:
+                                asin = row[asin_col_index].strip().upper()
+                                if asin and asin != 'nan' and asin != 'NAN':
+                                    worksheet_asins.add(asin)
+                        all_existing_asins[worksheet_name] = worksheet_asins
+                    else:
+                        all_existing_asins[worksheet_name] = set()
+                else:
+                    all_existing_asins[worksheet_name] = set()
+            except Exception as e:
+                print(f"Error reading worksheet {worksheet_name}: {e}")
+                all_existing_asins[worksheet_name] = set()
+        
+        # Group user leads by target worksheet
+        leads_by_worksheet = {}
+        
+        for lead in user_leads:
+            target_worksheet = get_worksheet_name_from_source(lead.get('source'))
+            if not target_worksheet:
+                sync_results['errors'] += 1
+                continue
+            
+            if target_worksheet not in existing_worksheets:
+                sync_results['errors'] += 1
+                continue
+            
+            # Check if ASIN already exists in the target worksheet
+            if lead['asin'] in all_existing_asins.get(target_worksheet, set()):
+                sync_results['already_existed'] += 1
+                continue
+            
+            if target_worksheet not in leads_by_worksheet:
+                leads_by_worksheet[target_worksheet] = []
+            
+            leads_by_worksheet[target_worksheet].append(lead)
+        
+        # Process each worksheet - add missing leads
+        for worksheet_name, worksheet_leads in leads_by_worksheet.items():
+            try:
+                # Get existing data from worksheet to get the current row count
+                range_ = f"'{worksheet_name}'!A1:Z"
+                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}"
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()
+                
+                values = response.json().get("values", [])
+                if not values:
+                    # Empty worksheet - add header
+                    values = [['ASIN', 'Name', 'Source', 'Sell', 'Cost']]
+                    # First add the header row
+                    header_body = {'values': [['ASIN', 'Name', 'Source', 'Sell', 'Cost']]}
+                    header_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/'{worksheet_name}'!A1:E1?valueInputOption=RAW"
+                    requests.put(header_url, headers=headers, json=header_body)
+                
+                # Prepare new rows to add
+                new_rows = []
+                added_count = 0
+                
+                for lead in worksheet_leads:
+                    # Prepare row data
+                    asin = lead.get('asin', '')
+                    name = lead.get('name', '')
+                    source = lead.get('source', '')
+                    sell = f"https://www.amazon.com/dp/{asin}"  # Amazon link
+                    cost = lead.get('cost', '')  # Use cost from user's sheet if available
+                    
+                    new_rows.append([asin, name, source, sell, cost])
+                    added_count += 1
+                
+                # Add new rows to spreadsheet if any
+                if new_rows:
+                    # Determine the range for new data
+                    start_row = len(values) + 1  # Next available row
+                    end_row = start_row + len(new_rows) - 1
+                    range_ = f"'{worksheet_name}'!A{start_row}:E{end_row}"
+                    
+                    # Prepare the request body
+                    body = {
+                        'values': new_rows
+                    }
+                    
+                    # Update the spreadsheet
+                    update_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}?valueInputOption=RAW"
+                    update_response = requests.put(update_url, headers=headers, json=body)
+                    update_response.raise_for_status()
+                
+                sync_results['added'] += added_count
+                
+                if added_count > 0:
+                    sync_results['details'].append({
+                        'worksheet': worksheet_name,
+                        'count': added_count
+                    })
+                
+            except Exception as e:
+                print(f"Error processing worksheet {worksheet_name}: {e}")
+                sync_results['errors'] += len(worksheet_leads)
+                continue
+        
+        return jsonify(sync_results)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error syncing leads to sheets: {str(e)}'}), 500
+
 def fetch_discount_email_alerts():
     """Fetch recent Distill.io email alerts from admin-configured Gmail using Gmail API"""
     try:

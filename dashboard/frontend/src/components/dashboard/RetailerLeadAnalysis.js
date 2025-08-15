@@ -11,7 +11,9 @@ import {
   XCircle,
   ExternalLink,
   Download,
-  RefreshCw
+  RefreshCw,
+  Upload,
+  Plus
 } from 'lucide-react';
 
 const RetailerLeadAnalysis = () => {
@@ -24,6 +26,8 @@ const RetailerLeadAnalysis = () => {
   const [filterRecommendation, setFilterRecommendation] = useState('all');
   const [worksheets, setWorksheets] = useState([]);
   const [excludeKeywords, setExcludeKeywords] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
 
   useEffect(() => {
     fetchWorksheets();
@@ -118,6 +122,26 @@ const RetailerLeadAnalysis = () => {
     return passesRecommendationFilter && passesKeywordFilter;
   }) || [];
 
+  const handleSyncLeads = async () => {
+    setSyncLoading(true);
+    setSyncResults(null);
+    setError('');
+
+    try {
+      // This now syncs leads from user's connected sheet to the target spreadsheet
+      const response = await axios.post('/api/retailer-leads/sync-to-sheets', {}, { 
+        withCredentials: true 
+      });
+
+      setSyncResults(response.data);
+    } catch (error) {
+      console.error('Sync error:', error);
+      setError(error.response?.data?.message || error.response?.data?.error || 'Failed to sync leads to spreadsheet');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
   const exportToCSV = () => {
     if (!analysis?.recommendations) return;
 
@@ -201,7 +225,42 @@ const RetailerLeadAnalysis = () => {
                 Analyze all leads from a specific worksheet and get buying recommendations
               </p>
             </div>
+            <button
+              onClick={handleSyncLeads}
+              disabled={syncLoading}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm font-medium"
+              title="Sync all leads from your connected Google Sheet to the appropriate retailer worksheets (Walmart - Flat, Amazon - Flat, etc.)"
+            >
+              {syncLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing All Leads...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Sync All Leads to Sheets
+                </>
+              )}
+            </button>
           </div>
+
+        {/* Info box about sync feature */}
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+            <div className="text-sm text-blue-800">
+              <div className="font-medium mb-1">Lead Sync Feature</div>
+              <div>The "Sync All Leads to Sheets" button will:</div>
+              <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
+                <li>Read all leads from your connected Google Sheet</li>
+                <li>Check which leads are missing from retailer worksheets (Walmart - Flat, Target - Flat, etc.)</li>
+                <li>Automatically add missing leads to the appropriate worksheets based on their source URLs</li>
+                <li>Skip leads that already exist to avoid duplicates</li>
+              </ul>
+            </div>
+          </div>
+        </div>
 
         <div className="flex items-end space-x-4">
           <div className="flex-1">
@@ -254,6 +313,39 @@ const RetailerLeadAnalysis = () => {
             <div className="flex items-start">
               <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
               <div className="text-sm text-red-800 whitespace-pre-line">{error}</div>
+            </div>
+          </div>
+        )}
+
+        {syncResults && (
+          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+            <div className="flex items-start">
+              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-2" />
+              <div className="text-sm text-green-800">
+                <div className="font-medium">Sync completed successfully!</div>
+                <div className="mt-1">
+                  • {syncResults.added || 0} new leads added to retailer worksheets
+                  {syncResults.already_existed > 0 && (
+                    <span> • {syncResults.already_existed} leads already existed (skipped)</span>
+                  )}
+                  {syncResults.errors > 0 && (
+                    <span className="text-red-600"> • {syncResults.errors} errors occurred (no source URL or worksheet not found)</span>
+                  )}
+                </div>
+                {syncResults.details && syncResults.details.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs font-medium">Added to worksheets:</div>
+                    <ul className="text-xs mt-1 space-y-1">
+                      {syncResults.details.map((detail, index) => (
+                        <li key={index} className="flex items-center">
+                          <Plus className="h-3 w-3 mr-1" />
+                          {detail.worksheet}: {detail.count} leads
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -320,6 +412,23 @@ const RetailerLeadAnalysis = () => {
                       <option value="SKIP">Skip Only</option>
                     </select>
                   </div>
+                  <button
+                    onClick={handleSyncLeads}
+                    disabled={syncLoading}
+                    className="px-3 py-1 bg-green-100 text-green-700 rounded-md hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm mr-2"
+                  >
+                    {syncLoading ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-1" />
+                        Sync to Sheets
+                      </>
+                    )}
+                  </button>
                   <button
                     onClick={exportToCSV}
                     className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center text-sm"

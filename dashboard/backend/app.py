@@ -5205,6 +5205,67 @@ def get_expected_arrivals():
         traceback.print_exc()
         return jsonify({"error": f"Failed to analyze expected arrivals: {str(e)}"}), 500
 
+@app.route('/api/retailer-leads/target-worksheets', methods=['GET'])
+@login_required
+def get_target_worksheets():
+    """Get available worksheets from the target spreadsheet"""
+    try:
+        discord_id = session['discord_id']
+        user = get_user_record(discord_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user config
+        config_user_record = user
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Check if user has Google tokens
+        if not config_user_record.get('google_tokens'):
+            return jsonify({'worksheets': ['Unknown', 'Other', 'Misc', 'No Source']})
+        
+        try:
+            # Get Google access token
+            google_tokens = config_user_record.get('google_tokens', {})
+            
+            import requests as req
+            refresh_data = {
+                'refresh_token': google_tokens.get('refresh_token'),
+                'client_id': os.environ.get('GOOGLE_CLIENT_ID'),
+                'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET'),
+                'grant_type': 'refresh_token'
+            }
+            
+            token_response = req.post('https://oauth2.googleapis.com/token', data=refresh_data)
+            token_response.raise_for_status()
+            token_data = token_response.json()
+            access_token = token_data['access_token']
+            
+            # Target spreadsheet
+            sheet_id = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'
+            
+            # Get list of all worksheets
+            metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            metadata_response = requests.get(metadata_url, headers=headers)
+            metadata_response.raise_for_status()
+            sheets_info = metadata_response.json().get("sheets", [])
+            worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
+            
+            return jsonify({'worksheets': worksheet_names})
+            
+        except Exception as e:
+            print(f"Error fetching target worksheets: {e}")
+            # Return default list on error
+            return jsonify({'worksheets': ['Unknown', 'Other', 'Misc', 'No Source']})
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/retailer-leads/worksheets', methods=['GET'])
 @login_required
 def get_available_worksheets():
@@ -5790,7 +5851,8 @@ def sync_leads_to_sheets():
     """Sync leads from user's leads sheet to appropriate worksheets in the target spreadsheet"""
     try:
         data = request.get_json() or {}
-        # We don't need the leads parameter anymore - we'll fetch from user's sheet
+        # Optional: default worksheet for leads without source URLs
+        default_worksheet_for_no_source = data.get('default_worksheet', 'Unknown')
         
         discord_id = session['discord_id']
         user = get_user_record(discord_id)
@@ -6030,11 +6092,14 @@ def sync_leads_to_sheets():
         
         # Group user leads by target worksheet
         leads_by_worksheet = {}
+        no_source_leads = []  # Track leads without source URLs
         
         for lead in user_leads:
             target_worksheet = get_worksheet_name_from_source(lead.get('source'))
+            
             if not target_worksheet:
-                sync_results['errors'] += 1
+                # No source URL - collect these separately
+                no_source_leads.append(lead)
                 continue
             
             if target_worksheet not in existing_worksheets:
@@ -6050,6 +6115,24 @@ def sync_leads_to_sheets():
                 leads_by_worksheet[target_worksheet] = []
             
             leads_by_worksheet[target_worksheet].append(lead)
+        
+        # Handle leads without source URLs
+        if no_source_leads:
+            # Use the specified default worksheet or try to find one
+            if default_worksheet_for_no_source in existing_worksheets:
+                # Add leads without sources to the default worksheet
+                for lead in no_source_leads:
+                    if lead['asin'] not in all_existing_asins.get(default_worksheet_for_no_source, set()):
+                        if default_worksheet_for_no_source not in leads_by_worksheet:
+                            leads_by_worksheet[default_worksheet_for_no_source] = []
+                        leads_by_worksheet[default_worksheet_for_no_source].append(lead)
+                    else:
+                        sync_results['already_existed'] += 1
+            else:
+                # Default worksheet doesn't exist - report these
+                sync_results['no_source_count'] = len(no_source_leads)
+                sync_results['no_source_worksheet_missing'] = True
+                sync_results['suggested_worksheet'] = default_worksheet_for_no_source
         
         # Process each worksheet - add missing leads
         for worksheet_name, worksheet_leads in leads_by_worksheet.items():

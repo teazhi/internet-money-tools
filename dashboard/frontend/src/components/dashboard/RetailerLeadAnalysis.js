@@ -28,9 +28,12 @@ const RetailerLeadAnalysis = () => {
   const [excludeKeywords, setExcludeKeywords] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
+  const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
+  const [targetWorksheets, setTargetWorksheets] = useState([]);
 
   useEffect(() => {
     fetchWorksheets();
+    fetchTargetWorksheets();
   }, []);
 
   const fetchWorksheets = async () => {
@@ -43,6 +46,17 @@ const RetailerLeadAnalysis = () => {
       setError('Failed to load available worksheets');
     } finally {
       setLoadingWorksheets(false);
+    }
+  };
+
+  const fetchTargetWorksheets = async () => {
+    try {
+      const response = await axios.get('/api/retailer-leads/target-worksheets', { withCredentials: true });
+      setTargetWorksheets(response.data.worksheets || []);
+    } catch (error) {
+      console.error('Failed to fetch target worksheets:', error);
+      // Not critical - we'll use a default list
+      setTargetWorksheets(['Unknown', 'Other', 'Misc', 'No Source']);
     }
   };
 
@@ -129,7 +143,9 @@ const RetailerLeadAnalysis = () => {
 
     try {
       // This now syncs leads from user's connected sheet to the target spreadsheet
-      const response = await axios.post('/api/retailer-leads/sync-to-sheets', {}, { 
+      const response = await axios.post('/api/retailer-leads/sync-to-sheets', {
+        default_worksheet: defaultWorksheetForNoSource
+      }, { 
         withCredentials: true 
       });
 
@@ -249,7 +265,7 @@ const RetailerLeadAnalysis = () => {
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
           <div className="flex items-start">
             <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
-            <div className="text-sm text-blue-800">
+            <div className="text-sm text-blue-800 flex-1">
               <div className="font-medium mb-1">Lead Sync Feature</div>
               <div>The "Sync All Leads to Sheets" button will:</div>
               <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
@@ -257,7 +273,28 @@ const RetailerLeadAnalysis = () => {
                 <li>Check which leads are missing from retailer worksheets (Walmart - Flat, Target - Flat, etc.)</li>
                 <li>Automatically add missing leads to the appropriate worksheets based on their source URLs</li>
                 <li>Skip leads that already exist to avoid duplicates</li>
+                <li>Leads without source URLs will be added to the selected default worksheet</li>
               </ul>
+              
+              <div className="mt-3 flex items-center space-x-2">
+                <label className="text-xs font-medium">Default worksheet for no-source leads:</label>
+                <select
+                  value={defaultWorksheetForNoSource}
+                  onChange={(e) => setDefaultWorksheetForNoSource(e.target.value)}
+                  className="px-2 py-1 text-xs border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="Unknown">Unknown</option>
+                  <option value="Other">Other</option>
+                  <option value="Misc">Misc</option>
+                  <option value="No Source">No Source</option>
+                  {targetWorksheets
+                    .filter(ws => !['Unknown', 'Other', 'Misc', 'No Source'].includes(ws))
+                    .map(ws => (
+                      <option key={ws} value={ws}>{ws}</option>
+                    ))
+                  }
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -328,8 +365,16 @@ const RetailerLeadAnalysis = () => {
                   {syncResults.already_existed > 0 && (
                     <span> • {syncResults.already_existed} leads already existed (skipped)</span>
                   )}
+                  {syncResults.no_source_count > 0 && (
+                    <span className="text-yellow-600"> 
+                      • {syncResults.no_source_count} leads without source URLs 
+                      {syncResults.no_source_worksheet_missing && 
+                        ` (create "${syncResults.suggested_worksheet}" worksheet to sync these)`
+                      }
+                    </span>
+                  )}
                   {syncResults.errors > 0 && (
-                    <span className="text-red-600"> • {syncResults.errors} errors occurred (no source URL or worksheet not found)</span>
+                    <span className="text-red-600"> • {syncResults.errors} errors occurred (worksheet not found)</span>
                   )}
                 </div>
                 {syncResults.details && syncResults.details.length > 0 && (

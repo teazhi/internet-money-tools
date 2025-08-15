@@ -390,6 +390,35 @@ const RetailerLeadAnalysis = () => {
                     </ul>
                   </div>
                 )}
+                {syncResults.debug_info && (
+                  <div className="mt-3 p-2 bg-gray-100 rounded text-xs">
+                    <details>
+                      <summary className="cursor-pointer font-medium">Debug Info</summary>
+                      <div className="mt-2 space-y-1">
+                        <div>Total leads in your sheet: {syncResults.debug_info.total_user_leads}</div>
+                        <div>Available worksheets: {syncResults.debug_info.existing_worksheets.join(', ')}</div>
+                        {syncResults.debug_info.worksheet_not_found && syncResults.debug_info.worksheet_not_found.length > 0 && (
+                          <div>
+                            <div className="font-medium">Missing worksheets (first 5):</div>
+                            {syncResults.debug_info.worksheet_not_found.slice(0, 5).map((item, idx) => (
+                              <div key={idx} className="ml-2">
+                                • {item.asin}: needs "{item.target_worksheet}" (source: {item.source || 'none'})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {syncResults.debug_info.no_source_leads && (
+                          <div>
+                            <div className="font-medium">No-source leads (first 5):</div>
+                            {syncResults.debug_info.no_source_leads.map((item, idx) => (
+                              <div key={idx} className="ml-2">• {item.asin}: {item.name}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -6049,7 +6049,12 @@ def sync_leads_to_sheets():
             'skipped': 0,
             'errors': 0,
             'already_existed': 0,
-            'details': []
+            'details': [],
+            'debug_info': {
+                'total_user_leads': len(user_leads),
+                'existing_worksheets': existing_worksheets,
+                'worksheet_not_found': []
+            }
         }
         
         # Get all ASINs from all worksheets in target spreadsheet first
@@ -6104,6 +6109,11 @@ def sync_leads_to_sheets():
             
             if target_worksheet not in existing_worksheets:
                 sync_results['errors'] += 1
+                sync_results['debug_info']['worksheet_not_found'].append({
+                    'asin': lead.get('asin'),
+                    'source': lead.get('source'),
+                    'target_worksheet': target_worksheet
+                })
                 continue
             
             # Check if ASIN already exists in the target worksheet
@@ -6133,6 +6143,10 @@ def sync_leads_to_sheets():
                 sync_results['no_source_count'] = len(no_source_leads)
                 sync_results['no_source_worksheet_missing'] = True
                 sync_results['suggested_worksheet'] = default_worksheet_for_no_source
+                sync_results['debug_info']['no_source_leads'] = [
+                    {'asin': lead.get('asin'), 'name': lead.get('name', '')} 
+                    for lead in no_source_leads[:5]  # First 5 for debugging
+                ]
         
         # Process each worksheet - add missing leads
         for worksheet_name, worksheet_leads in leads_by_worksheet.items():

@@ -5910,8 +5910,10 @@ def sync_leads_to_sheets():
             column_mapping = config_user_record.get('column_mapping', {})
             
             # Fetch data from user's sheet
-            range_ = f"'{user_worksheet_title}'!A1:Z"
-            url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}/values/{range_}"
+            # Properly encode worksheet title for URL
+            import urllib.parse
+            encoded_range = urllib.parse.quote(f"'{user_worksheet_title}'!A1:Z")
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}/values/{encoded_range}"
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             
@@ -6062,8 +6064,9 @@ def sync_leads_to_sheets():
         
         for worksheet_name in existing_worksheets:
             try:
-                range_ = f"'{worksheet_name}'!A1:Z"
-                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}"
+                # Properly encode worksheet title for URL
+                encoded_range = urllib.parse.quote(f"'{worksheet_name}'!A1:Z")
+                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{encoded_range}"
                 response = requests.get(url, headers=headers)
                 response.raise_for_status()
                 
@@ -6152,8 +6155,9 @@ def sync_leads_to_sheets():
         for worksheet_name, worksheet_leads in leads_by_worksheet.items():
             try:
                 # Get existing data from worksheet to get the current row count
-                range_ = f"'{worksheet_name}'!A1:Z"
-                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}"
+                # Properly encode worksheet title for URL
+                encoded_range = urllib.parse.quote(f"'{worksheet_name}'!A1:Z")
+                url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{encoded_range}"
                 response = requests.get(url, headers=headers)
                 response.raise_for_status()
                 
@@ -6163,7 +6167,8 @@ def sync_leads_to_sheets():
                     values = [['ASIN', 'Name', 'Source', 'Sell', 'Cost']]
                     # First add the header row
                     header_body = {'values': [['ASIN', 'Name', 'Source', 'Sell', 'Cost']]}
-                    header_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/'{worksheet_name}'!A1:E1?valueInputOption=RAW"
+                    encoded_header_range = urllib.parse.quote(f"'{worksheet_name}'!A1:E1")
+                    header_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{encoded_header_range}?valueInputOption=RAW"
                     requests.put(header_url, headers=headers, json=header_body)
                 
                 # Prepare new rows to add
@@ -6193,8 +6198,9 @@ def sync_leads_to_sheets():
                         'values': new_rows
                     }
                     
-                    # Update the spreadsheet
-                    update_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{range_}?valueInputOption=RAW"
+                    # Update the spreadsheet - properly encode the range
+                    encoded_update_range = urllib.parse.quote(range_)
+                    update_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{encoded_update_range}?valueInputOption=RAW"
                     update_response = requests.put(update_url, headers=headers, json=body)
                     update_response.raise_for_status()
                 

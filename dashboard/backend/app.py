@@ -1218,7 +1218,6 @@ def configure_sheet():
     spreadsheet_id = data.get('spreadsheet_id')
     worksheet_title = data.get('worksheet_title')
     column_mapping = data.get('column_mapping')
-    
     if not all([spreadsheet_id, worksheet_title, column_mapping]):
         return jsonify({'error': 'Missing required fields'}), 400
     
@@ -6024,8 +6023,28 @@ def sync_leads_to_sheets():
                 return None
             
             source_lower = source_link.lower()
+            # Map to your existing worksheets
             if 'walmart.com' in source_lower:
                 return 'Walmart - Flat'
+            elif 'lowes.com' in source_lower:
+                return 'Lowes - Flat'
+            elif 'samsclub.com' in source_lower or 'sams club' in source_lower:
+                return 'Sam\'s Club - Flat'
+            elif 'kohls.com' in source_lower:
+                return 'Kohls - Flat'
+            elif 'keurig.com' in source_lower:
+                return 'Keurig - Flat'
+            elif 'jcpenney.com' in source_lower or 'jcp.com' in source_lower:
+                return 'JC Penney - Flat'
+            elif 'walgreens.com' in source_lower:
+                return 'Walgreens'
+            elif 'zoro.com' in source_lower:
+                return 'Zoro - Flat'
+            elif 'vitacost.com' in source_lower:
+                return 'vitacost'
+            elif 'swansonvitamins.com' in source_lower or 'swanson.com' in source_lower:
+                return 'swanson'
+            # Common ones that might need worksheets created
             elif 'amazon.com' in source_lower:
                 return 'Amazon - Flat' 
             elif 'target.com' in source_lower:
@@ -6034,8 +6053,8 @@ def sync_leads_to_sheets():
                 return 'Best Buy - Flat'
             elif 'homedepot.com' in source_lower:
                 return 'Home Depot - Flat'
-            elif 'lowes.com' in source_lower:
-                return 'Lowes - Flat'
+            elif 'costco.com' in source_lower:
+                return 'Costco - Flat'
             # Add more mappings as needed
             return None
         

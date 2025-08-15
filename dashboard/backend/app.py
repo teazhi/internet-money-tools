@@ -5863,8 +5863,12 @@ def sync_leads_to_sheets():
             headers_row = values[0]
             data_rows = values[1:]
             
+            print(f"Found headers: {headers_row}")
+            print(f"Processing {len(data_rows)} data rows")
+            print(f"Column mapping: {column_mapping}")
+            
             # Process each row
-            for row in data_rows:
+            for row_index, row in enumerate(data_rows):
                 # Pad row to match headers length
                 padded_row = row + [''] * (len(headers_row) - len(row))
                 row_dict = dict(zip(headers_row, padded_row))
@@ -5874,25 +5878,50 @@ def sync_leads_to_sheets():
                 name = None
                 source = None
                 
-                # Get ASIN
-                asin_col = column_mapping.get('asin_column')
-                if asin_col and asin_col in row_dict:
+                # Column mapping maps logical names to actual column names
+                # e.g., {"ASIN": "Product ASIN", "COGS": "Cost", etc.}
+                
+                # Get ASIN - use column mapping to find the right column
+                asin_col = column_mapping.get('ASIN', 'ASIN')  # Default to 'ASIN' if not mapped
+                if asin_col in row_dict:
                     asin = str(row_dict[asin_col]).strip().upper()
+                else:
+                    # Fallback: try common ASIN column names
+                    for possible_asin_col in ['ASIN', 'asin', 'Asin', 'product_asin', 'Product ASIN']:
+                        if possible_asin_col in row_dict:
+                            potential_asin = str(row_dict[possible_asin_col]).strip().upper()
+                            if potential_asin and potential_asin != 'NAN' and potential_asin != 'NONE':
+                                asin = potential_asin
+                                break
                 
-                # Get name
-                name_col = column_mapping.get('name_column')
-                if name_col and name_col in row_dict:
-                    name = str(row_dict[name_col]).strip()
+                # Get name - there's no standard mapping for name, so try common names
+                name = None
+                for possible_name_col in ['Name', 'name', 'Product Name', 'product_name', 'Title', 'title', 'Product Title', 'product_title', 'Description']:
+                    if possible_name_col in row_dict:
+                        potential_name = str(row_dict[possible_name_col]).strip()
+                        if potential_name and potential_name != 'nan':
+                            name = potential_name
+                            break
                 
-                # Get source
-                source_col = column_mapping.get('source_column')
+                # Get source - look for source/link columns
+                source = None
+                # Check if there's a mapped source field (like "Store and Source Link")
+                source_col = column_mapping.get('Store and Source Link')
                 if source_col and source_col in row_dict:
                     source = str(row_dict[source_col]).strip()
+                else:
+                    # Fallback: try common source column names
+                    for possible_source_col in ['Source', 'source', 'URL', 'url', 'Link', 'link', 'Source Link', 'source_link', 'Product URL', 'Store and Source Link']:
+                        if possible_source_col in row_dict:
+                            potential_source = str(row_dict[possible_source_col]).strip()
+                            if potential_source and potential_source.startswith('http'):
+                                source = potential_source
+                                break
                 
-                # Get cost if available
-                cost_col = column_mapping.get('cost_column')
+                # Get cost - use COGS mapping
                 cost = ''
-                if cost_col and cost_col in row_dict:
+                cost_col = column_mapping.get('COGS', 'COGS')  # Default to 'COGS' if not mapped
+                if cost_col in row_dict:
                     cost = str(row_dict[cost_col]).strip()
                 
                 if asin and asin != 'nan' and asin != 'NAN':
@@ -5902,6 +5931,13 @@ def sync_leads_to_sheets():
                         'source': source or '',
                         'cost': cost or ''
                     })
+                    if row_index < 5:  # Log first 5 successful extractions
+                        print(f"Row {row_index}: Found ASIN {asin} with source {source}")
+                else:
+                    if row_index < 5:  # Log first 5 failed extractions
+                        print(f"Row {row_index}: No valid ASIN found. Raw data: {row_dict}")
+            
+            print(f"Total leads found: {len(user_leads)}")
             
         except Exception as e:
             return jsonify({

@@ -519,6 +519,7 @@ const SheetConfig = () => {
       </div>
     </div>
   );
+  };
 
   const renderStep4 = () => (
     <div className="card max-w-2xl">

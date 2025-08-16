@@ -34,6 +34,7 @@ const SheetConfig = () => {
   
   // Configuration display state
   const [configuredSpreadsheetName, setConfiguredSpreadsheetName] = useState('');
+  const [hasManuallyNavigated, setHasManuallyNavigated] = useState(false);
 
   const requiredColumns = [
     'Date', 'Sale Price', 'Name', 'Size/Color', '# Units in Bundle',
@@ -41,16 +42,16 @@ const SheetConfig = () => {
   ];
 
   useEffect(() => {
-    if (user?.google_linked) {
+    if (user?.sheet_configured && user?.user_record) {
+      // Load existing configuration and go to step 4 (highest priority)
+      loadExistingConfiguration(user.user_record);
+      setStep(4);
+    } else if (user?.google_linked && !hasManuallyNavigated) {
+      // Only auto-advance to step 2 if user hasn't manually navigated
       setStep(2);
       fetchSpreadsheets();
     }
-    if (user?.sheet_configured && user?.user_record) {
-      // Load existing configuration
-      loadExistingConfiguration(user.user_record);
-      setStep(4);
-    }
-  }, [user]);
+  }, [user, hasManuallyNavigated]);
 
   const loadExistingConfiguration = async (userRecord) => {
     try {
@@ -293,45 +294,77 @@ const SheetConfig = () => {
         </p>
       </div>
 
-      {!googleAuthUrl ? (
-        <button
-          onClick={getGoogleAuthUrl}
-          className="btn-primary w-full mb-4"
-        >
-          Generate Authorization URL
-        </button>
-      ) : (
+      {user?.google_linked ? (
+        // Already connected - show status and next button
         <div className="space-y-4">
-          <a
-            href={googleAuthUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary w-full flex items-center justify-center space-x-2"
-          >
-            <ExternalLink className="h-4 w-4" />
-            <span>Open Google Authorization</span>
-          </a>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Authorization Code
-            </label>
-            <input
-              type="text"
-              value={authCode}
-              onChange={(e) => setAuthCode(e.target.value)}
-              className="input-field mb-4"
-              placeholder="Paste the authorization code here"
-            />
+          <div className="bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+              <span className="text-sm text-green-800">Google account is already connected</span>
+            </div>
+          </div>
+          <div className="flex space-x-3">
             <button
-              onClick={completeGoogleAuth}
-              disabled={loading || !authCode.trim()}
-              className="btn-primary w-full disabled:opacity-50"
+              onClick={() => {
+                setStep(2);
+                fetchSpreadsheets();
+              }}
+              className="btn-primary flex-1"
             >
-              {loading ? 'Linking...' : 'Complete Authorization'}
+              Next: Select Spreadsheet
+            </button>
+            <button
+              onClick={handleDisconnectGoogle}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200"
+            >
+              Disconnect & Reconnect
             </button>
           </div>
         </div>
+      ) : (
+        // Not connected - show auth flow
+        <>
+          {!googleAuthUrl ? (
+            <button
+              onClick={getGoogleAuthUrl}
+              className="btn-primary w-full mb-4"
+            >
+              Generate Authorization URL
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <a
+                href={googleAuthUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary w-full flex items-center justify-center space-x-2"
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span>Open Google Authorization</span>
+              </a>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Authorization Code
+                </label>
+                <input
+                  type="text"
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  className="input-field mb-4"
+                  placeholder="Paste the authorization code here"
+                />
+                <button
+                  onClick={completeGoogleAuth}
+                  disabled={loading || !authCode.trim()}
+                  className="btn-primary w-full disabled:opacity-50"
+                >
+                  {loading ? 'Linking...' : 'Complete Authorization'}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -555,15 +588,35 @@ const SheetConfig = () => {
         ].map((stepItem, index) => (
           <React.Fragment key={stepItem.num}>
             <div className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                stepItem.completed 
-                  ? 'bg-green-500 text-white' 
-                  : stepItem.active 
-                    ? 'bg-builders-500 text-white' 
-                    : 'bg-gray-200 text-gray-600'
-              }`}>
+              <button
+                onClick={() => {
+                  setHasManuallyNavigated(true);
+                  if (stepItem.num === 1) {
+                    setStep(1);
+                  } else if (stepItem.num === 2 && user?.google_linked) {
+                    setStep(2);
+                    fetchSpreadsheets();
+                  } else if (stepItem.num === 3 && selectedSpreadsheet && selectedWorksheet) {
+                    setStep(3.5);
+                  } else if (stepItem.num === 4 && user?.sheet_configured) {
+                    setStep(4);
+                  }
+                }}
+                disabled={
+                  (stepItem.num === 2 && !user?.google_linked) ||
+                  (stepItem.num === 3 && (!selectedSpreadsheet || !selectedWorksheet)) ||
+                  (stepItem.num === 4 && !user?.sheet_configured)
+                }
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                  stepItem.completed 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : stepItem.active 
+                      ? 'bg-builders-500 text-white' 
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:hover:bg-gray-200 disabled:cursor-not-allowed'
+                }`}
+              >
                 {stepItem.completed ? <CheckCircle className="h-4 w-4" /> : stepItem.num}
-              </div>
+              </button>
               <span className={`ml-2 text-sm ${
                 stepItem.active ? 'text-builders-600 font-medium' : 'text-gray-500'
               }`}>

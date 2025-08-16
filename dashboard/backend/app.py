@@ -6154,9 +6154,10 @@ def sync_leads_to_sheets():
                 print(f"Error reading worksheet {worksheet_name}: {e}")
                 all_existing_asins[worksheet_name] = set()
         
-        # Group user leads by target worksheet
+        # Group user leads by target worksheet with deduplication
         leads_by_worksheet = {}
         no_source_leads = []  # Track leads without source URLs
+        processed_asins_per_worksheet = {}  # Track ASINs we're about to add in this batch
         
         for lead in user_leads:
             target_worksheet = get_worksheet_name_from_source(lead.get('source'))
@@ -6180,6 +6181,18 @@ def sync_leads_to_sheets():
                 sync_results['already_existed'] += 1
                 continue
             
+            # Initialize tracking for this worksheet if needed
+            if target_worksheet not in processed_asins_per_worksheet:
+                processed_asins_per_worksheet[target_worksheet] = set()
+            
+            # Check if we've already processed this ASIN for this worksheet in this batch
+            if lead['asin'] in processed_asins_per_worksheet[target_worksheet]:
+                sync_results['already_existed'] += 1
+                continue
+            
+            # Track this ASIN as processed for this worksheet
+            processed_asins_per_worksheet[target_worksheet].add(lead['asin'])
+            
             if target_worksheet not in leads_by_worksheet:
                 leads_by_worksheet[target_worksheet] = []
             
@@ -6189,14 +6202,28 @@ def sync_leads_to_sheets():
         if no_source_leads:
             # Use the specified default worksheet or try to find one
             if default_worksheet_for_no_source in existing_worksheets:
-                # Add leads without sources to the default worksheet
+                # Initialize tracking for default worksheet if needed
+                if default_worksheet_for_no_source not in processed_asins_per_worksheet:
+                    processed_asins_per_worksheet[default_worksheet_for_no_source] = set()
+                
+                # Add leads without sources to the default worksheet (with deduplication)
                 for lead in no_source_leads:
-                    if lead['asin'] not in all_existing_asins.get(default_worksheet_for_no_source, set()):
-                        if default_worksheet_for_no_source not in leads_by_worksheet:
-                            leads_by_worksheet[default_worksheet_for_no_source] = []
-                        leads_by_worksheet[default_worksheet_for_no_source].append(lead)
-                    else:
+                    # Check if already exists in target spreadsheet
+                    if lead['asin'] in all_existing_asins.get(default_worksheet_for_no_source, set()):
                         sync_results['already_existed'] += 1
+                        continue
+                    
+                    # Check if we've already processed this ASIN for this worksheet in this batch
+                    if lead['asin'] in processed_asins_per_worksheet[default_worksheet_for_no_source]:
+                        sync_results['already_existed'] += 1
+                        continue
+                    
+                    # Track this ASIN as processed for this worksheet
+                    processed_asins_per_worksheet[default_worksheet_for_no_source].add(lead['asin'])
+                    
+                    if default_worksheet_for_no_source not in leads_by_worksheet:
+                        leads_by_worksheet[default_worksheet_for_no_source] = []
+                    leads_by_worksheet[default_worksheet_for_no_source].append(lead)
             else:
                 # Default worksheet doesn't exist - report these
                 sync_results['no_source_count'] = len(no_source_leads)

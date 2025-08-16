@@ -5968,18 +5968,25 @@ def sync_leads_to_sheets():
                 
                 # Get source - look for source/link columns
                 source = None
-                # Check if there's a mapped source field (like "Store and Source Link")
-                source_col = column_mapping.get('Store and Source Link')
+                source_col = None
+                
+                # Smart detection: Find source column like Smart Restock does
+                for col in headers_row:
+                    col_lower = col.lower()
+                    if any(keyword in col_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor', 'store']):
+                        # Skip Amazon-specific columns
+                        if any(skip_word in col_lower for skip_word in ['amazon', 'sell', 'listing']):
+                            continue
+                        source_col = col
+                        if row_index == 0:  # Log first time only
+                            print(f"Detected source column: '{source_col}'")
+                        break
+                
+                # Get source value from the detected column
                 if source_col and source_col in row_dict:
-                    source = str(row_dict[source_col]).strip()
-                else:
-                    # Fallback: try common source column names
-                    for possible_source_col in ['Source', 'source', 'URL', 'url', 'Link', 'link', 'Source Link', 'source_link', 'Product URL', 'Store and Source Link']:
-                        if possible_source_col in row_dict:
-                            potential_source = str(row_dict[possible_source_col]).strip()
-                            if potential_source and potential_source.startswith('http'):
-                                source = potential_source
-                                break
+                    potential_source = str(row_dict[source_col]).strip()
+                    if potential_source and potential_source != 'nan' and potential_source.startswith('http'):
+                        source = potential_source
                 
                 # Get cost - use COGS mapping
                 cost = ''
@@ -5995,7 +6002,7 @@ def sync_leads_to_sheets():
                         'cost': cost or ''
                     })
                     if row_index < 5:  # Log first 5 successful extractions
-                        print(f"Row {row_index}: Found ASIN {asin} with source {source}")
+                        print(f"Row {row_index}: Found ASIN {asin} with source '{source}'")
                 else:
                     if row_index < 5:  # Log first 5 failed extractions
                         print(f"Row {row_index}: No valid ASIN found. Raw data: {row_dict}")

@@ -729,8 +729,8 @@ const Onboarding = () => {
           </button>
 
           <button
-            onClick={() => setCurrentStep(Math.min(3, currentStep + 1))}
-            disabled={currentStep === 3 || !canProceedToStep(currentStep + 1)}
+            onClick={() => setCurrentStep(Math.min(4, currentStep + 1))}
+            disabled={currentStep === 4 || !canProceedToStep(currentStep + 1)}
             className="flex items-center px-4 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next

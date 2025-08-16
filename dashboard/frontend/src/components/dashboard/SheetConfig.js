@@ -185,6 +185,40 @@ const SheetConfig = () => {
     }
   };
 
+  const handleDisconnectGoogle = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your Google account? This will reset your sheet configuration and require re-authorization with write permissions.')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await axios.post('/api/google/disconnect', {}, { withCredentials: true });
+      setMessage({ type: 'success', text: 'Google account disconnected successfully!' });
+      
+      // Update user context and reset to step 1
+      updateUser({
+        google_linked: false,
+        sheet_configured: false
+      });
+      
+      // Reset all state
+      setStep(1);
+      setSelectedSpreadsheet('');
+      setSelectedWorksheet('');
+      setColumnMapping({});
+      setConfiguredSpreadsheetName('');
+      setSpreadsheets([]);
+      setWorksheets([]);
+      setHeaders([]);
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to disconnect Google account' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderStep1 = () => (
     <div className="card max-w-2xl">
       <div className="text-center mb-6">
@@ -381,7 +415,7 @@ const SheetConfig = () => {
         </div>
       </div>
 
-      <div className="mt-6 text-center">
+      <div className="mt-6 flex justify-center space-x-3">
         <button
           onClick={() => {
             setStep(2);
@@ -393,6 +427,12 @@ const SheetConfig = () => {
           className="btn-secondary"
         >
           Reconfigure
+        </button>
+        <button
+          onClick={handleDisconnectGoogle}
+          className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors duration-200"
+        >
+          Disconnect Google Account
         </button>
       </div>
     </div>

@@ -1080,7 +1080,7 @@ def get_google_auth_url():
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
-        "scope": "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
+        "scope": "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
         "access_type": "offline",
         "prompt": "consent",
         "state": str(discord_id)
@@ -1131,6 +1131,28 @@ def complete_google_auth():
             
     except Exception as e:
         return jsonify({'error': f'Error completing Google OAuth: {str(e)}'}), 500
+
+@app.route('/api/google/disconnect', methods=['POST'])
+@login_required
+def disconnect_google():
+    """Disconnect user's Google account"""
+    discord_id = session['discord_id']
+    users = get_users_config()
+    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    
+    if not user_record:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Remove Google tokens and sheet configuration
+    user_record.pop('google_tokens', None)
+    user_record.pop('sheet_id', None)
+    user_record.pop('worksheet_title', None)
+    user_record.pop('column_mapping', None)
+    
+    if update_users_config(users):
+        return jsonify({'message': 'Google account disconnected successfully'})
+    else:
+        return jsonify({'error': 'Failed to disconnect Google account'}), 500
 
 @app.route('/api/google/spreadsheets')
 @login_required
@@ -5984,9 +6006,17 @@ def sync_leads_to_sheets():
                 
                 # Get source value from the detected column
                 if source_col and source_col in row_dict:
-                    potential_source = str(row_dict[source_col]).strip()
-                    if potential_source and potential_source != 'nan' and potential_source.startswith('http'):
+                    raw_value = row_dict[source_col]
+                    if row_index < 5:  # Debug first 5 rows
+                        print(f"Row {row_index}: Raw source value: '{raw_value}' (type: {type(raw_value)})")
+                    
+                    potential_source = str(raw_value).strip() if raw_value else ''
+                    if potential_source and potential_source.lower() not in ['nan', 'none', ''] and potential_source != 'None':
+                        # Accept any non-empty value, not just URLs starting with http
                         source = potential_source
+                        # Add http:// if it looks like a domain without protocol
+                        if '.' in source and not source.startswith('http'):
+                            source = f'https://{source}'
                 
                 # Get cost - use COGS mapping
                 cost = ''

@@ -121,6 +121,27 @@ const Settings = () => {
     }
   };
 
+  const handleDisconnectGoogle = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your Google account? This will reset your sheet configuration and require re-authorization with write permissions.')) {
+      return;
+    }
+    try {
+      await axios.post('/api/google/disconnect', {}, { withCredentials: true });
+      setMessage({ type: 'success', text: 'Google account disconnected successfully!' });
+      
+      // Update user context
+      updateUser({
+        google_linked: false,
+        sheet_configured: false
+      });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to disconnect Google account' 
+      });
+    }
+  };
+
   const handleTestConnection = async () => {
     setTestingConnection(true);
     setMessage({ type: '', text: '' });
@@ -565,9 +586,19 @@ const Settings = () => {
           </div>
           <div className="flex justify-between items-center py-2 border-b border-gray-200">
             <span className="text-sm font-medium text-gray-600">Google Account</span>
-            <span className={`text-sm ${user?.google_linked ? 'text-green-600' : 'text-red-600'}`}>
-              {user?.google_linked ? 'Connected' : 'Not Connected'}
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className={`text-sm ${user?.google_linked ? 'text-green-600' : 'text-red-600'}`}>
+                {user?.google_linked ? 'Connected' : 'Not Connected'}
+              </span>
+              {user?.google_linked && (
+                <button
+                  onClick={handleDisconnectGoogle}
+                  className="text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded transition-colors duration-200"
+                >
+                  Disconnect
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex justify-between items-center py-2 border-b border-gray-200">
             <span className="text-sm font-medium text-gray-600">Sheet Configuration</span>

@@ -568,7 +568,30 @@ const Onboarding = () => {
             completed={isStepComplete(3)}
             active={currentStep === 3}
           >
-            {!isStepComplete(3) && (
+            {isStepComplete(3) ? (
+              <div className="mt-4 space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    <div className="ml-3">
+                      <h4 className="text-sm font-medium text-green-800">Google Account Connected</h4>
+                      <p className="text-sm text-green-700 mt-1">
+                        Your Google account is successfully linked and ready for spreadsheet access.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setCurrentStep(4);
+                    fetchSpreadsheets();
+                  }}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-builders-600 hover:bg-builders-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-builders-500"
+                >
+                  Continue to Spreadsheet Configuration
+                </button>
+              </div>
+            ) : (
               <div className="mt-4 space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex">

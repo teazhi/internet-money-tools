@@ -138,6 +138,62 @@ const SheetConfig = () => {
     }
   };
 
+  const autoDetectColumnMapping = (headers) => {
+    const mapping = {};
+    
+    // Define patterns for each required column
+    const patterns = {
+      'Date': ['date', 'purchase date', 'order date', 'bought', 'purchased'],
+      'Sale Price': ['sale price', 'selling price', 'price', 'sell price', 'sale', 'amount'],
+      'Name': ['name', 'product name', 'title', 'product title', 'item name', 'description'],
+      'Size/Color': ['size', 'color', 'variant', 'size/color', 'variation', 'style'],
+      '# Units in Bundle': ['units', 'quantity', 'qty', 'bundle', 'pack size', 'count'],
+      'Amount Purchased': ['amount purchased', 'purchase quantity', 'bought quantity', 'purchased qty'],
+      'ASIN': ['asin', 'product asin', 'amazon asin'],
+      'COGS': ['cogs', 'cost', 'purchase price', 'buy price', 'wholesale', 'cost price'],
+      'Order #': ['order', 'order number', 'order #', 'order id', 'purchase order'],
+      'Prep Notes': ['prep', 'notes', 'prep notes', 'preparation', 'comment', 'remarks']
+    };
+    
+    // For each required column, find the best matching header
+    for (const [requiredCol, searchPatterns] of Object.entries(patterns)) {
+      let bestMatch = null;
+      let bestScore = 0;
+      
+      for (const header of headers) {
+        const headerLower = header.toLowerCase();
+        
+        // Check for exact matches first (highest score)
+        for (const pattern of searchPatterns) {
+          if (headerLower === pattern) {
+            bestMatch = header;
+            bestScore = 100;
+            break;
+          }
+        }
+        
+        // If no exact match, check for partial matches
+        if (bestScore < 100) {
+          for (const pattern of searchPatterns) {
+            if (headerLower.includes(pattern)) {
+              const score = pattern.length / headerLower.length * 50; // Partial match score
+              if (score > bestScore) {
+                bestMatch = header;
+                bestScore = score;
+              }
+            }
+          }
+        }
+      }
+      
+      if (bestMatch && bestScore > 30) { // Only use matches with reasonable confidence
+        mapping[requiredCol] = bestMatch;
+      }
+    }
+    
+    return mapping;
+  };
+
   const fetchHeaders = async () => {
     if (!selectedSpreadsheet || !selectedWorksheet) return;
     
@@ -147,7 +203,15 @@ const SheetConfig = () => {
         `/api/sheet/headers/${selectedSpreadsheet}/${encodeURIComponent(selectedWorksheet)}`,
         { withCredentials: true }
       );
-      setHeaders(response.data.headers);
+      const fetchedHeaders = response.data.headers;
+      setHeaders(fetchedHeaders);
+      
+      // Auto-detect column mapping (only if not already configured)
+      if (Object.keys(columnMapping).length === 0) {
+        const detectedMapping = autoDetectColumnMapping(fetchedHeaders);
+        setColumnMapping(detectedMapping);
+      }
+      
       setStep(3.5); // Column mapping step
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to fetch sheet headers' });
@@ -346,37 +410,69 @@ const SheetConfig = () => {
     </div>
   );
 
-  const renderColumnMapping = () => (
-    <div className="card">
-      <div className="text-center mb-6">
-        <Database className="h-12 w-12 text-purple-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Columns</h3>
-        <p className="text-gray-600">
-          Map your sheet columns to the required fields
-        </p>
-      </div>
+  const renderColumnMapping = () => {
+    const autoDetectedMapping = autoDetectColumnMapping(headers);
+    const detectedCount = Object.keys(autoDetectedMapping).length;
+    
+    return (
+      <div className="card">
+        <div className="text-center mb-6">
+          <Database className="h-12 w-12 text-purple-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Columns</h3>
+          <p className="text-gray-600">
+            Map your sheet columns to the required fields
+          </p>
+          {detectedCount > 0 && (
+            <div className="mt-3 flex items-center justify-center space-x-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              <span className="text-sm text-green-600">
+                Auto-detected {detectedCount} of {requiredColumns.length} columns
+              </span>
+              <button
+                onClick={() => {
+                  const detectedMapping = autoDetectColumnMapping(headers);
+                  setColumnMapping(detectedMapping);
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 underline ml-2"
+              >
+                Reset to Auto-Detect
+              </button>
+            </div>
+          )}
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {requiredColumns.map((requiredCol) => (
-          <div key={requiredCol}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {requiredCol} <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={columnMapping[requiredCol] || ''}
-              onChange={(e) => setColumnMapping(prev => ({
-                ...prev,
-                [requiredCol]: e.target.value
-              }))}
-              className="select-field"
-            >
-              <option value="">Select column...</option>
-              {headers.map((header, index) => (
-                <option key={index} value={header}>{header}</option>
-              ))}
-            </select>
-          </div>
-        ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {requiredColumns.map((requiredCol) => {
+          const isAutoDetected = autoDetectedMapping[requiredCol] === columnMapping[requiredCol];
+          return (
+            <div key={requiredCol}>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="flex items-center space-x-2">
+                  <span>{requiredCol} <span className="text-red-500">*</span></span>
+                  {isAutoDetected && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Auto-detected
+                    </span>
+                  )}
+                </div>
+              </label>
+              <select
+                value={columnMapping[requiredCol] || ''}
+                onChange={(e) => setColumnMapping(prev => ({
+                  ...prev,
+                  [requiredCol]: e.target.value
+                }))}
+                className={`select-field ${isAutoDetected ? 'border-green-300 bg-green-50' : ''}`}
+              >
+                <option value="">Select column...</option>
+                {headers.map((header, index) => (
+                  <option key={index} value={header}>{header}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-6 flex justify-end">

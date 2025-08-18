@@ -272,8 +272,7 @@ const Dashboard = () => {
       </div>
 
       {/* Desktop sidebar */}
-      <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} md:flex-col transition-all duration-300`}>
-        <div className="flex flex-col flex-grow bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 shadow-2xl">
+      <div className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'} md:flex-col transition-all duration-300 fixed left-0 top-0 h-screen z-30 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 shadow-2xl`}>
           {/* Logo section */}
           <div className="flex items-center justify-between px-4 py-6">
             <div className="flex items-center">
@@ -384,11 +383,10 @@ const Dashboard = () => {
               </div>
             </div>
           )}
-        </div>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="px-4 sm:px-6 lg:px-8">

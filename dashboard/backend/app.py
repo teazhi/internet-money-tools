@@ -259,14 +259,14 @@ def get_dummy_analytics_data(target_date):
         'success': True,
         'report_date': target_date.strftime('%Y-%m-%d'),
         'user_timezone': 'America/New_York',
-        'total_revenue': 15847.32,
-        'total_orders': 124,
-        'avg_order_value': 127.80,
-        'units_sold': 186,
+        'total_revenue': 4235.67,
+        'total_orders': 89,
+        'avg_order_value': 47.60,
+        'units_sold': 134,
         'today_sales': {
-            'B08N5WRWNW': 32,
-            'B07XJ8C8F7': 28,
-            'B09KMXJQ9R': 25
+            'B08N5WRWNW': 18,
+            'B07XJ8C8F7': 22,
+            'B09KMXJQ9R': 15
         },
         'sellerboard_orders': [
             {
@@ -321,56 +321,62 @@ def get_dummy_analytics_data(target_date):
             {
                 'asin': 'B08N5WRWNW',
                 'title': 'Demo Wireless Bluetooth Headphones',
-                'units_sold': 32,
-                'revenue': 2547.68,
-                'avg_price': 79.62
+                'units_sold': 18,
+                'revenue': 1439.10,
+                'avg_price': 79.95
             },
             {
                 'asin': 'B07XJ8C8F7',
                 'title': 'Premium Phone Case - Clear',
-                'units_sold': 28,
-                'revenue': 1876.44,
-                'avg_price': 67.02
+                'units_sold': 22,
+                'revenue': 549.78,
+                'avg_price': 24.99
             },
             {
                 'asin': 'B09KMXJQ9R',
                 'title': 'Wireless Charging Pad',
-                'units_sold': 25,
-                'revenue': 1624.75,
+                'units_sold': 15,
+                'revenue': 974.85,
                 'avg_price': 64.99
             }
         ],
         'hourly_sales': [
-            {'hour': '00:00', 'revenue': 234.56, 'orders': 3},
-            {'hour': '01:00', 'revenue': 189.23, 'orders': 2},
-            {'hour': '02:00', 'revenue': 345.67, 'orders': 4},
-            {'hour': '03:00', 'revenue': 567.89, 'orders': 7},
-            {'hour': '04:00', 'revenue': 432.10, 'orders': 5},
-            {'hour': '05:00', 'revenue': 678.90, 'orders': 8},
-            {'hour': '06:00', 'revenue': 789.12, 'orders': 9},
-            {'hour': '07:00', 'revenue': 890.34, 'orders': 11},
-            {'hour': '08:00', 'revenue': 1234.56, 'orders': 15},
-            {'hour': '09:00', 'revenue': 1456.78, 'orders': 18},
-            {'hour': '10:00', 'revenue': 1678.90, 'orders': 21},
-            {'hour': '11:00', 'revenue': 1890.12, 'orders': 24},
-            {'hour': '12:00', 'revenue': 2100.34, 'orders': 26},
-            {'hour': '13:00', 'revenue': 1987.65, 'orders': 25},
-            {'hour': '14:00', 'revenue': 1765.43, 'orders': 22},
-            {'hour': '15:00', 'revenue': 1543.21, 'orders': 19},
-            {'hour': '16:00', 'revenue': 1321.09, 'orders': 16},
-            {'hour': '17:00', 'revenue': 1109.87, 'orders': 14},
-            {'hour': '18:00', 'revenue': 987.65, 'orders': 12},
-            {'hour': '19:00', 'revenue': 876.54, 'orders': 11},
-            {'hour': '20:00', 'revenue': 765.43, 'orders': 9},
-            {'hour': '21:00', 'revenue': 654.32, 'orders': 8},
-            {'hour': '22:00', 'revenue': 543.21, 'orders': 6},
-            {'hour': '23:00', 'revenue': 432.10, 'orders': 5}
+            {'hour': '00:00', 'revenue': 125.30, 'orders': 2},
+            {'hour': '01:00', 'revenue': 89.45, 'orders': 1},
+            {'hour': '02:00', 'revenue': 156.78, 'orders': 3},
+            {'hour': '03:00', 'revenue': 203.89, 'orders': 4},
+            {'hour': '04:00', 'revenue': 178.20, 'orders': 3},
+            {'hour': '05:00', 'revenue': 267.90, 'orders': 5},
+            {'hour': '06:00', 'revenue': 312.45, 'orders': 6},
+            {'hour': '07:00', 'revenue': 389.34, 'orders': 8},
+            {'hour': '08:00', 'revenue': 445.67, 'orders': 9},
+            {'hour': '09:00', 'revenue': 534.78, 'orders': 11},
+            {'hour': '10:00', 'revenue': 623.90, 'orders': 13},
+            {'hour': '11:00', 'revenue': 712.12, 'orders': 15},
+            {'hour': '12:00', 'revenue': 789.34, 'orders': 16},
+            {'hour': '13:00', 'revenue': 734.65, 'orders': 15},
+            {'hour': '14:00', 'revenue': 656.43, 'orders': 14},
+            {'hour': '15:00', 'revenue': 578.21, 'orders': 12},
+            {'hour': '16:00', 'revenue': 489.09, 'orders': 10},
+            {'hour': '17:00', 'revenue': 423.87, 'orders': 9},
+            {'hour': '18:00', 'revenue': 367.65, 'orders': 7},
+            {'hour': '19:00', 'revenue': 334.54, 'orders': 6},
+            {'hour': '20:00', 'revenue': 289.43, 'orders': 5},
+            {'hour': '21:00', 'revenue': 234.32, 'orders': 4},
+            {'hour': '22:00', 'revenue': 189.21, 'orders': 3},
+            {'hour': '23:00', 'revenue': 145.10, 'orders': 2}
         ],
         'comparison': {
-            'yesterday_revenue': 14256.78,
-            'yesterday_orders': 118,
-            'revenue_change': 11.2,
-            'orders_change': 5.1
+            'yesterday_revenue': 3842.33,
+            'yesterday_orders': 82,
+            'revenue_change': 10.2,
+            'orders_change': 8.5
+        },
+        'purchase_investment': {
+            'total_investment': 52750.00,
+            'monthly_investment': 8950.00,
+            'roi_percentage': 24.3,
+            'break_even_days': 18
         },
         'inventory_alerts': [
             {

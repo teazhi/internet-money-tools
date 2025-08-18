@@ -5965,13 +5965,24 @@ def sync_leads_to_sheets():
                             
                             for idx, header in enumerate(worksheet_headers):
                                 header_lower = header.lower()
-                                # Find ASIN column
+                                # Find ASIN column - be more flexible
                                 if 'asin' in header_lower and asin_col_idx is None:
+                                    asin_col_idx = idx
+                                # Also check exact match
+                                elif header == 'ASIN' and asin_col_idx is None:
                                     asin_col_idx = idx
                                 # Find source column (same logic as Smart Restock)
                                 if any(keyword in header_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor', 'store']):
                                     if not any(skip_word in header_lower for skip_word in ['amazon', 'sell', 'listing']):
                                         source_col_idx = idx
+                            
+                            # Log which columns were found
+                            if asin_col_idx is not None or source_col_idx is not None:
+                                print(f"Worksheet {worksheet_name}: ASIN column index: {asin_col_idx}, Source column index: {source_col_idx}")
+                                if asin_col_idx is not None:
+                                    print(f"  ASIN column header: {worksheet_headers[asin_col_idx]}")
+                                if source_col_idx is not None:
+                                    print(f"  Source column header: {worksheet_headers[source_col_idx]}")
                             
                             # Build lookup
                             if asin_col_idx is not None and source_col_idx is not None:
@@ -5979,9 +5990,17 @@ def sync_leads_to_sheets():
                                     if len(row) > max(asin_col_idx, source_col_idx):
                                         asin = str(row[asin_col_idx]).strip().upper()
                                         source = str(row[source_col_idx]).strip()
-                                        if asin and asin not in ['NAN', 'NONE', ''] and source and source.lower() not in ['nan', 'none', '']:
+                                        # More thorough check for valid ASIN and source
+                                        if (asin and asin not in ['NAN', 'NONE', '', 'N/A', 'NULL'] and 
+                                            source and source.lower() not in ['nan', 'none', '', 'n/a', 'null'] and
+                                            len(source) > 0):
                                             # Store the source for this ASIN (overwrite if found in multiple places)
+                                            # Add http:// if it looks like a domain without protocol
+                                            if '.' in source and not source.startswith('http'):
+                                                source = f'https://{source}'
                                             asin_to_source_lookup[asin] = source
+                                            if len(asin_to_source_lookup) <= 5:  # Log first few
+                                                print(f"Worksheet {worksheet_name}: Found source for ASIN {asin}: {source}")
                                             
                     except Exception as ws_error:
                         print(f"Error reading worksheet {worksheet_name}: {ws_error}")
@@ -6070,7 +6089,11 @@ def sync_leads_to_sheets():
                         print(f"Row {row_index}: Raw source value: '{raw_value}' (type: {type(raw_value)})")
                     
                     potential_source = str(raw_value).strip() if raw_value else ''
-                    if potential_source and potential_source.lower() not in ['nan', 'none', ''] and potential_source != 'None':
+                    # More thorough check for empty/invalid values
+                    if (potential_source and 
+                        potential_source.lower() not in ['nan', 'none', '', 'n/a', 'null'] and 
+                        potential_source != 'None' and
+                        len(potential_source) > 0):
                         # Accept any non-empty value, not just URLs starting with http
                         source = potential_source
                         # Add http:// if it looks like a domain without protocol
@@ -6079,10 +6102,14 @@ def sync_leads_to_sheets():
                 
                 # If no source found in current row but we have search_all_worksheets enabled, 
                 # check the lookup from other worksheets
-                if not source and search_all_worksheets and asin and asin in asin_to_source_lookup:
-                    source = asin_to_source_lookup[asin]
-                    if row_index < 5:  # Debug first 5 rows
-                        print(f"Row {row_index}: Found source from other worksheet for ASIN {asin}: '{source}'")
+                if not source and search_all_worksheets and asin:
+                    if asin in asin_to_source_lookup:
+                        source = asin_to_source_lookup[asin]
+                        if row_index < 10:  # Debug first 10 rows
+                            print(f"Row {row_index}: Found source from other worksheet for ASIN {asin}: '{source}'")
+                    else:
+                        if row_index < 10:  # Debug first 10 rows
+                            print(f"Row {row_index}: ASIN {asin} not found in lookup. Available ASINs in lookup: {list(asin_to_source_lookup.keys())[:5]}...")
                 
                 # Get cost - use COGS mapping
                 cost = ''
@@ -6158,7 +6185,17 @@ def sync_leads_to_sheets():
                 return 'Home Depot - Flat'
             elif 'costco.com' in source_lower:
                 return 'Costco - Flat'
-            # Add more mappings as needed
+            elif 'bathandbodyworks.com' in source_lower or 'bbw' in source_lower:
+                return 'BBW'
+            elif 'crocs.com' in source_lower:
+                return 'Crocs'
+            elif 'yankeecandle.com' in source_lower:
+                return 'Yankee Candles'
+            # Generic "Misc" for unrecognized sources
+            elif source_link and source_link.strip():
+                # If there's a source but we don't recognize it, put it in Misc
+                return 'Misc'
+            # Only return None if there's truly no source
             return None
         
         # Get list of existing worksheets in target spreadsheet
@@ -6233,6 +6270,8 @@ def sync_leads_to_sheets():
             if not target_worksheet:
                 # No source URL - collect these separately
                 no_source_leads.append(lead)
+                if len(no_source_leads) <= 5:  # Debug first few
+                    print(f"No source for ASIN {lead.get('asin')} - source value was: '{lead.get('source')}'")
                 continue
             
             if target_worksheet not in existing_worksheets:

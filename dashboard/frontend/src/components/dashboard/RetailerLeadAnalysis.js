@@ -385,6 +385,9 @@ const RetailerLeadAnalysis = () => {
                         <li key={index} className="flex items-center">
                           <Plus className="h-3 w-3 mr-1" />
                           {detail.worksheet}: {detail.count} leads
+                          {detail.highlighted && (
+                            <span className="ml-1 text-green-600">(highlighted in green)</span>
+                          )}
                         </li>
                       ))}
                     </ul>

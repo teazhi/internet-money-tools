@@ -6286,13 +6286,61 @@ def sync_leads_to_sheets():
                     update_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}/values/{encoded_update_range}?valueInputOption=RAW"
                     update_response = requests.put(update_url, headers=headers, json=body)
                     update_response.raise_for_status()
+                    
+                    # Highlight the newly added rows with light green background
+                    try:
+                        # Get worksheet ID for formatting
+                        metadata_response = requests.get(f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}", headers=headers)
+                        metadata_response.raise_for_status()
+                        sheets_info = metadata_response.json().get("sheets", [])
+                        
+                        worksheet_id = None
+                        for sheet in sheets_info:
+                            if sheet["properties"]["title"] == worksheet_name:
+                                worksheet_id = sheet["properties"]["sheetId"]
+                                break
+                        
+                        if worksheet_id is not None:
+                            # Prepare formatting request
+                            format_requests = [{
+                                "repeatCell": {
+                                    "range": {
+                                        "sheetId": worksheet_id,
+                                        "startRowIndex": start_row - 1,  # 0-indexed
+                                        "endRowIndex": end_row,  # 0-indexed, exclusive
+                                        "startColumnIndex": 0,  # Column A
+                                        "endColumnIndex": 5  # Up to column E
+                                    },
+                                    "cell": {
+                                        "userEnteredFormat": {
+                                            "backgroundColor": {
+                                                "red": 0.85,    # Light green background
+                                                "green": 0.95,
+                                                "blue": 0.85
+                                            }
+                                        }
+                                    },
+                                    "fields": "userEnteredFormat.backgroundColor"
+                                }
+                            }]
+                            
+                            # Apply formatting
+                            format_body = {"requests": format_requests}
+                            format_url = f"https://sheets.googleapis.com/v4/spreadsheets/{target_sheet_id}:batchUpdate"
+                            format_response = requests.post(format_url, headers=headers, json=format_body)
+                            format_response.raise_for_status()
+                            
+                    except Exception as format_error:
+                        print(f"Warning: Failed to highlight rows in {worksheet_name}: {format_error}")
+                        # Continue without failing the entire sync if highlighting fails
                 
                 sync_results['added'] += added_count
                 
                 if added_count > 0:
                     sync_results['details'].append({
                         'worksheet': worksheet_name,
-                        'count': added_count
+                        'count': added_count,
+                        'highlighted': True
                     })
                 
             except Exception as e:

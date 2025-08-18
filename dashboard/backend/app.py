@@ -6119,15 +6119,17 @@ def sync_leads_to_sheets():
                 if cost_col in row_dict:
                     cost = str(row_dict[cost_col]).strip()
                 
-                if asin and asin != 'nan' and asin != 'NAN':
+                if asin and asin not in ['NAN', 'NONE', '', 'N/A', 'NULL']:
+                    # Ensure ASIN is clean and uppercase
+                    clean_asin = asin.strip().upper()
                     user_leads.append({
-                        'asin': asin,
+                        'asin': clean_asin,
                         'name': name or '',
                         'source': source or '',
                         'cost': cost or ''
                     })
                     if row_index < 5:  # Log first 5 successful extractions
-                        print(f"Row {row_index}: Found ASIN {asin} with source '{source}'")
+                        print(f"Row {row_index}: Found ASIN {clean_asin} with source '{source}'")
                 else:
                     if row_index < 5:  # Log first 5 failed extractions
                         print(f"Row {row_index}: No valid ASIN found. Raw data: {row_dict}")
@@ -6238,10 +6240,10 @@ def sync_leads_to_sheets():
                     headers_row = values[0]
                     existing_data = values[1:]
                     
-                    # Find ASIN column
+                    # Find ASIN column - be more flexible with detection
                     asin_col_index = None
                     for i, header in enumerate(headers_row):
-                        if header.upper() == 'ASIN':
+                        if 'ASIN' in header.upper():
                             asin_col_index = i
                             break
                     
@@ -6250,11 +6252,15 @@ def sync_leads_to_sheets():
                         for row in existing_data:
                             if len(row) > asin_col_index:
                                 asin = row[asin_col_index].strip().upper()
-                                if asin and asin != 'nan' and asin != 'NAN':
+                                if asin and asin not in ['NAN', 'NONE', '', 'N/A', 'NULL']:
                                     worksheet_asins.add(asin)
                         all_existing_asins[worksheet_name] = worksheet_asins
+                        print(f"Worksheet {worksheet_name}: Found {len(worksheet_asins)} existing ASINs")
+                        if len(worksheet_asins) > 0 and len(worksheet_asins) <= 10:
+                            print(f"  Sample ASINs: {list(worksheet_asins)[:5]}")
                     else:
                         all_existing_asins[worksheet_name] = set()
+                        print(f"Worksheet {worksheet_name}: No ASIN column found in headers: {headers_row[:5]}...")
                 else:
                     all_existing_asins[worksheet_name] = set()
             except Exception as e:
@@ -6286,9 +6292,21 @@ def sync_leads_to_sheets():
                 continue
             
             # Check if ASIN already exists in the target worksheet
-            if lead['asin'] in all_existing_asins.get(target_worksheet, set()):
+            existing_asins_in_worksheet = all_existing_asins.get(target_worksheet, set())
+            if lead['asin'] in existing_asins_in_worksheet:
                 sync_results['already_existed'] += 1
+                if sync_results['already_existed'] <= 5:  # Debug first few
+                    print(f"ASIN {lead['asin']} already exists in {target_worksheet}")
                 continue
+            else:
+                # Debug: Check why it's not finding the ASIN as existing
+                if len(leads_by_worksheet.get(target_worksheet, [])) < 3:  # Debug first few per worksheet
+                    print(f"ASIN {lead['asin']} NOT found in {target_worksheet}. Worksheet has {len(existing_asins_in_worksheet)} ASINs")
+                    if len(existing_asins_in_worksheet) > 0:
+                        # Check if there's a close match (case issue)
+                        for existing_asin in list(existing_asins_in_worksheet)[:5]:
+                            if existing_asin.lower() == lead['asin'].lower():
+                                print(f"  WARNING: Case mismatch? Existing: '{existing_asin}' vs New: '{lead['asin']}'")
             
             # Initialize tracking for this worksheet if needed
             if target_worksheet not in processed_asins_per_worksheet:

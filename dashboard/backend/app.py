@@ -5929,6 +5929,9 @@ def sync_leads_to_sheets():
         # Also create a lookup dictionary for source links from all worksheets
         asin_to_source_lookup = {}
         
+        # Import urllib.parse at the beginning
+        import urllib.parse
+        
         try:
             # Get column mapping
             column_mapping = config_user_record.get('column_mapping', {})
@@ -6010,7 +6013,6 @@ def sync_leads_to_sheets():
             
             # Fetch data from user's main sheet
             # Properly encode worksheet title for URL
-            import urllib.parse
             encoded_range = urllib.parse.quote(f"'{user_worksheet_title}'!A1:Z")
             url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}/values/{encoded_range}"
             response = requests.get(url, headers=headers)

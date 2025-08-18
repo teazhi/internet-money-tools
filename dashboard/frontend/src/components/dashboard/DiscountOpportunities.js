@@ -95,7 +95,7 @@ const DiscountOpportunities = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center space-x-3">
-        <Target className="h-8 w-8 text-builders-500" />
+        <Target className="h-8 w-8 text-blue-500" />
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Discount Opportunities</h1>
           <p className="text-gray-600">Find products with pricing opportunities and profit margins</p>
@@ -113,7 +113,7 @@ const DiscountOpportunities = () => {
                 onClick={() => setActiveTab(tab.id)}
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
                   activeTab === tab.id
-                    ? 'border-builders-500 text-builders-600'
+                    ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -132,9 +132,9 @@ const DiscountOpportunities = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">Distill Email Opportunities</h3>
+                <h3 className="text-lg font-medium text-gray-900">Email Opportunities</h3>
                 <p className="text-sm text-gray-600">
-                  Products from Distill alerts that need restocking (past 7 days)
+                  Products from email alerts that need restocking (past 7 days)
                 </p>
                 {stats && (
                   <div className="mt-2 text-xs text-gray-500">
@@ -153,6 +153,7 @@ const DiscountOpportunities = () => {
                   <option value="">All Retailers</option>
                   <option value="walmart">Walmart</option>
                   <option value="target">Target</option>
+                  <option value="lowes">Lowes</option>
                   <option value="vitacost">Vitacost</option>
                   <option value="kohls">Kohl's</option>
                 </select>
@@ -194,7 +195,7 @@ const DiscountOpportunities = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <div className="text-center">
                 <RefreshCw className="h-8 w-8 text-blue-500 mx-auto mb-4 animate-spin" />
-                <p className="text-gray-600">Analyzing Distill email alerts...</p>
+                <p className="text-gray-600">Analyzing email alerts...</p>
               </div>
             </div>
           )}
@@ -207,7 +208,7 @@ const DiscountOpportunities = () => {
                   <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Opportunities Found</h3>
                   <p className="text-gray-600">
-                    No ASINs from recent Distill emails need restocking, or no emails found in the last 7 days.
+                    No ASINs from recent email alerts need restocking, or no emails found in the last 7 days.
                   </p>
                 </div>
               ) : (

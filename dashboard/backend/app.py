@@ -623,16 +623,16 @@ def get_dummy_discount_opportunities():
         'success': True,
         'opportunities': [
             {
-                'asin': 'B08N5WRWNW',
+                'asin': 'B00F3DCZ6Q',
                 'product_name': 'Demo Wireless Bluetooth Headphones',
                 'retailer': 'Walmart',
                 'current_stock': 8,
                 'suggested_quantity': 120,
                 'days_left': 3.2,
                 'velocity': 2.5,
-                'source_link': 'https://www.walmart.com/search?query=B08N5WRWNW',
+                'source_link': 'https://www.walmart.com/search?query=B00F3DCZ6Q',
                 'promo_message': None,
-                'note': 'Price dropped 15% - limited time',
+                'note': 'Locally',
                 'alert_time': (datetime.now() - timedelta(hours=4)).isoformat(),
                 'priority_score': 95,
                 'restock_priority': 'critical_high_velocity'
@@ -653,16 +653,16 @@ def get_dummy_discount_opportunities():
                 'restock_priority': 'warning_high_velocity'
             },
             {
-                'asin': 'B09KMXJQ9R',
+                'asin': 'B00TW2XZ04',
                 'product_name': 'Wireless Charging Pad',
-                'retailer': 'Vitacost',
+                'retailer': 'Lowes',
                 'current_stock': 25,
                 'suggested_quantity': 50,
                 'days_left': 8.3,
                 'velocity': 3.0,
-                'source_link': 'https://www.vitacost.com/search?q=B09KMXJQ9R',
-                'promo_message': 'Free shipping on orders over $49',
-                'note': 'New coupon available',
+                'source_link': 'https://www.lowes.com/search?searchTerm=B00TW2XZ04',
+                'promo_message': None,
+                'note': 'TESTING',
                 'alert_time': (datetime.now() - timedelta(hours=12)).isoformat(),
                 'priority_score': 75,
                 'restock_priority': 'warning_moderate'
@@ -5558,7 +5558,7 @@ def fetch_discount_leads():
 @app.route('/api/discount-opportunities/analyze', methods=['POST'])
 @login_required
 def analyze_discount_opportunities():
-    """Analyze discount opportunities from Distill.io email alerts against user's inventory"""
+    """Analyze discount opportunities from email alerts against user's inventory"""
     try:
         # Return dummy data in demo mode
         if DEMO_MODE:
@@ -5639,7 +5639,7 @@ def analyze_discount_opportunities():
                 'message': f'Failed to generate analytics: {str(e)}'
             }), 500
         
-        # Fetch recent Distill.io email alerts
+        # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
         
         # Fetch source links CSV for ASIN matching
@@ -7168,7 +7168,7 @@ def sync_leads_to_sheets():
         return jsonify({'error': f'Error syncing leads to sheets: {str(e)}'}), 500
 
 def fetch_discount_email_alerts():
-    """Fetch recent Distill.io email alerts from admin-configured Gmail using Gmail API"""
+    """Fetch recent email alerts from admin-configured Gmail using Gmail API"""
     try:
         monitor_email = DISCOUNT_MONITOR_EMAIL
         if not monitor_email:
@@ -7205,8 +7205,8 @@ def fetch_discount_email_alerts():
             return fetch_mock_discount_alerts()
         
         # Build Gmail search query
-        # Search for emails from Distill.io in the last N days
-        # No keyword filtering needed - Distill.io already filters relevant emails
+        # Search for emails from alert service in the last N days
+        # No keyword filtering needed - alerts are already filtered for relevance
         from datetime import datetime, timedelta
         import pytz
         
@@ -7215,7 +7215,7 @@ def fetch_discount_email_alerts():
         date_str = cutoff_date.strftime('%Y/%m/%d')
         
         # Create search query for Gmail
-        # No need to filter by keywords since Distill.io already filters relevant emails
+        # No need to filter by keywords since alerts are already filtered for relevance
         query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str}'
         
         print(f"Gmail search query: {query}")
@@ -7251,14 +7251,14 @@ def fetch_discount_email_alerts():
             if not email_content:
                 continue
             
-            # Verify sender is from Distill.io
+            # Verify sender is from alert service
             sender = email_content.get('sender', '')
             if DISCOUNT_SENDER_EMAIL not in sender:
                 continue
             
             # Parse email subject to extract retailer and ASIN
             subject = email_content.get('subject', '')
-            parsed_alert = parse_distill_email_subject(subject)
+            parsed_alert = parse_email_subject(subject)
             
             if parsed_alert:
                 # Convert Gmail date to ISO format
@@ -7275,7 +7275,7 @@ def fetch_discount_email_alerts():
                     'message_id': message_id
                 })
         
-        print(f"Processed {len(email_alerts)} discount email alerts")
+        print(f"Processed {len(email_alerts)} email alerts")
         
         # Sort by alert time (newest first)
         email_alerts.sort(key=lambda x: x['alert_time'], reverse=True)
@@ -7283,7 +7283,7 @@ def fetch_discount_email_alerts():
         return email_alerts
         
     except Exception as e:
-        print(f"Error fetching discount email alerts: {e}")
+        print(f"Error fetching email alerts: {e}")
         import traceback
         traceback.print_exc()
         # Return mock data on error
@@ -7329,14 +7329,32 @@ def convert_gmail_date_to_iso(gmail_date):
         import pytz
         return datetime.now(pytz.UTC).isoformat()
 
-def parse_distill_email_subject(subject):
-    """Parse Distill.io email subject to extract retailer, ASIN, and notes"""
+def parse_email_subject(subject):
+    """Parse email subject to extract retailer, ASIN, and notes
+    
+    Handles formats like:
+    - [Walmart] Alert: Walmart (ASIN: B00F3DCZ6Q) (Note: Locally)
+    - [Lowes] Alert: Lowes (ASIN: B00TW2XZ04) (Note: TESTING)
+    """
     import re
     
-    # Pattern to match: Retailer (ASIN: XXXXXXXXXX) (Note: additional info)
+    # Primary pattern for new format: [Retailer] Alert: Retailer (ASIN: XXXXXXXXXX) (Note: ...)
+    # Example: [Walmart] Alert: Walmart (ASIN: B00F3DCZ6Q) (Note: Locally)
+    new_format_pattern = r'\[([^\]]+)\]\s*Alert:\s*[^(]*\(ASIN:\s*([B-Z][0-9A-Z]{9})\)(?:\s*\(Note:\s*([^)]+)\))?'
+    
+    match = re.search(new_format_pattern, subject, re.IGNORECASE)
+    if match:
+        retailer_bracket, asin, note = match.groups()
+        return {
+            'retailer': retailer_bracket.strip(),
+            'asin': asin.strip(),
+            'note': note.strip() if note else None
+        }
+    
+    # Legacy pattern: Retailer (ASIN: XXXXXXXXXX) (Note: additional info)
     # Example: Walmart (ASIN: B07D83HV1M) (Note: Amazon is two pack)
-    pattern = r'([A-Za-z]+)\s*\(ASIN:\s*([B-Z][0-9A-Z]{9})\)(?:\s*\(Note:\s*([^)]+)\))?'
-    match = re.search(pattern, subject)
+    legacy_pattern = r'([A-Za-z]+)\s*\(ASIN:\s*([B-Z][0-9A-Z]{9})\)(?:\s*\(Note:\s*([^)]+)\))?'
+    match = re.search(legacy_pattern, subject)
     
     if match:
         retailer, asin, note = match.groups()
@@ -7354,7 +7372,7 @@ def parse_distill_email_subject(subject):
         r'([B-Z][0-9A-Z]{9})\s*-\s*([A-Za-z]+)', # ASIN - Retailer
     ]
     
-    retailers = ['vitacost', 'walmart', 'target', 'amazon', 'costco', 'sam']
+    retailers = ['vitacost', 'walmart', 'target', 'amazon', 'costco', 'sam', 'lowes', 'lowe']
     
     for pattern in patterns:
         match = re.search(pattern, subject, re.IGNORECASE)

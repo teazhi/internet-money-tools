@@ -207,7 +207,7 @@ const Dashboard = () => {
           <div className="flex-1 h-0 pt-6 pb-4 overflow-y-auto">
             {/* Logo section */}
             <div className="flex items-center px-4 pb-6">
-              <div className="p-2 bg-blue-500 rounded-lg shadow-lg">
+              <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg shadow-lg">
                 <ShoppingCart className="h-6 w-6 text-white" />
               </div>
               <div className="ml-3">
@@ -227,7 +227,7 @@ const Dashboard = () => {
                     onClick={() => setSidebarOpen(false)}
                     className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                       item.current
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/25'
                         : 'text-slate-300 hover:text-white hover:bg-slate-700'
                     }`}
                   >
@@ -246,7 +246,7 @@ const Dashboard = () => {
           {/* Mobile user section */}
           <div className="border-t border-slate-700 px-3 py-4">
             <div className="flex items-center px-3 py-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center">
                 <User className="h-4 w-4 text-white" />
               </div>
               <div className="ml-3 min-w-0 flex-1">
@@ -277,7 +277,7 @@ const Dashboard = () => {
           {/* Logo section */}
           <div className="flex items-center justify-between px-4 py-6">
             <div className="flex items-center">
-              <div className="p-2 bg-blue-500 rounded-lg shadow-lg">
+              <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg shadow-lg">
                 <ShoppingCart className="h-6 w-6 text-white" />
               </div>
               {!sidebarCollapsed && (
@@ -321,7 +321,7 @@ const Dashboard = () => {
                   to={item.href}
                   className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                     item.current
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/25'
                       : 'text-slate-300 hover:text-white hover:bg-slate-700'
                   }`}
                   title={sidebarCollapsed ? item.name : ''}
@@ -343,7 +343,7 @@ const Dashboard = () => {
           {!sidebarCollapsed && (
             <div className="border-t border-slate-700 px-3 py-4">
               <div className="flex items-center px-3 py-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center">
                   <User className="h-4 w-4 text-white" />
                 </div>
                 <div className="ml-3 min-w-0 flex-1">
@@ -371,7 +371,7 @@ const Dashboard = () => {
           {sidebarCollapsed && (
             <div className="border-t border-slate-700 px-3 py-4">
               <div className="flex flex-col items-center space-y-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center">
                   <User className="h-4 w-4 text-white" />
                 </div>
                 <button
@@ -396,7 +396,7 @@ const Dashboard = () => {
               <div className="flex items-center">
                 <button
                   type="button"
-                  className="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                  className="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                 >
                   <span className="sr-only">Open sidebar</span>
@@ -405,39 +405,6 @@ const Dashboard = () => {
                 <h1 className="text-lg font-semibold text-gray-900 ml-3 md:ml-0">
                   {navigation.find(item => item.current)?.name || 'Dashboard'}
                 </h1>
-              </div>
-              
-              <div className="flex items-center space-x-4">
-                {/* Status Badge */}
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor()}`}>
-                  {getStatusText()}
-                </span>
-                
-                {/* User Menu */}
-                <div className="flex items-center space-x-2">
-                  <div className="text-right">
-                    <p className="text-xs font-medium text-gray-900">{user?.discord_username}</p>
-                    <p className="text-xs text-gray-500">Discord User</p>
-                  </div>
-                  {user?.discord_avatar ? (
-                    <img
-                      className="h-6 w-6 rounded-full"
-                      src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
-                      alt="User avatar"
-                    />
-                  ) : (
-                    <div className="h-6 w-6 rounded-full bg-builders-500 flex items-center justify-center">
-                      <User className="h-4 w-4 text-white" />
-                    </div>
-                  )}
-                  <button
-                    onClick={logout}
-                    className="text-gray-400 hover:text-gray-500 transition-colors duration-200"
-                    title="Logout"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
             </div>
           </div>

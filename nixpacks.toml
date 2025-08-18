@@ -1,5 +1,14 @@
-[build]
-cmd = "cd dashboard/backend && pip install -r requirements.txt"
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.11"
 
-[start] 
-cmd = "cd dashboard/backend && python app.py"
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install -r dashboard/backend/requirements.txt"
+]
+
+[start]
+cmd = ". /opt/venv/bin/activate && cd dashboard/backend && python app.py"

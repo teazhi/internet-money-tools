@@ -31,6 +31,7 @@ const Overview = () => {
   const fetchAnalytics = useCallback(async () => {
     try {
       setError(null);
+      setLoading(true);
       const response = await axios.get('/api/analytics/orders', { withCredentials: true });
       setAnalytics(response.data);
       setLastUpdated(new Date());

@@ -31,6 +31,10 @@ except Exception as e:
 # Demo mode flag - set to True to use dummy data for demos
 DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
 
+# Simple in-memory cache for analytics data (expires after 5 minutes)
+analytics_cache = {}
+CACHE_EXPIRY_MINUTES = 5
+
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
@@ -676,6 +680,47 @@ def get_dummy_sheet_data():
             'COGS Data': ['ASIN', 'Max COGS', 'Current COGS', 'Effective Date']
         }
     }
+
+def get_cache_key(discord_id, target_date, endpoint_type='analytics'):
+    """Generate cache key for user data"""
+    return f"{endpoint_type}_{discord_id}_{target_date.strftime('%Y-%m-%d')}"
+
+def is_cache_valid(cache_entry):
+    """Check if cache entry is still valid"""
+    if not cache_entry:
+        return False
+    
+    cached_time = cache_entry.get('timestamp')
+    if not cached_time:
+        return False
+    
+    # Check if cache is older than CACHE_EXPIRY_MINUTES
+    cache_age = datetime.utcnow() - cached_time
+    return cache_age.total_seconds() < (CACHE_EXPIRY_MINUTES * 60)
+
+def get_cached_data(cache_key):
+    """Get cached data if valid, otherwise return None"""
+    cache_entry = analytics_cache.get(cache_key)
+    if is_cache_valid(cache_entry):
+        return cache_entry.get('data')
+    return None
+
+def set_cached_data(cache_key, data):
+    """Store data in cache with timestamp"""
+    analytics_cache[cache_key] = {
+        'data': data,
+        'timestamp': datetime.utcnow()
+    }
+    
+    # Clean old cache entries (simple cleanup)
+    current_time = datetime.utcnow()
+    keys_to_remove = []
+    for key, entry in analytics_cache.items():
+        if not is_cache_valid(entry):
+            keys_to_remove.append(key)
+    
+    for key in keys_to_remove:
+        del analytics_cache[key]
 
 def get_users_config():
     if DEMO_MODE:
@@ -2042,27 +2087,53 @@ def debug_cogs_status():
 @login_required
 def get_orders_analytics():
     try:
+        # Get user info first for caching
+        discord_id = session['discord_id']
+        
+        # Get target date
+        target_date_str = request.args.get('date')
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        else:
+            # Default logic for target date (moved up for caching)
+            user_record = get_user_record(discord_id)
+            user_timezone = user_record.get('timezone') if user_record else None
+            
+            if user_timezone:
+                try:
+                    tz = pytz.timezone(user_timezone)
+                    now = datetime.now(tz)
+                except pytz.UnknownTimeZoneError:
+                    now = datetime.now()
+            else:
+                now = datetime.now()
+            
+            # Show yesterday's data until 11:59 PM today, then show today's data
+            if now.hour == 23 and now.minute == 59:
+                target_date = now.date()
+            else:
+                target_date = now.date() - timedelta(days=1)
+        
         # Check if demo mode is enabled
         if DEMO_MODE:
-            # Get target date
-            target_date_str = request.args.get('date')
-            if target_date_str:
-                try:
-                    target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
-                except ValueError:
-                    return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-            else:
-                target_date = (datetime.now() - timedelta(days=1)).date()
-            
             return jsonify(get_dummy_analytics_data(target_date))
+        
+        # Check cache first
+        cache_key = get_cache_key(discord_id, target_date)
+        cached_data = get_cached_data(cache_key)
+        if cached_data:
+            return jsonify(cached_data)
         
         # Process dashboard analytics request
         
         # Try SP-API first, fallback to Sellerboard if needed
         
-        # Get user's timezone preference first and update last activity
-        discord_id = session['discord_id']
-        user_record = get_user_record(discord_id)
+        # Get user record (already retrieved above if needed)
+        if 'user_record' not in locals():
+            user_record = get_user_record(discord_id)
         
         # For subusers, we need to check their parent's configuration for Sellerboard URLs
         # but keep their own timezone preference
@@ -2076,49 +2147,35 @@ def get_orders_analytics():
         
         user_timezone = user_record.get('timezone') if user_record else None
         
-        # Update last activity for analytics access
+        # Update last activity for analytics access (only if not updated recently)
         if user_record:
             try:
-                users = get_users_config()
-                for user in users:
-                    if user.get("discord_id") == discord_id:
-                        user['last_activity'] = datetime.now().isoformat()
-                        if 'discord_username' in session:
-                            user['discord_username'] = session['discord_username']
-                        break
-                update_users_config(users)
+                last_activity = user_record.get('last_activity')
+                should_update = True
+                
+                if last_activity:
+                    try:
+                        last_update = datetime.fromisoformat(last_activity.replace('Z', '+00:00'))
+                        time_since_update = datetime.now() - last_update.replace(tzinfo=None)
+                        # Only update if more than 10 minutes since last update
+                        should_update = time_since_update.total_seconds() > 600
+                    except:
+                        should_update = True
+                
+                if should_update:
+                    users = get_users_config()
+                    for user in users:
+                        if user.get("discord_id") == discord_id:
+                            user['last_activity'] = datetime.now().isoformat()
+                            if 'discord_username' in session:
+                                user['discord_username'] = session['discord_username']
+                            break
+                    update_users_config(users)
             except Exception as e:
-                # Failed to update last activity
+                # Failed to update last activity - not critical
                 pass
         
-        # Get query parameter for date, default to yesterday until 11:59 PM
-        target_date_str = request.args.get('date')
-        if target_date_str:
-            try:
-                target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-        else:
-            # Default to UTC if no timezone set
-            if user_timezone:
-                try:
-                    tz = pytz.timezone(user_timezone)
-                    now = datetime.now(tz)
-                    pass  # Debug print removed
-                except pytz.UnknownTimeZoneError:
-                    now = datetime.now()
-                    pass  # Debug print removed
-            else:
-                now = datetime.now()
-            
-            # Show yesterday's data until 11:59 PM today, then show today's data
-            if now.hour == 23 and now.minute == 59:
-                # At 11:59 PM, switch to today's data
-                target_date = now.date()
-                pass  # Debug print removed
-            else:
-                # Show yesterday's complete data throughout the day
-                target_date = now.date() - timedelta(days=1)
+        # Target date already processed above
         
         
         # Check if user is admin and SP-API should be attempted
@@ -2364,8 +2421,12 @@ def get_orders_analytics():
         analysis['user_timezone'] = user_timezone
         
         
-        pass  # Debug print removed
-        pass  # Debug print removed
+        # Cache the successful analysis for future requests
+        try:
+            set_cached_data(cache_key, analysis)
+        except Exception as cache_error:
+            # Cache failure is not critical
+            pass
         
         response = jsonify(analysis)
         response.headers['Content-Type'] = 'application/json'

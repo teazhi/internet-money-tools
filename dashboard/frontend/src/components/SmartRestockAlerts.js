@@ -534,7 +534,6 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Smart Restock Recommendations</h3>
             <p className="text-xs text-gray-600 mb-3">
               Products requiring immediate restocking attention based on current stock levels and sales velocity.
             </p>

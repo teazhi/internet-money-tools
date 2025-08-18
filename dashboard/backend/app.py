@@ -350,6 +350,273 @@ def get_dummy_analytics_data(target_date):
         }
     }
 
+def get_dummy_reimbursements_data():
+    """Generate dummy reimbursements data for demo purposes"""
+    return {
+        'success': True,
+        'underpaid_reimbursements': [
+            {
+                'reimbursement_id': 'REIMB-2024-001',
+                'asin': 'B08N5WRWNW',
+                'fnsku': 'X001ABC123',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'reimbursed_quantity': 2,
+                'amount_per_unit': 35.50,
+                'amount_total': 71.00,
+                'max_cogs': 45.00,
+                'difference_per_unit': 9.50,
+                'total_underpaid': 19.00,
+                'reason': 'Customer Return'
+            },
+            {
+                'reimbursement_id': 'REIMB-2024-002',
+                'asin': 'B07XJ8C8F7',
+                'fnsku': 'X001DEF456',
+                'product_name': 'Premium Phone Case - Clear',
+                'reimbursed_quantity': 5,
+                'amount_per_unit': 12.00,
+                'amount_total': 60.00,
+                'max_cogs': 18.00,
+                'difference_per_unit': 6.00,
+                'total_underpaid': 30.00,
+                'reason': 'Lost in Warehouse'
+            },
+            {
+                'reimbursement_id': 'REIMB-2024-003',
+                'asin': 'B09KMXJQ9R',
+                'fnsku': 'X001GHI789',
+                'product_name': 'Wireless Charging Pad',
+                'reimbursed_quantity': 3,
+                'amount_per_unit': 22.00,
+                'amount_total': 66.00,
+                'max_cogs': 35.00,
+                'difference_per_unit': 13.00,
+                'total_underpaid': 39.00,
+                'reason': 'Damaged by Amazon'
+            }
+        ],
+        'summary': {
+            'total_underpaid_amount': 88.00,
+            'total_cases': 3,
+            'total_units_affected': 10,
+            'average_underpayment': 29.33,
+            'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    }
+
+def get_dummy_expected_arrivals_data():
+    """Generate dummy expected arrivals data for demo purposes"""
+    return {
+        'success': True,
+        'expected_arrivals': [
+            {
+                'expected_date': (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'),
+                'asin': 'B08N5WRWNW',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'expected_quantity': 150,
+                'current_stock': 8,
+                'days_of_stock': 3.2,
+                'daily_velocity': 2.5,
+                'status': 'on_time'
+            },
+            {
+                'expected_date': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'),
+                'asin': 'B07XJ8C8F7',
+                'product_name': 'Premium Phone Case - Clear',
+                'expected_quantity': 200,
+                'current_stock': 15,
+                'days_of_stock': 6.8,
+                'daily_velocity': 2.2,
+                'status': 'on_time'
+            },
+            {
+                'expected_date': (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'),
+                'asin': 'B09KMXJQ9R',
+                'product_name': 'Wireless Charging Pad',
+                'expected_quantity': 100,
+                'current_stock': 45,
+                'days_of_stock': 15.0,
+                'daily_velocity': 3.0,
+                'status': 'delayed'
+            }
+        ],
+        'missing_listings': [
+            {
+                'asin': 'B09ABC123',
+                'fnsku': 'X002ABC123',
+                'product_name': 'Smart Watch Band - Black',
+                'last_seen': '2024-01-10',
+                'days_missing': 5,
+                'last_velocity': 1.8,
+                'estimated_lost_sales': 162.00
+            },
+            {
+                'asin': 'B09DEF456',
+                'fnsku': 'X002DEF456',
+                'product_name': 'USB-C Cable 6ft',
+                'last_seen': '2024-01-08',
+                'days_missing': 7,
+                'last_velocity': 4.2,
+                'estimated_lost_sales': 293.40
+            }
+        ],
+        'summary': {
+            'total_expected_arrivals': 3,
+            'arrivals_on_time': 2,
+            'arrivals_delayed': 1,
+            'missing_listings_count': 2,
+            'total_estimated_lost_sales': 455.40
+        }
+    }
+
+def get_dummy_smart_restock_data():
+    """Generate dummy smart restock recommendations for demo purposes"""
+    return {
+        'success': True,
+        'recommendations': [
+            {
+                'asin': 'B08N5WRWNW',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'current_stock': 8,
+                'daily_velocity': 2.5,
+                'days_remaining': 3.2,
+                'lead_time': 90,
+                'recommended_quantity': 300,
+                'reorder_date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
+                'priority': 'urgent',
+                'confidence_score': 0.92,
+                'seasonality_factor': 1.2,
+                'trend': 'increasing'
+            },
+            {
+                'asin': 'B07XJ8C8F7',
+                'product_name': 'Premium Phone Case - Clear',
+                'current_stock': 15,
+                'daily_velocity': 2.2,
+                'days_remaining': 6.8,
+                'lead_time': 90,
+                'recommended_quantity': 250,
+                'reorder_date': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'),
+                'priority': 'high',
+                'confidence_score': 0.88,
+                'seasonality_factor': 1.0,
+                'trend': 'stable'
+            },
+            {
+                'asin': 'B09KMXJQ9R',
+                'product_name': 'Wireless Charging Pad',
+                'current_stock': 45,
+                'daily_velocity': 3.0,
+                'days_remaining': 15.0,
+                'lead_time': 90,
+                'recommended_quantity': 350,
+                'reorder_date': (datetime.now() + timedelta(days=15)).strftime('%Y-%m-%d'),
+                'priority': 'medium',
+                'confidence_score': 0.85,
+                'seasonality_factor': 0.9,
+                'trend': 'decreasing'
+            }
+        ],
+        'alerts': [
+            {
+                'type': 'urgent_restock',
+                'message': '1 product needs immediate reorder (less than 5 days of stock)',
+                'affected_asins': ['B08N5WRWNW']
+            },
+            {
+                'type': 'velocity_spike',
+                'message': 'Sales velocity increased by 30% for 2 products',
+                'affected_asins': ['B08N5WRWNW', 'B07XJ8C8F7']
+            }
+        ],
+        'summary': {
+            'total_products': 3,
+            'urgent_reorders': 1,
+            'high_priority': 1,
+            'medium_priority': 1,
+            'total_recommended_units': 900,
+            'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+    }
+
+def get_dummy_discount_opportunities():
+    """Generate dummy discount opportunities data for demo purposes"""
+    return {
+        'success': True,
+        'opportunities': [
+            {
+                'asin': 'B08N5WRWNW',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'competitor': 'TechSound Pro',
+                'our_price': 79.99,
+                'competitor_price': 69.99,
+                'price_difference': 10.00,
+                'discount_percentage': 12.5,
+                'estimated_sales_increase': '35%',
+                'roi_estimate': 1.8,
+                'recommendation': 'Match competitor price for 2 weeks'
+            },
+            {
+                'asin': 'B07XJ8C8F7',
+                'product_name': 'Premium Phone Case - Clear',
+                'competitor': 'ClearShield',
+                'our_price': 24.99,
+                'competitor_price': 19.99,
+                'price_difference': 5.00,
+                'discount_percentage': 20.0,
+                'estimated_sales_increase': '50%',
+                'roi_estimate': 2.1,
+                'recommendation': 'Create limited-time 15% off promotion'
+            }
+        ],
+        'upcoming_events': [
+            {
+                'event': 'Prime Day',
+                'date': '2024-07-16',
+                'recommended_discount': '25-30%',
+                'expected_lift': '300%'
+            },
+            {
+                'event': 'Black Friday',
+                'date': '2024-11-29',
+                'recommended_discount': '35-40%',
+                'expected_lift': '500%'
+            }
+        ]
+    }
+
+def get_dummy_sheet_data():
+    """Generate dummy Google Sheets data for demo purposes"""
+    return {
+        'spreadsheets': [
+            {
+                'id': '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+                'name': 'Demo Product Catalog 2024',
+                'url': 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+                'created_time': '2024-01-01T00:00:00Z',
+                'modified_time': (datetime.now() - timedelta(hours=2)).isoformat() + 'Z'
+            },
+            {
+                'id': '1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890',
+                'name': 'Demo Inventory Tracking',
+                'url': 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890',
+                'created_time': '2024-01-15T00:00:00Z',
+                'modified_time': (datetime.now() - timedelta(days=1)).isoformat() + 'Z'
+            }
+        ],
+        'worksheets': {
+            '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms': [
+                {'title': 'Products', 'id': '0'},
+                {'title': 'COGS Data', 'id': '1'},
+                {'title': 'Archive', 'id': '2'}
+            ]
+        },
+        'headers': {
+            'Products': ['ASIN', 'Product Name', 'COGS', 'Supplier', 'Last Updated'],
+            'COGS Data': ['ASIN', 'Max COGS', 'Current COGS', 'Effective Date']
+        }
+    }
+
 def get_users_config():
     if DEMO_MODE:
         return get_dummy_users()
@@ -1355,6 +1622,11 @@ def disconnect_google():
 @app.route('/api/google/spreadsheets')
 @login_required
 def list_spreadsheets():
+    # Return dummy data in demo mode
+    if DEMO_MODE:
+        dummy_data = get_dummy_sheet_data()
+        return jsonify({'spreadsheets': dummy_data['spreadsheets']})
+    
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
@@ -1395,6 +1667,12 @@ def list_spreadsheets():
 @app.route('/api/google/worksheets/<spreadsheet_id>')
 @login_required
 def list_worksheets(spreadsheet_id):
+    # Return dummy data in demo mode
+    if DEMO_MODE:
+        dummy_data = get_dummy_sheet_data()
+        worksheets = dummy_data['worksheets'].get(spreadsheet_id, [])
+        return jsonify({'worksheets': worksheets})
+    
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
@@ -4954,6 +5232,10 @@ def status():
 def analyze_underpaid_reimbursements():
     """Analyze uploaded reimbursement CSV for underpaid reimbursements"""
     try:
+        # Return dummy data in demo mode
+        if DEMO_MODE:
+            return jsonify(get_dummy_reimbursements_data())
+        
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         
@@ -5131,6 +5413,10 @@ def fetch_discount_leads():
 def analyze_discount_opportunities():
     """Analyze discount opportunities from Distill.io email alerts against user's inventory"""
     try:
+        # Return dummy data in demo mode
+        if DEMO_MODE:
+            return jsonify(get_dummy_discount_opportunities())
+        
         data = request.get_json() or {}
         retailer_filter = data.get('retailer', '')
         
@@ -5302,6 +5588,10 @@ def analyze_discount_opportunities():
 def get_expected_arrivals():
     """Get items purchased in last 2 months that don't have Amazon listings created yet"""
     try:
+        # Return dummy data in demo mode
+        if DEMO_MODE:
+            return jsonify(get_dummy_expected_arrivals_data())
+        
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         

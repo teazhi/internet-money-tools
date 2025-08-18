@@ -625,42 +625,54 @@ def get_dummy_discount_opportunities():
             {
                 'asin': 'B08N5WRWNW',
                 'product_name': 'Demo Wireless Bluetooth Headphones',
-                'competitor': 'TechSound Pro',
-                'our_price': 79.99,
-                'competitor_price': 69.99,
-                'price_difference': 10.00,
-                'discount_percentage': 12.5,
-                'estimated_sales_increase': '35%',
-                'roi_estimate': 1.8,
-                'recommendation': 'Match competitor price for 2 weeks'
+                'retailer': 'Walmart',
+                'current_stock': 8,
+                'suggested_quantity': 120,
+                'days_left': 3.2,
+                'velocity': 2.5,
+                'source_link': 'https://www.walmart.com/search?query=B08N5WRWNW',
+                'promo_message': None,
+                'note': 'Price dropped 15% - limited time',
+                'alert_time': (datetime.now() - timedelta(hours=4)).isoformat(),
+                'priority_score': 95,
+                'restock_priority': 'critical_high_velocity'
             },
             {
                 'asin': 'B07XJ8C8F7',
                 'product_name': 'Premium Phone Case - Clear',
-                'competitor': 'ClearShield',
-                'our_price': 24.99,
-                'competitor_price': 19.99,
-                'price_difference': 5.00,
-                'discount_percentage': 20.0,
-                'estimated_sales_increase': '50%',
-                'roi_estimate': 2.1,
-                'recommendation': 'Create limited-time 15% off promotion'
-            }
-        ],
-        'upcoming_events': [
-            {
-                'event': 'Prime Day',
-                'date': '2024-07-16',
-                'recommended_discount': '25-30%',
-                'expected_lift': '300%'
+                'retailer': 'Target',
+                'current_stock': 15,
+                'suggested_quantity': 75,
+                'days_left': 6.8,
+                'velocity': 2.2,
+                'source_link': 'https://www.target.com/s?searchTerm=B07XJ8C8F7',
+                'promo_message': None,
+                'note': 'Flash sale - 20% off',
+                'alert_time': (datetime.now() - timedelta(hours=8)).isoformat(),
+                'priority_score': 85,
+                'restock_priority': 'warning_high_velocity'
             },
             {
-                'event': 'Black Friday',
-                'date': '2024-11-29',
-                'recommended_discount': '35-40%',
-                'expected_lift': '500%'
+                'asin': 'B09KMXJQ9R',
+                'product_name': 'Wireless Charging Pad',
+                'retailer': 'Vitacost',
+                'current_stock': 25,
+                'suggested_quantity': 50,
+                'days_left': 8.3,
+                'velocity': 3.0,
+                'source_link': 'https://www.vitacost.com/search?q=B09KMXJQ9R',
+                'promo_message': 'Free shipping on orders over $49',
+                'note': 'New coupon available',
+                'alert_time': (datetime.now() - timedelta(hours=12)).isoformat(),
+                'priority_score': 75,
+                'restock_priority': 'warning_moderate'
             }
-        ]
+        ],
+        'total_alerts_processed': 15,
+        'matched_products': 3,
+        'retailer_filter': '',
+        'analyzed_at': datetime.now().isoformat(),
+        'message': 'Found 3 discount opportunities for products that need restocking'
     }
 
 def get_dummy_sheet_data():

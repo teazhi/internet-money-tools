@@ -382,6 +382,20 @@ def get_dummy_analytics_data(target_date):
             'roi_percentage': 24.3,
             'break_even_days': 18
         },
+        'purchase_insights': {
+            'summary_metrics': {
+                'total_investment': 52750.00,  # Total across all worksheets
+                'current_month_investment': 8950.00,  # Current month only (for Purchase Investment box)
+                'current_month_asins': 12,
+                'current_month_units': 145,
+                'total_asins_tracked': 35,
+                'total_units_purchased': 1250,
+                'analysis_date_range': {
+                    'start': '2024-01-01',
+                    'end': datetime.now().strftime('%Y-%m-%d')
+                }
+            }
+        },
         'inventory_alerts': [
             {
                 'asin': 'B08N5WRWNW',

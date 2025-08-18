@@ -364,6 +364,13 @@ class PurchaseAnalytics:
         recent_asins = recent_data['asin'].nunique()
         recent_investment = (recent_data['cogs'] * recent_data['amount_purchased']).sum()
         
+        # Current month investment (for Purchase Investment display)
+        current_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        current_month_data = df[df['date'] >= current_month_start]
+        current_month_investment = (current_month_data['cogs'] * current_month_data['amount_purchased']).sum()
+        current_month_asins = current_month_data['asin'].nunique()
+        current_month_units = current_month_data['amount_purchased'].sum()
+        
         return {
             'total_asins_tracked': int(total_asins),
             'total_purchase_records': int(total_purchases),
@@ -372,6 +379,10 @@ class PurchaseAnalytics:
             'avg_purchase_value': float(avg_purchase_value),
             'recent_30d_asins': int(recent_asins),
             'recent_30d_investment': float(recent_investment),
+            # Add current month metrics for Purchase Investment display
+            'current_month_investment': float(current_month_investment),
+            'current_month_asins': int(current_month_asins),
+            'current_month_units': int(current_month_units),
             'analysis_date_range': {
                 'start': df['date'].min().isoformat() if not df.empty else None,
                 'end': df['date'].max().isoformat() if not df.empty else None

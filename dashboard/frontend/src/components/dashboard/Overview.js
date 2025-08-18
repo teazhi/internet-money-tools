@@ -981,13 +981,13 @@ const Overview = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">
-                    Purchase Investment ({purchaseInsights.dateRange})
+                    Purchase Investment (Current Month)
                   </p>
                   <p className="text-2xl font-semibold text-gray-900">
-                    ${(purchaseInsights.summary.total_investment || 0).toLocaleString()}
+                    ${(purchaseInsights.summary.current_month_investment || 0).toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {(purchaseInsights.summary.total_asins_tracked || 0)} ASINs • {(purchaseInsights.summary.total_units_purchased || 0)} units
+                    {(purchaseInsights.summary.current_month_asins || 0)} ASINs • {(purchaseInsights.summary.current_month_units || 0)} units
                   </p>
                 </div>
               </div>

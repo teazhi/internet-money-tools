@@ -5926,11 +5926,70 @@ def sync_leads_to_sheets():
         
         # First, fetch all leads from user's connected sheet
         user_leads = []
+        # Also create a lookup dictionary for source links from all worksheets
+        asin_to_source_lookup = {}
+        
         try:
             # Get column mapping
             column_mapping = config_user_record.get('column_mapping', {})
             
-            # Fetch data from user's sheet
+            # Check if user has search_all_worksheets enabled
+            search_all_worksheets = config_user_record.get('search_all_worksheets', True)  # Default to True
+            
+            # If search_all_worksheets is enabled, first build a lookup of all ASINs and their sources
+            if search_all_worksheets:
+                print(f"Building source lookup from all worksheets...")
+                # Get all worksheet names
+                metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}"
+                metadata_response = requests.get(metadata_url, headers=headers)
+                metadata_response.raise_for_status()
+                sheets_info = metadata_response.json().get("sheets", [])
+                worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
+                
+                # Search each worksheet for ASINs and sources
+                for worksheet_name in worksheet_names:
+                    try:
+                        encoded_range = urllib.parse.quote(f"'{worksheet_name}'!A1:Z")
+                        url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_sheet_id}/values/{encoded_range}"
+                        worksheet_response = requests.get(url, headers=headers)
+                        worksheet_response.raise_for_status()
+                        
+                        worksheet_values = worksheet_response.json().get("values", [])
+                        if worksheet_values and len(worksheet_values) > 1:
+                            worksheet_headers = worksheet_values[0]
+                            worksheet_rows = worksheet_values[1:]
+                            
+                            # Find ASIN and source columns
+                            asin_col_idx = None
+                            source_col_idx = None
+                            
+                            for idx, header in enumerate(worksheet_headers):
+                                header_lower = header.lower()
+                                # Find ASIN column
+                                if 'asin' in header_lower and asin_col_idx is None:
+                                    asin_col_idx = idx
+                                # Find source column (same logic as Smart Restock)
+                                if any(keyword in header_lower for keyword in ['source', 'link', 'url', 'supplier', 'vendor', 'store']):
+                                    if not any(skip_word in header_lower for skip_word in ['amazon', 'sell', 'listing']):
+                                        source_col_idx = idx
+                            
+                            # Build lookup
+                            if asin_col_idx is not None and source_col_idx is not None:
+                                for row in worksheet_rows:
+                                    if len(row) > max(asin_col_idx, source_col_idx):
+                                        asin = str(row[asin_col_idx]).strip().upper()
+                                        source = str(row[source_col_idx]).strip()
+                                        if asin and asin not in ['NAN', 'NONE', ''] and source and source.lower() not in ['nan', 'none', '']:
+                                            # Store the source for this ASIN (overwrite if found in multiple places)
+                                            asin_to_source_lookup[asin] = source
+                                            
+                    except Exception as ws_error:
+                        print(f"Error reading worksheet {worksheet_name}: {ws_error}")
+                        continue
+                
+                print(f"Found sources for {len(asin_to_source_lookup)} ASINs across all worksheets")
+            
+            # Fetch data from user's main sheet
             # Properly encode worksheet title for URL
             import urllib.parse
             encoded_range = urllib.parse.quote(f"'{user_worksheet_title}'!A1:Z")
@@ -6017,6 +6076,13 @@ def sync_leads_to_sheets():
                         # Add http:// if it looks like a domain without protocol
                         if '.' in source and not source.startswith('http'):
                             source = f'https://{source}'
+                
+                # If no source found in current row but we have search_all_worksheets enabled, 
+                # check the lookup from other worksheets
+                if not source and search_all_worksheets and asin and asin in asin_to_source_lookup:
+                    source = asin_to_source_lookup[asin]
+                    if row_index < 5:  # Debug first 5 rows
+                        print(f"Row {row_index}: Found source from other worksheet for ASIN {asin}: '{source}'")
                 
                 # Get cost - use COGS mapping
                 cost = ''
@@ -6111,7 +6177,9 @@ def sync_leads_to_sheets():
             'debug_info': {
                 'total_user_leads': len(user_leads),
                 'existing_worksheets': existing_worksheets,
-                'worksheet_not_found': []
+                'worksheet_not_found': [],
+                'search_all_worksheets': search_all_worksheets,
+                'sources_found_from_other_worksheets': len(asin_to_source_lookup) if search_all_worksheets else 0
             }
         }
         
@@ -6314,9 +6382,9 @@ def sync_leads_to_sheets():
                                     "cell": {
                                         "userEnteredFormat": {
                                             "backgroundColor": {
-                                                "red": 0.85,    # Light green background
-                                                "green": 0.95,
-                                                "blue": 0.85
+                                                "red": 1.0,     # Yellow background
+                                                "green": 1.0,
+                                                "blue": 0.6
                                             }
                                         }
                                     },

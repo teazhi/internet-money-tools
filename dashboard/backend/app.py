@@ -257,97 +257,151 @@ def get_dummy_analytics_data(target_date):
     
     return {
         'success': True,
-        'data': {
-            'total_revenue': 15847.32,
-            'total_orders': 124,
-            'avg_order_value': 127.80,
-            'units_sold': 186,
-            'top_products': [
-                {
-                    'asin': 'B08N5WRWNW',
-                    'title': 'Demo Wireless Bluetooth Headphones',
-                    'units_sold': 32,
-                    'revenue': 2547.68,
-                    'avg_price': 79.62
-                },
-                {
-                    'asin': 'B07XJ8C8F7',
-                    'title': 'Premium Phone Case - Clear',
-                    'units_sold': 28,
-                    'revenue': 1876.44,
-                    'avg_price': 67.02
-                },
-                {
-                    'asin': 'B09KMXJQ9R',
-                    'title': 'Wireless Charging Pad',
-                    'units_sold': 25,
-                    'revenue': 1624.75,
-                    'avg_price': 64.99
-                }
-            ],
-            'hourly_sales': [
-                {'hour': '00:00', 'revenue': 234.56, 'orders': 3},
-                {'hour': '01:00', 'revenue': 189.23, 'orders': 2},
-                {'hour': '02:00', 'revenue': 345.67, 'orders': 4},
-                {'hour': '03:00', 'revenue': 567.89, 'orders': 7},
-                {'hour': '04:00', 'revenue': 432.10, 'orders': 5},
-                {'hour': '05:00', 'revenue': 678.90, 'orders': 8},
-                {'hour': '06:00', 'revenue': 789.12, 'orders': 9},
-                {'hour': '07:00', 'revenue': 890.34, 'orders': 11},
-                {'hour': '08:00', 'revenue': 1234.56, 'orders': 15},
-                {'hour': '09:00', 'revenue': 1456.78, 'orders': 18},
-                {'hour': '10:00', 'revenue': 1678.90, 'orders': 21},
-                {'hour': '11:00', 'revenue': 1890.12, 'orders': 24},
-                {'hour': '12:00', 'revenue': 2100.34, 'orders': 26},
-                {'hour': '13:00', 'revenue': 1987.65, 'orders': 25},
-                {'hour': '14:00', 'revenue': 1765.43, 'orders': 22},
-                {'hour': '15:00', 'revenue': 1543.21, 'orders': 19},
-                {'hour': '16:00', 'revenue': 1321.09, 'orders': 16},
-                {'hour': '17:00', 'revenue': 1109.87, 'orders': 14},
-                {'hour': '18:00', 'revenue': 987.65, 'orders': 12},
-                {'hour': '19:00', 'revenue': 876.54, 'orders': 11},
-                {'hour': '20:00', 'revenue': 765.43, 'orders': 9},
-                {'hour': '21:00', 'revenue': 654.32, 'orders': 8},
-                {'hour': '22:00', 'revenue': 543.21, 'orders': 6},
-                {'hour': '23:00', 'revenue': 432.10, 'orders': 5}
-            ],
-            'comparison': {
-                'yesterday_revenue': 14256.78,
-                'yesterday_orders': 118,
-                'revenue_change': 11.2,
-                'orders_change': 5.1
+        'report_date': target_date.strftime('%Y-%m-%d'),
+        'user_timezone': 'America/New_York',
+        'total_revenue': 15847.32,
+        'total_orders': 124,
+        'avg_order_value': 127.80,
+        'units_sold': 186,
+        'today_sales': {
+            'B08N5WRWNW': 32,
+            'B07XJ8C8F7': 28,
+            'B09KMXJQ9R': 25
+        },
+        'sellerboard_orders': [
+            {
+                'date': yesterday.strftime('%Y-%m-%d'),
+                'asin': 'B08N5WRWNW',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'quantity': 5,
+                'revenue': 399.95,
+                'price': 79.99
             },
-            'inventory_alerts': [
-                {
-                    'asin': 'B08N5WRWNW',
-                    'title': 'Demo Wireless Bluetooth Headphones',
-                    'current_stock': 8,
-                    'days_remaining': 3.2,
-                    'daily_velocity': 2.5,
-                    'alert_type': 'low_stock'
-                },
-                {
-                    'asin': 'B07XJ8C8F7',
-                    'title': 'Premium Phone Case - Clear',
-                    'current_stock': 15,
-                    'days_remaining': 6.8,
-                    'daily_velocity': 2.2,
-                    'alert_type': 'medium_stock'
-                }
-            ],
-            'restock_recommendations': [
-                {
-                    'asin': 'B08N5WRWNW',
-                    'title': 'Demo Wireless Bluetooth Headphones',
-                    'recommended_quantity': 120,
-                    'lead_time_days': 14,
-                    'order_by_date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
-                    'priority': 'high'
-                }
-            ],
-            'date': target_date.strftime('%Y-%m-%d'),
-            'generated_at': datetime.utcnow().isoformat()
-        }
+            {
+                'date': yesterday.strftime('%Y-%m-%d'),
+                'asin': 'B07XJ8C8F7',
+                'product_name': 'Premium Phone Case - Clear',
+                'quantity': 8,
+                'revenue': 199.92,
+                'price': 24.99
+            },
+            {
+                'date': yesterday.strftime('%Y-%m-%d'),
+                'asin': 'B09KMXJQ9R',
+                'product_name': 'Wireless Charging Pad',
+                'quantity': 6,
+                'revenue': 389.94,
+                'price': 64.99
+            }
+        ],
+        'enhanced_analytics': {
+            'B08N5WRWNW': {
+                'current_stock': 8,
+                'days_remaining': 3.2,
+                'daily_velocity': 2.5,
+                'alert_type': 'low_stock',
+                'restock_priority': 'urgent'
+            },
+            'B07XJ8C8F7': {
+                'current_stock': 15,
+                'days_remaining': 6.8,
+                'daily_velocity': 2.2,
+                'alert_type': 'medium_stock',
+                'restock_priority': 'high'
+            },
+            'B09KMXJQ9R': {
+                'current_stock': 45,
+                'days_remaining': 15.0,
+                'daily_velocity': 3.0,
+                'alert_type': 'good_stock',
+                'restock_priority': 'medium'
+            }
+        },
+        'top_products': [
+            {
+                'asin': 'B08N5WRWNW',
+                'title': 'Demo Wireless Bluetooth Headphones',
+                'units_sold': 32,
+                'revenue': 2547.68,
+                'avg_price': 79.62
+            },
+            {
+                'asin': 'B07XJ8C8F7',
+                'title': 'Premium Phone Case - Clear',
+                'units_sold': 28,
+                'revenue': 1876.44,
+                'avg_price': 67.02
+            },
+            {
+                'asin': 'B09KMXJQ9R',
+                'title': 'Wireless Charging Pad',
+                'units_sold': 25,
+                'revenue': 1624.75,
+                'avg_price': 64.99
+            }
+        ],
+        'hourly_sales': [
+            {'hour': '00:00', 'revenue': 234.56, 'orders': 3},
+            {'hour': '01:00', 'revenue': 189.23, 'orders': 2},
+            {'hour': '02:00', 'revenue': 345.67, 'orders': 4},
+            {'hour': '03:00', 'revenue': 567.89, 'orders': 7},
+            {'hour': '04:00', 'revenue': 432.10, 'orders': 5},
+            {'hour': '05:00', 'revenue': 678.90, 'orders': 8},
+            {'hour': '06:00', 'revenue': 789.12, 'orders': 9},
+            {'hour': '07:00', 'revenue': 890.34, 'orders': 11},
+            {'hour': '08:00', 'revenue': 1234.56, 'orders': 15},
+            {'hour': '09:00', 'revenue': 1456.78, 'orders': 18},
+            {'hour': '10:00', 'revenue': 1678.90, 'orders': 21},
+            {'hour': '11:00', 'revenue': 1890.12, 'orders': 24},
+            {'hour': '12:00', 'revenue': 2100.34, 'orders': 26},
+            {'hour': '13:00', 'revenue': 1987.65, 'orders': 25},
+            {'hour': '14:00', 'revenue': 1765.43, 'orders': 22},
+            {'hour': '15:00', 'revenue': 1543.21, 'orders': 19},
+            {'hour': '16:00', 'revenue': 1321.09, 'orders': 16},
+            {'hour': '17:00', 'revenue': 1109.87, 'orders': 14},
+            {'hour': '18:00', 'revenue': 987.65, 'orders': 12},
+            {'hour': '19:00', 'revenue': 876.54, 'orders': 11},
+            {'hour': '20:00', 'revenue': 765.43, 'orders': 9},
+            {'hour': '21:00', 'revenue': 654.32, 'orders': 8},
+            {'hour': '22:00', 'revenue': 543.21, 'orders': 6},
+            {'hour': '23:00', 'revenue': 432.10, 'orders': 5}
+        ],
+        'comparison': {
+            'yesterday_revenue': 14256.78,
+            'yesterday_orders': 118,
+            'revenue_change': 11.2,
+            'orders_change': 5.1
+        },
+        'inventory_alerts': [
+            {
+                'asin': 'B08N5WRWNW',
+                'title': 'Demo Wireless Bluetooth Headphones',
+                'current_stock': 8,
+                'days_remaining': 3.2,
+                'daily_velocity': 2.5,
+                'alert_type': 'low_stock'
+            },
+            {
+                'asin': 'B07XJ8C8F7',
+                'title': 'Premium Phone Case - Clear',
+                'current_stock': 15,
+                'days_remaining': 6.8,
+                'daily_velocity': 2.2,
+                'alert_type': 'medium_stock'
+            }
+        ],
+        'restock_recommendations': [
+            {
+                'asin': 'B08N5WRWNW',
+                'title': 'Demo Wireless Bluetooth Headphones',
+                'recommended_quantity': 120,
+                'lead_time_days': 14,
+                'order_by_date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
+                'priority': 'high'
+            }
+        ],
+        'date': target_date.strftime('%Y-%m-%d'),
+        'generated_at': datetime.utcnow().isoformat()
     }
 
 def get_dummy_reimbursements_data():

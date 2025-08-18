@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye, TestTube } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import axios from 'axios';
 
@@ -38,6 +38,7 @@ const COMMON_TIMEZONES = [
 
 const Settings = () => {
   const { user, updateUser } = useAuth();
+  const [demoMode, setDemoMode] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     listing_loader_key: '',
@@ -75,6 +76,38 @@ const Settings = () => {
       });
     }
   }, [user]);
+
+  // Check demo mode status
+  useEffect(() => {
+    const checkDemoMode = async () => {
+      try {
+        const response = await axios.get('/api/demo/status');
+        setDemoMode(response.data.demo_mode);
+      } catch (error) {
+        console.log('Failed to check demo mode:', error);
+      }
+    };
+    checkDemoMode();
+  }, []);
+
+  // Toggle demo mode
+  const toggleDemoMode = async () => {
+    try {
+      const endpoint = demoMode ? '/api/demo/disable' : '/api/demo/enable';
+      const response = await axios.post(endpoint);
+      setDemoMode(response.data.demo_mode);
+      setMessage({ 
+        type: 'success', 
+        text: response.data.message 
+      });
+    } catch (error) {
+      console.error('Failed to toggle demo mode:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to toggle demo mode' 
+      });
+    }
+  };
 
   // Load Amazon connection status
   useEffect(() => {
@@ -735,6 +768,38 @@ const Settings = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Demo Mode Controls */}
+      <div className="card max-w-2xl border-blue-200">
+        <h3 className="text-sm font-semibold text-blue-900 mb-4 flex items-center space-x-2">
+          <TestTube className="h-4 w-4" />
+          <span>Demo Mode</span>
+        </h3>
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="flex items-start space-x-3">
+            <Eye className="h-5 w-5 text-blue-500 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-blue-900">Demonstration Mode</h4>
+              <p className="text-sm text-blue-700 mb-3">
+                {demoMode 
+                  ? "Demo mode is currently enabled. All data is simulated for demonstration purposes."
+                  : "Demo mode is disabled. Using real application data."
+                }
+              </p>
+              <button 
+                onClick={toggleDemoMode}
+                className={`text-sm px-3 py-1 rounded-md transition-colors duration-200 ${
+                  demoMode 
+                    ? "bg-red-600 hover:bg-red-700 text-white" 
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
+              >
+                {demoMode ? "Disable Demo Mode" : "Enable Demo Mode"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Danger Zone */}

@@ -21,7 +21,8 @@ import {
   ChevronRight,
   X,
   Package,
-  Zap
+  Zap,
+  TestTube
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -42,9 +43,36 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   // Check if current user is admin
   const isAdmin = user?.discord_id === '712147636463075389';
+
+  // Check for demo mode
+  useEffect(() => {
+    const checkDemoMode = async () => {
+      try {
+        const response = await axios.get('/api/demo/status');
+        setDemoMode(response.data.demo_mode);
+      } catch (error) {
+        console.log('Failed to check demo mode:', error);
+      }
+    };
+    checkDemoMode();
+  }, []);
+
+  // Demo mode controls
+  const toggleDemoMode = async () => {
+    try {
+      const endpoint = demoMode ? '/api/demo/disable' : '/api/demo/enable';
+      const response = await axios.post(endpoint);
+      setDemoMode(response.data.demo_mode);
+      // Refresh user data to reflect demo mode changes
+      await refreshUser();
+    } catch (error) {
+      console.error('Failed to toggle demo mode:', error);
+    }
+  };
 
   // Handle returning from impersonation
   const handleReturnFromImpersonation = async () => {
@@ -314,6 +342,30 @@ const Dashboard = () => {
           </div>
         </header>
 
+        {/* Demo Mode Banner */}
+        {demoMode && (
+          <div className="bg-orange-100 border-l-4 border-orange-500 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <Eye className="h-5 w-5 text-orange-400" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-orange-700">
+                    <strong>Demo Mode Active:</strong> All data shown is simulated for demonstration purposes only.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={toggleDemoMode}
+                className="bg-orange-200 hover:bg-orange-300 text-orange-800 px-3 py-1 rounded text-xs font-medium transition-colors"
+              >
+                Exit Demo
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Page content */}
         <main className="flex-1 overflow-y-auto bg-gray-50">
           <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -331,6 +383,19 @@ const Dashboard = () => {
             </Routes>
           </div>
         </main>
+
+        {/* Floating Demo Mode Toggle Button */}
+        <button
+          onClick={toggleDemoMode}
+          className={`fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-105 ${
+            demoMode 
+              ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+          }`}
+          title={demoMode ? "Exit Demo Mode" : "Enter Demo Mode"}
+        >
+          <TestTube className="h-5 w-5" />
+        </button>
       </div>
       </div>
     </div>

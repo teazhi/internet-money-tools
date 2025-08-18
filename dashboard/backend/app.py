@@ -28,6 +28,9 @@ try:
 except Exception as e:
     pass  # Failed to load .env file
 
+# Demo mode flag - set to True to use dummy data for demos
+DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
+
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
@@ -175,7 +178,182 @@ def exchange_amazon_auth_code(auth_code):
         pass  # Error exchanging auth code
         return None
 
+def get_dummy_users():
+    """Generate dummy users for demo purposes"""
+    return [
+        {
+            "discord_id": "123456789012345678",
+            "discord_username": "DemoUser#1234",
+            "email": "demo@example.com",
+            "va_name": "Demo VA",
+            "user_type": "main",
+            "profile_configured": True,
+            "google_linked": True,
+            "sheet_configured": True,
+            "permissions": ["all"],
+            "sellerboard_orders_url": "https://demo.sellerboard.com/orders",
+            "sellerboard_stock_url": "https://demo.sellerboard.com/stock",
+            "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+            "google_tokens": {
+                "access_token": "dummy_access_token",
+                "refresh_token": "dummy_refresh_token",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "client_id": "dummy_client_id",
+                "client_secret": "dummy_client_secret"
+            },
+            "uploaded_files": [
+                {
+                    "filename": "orders_2024_01.csv",
+                    "upload_date": "2024-01-15T10:30:00Z",
+                    "file_size": 2048000,
+                    "s3_key": "demo/orders_2024_01.csv"
+                },
+                {
+                    "filename": "inventory_snapshot.xlsx",
+                    "upload_date": "2024-01-10T14:20:00Z",
+                    "file_size": 1024000,
+                    "s3_key": "demo/inventory_snapshot.xlsx"
+                }
+            ],
+            "last_activity": (datetime.utcnow() - timedelta(hours=2)).isoformat(),
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": (datetime.utcnow() - timedelta(days=1)).isoformat()
+        },
+        {
+            "discord_id": "234567890123456789",
+            "discord_username": "AdminDemo#5678",
+            "email": "admin@example.com",
+            "user_type": "admin",
+            "profile_configured": True,
+            "google_linked": True,
+            "sheet_configured": True,
+            "permissions": ["all"],
+            "sellerboard_orders_url": "https://demo.sellerboard.com/admin/orders",
+            "sellerboard_stock_url": "https://demo.sellerboard.com/admin/stock",
+            "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+            "last_activity": (datetime.utcnow() - timedelta(minutes=30)).isoformat(),
+            "created_at": "2023-12-01T00:00:00Z",
+            "updated_at": datetime.utcnow().isoformat()
+        },
+        {
+            "discord_id": "345678901234567890",
+            "discord_username": "VAUser#9012",
+            "email": "va@example.com",
+            "va_name": "Virtual Assistant",
+            "user_type": "subuser",
+            "parent_user_id": "123456789012345678",
+            "profile_configured": True,
+            "permissions": ["sellerboard_upload", "reimbursements_analysis"],
+            "last_activity": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+            "created_at": "2024-01-05T00:00:00Z",
+            "updated_at": (datetime.utcnow() - timedelta(hours=6)).isoformat()
+        }
+    ]
+
+def get_dummy_analytics_data(target_date):
+    """Generate dummy analytics data for demo purposes"""
+    base_date = target_date
+    yesterday = base_date - timedelta(days=1)
+    
+    return {
+        'success': True,
+        'data': {
+            'total_revenue': 15847.32,
+            'total_orders': 124,
+            'avg_order_value': 127.80,
+            'units_sold': 186,
+            'top_products': [
+                {
+                    'asin': 'B08N5WRWNW',
+                    'title': 'Demo Wireless Bluetooth Headphones',
+                    'units_sold': 32,
+                    'revenue': 2547.68,
+                    'avg_price': 79.62
+                },
+                {
+                    'asin': 'B07XJ8C8F7',
+                    'title': 'Premium Phone Case - Clear',
+                    'units_sold': 28,
+                    'revenue': 1876.44,
+                    'avg_price': 67.02
+                },
+                {
+                    'asin': 'B09KMXJQ9R',
+                    'title': 'Wireless Charging Pad',
+                    'units_sold': 25,
+                    'revenue': 1624.75,
+                    'avg_price': 64.99
+                }
+            ],
+            'hourly_sales': [
+                {'hour': '00:00', 'revenue': 234.56, 'orders': 3},
+                {'hour': '01:00', 'revenue': 189.23, 'orders': 2},
+                {'hour': '02:00', 'revenue': 345.67, 'orders': 4},
+                {'hour': '03:00', 'revenue': 567.89, 'orders': 7},
+                {'hour': '04:00', 'revenue': 432.10, 'orders': 5},
+                {'hour': '05:00', 'revenue': 678.90, 'orders': 8},
+                {'hour': '06:00', 'revenue': 789.12, 'orders': 9},
+                {'hour': '07:00', 'revenue': 890.34, 'orders': 11},
+                {'hour': '08:00', 'revenue': 1234.56, 'orders': 15},
+                {'hour': '09:00', 'revenue': 1456.78, 'orders': 18},
+                {'hour': '10:00', 'revenue': 1678.90, 'orders': 21},
+                {'hour': '11:00', 'revenue': 1890.12, 'orders': 24},
+                {'hour': '12:00', 'revenue': 2100.34, 'orders': 26},
+                {'hour': '13:00', 'revenue': 1987.65, 'orders': 25},
+                {'hour': '14:00', 'revenue': 1765.43, 'orders': 22},
+                {'hour': '15:00', 'revenue': 1543.21, 'orders': 19},
+                {'hour': '16:00', 'revenue': 1321.09, 'orders': 16},
+                {'hour': '17:00', 'revenue': 1109.87, 'orders': 14},
+                {'hour': '18:00', 'revenue': 987.65, 'orders': 12},
+                {'hour': '19:00', 'revenue': 876.54, 'orders': 11},
+                {'hour': '20:00', 'revenue': 765.43, 'orders': 9},
+                {'hour': '21:00', 'revenue': 654.32, 'orders': 8},
+                {'hour': '22:00', 'revenue': 543.21, 'orders': 6},
+                {'hour': '23:00', 'revenue': 432.10, 'orders': 5}
+            ],
+            'comparison': {
+                'yesterday_revenue': 14256.78,
+                'yesterday_orders': 118,
+                'revenue_change': 11.2,
+                'orders_change': 5.1
+            },
+            'inventory_alerts': [
+                {
+                    'asin': 'B08N5WRWNW',
+                    'title': 'Demo Wireless Bluetooth Headphones',
+                    'current_stock': 8,
+                    'days_remaining': 3.2,
+                    'daily_velocity': 2.5,
+                    'alert_type': 'low_stock'
+                },
+                {
+                    'asin': 'B07XJ8C8F7',
+                    'title': 'Premium Phone Case - Clear',
+                    'current_stock': 15,
+                    'days_remaining': 6.8,
+                    'daily_velocity': 2.2,
+                    'alert_type': 'medium_stock'
+                }
+            ],
+            'restock_recommendations': [
+                {
+                    'asin': 'B08N5WRWNW',
+                    'title': 'Demo Wireless Bluetooth Headphones',
+                    'recommended_quantity': 120,
+                    'lead_time_days': 14,
+                    'order_by_date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
+                    'priority': 'high'
+                }
+            ],
+            'date': target_date.strftime('%Y-%m-%d'),
+            'generated_at': datetime.utcnow().isoformat()
+        }
+    }
+
 def get_users_config():
+    if DEMO_MODE:
+        return get_dummy_users()
+    
     s3_client = get_s3_client()
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
@@ -940,6 +1118,26 @@ def debug_auth():
 @login_required
 def get_user():
     discord_id = session['discord_id']
+    
+    # In demo mode, return the demo user
+    if DEMO_MODE:
+        demo_users = get_dummy_users()
+        demo_user = demo_users[0]  # Use first demo user
+        return jsonify({
+            'discord_id': demo_user['discord_id'],
+            'discord_username': demo_user['discord_username'],
+            'email': demo_user['email'],
+            'profile_configured': True,
+            'google_linked': True,
+            'sheet_configured': True,
+            'amazon_connected': True,
+            'demo_mode': True,
+            'user_type': demo_user.get('user_type', 'main'),
+            'permissions': demo_user.get('permissions', ['all']),
+            'last_activity': demo_user.get('last_activity'),
+            'timezone': 'America/New_York'
+        })
+    
     user_record = get_user_record(discord_id)
     
     # Check if we're in admin impersonation mode
@@ -1506,6 +1704,20 @@ def debug_cogs_status():
 @login_required
 def get_orders_analytics():
     try:
+        # Check if demo mode is enabled
+        if DEMO_MODE:
+            # Get target date
+            target_date_str = request.args.get('date')
+            if target_date_str:
+                try:
+                    target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+            else:
+                target_date = (datetime.now() - timedelta(days=1)).date()
+            
+            return jsonify(get_dummy_analytics_data(target_date))
+        
         # Process dashboard analytics request
         
         # Try SP-API first, fallback to Sellerboard if needed
@@ -2097,6 +2309,42 @@ def list_sellerboard_files():
     """List user's uploaded files - now with proper discord_id filtering"""
     try:
         discord_id = session['discord_id']
+        
+        # Return dummy data in demo mode
+        if DEMO_MODE:
+            dummy_files = [
+                {
+                    'filename': 'orders_2024_01_15.csv',
+                    'upload_date': '2024-01-15T10:30:00Z',
+                    'file_size': 2048000,
+                    'file_type': 'orders',
+                    's3_key': 'demo/orders_2024_01_15.csv',
+                    'last_modified': '2024-01-15T10:30:00Z'
+                },
+                {
+                    'filename': 'inventory_snapshot_2024_01_10.xlsx',
+                    'upload_date': '2024-01-10T14:20:00Z',
+                    'file_size': 1024000,
+                    'file_type': 'inventory',
+                    's3_key': 'demo/inventory_snapshot_2024_01_10.xlsx',
+                    'last_modified': '2024-01-10T14:20:00Z'
+                },
+                {
+                    'filename': 'listing_loader_data_2024_01_12.csv',
+                    'upload_date': '2024-01-12T09:15:00Z',
+                    'file_size': 512000,
+                    'file_type': 'listing_loader',
+                    's3_key': 'demo/listing_loader_data_2024_01_12.csv',
+                    'last_modified': '2024-01-12T09:15:00Z'
+                }
+            ]
+            
+            return jsonify({
+                'files': dummy_files,
+                'duplicates': {},
+                'warnings': [],
+                'total_files': len(dummy_files)
+            })
         
         # Get files directly from S3 using proper discord_id filtering
         user_files = get_user_files_from_s3(discord_id)
@@ -6957,6 +7205,50 @@ def not_found(error):
 def internal_error(error):
     """Handle 500 errors"""
     return jsonify({'error': 'Internal server error'}), 500
+
+# Demo control endpoints
+@app.route('/api/demo/status', methods=['GET'])
+def demo_status():
+    """Check demo mode status"""
+    return jsonify({
+        'demo_mode': DEMO_MODE,
+        'environment': os.getenv('DEMO_MODE', 'false')
+    })
+
+@app.route('/api/demo/toggle', methods=['POST'])
+def toggle_demo_mode():
+    """Toggle demo mode (for development/testing only)"""
+    global DEMO_MODE
+    
+    # Only allow toggling in development
+    if os.getenv('FLASK_ENV') == 'development' or os.getenv('ENVIRONMENT') == 'development':
+        DEMO_MODE = not DEMO_MODE
+        return jsonify({
+            'demo_mode': DEMO_MODE,
+            'message': f'Demo mode {"enabled" if DEMO_MODE else "disabled"}'
+        })
+    else:
+        return jsonify({'error': 'Demo mode toggle not available in production'}), 403
+
+@app.route('/api/demo/enable', methods=['POST'])
+def enable_demo_mode():
+    """Enable demo mode for demos"""
+    global DEMO_MODE
+    DEMO_MODE = True
+    return jsonify({
+        'demo_mode': True,
+        'message': 'Demo mode enabled - all data is now simulated for demonstration purposes'
+    })
+
+@app.route('/api/demo/disable', methods=['POST'])
+def disable_demo_mode():
+    """Disable demo mode"""
+    global DEMO_MODE
+    DEMO_MODE = False
+    return jsonify({
+        'demo_mode': False,
+        'message': 'Demo mode disabled - using real data'
+    })
 
 if __name__ == '__main__':
     try:

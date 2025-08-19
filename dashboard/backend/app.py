@@ -7264,41 +7264,29 @@ def fetch_discount_email_alerts():
             print(f"[DEBUG] Newer_than query: {query_newer}")
             search_results = search_gmail_messages(admin_user_record, query_newer, max_results=100)
         
-        if not search_results:
-            print("[DEBUG] No search results from Gmail API with date filtering")
-            print("[DEBUG] Falling back to fetching all Distill emails and filtering client-side...")
+        # Check if we got results with date filtering
+        messages = search_results.get('messages', []) if search_results else []
+        
+        # If no messages found with date filtering, try without date filter
+        if not messages:
+            print("[DEBUG] No messages found with date filtering, fetching all Distill emails...")
             
             # Fetch all Distill emails without date filter, then filter client-side
             no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
+            print(f"[DEBUG] Searching without date filter: {no_date_query}")
             search_results = search_gmail_messages(admin_user_record, no_date_query, max_results=100)
             
             if not search_results:
                 print("[DEBUG] No Distill emails found at all")
                 return fetch_mock_discount_alerts()
+            
+            messages = search_results.get('messages', [])
+            if not messages:
+                print("[DEBUG] No messages in search results even without date filter")
+                return fetch_mock_discount_alerts()
+            
+            print(f"[DEBUG] Found {len(messages)} Distill emails total, will filter by date client-side")
         
-        messages = search_results.get('messages', [])
-        if not messages:
-            print("No messages found in search results")
-            # Try searching for any Distill emails without date filter
-            print("[DEBUG] Trying search without date filter...")
-            no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
-            no_date_results = search_gmail_messages(admin_user_record, no_date_query, max_results=5)
-            if no_date_results and no_date_results.get('messages'):
-                print(f"[DEBUG] Found {len(no_date_results['messages'])} Distill emails without date filter")
-            else:
-                print("[DEBUG] No Distill emails found even without date filter")
-                # Try searching for 'distill' in subject
-                distill_query = 'subject:distill'
-                distill_results = search_gmail_messages(admin_user_record, distill_query, max_results=5)
-                if distill_results and distill_results.get('messages'):
-                    print(f"[DEBUG] Found {len(distill_results['messages'])} emails with 'distill' in subject")
-                    # Check the first one to see the actual sender
-                    first_msg = get_gmail_message(admin_user_record, distill_results['messages'][0].get('id'))
-                    if first_msg:
-                        content = extract_email_content(first_msg)
-                        if content:
-                            print(f"[DEBUG] Actual sender of Distill email: {content.get('sender')}")
-            return fetch_mock_discount_alerts()
         
         print(f"Found {len(messages)} messages from Gmail search")
         

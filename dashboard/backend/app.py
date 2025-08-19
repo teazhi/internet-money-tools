@@ -6222,8 +6222,11 @@ def analyze_discount_opportunities():
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required
 def get_expected_arrivals():
-    """Get items purchased in last 2 months that don't have Amazon listings created yet"""
+    """Get items purchased that don't have Amazon listings created yet"""
     try:
+        # Get scope parameter (all or current_month)
+        scope = request.args.get('scope', 'all')
+        
         # Return dummy data in demo mode
         if DEMO_MODE:
             return jsonify(get_dummy_expected_arrivals_data())
@@ -6253,26 +6256,82 @@ def get_expected_arrivals():
 
         # Initialize OrdersAnalysis to get purchase data
         from orders_analysis import OrdersAnalysis
+        import pandas as pd
         analysis = OrdersAnalysis()
         
-        # Get purchase data from Google Sheets
+        # Get purchase data from Google Sheets based on scope
         print(f"DEBUG - Missing Listings: Sheet ID: {sheet_id}")
         print(f"DEBUG - Missing Listings: Column mapping: {column_mapping}")
+        print(f"DEBUG - Missing Listings: Analysis scope: {scope}")
         print(f"DEBUG - Missing Listings: Has access token: {bool(google_tokens.get('access_token'))}")
         
         try:
-            print("DEBUG - Missing Listings: About to call fetch_google_sheet_cogs_data_all_worksheets")
+            if scope == 'current_month':
+                print("DEBUG - Missing Listings: Using current month worksheet only")
+                
+                # Get current month worksheet name
+                from datetime import datetime
+                current_month = datetime.now().strftime('%B').upper()
+                
+                # Use safe_google_api_call to get worksheet list first
+                def get_worksheets_api_call(access_token):
+                    import requests
+                    metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    r = requests.get(metadata_url, headers=headers)
+                    r.raise_for_status()
+                    sheets_info = r.json().get("sheets", [])
+                    return [sheet["properties"]["title"] for sheet in sheets_info]
+                
+                worksheet_names = safe_google_api_call(config_user_record, get_worksheets_api_call)
+                
+                # Find current month worksheet
+                current_month_worksheet = None
+                for ws_name in worksheet_names:
+                    if current_month in ws_name.upper():
+                        current_month_worksheet = ws_name
+                        break
+                
+                if not current_month_worksheet:
+                    # Fallback to first worksheet if no current month found
+                    current_month_worksheet = worksheet_names[0] if worksheet_names else None
+                
+                if not current_month_worksheet:
+                    return jsonify({"error": "No worksheets found in the spreadsheet"}), 400
+                
+                print(f"DEBUG - Missing Listings: Using worksheet '{current_month_worksheet}' for current month analysis")
+                
+                # Fetch data from current month worksheet only
+                def api_call(access_token):
+                    return analysis.fetch_google_sheet_cogs_data(
+                        access_token=access_token,
+                        sheet_id=sheet_id,
+                        worksheet_title=current_month_worksheet,
+                        column_mapping=column_mapping
+                    ), analysis.fetch_google_sheet_data(
+                        access_token=access_token,
+                        sheet_id=sheet_id,
+                        worksheet_title=current_month_worksheet,
+                        column_mapping=column_mapping
+                    )[1]  # Get the dataframe part
+                
+                result = safe_google_api_call(config_user_record, api_call)
+                cogs_data, combined_purchase_df = result
+                
+            else:
+                print("DEBUG - Missing Listings: About to call fetch_google_sheet_cogs_data_all_worksheets")
+                
+                # Use safe_google_api_call to handle token refresh
+                def api_call(access_token):
+                    return analysis.fetch_google_sheet_cogs_data_all_worksheets(
+                        access_token=access_token,
+                        sheet_id=sheet_id,
+                        column_mapping=column_mapping
+                    )
+                
+                cogs_data, combined_purchase_df = safe_google_api_call(config_user_record, api_call)
             
-            # Use safe_google_api_call to handle token refresh
-            def api_call(access_token):
-                return analysis.fetch_google_sheet_cogs_data_all_worksheets(
-                    access_token=access_token,
-                    sheet_id=sheet_id,
-                    column_mapping=column_mapping
-                )
-            
-            cogs_data, combined_purchase_df = safe_google_api_call(config_user_record, api_call)
-            print("DEBUG - Missing Listings: Successfully returned from fetch_google_sheet_cogs_data_all_worksheets")
+            print("DEBUG - Missing Listings: Successfully returned from data fetch")
             print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
             if not combined_purchase_df.empty:
                 print(f"DEBUG - Missing Listings: DataFrame columns: {list(combined_purchase_df.columns)}")
@@ -6292,7 +6351,7 @@ def get_expected_arrivals():
                 "message": "No recent purchase data found"
             }), 200
 
-        # Analyze recent purchases (last 2 months)
+        # Analyze purchases based on scope
         from purchase_analytics import PurchaseAnalytics
         purchase_analytics = PurchaseAnalytics()
         purchase_insights = purchase_analytics.analyze_purchase_data(
@@ -6300,7 +6359,62 @@ def get_expected_arrivals():
             column_mapping
         )
         
-        recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
+        if scope == 'current_month':
+            # For current month scope, analyze all purchases from the current month worksheet
+            recent_purchases_data = {}
+            
+            # Process current month data directly from DataFrame
+            if not combined_purchase_df.empty:
+                for _, row in combined_purchase_df.iterrows():
+                    asin = row.get('ASIN')
+                    if pd.notna(asin) and asin.strip():
+                        asin = str(asin).strip()
+                        
+                        if asin not in recent_purchases_data:
+                            recent_purchases_data[asin] = {
+                                'total_quantity_purchased': 0,
+                                'purchase_count': 0,
+                                'last_purchase_date': None,
+                                'first_purchase_date': None,
+                                'avg_cogs_recent': 0,
+                                'source_worksheets': set(),
+                                'analysis_period': 'Current month only'
+                            }
+                        
+                        # Update purchase data
+                        quantity = row.get('Quantity', 0) or row.get('Amount Purchased', 0)
+                        if pd.notna(quantity):
+                            recent_purchases_data[asin]['total_quantity_purchased'] += int(quantity)
+                            recent_purchases_data[asin]['purchase_count'] += 1
+                        
+                        # Update COGS
+                        cogs = row.get('COGS', 0)
+                        if pd.notna(cogs) and cogs > 0:
+                            recent_purchases_data[asin]['avg_cogs_recent'] = float(cogs)
+                        
+                        # Update dates
+                        date_val = row.get('Date')
+                        if pd.notna(date_val):
+                            date_str = str(date_val)
+                            if recent_purchases_data[asin]['last_purchase_date'] is None or date_str > recent_purchases_data[asin]['last_purchase_date']:
+                                recent_purchases_data[asin]['last_purchase_date'] = date_str
+                            if recent_purchases_data[asin]['first_purchase_date'] is None or date_str < recent_purchases_data[asin]['first_purchase_date']:
+                                recent_purchases_data[asin]['first_purchase_date'] = date_str
+                        
+                        # Update source worksheets
+                        worksheet_source = row.get('_worksheet_source')
+                        if pd.notna(worksheet_source):
+                            recent_purchases_data[asin]['source_worksheets'].add(str(worksheet_source))
+                
+                # Convert source_worksheets sets to lists
+                for asin_data in recent_purchases_data.values():
+                    asin_data['source_worksheets'] = list(asin_data['source_worksheets'])
+            
+            analysis_period_msg = "current month"
+        else:
+            # Use existing 2-month analysis
+            recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
+            analysis_period_msg = "last 2 months"
         
         print(f"DEBUG - Missing Listings: Found {len(recent_purchases_data)} recent purchases")
         if recent_purchases_data:
@@ -6310,7 +6424,7 @@ def get_expected_arrivals():
             return jsonify({
                 "missing_listings": [],
                 "summary": {"total_items": 0, "total_cost": 0},
-                "message": "No recent purchases found in the last 2 months"
+                "message": f"No recent purchases found in the {analysis_period_msg}"
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
@@ -6327,11 +6441,16 @@ def get_expected_arrivals():
             
             # Check both current inventory AND historical data for listings
             current_inventory = inventory_analysis.get('enhanced_analytics', {})
-            all_known_asins = set(current_inventory.keys())
+            all_known_asins = set()
+            
+            # Add ASINs from enhanced analytics (normalize case)
+            for asin_key in current_inventory.keys():
+                all_known_asins.add(asin_key.upper())
             
             # Also check basic analytics for any ASIN that has ever appeared
             basic_analytics = inventory_analysis.get('analytics', {})
-            all_known_asins.update(basic_analytics.keys())
+            for asin_key in basic_analytics.keys():
+                all_known_asins.add(asin_key.upper())
             
             print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs with Amazon listings")
             print(f"DEBUG - Missing Listings: Sample Sellerboard ASINs: {list(all_known_asins)[:5]}")
@@ -6345,10 +6464,11 @@ def get_expected_arrivals():
         total_quantity = 0
 
         for asin, purchase_data in recent_purchases_data.items():
-            # Check if this ASIN has ANY presence in Sellerboard (indicating a listing exists)
-            has_listing = asin in all_known_asins
+            # Check if this ASIN has ANY presence in Sellerboard (case-insensitive comparison)
+            asin_upper = asin.upper()
+            has_listing = asin_upper in all_known_asins
             
-            print(f"DEBUG - Missing Listings: ASIN {asin} - Has listing: {has_listing}")
+            print(f"DEBUG - Missing Listings: ASIN {asin} (normalized: {asin_upper}) - Has listing: {has_listing}")
             
             if not has_listing:
                 # This item was purchased recently but has no Amazon listing created yet
@@ -6390,8 +6510,8 @@ def get_expected_arrivals():
                 "total_cost": round(total_cost, 2)
             },
             "analyzed_at": datetime.now().isoformat(),
-            "analysis_period": "Last 2 months",
-            "message": f"Found {len(missing_listings)} purchased items without Amazon listings"
+            "analysis_period": "Current month only" if scope == 'current_month' else "Last 2 months",
+            "message": f"Found {len(missing_listings)} purchased items without Amazon listings ({analysis_period_msg})"
         })
 
     except Exception as e:

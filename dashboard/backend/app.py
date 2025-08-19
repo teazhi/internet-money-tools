@@ -1750,6 +1750,122 @@ def disconnect_google():
     else:
         return jsonify({'error': 'Failed to disconnect Google account'}), 500
 
+# Admin-only discount monitoring Gmail OAuth endpoints
+@app.route('/api/admin/discount-monitoring/gmail/auth-url')
+@admin_required
+def get_admin_discount_gmail_auth_url():
+    """Get Google OAuth URL for system-wide discount monitoring Gmail access (Admin only)"""
+    scopes = ['https://www.googleapis.com/auth/gmail.readonly']
+    auth_url = f"https://accounts.google.com/o/oauth2/auth?response_type=code&client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&scope={'+'.join(scopes)}&access_type=offline&prompt=consent&state=admin_discount_monitoring"
+    
+    return jsonify({'auth_url': auth_url})
+
+@app.route('/api/admin/discount-monitoring/gmail/complete-auth', methods=['POST'])
+@admin_required
+def complete_admin_discount_gmail_auth():
+    """Complete Google OAuth for system-wide discount monitoring Gmail access (Admin only)"""
+    try:
+        data = request.get_json()
+        code = data.get('code')
+        state = data.get('state')
+        
+        # Verify this is for admin discount monitoring
+        if state != 'admin_discount_monitoring':
+            return jsonify({'error': 'Invalid state parameter'}), 400
+        
+        if not code:
+            return jsonify({'error': 'Authorization code is required'}), 400
+        
+        # Exchange code for tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'code': code,
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'grant_type': 'authorization_code'
+        }
+        
+        response = requests.post(token_url, data=token_data)
+        
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to exchange authorization code for tokens'}), 400
+        
+        tokens = response.json()
+        
+        # Get Gmail profile to verify which account was connected
+        access_token = tokens.get('access_token')
+        gmail_email = 'Unknown'
+        
+        if access_token:
+            try:
+                profile_response = requests.get(
+                    'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    gmail_email = profile_data.get('emailAddress')
+                    print(f"[INFO] Connected system-wide discount monitoring Gmail: {gmail_email}")
+            except Exception as e:
+                print(f"Error getting Gmail profile: {e}")
+        
+        # Store in system-wide admin config
+        admin_config = {
+            'tokens': tokens,
+            'gmail_email': gmail_email,
+            'connected_at': datetime.now().isoformat(),
+            'connected_by_admin': session.get('discord_id')
+        }
+        
+        if save_admin_gmail_config(admin_config):
+            return jsonify({
+                'message': 'System-wide discount monitoring Gmail connected successfully',
+                'gmail_email': gmail_email,
+                'note': 'All users will now use this Gmail account for discount opportunities'
+            })
+        else:
+            return jsonify({'error': 'Failed to save Gmail configuration'}), 500
+            
+    except Exception as e:
+        print(f"Error completing admin discount Gmail auth: {e}")
+        return jsonify({'error': 'Failed to complete Gmail authentication'}), 500
+
+@app.route('/api/admin/discount-monitoring/gmail/disconnect', methods=['POST'])
+@admin_required
+def disconnect_admin_discount_gmail():
+    """Disconnect system-wide discount monitoring Gmail access (Admin only)"""
+    if save_admin_gmail_config(None):
+        return jsonify({
+            'message': 'System-wide discount monitoring Gmail disconnected successfully',
+            'note': 'All users will now see mock data for discount opportunities'
+        })
+    else:
+        return jsonify({'error': 'Failed to disconnect Gmail'}), 500
+
+@app.route('/api/discount-monitoring/gmail/status')
+@login_required 
+def get_discount_gmail_status():
+    """Get status of system-wide discount monitoring Gmail connection"""
+    admin_config = get_admin_gmail_config()
+    
+    if admin_config and admin_config.get('tokens'):
+        return jsonify({
+            'connected': True,
+            'gmail_email': admin_config.get('gmail_email', 'Unknown'),
+            'message': 'System-wide discount monitoring Gmail is connected',
+            'connected_at': admin_config.get('connected_at'),
+            'is_system_wide': True
+        })
+    else:
+        return jsonify({
+            'connected': False,
+            'gmail_email': None,
+            'message': 'System-wide discount monitoring Gmail not configured',
+            'note': 'Admin needs to connect Gmail for discount monitoring',
+            'is_system_wide': True
+        })
+
 @app.route('/api/google/spreadsheets')
 @login_required
 def list_spreadsheets():
@@ -2018,6 +2134,221 @@ def extract_html_from_message_payload(payload):
         return None
     except Exception as e:
         print(f"Error extracting HTML from payload: {e}")
+        return None
+
+# Discount monitoring specific Gmail functions
+def get_discount_gmail_token(user_record):
+    """Get Gmail access token for discount monitoring (uses separate tokens if available)"""
+    # Priority 1: Use discount-specific tokens if available
+    if user_record.get('discount_gmail_tokens'):
+        print("[DEBUG] Using discount-specific Gmail tokens")
+        return refresh_discount_gmail_token(user_record)
+    
+    # Priority 2: Fall back to regular Google tokens
+    if user_record.get('google_tokens'):
+        print("[DEBUG] Using regular Google tokens as fallback")
+        return refresh_google_token(user_record)
+    
+    print("[DEBUG] No Gmail tokens available")
+    return None
+
+def refresh_discount_gmail_token(user_record):
+    """Refresh discount monitoring specific Gmail tokens"""
+    discount_tokens = user_record.get('discount_gmail_tokens', {})
+    if not discount_tokens:
+        return None
+    
+    try:
+        # Use the same refresh logic as regular tokens
+        refresh_token = discount_tokens.get('refresh_token')
+        if not refresh_token:
+            return None
+        
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }
+        
+        response = requests.post(token_url, data=data)
+        if response.status_code == 200:
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            
+            # Update the stored tokens with new access token
+            discount_tokens['access_token'] = access_token
+            user_record['discount_gmail_tokens'] = discount_tokens
+            
+            # Save updated user config
+            update_user_config(user_record)
+            
+            return access_token
+        else:
+            print(f"Error refreshing discount Gmail token: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Error refreshing discount Gmail token: {e}")
+        return None
+
+# Admin Gmail config management
+def get_admin_gmail_config():
+    """Get system-wide admin Gmail configuration"""
+    try:
+        # Try to load from S3 or file system
+        config_bucket = CONFIG_S3_BUCKET
+        if config_bucket:
+            try:
+                s3 = boto3.client('s3', 
+                    aws_access_key_id=AWS_ACCESS_KEY_ID,
+                    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+                )
+                
+                response = s3.get_object(Bucket=config_bucket, Key='admin_gmail_config.json')
+                config_data = json.loads(response['Body'].read())
+                return config_data
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    return None
+                else:
+                    raise
+        else:
+            # Local file fallback
+            config_file = 'admin_gmail_config.json'
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
+                    return json.load(f)
+            return None
+    except Exception as e:
+        print(f"Error loading admin Gmail config: {e}")
+        return None
+
+def save_admin_gmail_config(config):
+    """Save system-wide admin Gmail configuration"""
+    try:
+        config_bucket = CONFIG_S3_BUCKET
+        if config_bucket:
+            s3 = boto3.client('s3', 
+                aws_access_key_id=AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+            )
+            
+            if config is None:
+                # Delete the config
+                try:
+                    s3.delete_object(Bucket=config_bucket, Key='admin_gmail_config.json')
+                except ClientError:
+                    pass  # File might not exist
+            else:
+                # Save the config
+                s3.put_object(
+                    Bucket=config_bucket,
+                    Key='admin_gmail_config.json',
+                    Body=json.dumps(config, indent=2),
+                    ContentType='application/json'
+                )
+        else:
+            # Local file fallback
+            config_file = 'admin_gmail_config.json'
+            if config is None:
+                # Delete the config
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+            else:
+                # Save the config
+                with open(config_file, 'w') as f:
+                    json.dump(config, f, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"Error saving admin Gmail config: {e}")
+        return False
+
+def get_admin_gmail_token():
+    """Get Gmail access token for system-wide admin configuration"""
+    admin_config = get_admin_gmail_config()
+    if not admin_config or not admin_config.get('tokens'):
+        return None
+    
+    tokens = admin_config['tokens']
+    access_token = tokens.get('access_token')
+    refresh_token = tokens.get('refresh_token')
+    
+    # Try to refresh if needed
+    try:
+        # Test current token
+        test_response = requests.get(
+            'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+            headers={'Authorization': f'Bearer {access_token}'}
+        )
+        
+        if test_response.status_code == 200:
+            return access_token
+        
+        # Need to refresh
+        if refresh_token:
+            token_url = "https://oauth2.googleapis.com/token"
+            data = {
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET,
+                'refresh_token': refresh_token,
+                'grant_type': 'refresh_token'
+            }
+            
+            response = requests.post(token_url, data=data)
+            if response.status_code == 200:
+                token_data = response.json()
+                new_access_token = token_data.get('access_token')
+                
+                # Update stored tokens
+                tokens['access_token'] = new_access_token
+                admin_config['tokens'] = tokens
+                save_admin_gmail_config(admin_config)
+                
+                return new_access_token
+    except Exception as e:
+        print(f"Error refreshing admin Gmail token: {e}")
+    
+    return None
+
+def search_gmail_messages_admin(query, max_results=50):
+    """Search Gmail messages using system-wide admin configuration"""
+    try:
+        access_token = get_admin_gmail_token()
+        if not access_token:
+            return None
+        
+        url = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params = {
+            "q": query,
+            "maxResults": max_results
+        }
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+        
+    except Exception as e:
+        print(f"Error searching Gmail messages (admin): {e}")
+        return None
+
+def get_gmail_message_admin(message_id):
+    """Get a specific Gmail message by ID using system-wide admin configuration"""
+    try:
+        access_token = get_admin_gmail_token()
+        if not access_token:
+            return None
+        
+        url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params = {"format": "full"}
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+        
+    except Exception as e:
+        print(f"Error getting Gmail message (admin): {e}")
         return None
 
 @app.route('/api/debug/stock-columns')
@@ -7196,28 +7527,21 @@ def fetch_discount_email_alerts():
                 }
             ]
         
-        # Get admin user record for Gmail access
-        admin_user_record = None
-        users = get_users_config()
-        print(f"[DEBUG] Searching for admin user with email: {monitor_email}")
-        print(f"[DEBUG] Total users in config: {len(users)}")
+        # Get system-wide discount monitoring Gmail access
+        print(f"[DEBUG] Checking system-wide discount monitoring Gmail access...")
         
-        for user in users:
-            user_email = user.get('email')
-            has_tokens = bool(user.get('google_tokens'))
-            print(f"[DEBUG] Checking user: email={user_email}, has_tokens={has_tokens}")
-            if user_email == monitor_email and has_tokens:
-                admin_user_record = user
-                print(f"[DEBUG] ✅ FOUND MATCHING USER: {user_email}")
-                print(f"[DEBUG] User Discord ID: {user.get('discord_id')}")
-                print(f"[DEBUG] User has Google linked: {user.get('google_linked', False)}")
-                break
+        # Try to get admin Gmail tokens from system config
+        admin_gmail_config = get_admin_gmail_config()
         
-        if not admin_user_record:
-            print(f"[DEBUG] No admin user found with email {monitor_email} and Google tokens")
-            print(f"[DEBUG] Available users: {[u.get('email') for u in users]}")
-            # Return mock data if admin not configured with Gmail
+        if not admin_gmail_config or not admin_gmail_config.get('tokens'):
+            print(f"[DEBUG] No system-wide discount monitoring Gmail configured")
+            print(f"[DEBUG] Admin needs to connect Gmail for discount monitoring")
+            # Return mock data if admin Gmail not configured
             return fetch_mock_discount_alerts()
+        
+        print(f"[DEBUG] ✅ FOUND SYSTEM-WIDE DISCOUNT GMAIL CONFIG")
+        print(f"[DEBUG] Connected Gmail: {admin_gmail_config.get('gmail_email', 'Unknown')}")
+        print(f"[DEBUG] All users will use this Gmail source for discount opportunities")
         
         # Build Gmail search query
         # Search for emails from alert service in the last N days
@@ -7248,11 +7572,12 @@ def fetch_discount_email_alerts():
         
         # First, test basic Gmail API access with a simple query
         print("[DEBUG] Testing basic Gmail API access...")
-        print(f"[DEBUG] About to search Gmail for user: {admin_user_record.get('email')}")
+        print(f"[DEBUG] About to search system-wide Gmail for discount monitoring")
         
         # Try to get the Gmail profile to verify which account we're accessing
         try:
-            access_token = refresh_google_token(admin_user_record)
+            # Get admin Gmail access token
+            access_token = get_admin_gmail_token()
             if access_token:
                 import requests
                 profile_response = requests.get(
@@ -7270,28 +7595,28 @@ def fetch_discount_email_alerts():
             print(f"[DEBUG] Error getting Gmail profile: {e}")
         
         basic_query = 'is:inbox'
-        basic_results = search_gmail_messages(admin_user_record, basic_query, max_results=5)
+        basic_results = search_gmail_messages_admin(basic_query, max_results=5)
         if basic_results and basic_results.get('messages'):
             print(f"[DEBUG] Gmail API working - found {len(basic_results['messages'])} inbox messages")
         else:
             print("[DEBUG] Gmail API issue - no inbox messages found")
         
-        # Search for messages
-        search_results = search_gmail_messages(admin_user_record, query, max_results=100)
+        # Search for messages using admin Gmail access
+        search_results = search_gmail_messages_admin(query, max_results=100)
         
         # If dash format doesn't work, try slash format
         if not search_results or not search_results.get('messages'):
             print(f"[DEBUG] Dash format failed, trying slash format")
             query_slash = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_slash}'
             print(f"[DEBUG] Slash query: {query_slash}")
-            search_results = search_gmail_messages(admin_user_record, query_slash, max_results=100)
+            search_results = search_gmail_messages_admin(query_slash, max_results=100)
         
         # If both formats fail, try with 'newer_than:' syntax
         if not search_results or not search_results.get('messages'):
             print(f"[DEBUG] Both date formats failed, trying newer_than syntax")
             query_newer = f'from:{DISCOUNT_SENDER_EMAIL} newer_than:{days_back}d'
             print(f"[DEBUG] Newer_than query: {query_newer}")
-            search_results = search_gmail_messages(admin_user_record, query_newer, max_results=100)
+            search_results = search_gmail_messages_admin(query_newer, max_results=100)
         
         # Check if we got results with date filtering
         messages = search_results.get('messages', []) if search_results else []
@@ -7303,7 +7628,7 @@ def fetch_discount_email_alerts():
             # Fetch all Distill emails without date filter, then filter client-side
             no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
             print(f"[DEBUG] Searching without date filter: {no_date_query}")
-            search_results = search_gmail_messages(admin_user_record, no_date_query, max_results=100)
+            search_results = search_gmail_messages_admin(no_date_query, max_results=100)
             
             if not search_results:
                 print("[DEBUG] No Distill emails found at all")
@@ -7330,7 +7655,7 @@ def fetch_discount_email_alerts():
                 continue
                 
             # Get full message details
-            message_data = get_gmail_message(admin_user_record, message_id)
+            message_data = get_gmail_message_admin(message_id)
             if not message_data:
                 continue
             

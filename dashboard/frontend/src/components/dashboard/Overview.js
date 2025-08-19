@@ -735,64 +735,69 @@ const Overview = () => {
         </div>
       )}
       
-      {/* Welcome Header */}
-      {loading && !analytics ? (
-        <SkeletonWelcomeHeader />
-      ) : (
-        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-bold mb-2">
-                Welcome back, {user?.discord_username}!
-              </h1>
-              <p className="text-builders-100">
-                Here's your business overview for {dateDisplayInfo.text}
-              </p>
-              {dateDisplayInfo.subtitle && (
-                <p className="text-builders-200 text-sm mt-1">
-                  📅 {dateDisplayInfo.subtitle}
+      {/* Welcome Header - Always render immediately */}
+      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">
+              Welcome back, {user?.discord_username || 'User'}!
+            </h1>
+            {loading && !analytics ? (
+              <>
+                <div className="animate-pulse bg-white/20 h-5 w-96 rounded mb-2" />
+                <div className="animate-pulse bg-white/20 h-4 w-48 rounded" />
+              </>
+            ) : (
+              <>
+                <p className="text-builders-100">
+                  Here's your business overview for {dateDisplayInfo.text}
                 </p>
-              )}
-              {lastUpdated && (
-                <p className="text-builders-200 text-sm mt-1">
-                  Last updated: {lastUpdated.toLocaleTimeString()}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => fetchAnalytics(true)}
-              disabled={loading}
-              className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
-              title={loading ? "Loading..." : "Refresh Data"}
-            >
-              <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+                {dateDisplayInfo.subtitle && (
+                  <p className="text-builders-200 text-sm mt-1">
+                    📅 {dateDisplayInfo.subtitle}
+                  </p>
+                )}
+                {lastUpdated && (
+                  <p className="text-builders-200 text-sm mt-1">
+                    Last updated: {lastUpdated.toLocaleTimeString()}
+                  </p>
+                )}
+              </>
+            )}
           </div>
-          {error && (
-            <div className="mt-3 p-3 bg-red-500/20 border border-red-400/30 rounded-md">
-              <p className="text-red-100 text-sm">{error}</p>
-            </div>
-          )}
-          {analytics?.fallback_mode && (
-            <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-md">
-              <p className="text-yellow-100 text-sm">⚠️ Running in basic mode. Some features may be limited.</p>
-            </div>
-          )}
-          {analytics?.basic_mode && (
-            <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-md">
-              <p className="text-blue-100 text-sm">📊 {analytics.message}</p>
-            </div>
-          )}
-          {loading && analytics && (
-            <div className="mt-3 p-3 bg-white/20 border border-white/30 rounded-md">
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                <p className="text-white text-sm">Refreshing analytics data...</p>
-              </div>
-            </div>
-          )}
+          <button
+            onClick={() => fetchAnalytics(true)}
+            disabled={loading}
+            className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
+            title={loading ? "Loading..." : "Refresh Data"}
+          >
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-      )}
+        {error && (
+          <div className="mt-3 p-3 bg-red-500/20 border border-red-400/30 rounded-md">
+            <p className="text-red-100 text-sm">{error}</p>
+          </div>
+        )}
+        {analytics?.fallback_mode && (
+          <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-md">
+            <p className="text-yellow-100 text-sm">⚠️ Running in basic mode. Some features may be limited.</p>
+          </div>
+        )}
+        {analytics?.basic_mode && (
+          <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-md">
+            <p className="text-blue-100 text-sm">📊 {analytics.message}</p>
+          </div>
+        )}
+        {loading && analytics && (
+          <div className="mt-3 p-3 bg-white/20 border border-white/30 rounded-md">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <p className="text-white text-sm">Refreshing analytics data...</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Setup Progress Card (only show if not fully configured) */}
       {setupProgress.progress < 100 && (

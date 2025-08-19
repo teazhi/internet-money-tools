@@ -301,25 +301,91 @@ def get_dummy_analytics_data(target_date):
         ],
         'enhanced_analytics': {
             'B08N5WRWNW': {
+                'product_name': 'Demo Wireless Bluetooth Headphones',
                 'current_stock': 8,
                 'days_remaining': 3.2,
                 'daily_velocity': 2.5,
                 'alert_type': 'low_stock',
-                'restock_priority': 'urgent'
+                'restock_priority': 'urgent',
+                'velocity': {
+                    'weighted_velocity': 2.5,
+                    'trend': 'accelerating'
+                },
+                'restock': {
+                    'current_stock': 8,
+                    'suggested_quantity': 150,
+                    'monthly_purchase_adjustment': 0
+                },
+                'priority': {
+                    'category': 'critical_high_velocity',
+                    'score': 95.5
+                },
+                'cogs_data': {
+                    'cogs': 45.00,
+                    'last_purchase_date': (datetime.now() - timedelta(days=21)).strftime('%Y-%m-%d'),
+                    'source_link': 'https://supplier.example.com/products/B08N5WRWNW'
+                },
+                'stock_info': {
+                    'Source': 'https://supplier.example.com/products/B08N5WRWNW'
+                }
             },
             'B07XJ8C8F7': {
+                'product_name': 'Premium Phone Case - Clear',
                 'current_stock': 15,
                 'days_remaining': 6.8,
                 'daily_velocity': 2.2,
                 'alert_type': 'medium_stock',
-                'restock_priority': 'high'
+                'restock_priority': 'high',
+                'velocity': {
+                    'weighted_velocity': 2.2,
+                    'trend': 'stable'
+                },
+                'restock': {
+                    'current_stock': 15,
+                    'suggested_quantity': 100,
+                    'monthly_purchase_adjustment': 0
+                },
+                'priority': {
+                    'category': 'warning_high_velocity',
+                    'score': 78.3
+                },
+                'cogs_data': {
+                    'cogs': 18.00,
+                    'last_purchase_date': (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d'),
+                    'source_link': 'https://supplier.example.com/products/B07XJ8C8F7'
+                },
+                'stock_info': {
+                    'Source': 'https://supplier.example.com/products/B07XJ8C8F7'
+                }
             },
             'B09KMXJQ9R': {
+                'product_name': 'Wireless Charging Pad',
                 'current_stock': 45,
                 'days_remaining': 15.0,
                 'daily_velocity': 3.0,
                 'alert_type': 'good_stock',
-                'restock_priority': 'medium'
+                'restock_priority': 'medium',
+                'velocity': {
+                    'weighted_velocity': 3.0,
+                    'trend': 'declining'
+                },
+                'restock': {
+                    'current_stock': 45,
+                    'suggested_quantity': 75,
+                    'monthly_purchase_adjustment': 25
+                },
+                'priority': {
+                    'category': 'warning_moderate',
+                    'score': 62.1
+                },
+                'cogs_data': {
+                    'cogs': 35.00,
+                    'last_purchase_date': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+                    'source_link': 'https://supplier.example.com/products/B09KMXJQ9R'
+                },
+                'stock_info': {
+                    'Source': 'https://supplier.example.com/products/B09KMXJQ9R'
+                }
             }
         },
         'top_products': [
@@ -425,6 +491,53 @@ def get_dummy_analytics_data(target_date):
                 'priority': 'high'
             }
         ],
+        'restock_alerts': {
+            'B08N5WRWNW': {
+                'asin': 'B08N5WRWNW',
+                'product_name': 'Demo Wireless Bluetooth Headphones',
+                'priority_score': 95.5,
+                'category': 'critical_high_velocity',
+                'emoji': '🔥',
+                'suggested_quantity': 150,
+                'current_stock': 8,
+                'days_left': 3.2,
+                'velocity': 2.5,
+                'trend': 'accelerating',
+                'cogs': 45.00,
+                'last_purchase_date': (datetime.now() - timedelta(days=21)).strftime('%Y-%m-%d')
+            },
+            'B07XJ8C8F7': {
+                'asin': 'B07XJ8C8F7', 
+                'product_name': 'Premium Phone Case - Clear',
+                'priority_score': 78.3,
+                'category': 'warning_high_velocity',
+                'emoji': '⚠️',
+                'suggested_quantity': 100,
+                'current_stock': 15,
+                'days_left': 6.8,
+                'velocity': 2.2,
+                'trend': 'stable',
+                'cogs': 18.00,
+                'last_purchase_date': (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
+            },
+            'B09KMXJQ9R': {
+                'asin': 'B09KMXJQ9R',
+                'product_name': 'Wireless Charging Pad',
+                'priority_score': 62.1,
+                'category': 'warning_moderate',
+                'emoji': '⏰',
+                'suggested_quantity': 75,
+                'current_stock': 45,
+                'days_left': 15.0,
+                'velocity': 3.0,
+                'trend': 'declining',
+                'cogs': 35.00,
+                'last_purchase_date': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            }
+        },
+        'critical_alerts': ['B08N5WRWNW'],
+        'total_products_analyzed': 3,
+        'high_priority_count': 2,
         'date': target_date.strftime('%Y-%m-%d'),
         'generated_at': datetime.utcnow().isoformat()
     }

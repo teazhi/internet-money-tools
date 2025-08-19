@@ -6270,7 +6270,6 @@ def get_expected_arrivals():
                 print("DEBUG - Missing Listings: Using current month worksheet only")
                 
                 # Get current month worksheet name
-                from datetime import datetime
                 current_month = datetime.now().strftime('%B').upper()
                 
                 # Use safe_google_api_call to get worksheet list first

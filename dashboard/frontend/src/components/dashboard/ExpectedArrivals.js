@@ -17,10 +17,9 @@ const ExpectedArrivals = () => {
   const [summary, setSummary] = useState({ total_items: 0, total_quantity: 0, total_cost: 0 });
   const [analyzedAt, setAnalyzedAt] = useState('');
   const [analysisScope, setAnalysisScope] = useState('all'); // 'all' or 'current_month'
+  const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
 
-  useEffect(() => {
-    fetchMissingListings();
-  }, []);
+  // Remove auto-fetch on component mount - let user choose scope first
 
   const fetchMissingListings = async (scope = analysisScope) => {
     setLoading(true);
@@ -38,8 +37,10 @@ const ExpectedArrivals = () => {
         setMissingListings(response.data.missing_listings);
         setSummary(response.data.summary);
         setAnalyzedAt(response.data.analyzed_at);
+        setHasRunAnalysis(true);
       } else {
         setError(response.data.message || 'No missing listings found');
+        setHasRunAnalysis(true);
       }
     } catch (error) {
       console.error('Missing listings error:', error);
@@ -290,13 +291,25 @@ const ExpectedArrivals = () => {
         </>
       )}
 
-      {!loading && missingListings.length === 0 && !error && (
+      {!loading && !hasRunAnalysis && (
+        <div className="bg-white rounded-lg shadow p-12">
+          <div className="text-center">
+            <Package className="mx-auto h-12 w-12 text-blue-400" />
+            <h3 className="mt-4 text-lg font-medium text-gray-900">Ready to Check for Missing Listings</h3>
+            <p className="mt-2 text-sm text-gray-500">
+              Select your analysis scope above and click "Check for Missing Listings" to get started.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!loading && hasRunAnalysis && missingListings.length === 0 && !error && (
         <div className="bg-white rounded-lg shadow p-12">
           <div className="text-center">
             <Package className="mx-auto h-12 w-12 text-green-400" />
             <h3 className="mt-4 text-lg font-medium text-gray-900">All Listings Created!</h3>
             <p className="mt-2 text-sm text-gray-500">
-              All items purchased in the last 2 months have Amazon listings created.
+              All items purchased in the selected period have Amazon listings created.
             </p>
           </div>
         </div>

@@ -58,6 +58,7 @@ const StandardTable = ({
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
+  const [dropIndicatorPosition, setDropIndicatorPosition] = useState(null);
   
   // Column ordering
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -112,9 +113,18 @@ const StandardTable = ({
   };
   
   const handleDragEnter = (e, columnKey) => {
-    if (!enableColumnReordering || !draggedColumn) return;
+    if (!enableColumnReordering || !draggedColumn || draggedColumn.key === columnKey) return;
     e.preventDefault();
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = e.clientX;
+    const columnCenter = rect.left + rect.width / 2;
+    
+    // Determine if we're on the left or right side of the column
+    const position = mouseX < columnCenter ? 'left' : 'right';
+    
     setDragOverColumn(columnKey);
+    setDropIndicatorPosition(position);
   };
   
   const handleDragLeave = (e) => {
@@ -122,6 +132,7 @@ const StandardTable = ({
     // Check if the related target is not a child of the current target
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setDragOverColumn(null);
+      setDropIndicatorPosition(null);
     }
   };
   
@@ -131,6 +142,7 @@ const StandardTable = ({
     if (!draggedColumn || !enableColumnReordering) {
       setDraggedColumn(null);
       setDragOverColumn(null);
+      setDropIndicatorPosition(null);
       return;
     }
     
@@ -141,8 +153,19 @@ const StandardTable = ({
     if (draggedIndex !== -1 && targetIndex !== -1 && draggedIndex !== targetIndex) {
       // Remove dragged item
       const [draggedItem] = newOrder.splice(draggedIndex, 1);
+      
+      // Determine insertion point based on drop indicator position
+      let insertIndex = targetIndex;
+      if (dropIndicatorPosition === 'right') {
+        insertIndex = targetIndex + 1;
+      }
+      // Adjust for removed item if inserting after its original position
+      if (draggedIndex < insertIndex) {
+        insertIndex -= 1;
+      }
+      
       // Insert at new position
-      newOrder.splice(targetIndex, 0, draggedItem);
+      newOrder.splice(insertIndex, 0, draggedItem);
       
       setColumnOrder(newOrder);
       
@@ -154,11 +177,13 @@ const StandardTable = ({
     
     setDraggedColumn(null);
     setDragOverColumn(null);
+    setDropIndicatorPosition(null);
   };
   
   const handleDragEnd = () => {
     setDraggedColumn(null);
     setDragOverColumn(null);
+    setDropIndicatorPosition(null);
   };
   
   // Reset column order
@@ -290,13 +315,13 @@ const StandardTable = ({
                 return (
                   <th 
                     key={columnKey}
-                    className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-200 ${
-                      enableColumnReordering && column.draggable !== false ? 'cursor-move' : ''
+                    className={`relative px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 ${
+                      enableColumnReordering && column.draggable !== false ? 'cursor-move hover:bg-gray-100' : ''
                     } ${
-                      draggedColumn?.key === columnKey ? 'opacity-50' : ''
+                      draggedColumn?.key === columnKey ? 'opacity-30 bg-gray-100' : ''
                     } ${
                       dragOverColumn === columnKey && draggedColumn?.key !== columnKey 
-                        ? 'bg-blue-50 border-l-4 border-blue-400 transform scale-105' 
+                        ? 'bg-blue-50' 
                         : ''
                     }`}
                     draggable={enableColumnReordering && column.draggable !== false}
@@ -307,22 +332,37 @@ const StandardTable = ({
                     onDrop={(e) => handleDrop(e, columnKey)}
                     onDragEnd={handleDragEnd}
                   >
-                    <div className="flex items-center space-x-1">
-                      {enableColumnReordering && column.draggable !== false && (
-                        <GripVertical className="h-3 w-3 text-gray-400" />
+                    <>
+                      {/* Drop indicator - Left side */}
+                      {dragOverColumn === columnKey && dropIndicatorPosition === 'left' && draggedColumn?.key !== columnKey && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 z-10 shadow-lg" />
                       )}
-                      {enableSorting && column.sortKey ? (
-                        <button
-                          onClick={() => handleSort(columnKey)}
-                          className="flex items-center space-x-1 hover:text-gray-700 text-xs"
-                        >
-                          <span>{column.label}</span>
-                          {getSortIcon(columnKey)}
-                        </button>
-                      ) : (
-                        <span className="text-xs">{column.label}</span>
+                      
+                      {/* Drop indicator - Right side */}
+                      {dragOverColumn === columnKey && dropIndicatorPosition === 'right' && draggedColumn?.key !== columnKey && (
+                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-blue-500 z-10 shadow-lg" />
                       )}
-                    </div>
+                      
+                      <div className="flex items-center space-x-1 relative z-0">
+                        {enableColumnReordering && column.draggable !== false && (
+                          <GripVertical className={`h-3 w-3 transition-colors ${
+                            draggedColumn?.key === columnKey ? 'text-gray-600' : 'text-gray-400'
+                          }`} />
+                        )}
+                        {enableSorting && column.sortKey ? (
+                          <button
+                            onClick={() => handleSort(columnKey)}
+                            className="flex items-center space-x-1 hover:text-gray-700 text-xs"
+                          >
+                            <span>{column.label}</span>
+                            {getSortIcon(columnKey)}
+                          </button>
+                        ) : (
+                          <span className="text-xs">{column.label}</span>
+                        )}
+                      </div>
+                    </>
+                  
                   </th>
                 );
               })}

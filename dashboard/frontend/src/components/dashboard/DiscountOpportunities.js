@@ -271,21 +271,25 @@ const DiscountOpportunities = () => {
     switch (columnKey) {
       case 'product':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-80">
             <div className="flex items-center">
-              <div className="flex-shrink-0 h-12 w-12">
+              <div className="flex-shrink-0 h-10 w-10">
                 <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
               </div>
-              <div className="ml-4">
-                <div className="text-sm font-medium text-gray-900">
-                  {opportunity.product_name || opportunity.asin}
+              <div className="ml-3 min-w-0 flex-1">
+                <div className="text-sm font-medium text-gray-900 truncate" title={opportunity.product_name || opportunity.asin}>
+                  {opportunity.product_name ? (
+                    opportunity.product_name.length > 35 
+                      ? `${opportunity.product_name.substring(0, 35)}...`
+                      : opportunity.product_name
+                  ) : opportunity.asin}
                 </div>
-                <div className="text-sm text-gray-500">
-                  ASIN: {opportunity.asin}
+                <div className="text-xs text-gray-500 truncate">
+                  {opportunity.asin}
                 </div>
                 {opportunity.note && (
-                  <div className="text-xs text-blue-600 mt-1">
-                    {opportunity.note}
+                  <div className="text-xs text-blue-600 mt-1 truncate" title={opportunity.note}>
+                    {opportunity.note.length > 25 ? `${opportunity.note.substring(0, 25)}...` : opportunity.note}
                   </div>
                 )}
               </div>
@@ -295,11 +299,11 @@ const DiscountOpportunities = () => {
       
       case 'retailer':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
-            <div className="text-sm text-gray-900">{opportunity.retailer}</div>
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-32">
+            <div className="text-sm text-gray-900 truncate">{opportunity.retailer}</div>
             {opportunity.promo_message && (
-              <div className="text-xs text-green-600 mt-1">
-                {opportunity.promo_message}
+              <div className="text-xs text-green-600 mt-1 truncate" title={opportunity.promo_message}>
+                {opportunity.promo_message.length > 20 ? `${opportunity.promo_message.substring(0, 20)}...` : opportunity.promo_message}
               </div>
             )}
           </td>
@@ -307,7 +311,7 @@ const DiscountOpportunities = () => {
       
       case 'status':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-36">
             <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
               {opportunity.status}
             </div>
@@ -316,7 +320,7 @@ const DiscountOpportunities = () => {
       
       case 'inventory':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-40">
             {opportunity.status === 'Not Tracked' ? (
               <div className="text-sm text-gray-500 italic">
                 Product not in inventory
@@ -351,7 +355,7 @@ const DiscountOpportunities = () => {
       
       case 'alert_time':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-32">
             <div className="text-sm text-gray-900">
               <div className="flex items-center space-x-1">
                 <Clock className="h-4 w-4 text-gray-500" />
@@ -363,7 +367,7 @@ const DiscountOpportunities = () => {
       
       case 'actions':
         return (
-          <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium">
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium w-48">
             <div className="flex items-center justify-end space-x-2">
               {opportunity.source_link ? (
                 <a

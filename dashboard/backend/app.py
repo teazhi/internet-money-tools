@@ -5567,6 +5567,11 @@ def analyze_discount_opportunities():
         data = request.get_json() or {}
         retailer_filter = data.get('retailer', '')
         
+        # Log environment configuration
+        print(f"[DEBUG] DISCOUNT_MONITOR_EMAIL: {DISCOUNT_MONITOR_EMAIL}")
+        print(f"[DEBUG] DISCOUNT_SENDER_EMAIL: {DISCOUNT_SENDER_EMAIL}")
+        print(f"[DEBUG] Days back: {get_discount_email_days_back()}")
+        
         # Get user's current analytics data
         discord_id = session['discord_id']
         user = get_user_record(discord_id)
@@ -7194,13 +7199,20 @@ def fetch_discount_email_alerts():
         # Get admin user record for Gmail access
         admin_user_record = None
         users = get_users_config()
+        print(f"[DEBUG] Searching for admin user with email: {monitor_email}")
+        print(f"[DEBUG] Total users in config: {len(users)}")
+        
         for user in users:
-            if user.get('email') == monitor_email and user.get('google_tokens'):
+            user_email = user.get('email')
+            has_tokens = bool(user.get('google_tokens'))
+            print(f"[DEBUG] Checking user: email={user_email}, has_tokens={has_tokens}")
+            if user_email == monitor_email and has_tokens:
                 admin_user_record = user
                 break
         
         if not admin_user_record:
-            print(f"No admin user found with email {monitor_email} and Google tokens")
+            print(f"[DEBUG] No admin user found with email {monitor_email} and Google tokens")
+            print(f"[DEBUG] Available users: {[u.get('email') for u in users]}")
             # Return mock data if admin not configured with Gmail
             return fetch_mock_discount_alerts()
         
@@ -7481,6 +7493,147 @@ def calculate_opportunity_priority(inventory_data, days_left, suggested_quantity
     
     return score
 
+@app.route('/api/discount-opportunities/debug', methods=['GET'])
+@admin_required
+def debug_discount_opportunities():
+    """Debug endpoint to troubleshoot email configuration and search"""
+    try:
+        debug_info = {
+            'config': {
+                'monitor_email': DISCOUNT_MONITOR_EMAIL,
+                'sender_email': DISCOUNT_SENDER_EMAIL,
+                'days_back': get_discount_email_days_back(),
+                'demo_mode': DEMO_MODE
+            },
+            'gmail_access': None,
+            'search_results': None,
+            'parsing_test': None
+        }
+        
+        # Check Gmail access
+        if DISCOUNT_MONITOR_EMAIL:
+            users = get_users_config()
+            admin_user = None
+            for user in users:
+                if user.get('email') == DISCOUNT_MONITOR_EMAIL:
+                    admin_user = user
+                    break
+            
+            if admin_user:
+                debug_info['gmail_access'] = {
+                    'user_found': True,
+                    'has_google_tokens': bool(admin_user.get('google_tokens')),
+                    'google_linked': admin_user.get('google_linked', False),
+                    'tokens_keys': list(admin_user.get('google_tokens', {}).keys()) if admin_user.get('google_tokens') else []
+                }
+                
+                # Try Gmail search
+                if admin_user.get('google_tokens'):
+                    try:
+                        from datetime import datetime, timedelta
+                        import pytz
+                        
+                        # Test Gmail API access
+                        cutoff_date = datetime.now(pytz.UTC) - timedelta(days=get_discount_email_days_back())
+                        date_str = cutoff_date.strftime('%Y/%m/%d')
+                        query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str}'
+                        
+                        # Get Gmail service
+                        access_token = refresh_google_token(admin_user)
+                        
+                        if access_token:
+                            headers = {"Authorization": f"Bearer {access_token}"}
+                            gmail_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages?q={query}&maxResults=50"
+                            
+                            import requests
+                            response = requests.get(gmail_url, headers=headers, timeout=30)
+                            
+                            if response.status_code == 200:
+                                gmail_data = response.json()
+                                message_count = len(gmail_data.get('messages', []))
+                                
+                                debug_info['search_results'] = {
+                                    'query': query,
+                                    'status_code': response.status_code,
+                                    'message_count': message_count,
+                                    'total_size_estimate': gmail_data.get('resultSizeEstimate', 0)
+                                }
+                                
+                                # Get details of first few messages for debugging
+                                if message_count > 0:
+                                    sample_messages = []
+                                    for msg in gmail_data.get('messages', [])[:3]:  # Get first 3 messages
+                                        msg_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg['id']}"
+                                        msg_response = requests.get(msg_url, headers=headers, timeout=30)
+                                        if msg_response.status_code == 200:
+                                            msg_data = msg_response.json()
+                                            
+                                            # Extract subject and sender
+                                            headers_data = msg_data.get('payload', {}).get('headers', [])
+                                            subject = next((h['value'] for h in headers_data if h['name'].lower() == 'subject'), 'No subject')
+                                            sender = next((h['value'] for h in headers_data if h['name'].lower() == 'from'), 'No sender')
+                                            date = next((h['value'] for h in headers_data if h['name'].lower() == 'date'), 'No date')
+                                            
+                                            # Test parsing
+                                            parsed = parse_email_subject(subject)
+                                            
+                                            sample_messages.append({
+                                                'id': msg['id'],
+                                                'subject': subject,
+                                                'sender': sender,
+                                                'date': date,
+                                                'parsed_result': parsed
+                                            })
+                                    
+                                    debug_info['search_results']['sample_messages'] = sample_messages
+                            else:
+                                debug_info['search_results'] = {
+                                    'query': query,
+                                    'status_code': response.status_code,
+                                    'error': response.text
+                                }
+                        else:
+                            debug_info['search_results'] = {'error': 'Failed to get access token'}
+                            
+                    except Exception as e:
+                        import traceback
+                        debug_info['search_results'] = {
+                            'error': str(e),
+                            'traceback': traceback.format_exc()
+                        }
+            else:
+                debug_info['gmail_access'] = {
+                    'user_found': False,
+                    'error': f'No user found with email {DISCOUNT_MONITOR_EMAIL}'
+                }
+        else:
+            debug_info['gmail_access'] = {'error': 'DISCOUNT_MONITOR_EMAIL not configured'}
+        
+        # Test parsing with your example subjects
+        test_subjects = [
+            '[Walmart] Alert: Walmart (ASIN: B00F3DCZ6Q) (Note: Locally)',
+            '[Lowes] Alert: Lowes (ASIN: B00TW2XZ04) (Note: TESTING)',
+            'Walmart (ASIN: B00F3DCZ6Q) (Note: Locally)',  # Legacy format
+            'Price Alert from Distill.io'  # Non-matching format
+        ]
+        
+        debug_info['parsing_test'] = []
+        for subject in test_subjects:
+            result = parse_email_subject(subject)
+            debug_info['parsing_test'].append({
+                'subject': subject,
+                'parsed': result
+            })
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/api/admin/discount-monitoring/status', methods=['GET'])
 @admin_required
 def get_discount_monitoring_status():
@@ -7649,6 +7802,87 @@ def get_discount_monitoring_settings():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/test-discount-email', methods=['GET'])
+@login_required
+def test_discount_email_endpoint():
+    """Test endpoint to diagnose discount email configuration"""
+    import os
+    from datetime import datetime, timedelta
+    
+    results = {
+        'environment': {
+            'DISCOUNT_MONITOR_EMAIL': os.getenv('DISCOUNT_MONITOR_EMAIL', 'Not Set'),
+            'DISCOUNT_SENDER_EMAIL': os.getenv('DISCOUNT_SENDER_EMAIL', 'Not Set'),
+            'DISCOUNT_EMAIL_DAYS_BACK': os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '7')
+        },
+        'checks': []
+    }
+    
+    # Check environment variables
+    monitor_email = os.getenv('DISCOUNT_MONITOR_EMAIL')
+    if not monitor_email:
+        results['checks'].append({
+            'check': 'Environment Variable',
+            'status': 'FAIL',
+            'message': 'DISCOUNT_MONITOR_EMAIL not set in Railway'
+        })
+        return jsonify(results), 200
+    
+    results['checks'].append({
+        'check': 'Environment Variable',
+        'status': 'PASS',
+        'message': f"Monitor email: {monitor_email}"
+    })
+    
+    # Check if user exists
+    users = get_users_config()
+    user_found = False
+    user_has_tokens = False
+    
+    for user in users:
+        if user.get('email') == monitor_email:
+            user_found = True
+            user_has_tokens = bool(user.get('google_tokens'))
+            results['user_info'] = {
+                'discord_id': user.get('discord_id'),
+                'has_google_tokens': user_has_tokens,
+                'google_linked': user.get('google_linked', False)
+            }
+            break
+    
+    if user_found:
+        results['checks'].append({
+            'check': 'User Exists',
+            'status': 'PASS',
+            'message': f"User found with email {monitor_email}"
+        })
+        
+        if user_has_tokens:
+            results['checks'].append({
+                'check': 'Gmail Tokens',
+                'status': 'PASS',
+                'message': 'User has Gmail tokens'
+            })
+        else:
+            results['checks'].append({
+                'check': 'Gmail Tokens',
+                'status': 'FAIL',
+                'message': 'User does NOT have Gmail tokens - need to link Gmail in Settings'
+            })
+    else:
+        results['checks'].append({
+            'check': 'User Exists',
+            'status': 'FAIL',
+            'message': f"No user found with email {monitor_email}"
+        })
+        # Show available emails (masked for privacy)
+        results['available_users'] = [
+            f"{email[:3]}***{email[-10:]}" if email and len(email) > 13 else email
+            for email in [u.get('email', 'No email') for u in users]
+        ]
+    
+    return jsonify(results), 200
 
 
 @app.errorhandler(404)

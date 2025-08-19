@@ -40,10 +40,17 @@ const DiscountOpportunities = () => {
         retailer: retailerFilter
       }, { withCredentials: true });
       
+      console.log('Discount opportunities response:', response.data);
+      console.log('Opportunities count:', response.data.opportunities?.length);
+      console.log('First opportunity:', response.data.opportunities?.[0]);
+      
       setOpportunities(response.data.opportunities || []);
       setStats({
         totalAlertsProcessed: response.data.total_alerts_processed,
         matchedProducts: response.data.matched_products,
+        restockNeededCount: response.data.restock_needed_count,
+        notNeededCount: response.data.not_needed_count,
+        notTrackedCount: response.data.not_tracked_count,
         message: response.data.message
       });
       setLastUpdated(new Date());
@@ -152,6 +159,11 @@ const DiscountOpportunities = () => {
                 {stats && (
                   <div className="mt-2 text-xs text-gray-500">
                     {stats.message} • {stats.totalAlertsProcessed} emails processed
+                    {stats.restockNeededCount !== undefined && (
+                      <div className="mt-1">
+                        Breakdown: {stats.restockNeededCount} need restocking, {stats.notNeededCount} not needed, {stats.notTrackedCount} not tracked
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -213,10 +225,17 @@ const DiscountOpportunities = () => {
             </div>
           )}
 
+          {/* Debug info */}
+          {!loading && !error && opportunities && (
+            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-2">
+              Debug: {opportunities.length} opportunities loaded
+            </div>
+          )}
+
           {/* Opportunities List */}
           {!loading && !error && (
             <div className="bg-white rounded-lg shadow">
-              {opportunities.length === 0 ? (
+              {!opportunities || opportunities.length === 0 ? (
                 <div className="p-8 text-center">
                   <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Opportunities Found</h3>

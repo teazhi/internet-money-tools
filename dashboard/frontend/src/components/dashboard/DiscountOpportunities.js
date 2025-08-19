@@ -46,26 +46,47 @@ const DiscountOpportunities = () => {
         retailer: retailerFilter
       }, { withCredentials: true });
       
-      console.log('Discount opportunities response:', response.data);
+      console.log('Full response:', response);
+      console.log('Response status:', response.status);
+      console.log('Response data:', response.data);
+      console.log('Response data type:', typeof response.data);
       console.log('Response keys:', Object.keys(response.data));
+      console.log('Has opportunities key:', 'opportunities' in response.data);
+      console.log('Opportunities value:', response.data.opportunities);
       console.log('Opportunities count:', response.data.opportunities?.length);
       console.log('First opportunity:', response.data.opportunities?.[0]);
       
-      // The opportunities are in response.data.opportunities
-      const opportunitiesData = response.data.opportunities || [];
+      // Check if response.data is directly an array of opportunities
+      let opportunitiesData = [];
+      let statsData = {};
+      
+      if (Array.isArray(response.data)) {
+        // Response data is directly an array of opportunities
+        opportunitiesData = response.data;
+        statsData = {
+          totalAlertsProcessed: response.data.length,
+          matchedProducts: response.data.length,
+          message: `Found ${response.data.length} opportunities`
+        };
+      } else if (response.data.opportunities) {
+        // Response data has an opportunities property
+        opportunitiesData = response.data.opportunities;
+        statsData = {
+          totalAlertsProcessed: response.data.total_alerts_processed,
+          matchedProducts: response.data.matched_products,
+          restockNeededCount: response.data.restock_needed_count,
+          notNeededCount: response.data.not_needed_count,
+          notTrackedCount: response.data.not_tracked_count,
+          message: response.data.message
+        };
+      }
+      
       console.log('Extracted opportunities:', opportunitiesData);
       console.log('Is array?', Array.isArray(opportunitiesData));
       console.log('Length:', opportunitiesData.length);
       
       setOpportunities(opportunitiesData);
-      setStats({
-        totalAlertsProcessed: response.data.total_alerts_processed,
-        matchedProducts: response.data.matched_products,
-        restockNeededCount: response.data.restock_needed_count,
-        notNeededCount: response.data.not_needed_count,
-        notTrackedCount: response.data.not_tracked_count,
-        message: response.data.message
-      });
+      setStats(statsData);
       setLastUpdated(new Date());
       
     } catch (error) {

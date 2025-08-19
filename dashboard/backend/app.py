@@ -7224,11 +7224,17 @@ def fetch_discount_email_alerts():
         
         days_back = get_discount_email_days_back()
         cutoff_date = datetime.now(pytz.UTC) - timedelta(days=days_back)
-        date_str = cutoff_date.strftime('%Y/%m/%d')
         
-        # Create search query for Gmail
-        # No need to filter by keywords since alerts are already filtered for relevance
-        query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str}'
+        # Try different date formats for Gmail
+        date_str_slash = cutoff_date.strftime('%Y/%m/%d')
+        date_str_dash = cutoff_date.strftime('%Y-%m-%d')
+        
+        print(f"[DEBUG] Cutoff date (UTC): {cutoff_date}")
+        print(f"[DEBUG] Date string (slash): {date_str_slash}")
+        print(f"[DEBUG] Date string (dash): {date_str_dash}")
+        
+        # Create search query for Gmail - try with dash format first
+        query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_dash}'
         
         print(f"Gmail search query: {query}")
         
@@ -7243,11 +7249,26 @@ def fetch_discount_email_alerts():
         
         # Search for messages
         search_results = search_gmail_messages(admin_user_record, query, max_results=100)
+        
+        # If dash format doesn't work, try slash format
+        if not search_results or not search_results.get('messages'):
+            print(f"[DEBUG] Dash format failed, trying slash format")
+            query_slash = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_slash}'
+            print(f"[DEBUG] Slash query: {query_slash}")
+            search_results = search_gmail_messages(admin_user_record, query_slash, max_results=100)
+        
+        # If both formats fail, try with 'newer_than:' syntax
+        if not search_results or not search_results.get('messages'):
+            print(f"[DEBUG] Both date formats failed, trying newer_than syntax")
+            query_newer = f'from:{DISCOUNT_SENDER_EMAIL} newer_than:{days_back}d'
+            print(f"[DEBUG] Newer_than query: {query_newer}")
+            search_results = search_gmail_messages(admin_user_record, query_newer, max_results=100)
+        
         if not search_results:
             print("[DEBUG] No search results from Gmail API")
             # Try a broader search to see what emails exist
             print("[DEBUG] Trying broader search...")
-            broader_query = f'after:{date_str}'
+            broader_query = f'after:{date_str_dash}'
             print(f"[DEBUG] Broader query: {broader_query}")
             broader_results = search_gmail_messages(admin_user_record, broader_query, max_results=10)
             if broader_results and broader_results.get('messages'):

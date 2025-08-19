@@ -13,7 +13,7 @@ import {
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
 
-// Product image component that fetches image URL from backend
+// Product image component with fallback to direct Amazon URLs
 const ProductImage = ({ asin, productName }) => {
   const [imageUrl, setImageUrl] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,6 +26,7 @@ const ProductImage = ({ asin, productName }) => {
       setLoading(true);
       setError(false);
       
+      // First try the backend API
       try {
         const response = await axios.get(`/api/product-image/${asin}`, { 
           withCredentials: true 
@@ -33,14 +34,46 @@ const ProductImage = ({ asin, productName }) => {
         
         if (response.data.imageUrl) {
           setImageUrl(response.data.imageUrl);
-        } else {
-          setError(true);
+          setLoading(false);
+          return;
         }
       } catch (err) {
-        setError(true);
-      } finally {
-        setLoading(false);
+        // Backend failed, try direct URLs
       }
+      
+      // Fallback: Try direct Amazon image URLs
+      const directUrls = [
+        `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
+        `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`,
+        `https://m.media-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`,
+        `https://images-amazon.com/images/P/${asin}.jpg`
+      ];
+      
+      // Test each URL
+      for (const url of directUrls) {
+        try {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = url;
+          });
+          
+          // If we get here, the image loaded successfully
+          setImageUrl(url);
+          setLoading(false);
+          return;
+        } catch (err) {
+          // This URL failed, try the next one
+          continue;
+        }
+      }
+      
+      // All methods failed
+      setError(true);
+      setLoading(false);
     };
 
     fetchProductImage();

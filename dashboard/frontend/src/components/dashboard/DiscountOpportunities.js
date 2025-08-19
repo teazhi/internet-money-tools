@@ -126,17 +126,26 @@ const DiscountOpportunities = () => {
   };
 
   const formatTimeAgo = (timestamp) => {
-    const now = new Date();
-    const alertTime = new Date(timestamp);
-    const diffHours = Math.floor((now - alertTime) / (1000 * 60 * 60));
+    if (!timestamp) return 'Unknown';
     
-    if (diffHours < 1) return 'Just now';
-    if (diffHours === 1) return '1 hour ago';
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return '1 day ago';
-    return `${diffDays} days ago`;
+    try {
+      const now = new Date();
+      const alertTime = new Date(timestamp);
+      
+      if (isNaN(alertTime.getTime())) return 'Invalid date';
+      
+      const diffHours = Math.floor((now - alertTime) / (1000 * 60 * 60));
+      
+      if (diffHours < 1) return 'Just now';
+      if (diffHours === 1) return '1 hour ago';
+      if (diffHours < 24) return `${diffHours} hours ago`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays === 1) return '1 day ago';
+      return `${diffDays} days ago`;
+    } catch (error) {
+      return 'Unknown';
+    }
   };
 
   return (
@@ -272,26 +281,26 @@ const DiscountOpportunities = () => {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-hidden">
+                <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-48">
                           Product
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Retailer
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Inventory Status
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Inventory
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Alert Info
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Alert Time
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -299,11 +308,20 @@ const DiscountOpportunities = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {opportunities.map((opportunity, index) => (
                         <tr key={`${opportunity.asin}-${index}`} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="flex-shrink-0 h-10 w-10">
-                                <div className="h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center">
-                                  <Package className="h-5 w-5 text-gray-600" />
+                              <div className="flex-shrink-0 h-12 w-12">
+                                <img
+                                  src={`https://images-na.ssl-images-amazon.com/images/P/${opportunity.asin}.01.THUMBZZZ.jpg`}
+                                  alt={opportunity.product_name || opportunity.asin}
+                                  className="h-12 w-12 rounded-lg object-cover bg-gray-100"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextElementSibling.style.display = 'flex';
+                                  }}
+                                />
+                                <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center" style={{display: 'none'}}>
+                                  <Package className="h-6 w-6 text-gray-600" />
                                 </div>
                               </div>
                               <div className="ml-4">
@@ -322,7 +340,7 @@ const DiscountOpportunities = () => {
                             </div>
                           </td>
                           
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{opportunity.retailer}</div>
                             {opportunity.promo_message && (
                               <div className="text-xs text-green-600 mt-1">
@@ -331,13 +349,13 @@ const DiscountOpportunities = () => {
                             )}
                           </td>
                           
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
                               {opportunity.status}
                             </div>
                           </td>
                           
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             {opportunity.status === 'Not Tracked' ? (
                               <div className="text-sm text-gray-500 italic">
                                 Product not in inventory
@@ -347,16 +365,16 @@ const DiscountOpportunities = () => {
                                 <div className="text-sm text-gray-900">
                                   <div className="flex items-center space-x-2">
                                     <Package className="h-4 w-4 text-gray-500" />
-                                    <span>{opportunity.current_stock} units</span>
+                                    <span>{opportunity.current_stock || 0} units</span>
                                   </div>
                                   {opportunity.needs_restock && (
                                     <div className="text-xs text-gray-500 mt-1">
-                                      Need: {opportunity.suggested_quantity} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left
+                                      Need: {opportunity.suggested_quantity || 0} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left
                                     </div>
                                   )}
                                   {opportunity.velocity > 0 && (
                                     <div className="text-xs text-gray-500">
-                                      Velocity: {opportunity.velocity.toFixed(2)}/day
+                                      Velocity: {(opportunity.velocity || 0).toFixed(2)}/day
                                     </div>
                                   )}
                                 </div>
@@ -369,7 +387,7 @@ const DiscountOpportunities = () => {
                             )}
                           </td>
                           
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
                               <div className="flex items-center space-x-1">
                                 <Clock className="h-4 w-4 text-gray-500" />
@@ -378,7 +396,7 @@ const DiscountOpportunities = () => {
                             </div>
                           </td>
                           
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <td className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end space-x-2">
                               {opportunity.source_link ? (
                                 <a

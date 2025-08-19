@@ -1029,7 +1029,7 @@ const Overview = () => {
             {stockAlertsData.map((item) => (
               <StockAlertItem key={item.asin} item={item} />
             ))}
-            {stockAlertsData.length === 0 && (
+            {!loading && stockAlertsData.length === 0 && (
               <p className="text-gray-500 text-sm">No stock alerts</p>
             )}
           </div>

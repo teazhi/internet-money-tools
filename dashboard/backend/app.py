@@ -538,6 +538,22 @@ def get_dummy_analytics_data(target_date):
         'critical_alerts': ['B08N5WRWNW'],
         'total_products_analyzed': 3,
         'high_priority_count': 2,
+        'stockout_30d': {
+            'B08N5WRWNW': {
+                'title': 'Demo Wireless Bluetooth Headphones',
+                'sold_today': 18,
+                'current_stock': 8,
+                'days_left': 3,
+                'suggested_reorder': 150
+            },
+            'B07XJ8C8F7': {
+                'title': 'Premium Phone Case - Clear',
+                'sold_today': 22,
+                'current_stock': 15,
+                'days_left': 7,
+                'suggested_reorder': 100
+            }
+        },
         'date': target_date.strftime('%Y-%m-%d'),
         'generated_at': datetime.utcnow().isoformat()
     }
@@ -635,30 +651,47 @@ def get_dummy_expected_arrivals_data():
         'missing_listings': [
             {
                 'asin': 'B09ABC123',
-                'fnsku': 'X002ABC123',
                 'product_name': 'Smart Watch Band - Black',
-                'last_seen': '2024-01-10',
-                'days_missing': 5,
-                'last_velocity': 1.8,
-                'estimated_lost_sales': 162.00
+                'quantity_purchased': 50,
+                'purchase_count': 3,
+                'last_purchase_date': (datetime.now() - timedelta(days=21)).strftime('%Y-%m-%d'),
+                'avg_cogs': 12.50,
+                'total_cost': 625.00,
+                'source_worksheets': ['Q1 2024 Purchases', 'February Orders'],
+                'status': 'No Amazon listing created'
             },
             {
                 'asin': 'B09DEF456',
-                'fnsku': 'X002DEF456',
-                'product_name': 'USB-C Cable 6ft',
-                'last_seen': '2024-01-08',
-                'days_missing': 7,
-                'last_velocity': 4.2,
-                'estimated_lost_sales': 293.40
+                'product_name': 'USB-C Cable 6ft - Premium Quality',
+                'quantity_purchased': 100,
+                'purchase_count': 2,
+                'last_purchase_date': (datetime.now() - timedelta(days=35)).strftime('%Y-%m-%d'),
+                'avg_cogs': 8.75,
+                'total_cost': 875.00,
+                'source_worksheets': ['January Inventory'],
+                'status': 'No Amazon listing created'
+            },
+            {
+                'asin': 'B09GHI789',
+                'product_name': 'Wireless Mouse - Ergonomic Design',
+                'quantity_purchased': 25,
+                'purchase_count': 1,
+                'last_purchase_date': (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d'),
+                'avg_cogs': 22.00,
+                'total_cost': 550.00,
+                'source_worksheets': ['March Electronics'],
+                'status': 'No Amazon listing created'
             }
         ],
         'summary': {
             'total_expected_arrivals': 3,
             'arrivals_on_time': 2,
             'arrivals_delayed': 1,
-            'missing_listings_count': 2,
-            'total_estimated_lost_sales': 455.40
-        }
+            'total_items': 3,
+            'total_quantity': 175,
+            'total_cost': 2050.00
+        },
+        'analyzed_at': datetime.now().isoformat()
     }
 
 def get_dummy_smart_restock_data():

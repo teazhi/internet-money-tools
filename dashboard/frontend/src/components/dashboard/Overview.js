@@ -26,7 +26,8 @@ import {
   SkeletonStockAlert,
   SkeletonWelcomeHeader,
   SkeletonMetric,
-  SkeletonText
+  SkeletonText,
+  SkeletonTable
 } from '../common/SkeletonLoaders';
 
 const Overview = () => {
@@ -928,36 +929,39 @@ const Overview = () => {
             </div>
           </div>
 
-          {/* Purchase Insights Card - Enhanced */}
-          {purchaseInsights && (
-            <div className="card">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <ShoppingBag className="h-8 w-8 text-indigo-500" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">
-                    Purchase Investment (Current Month)
-                  </p>
-                  {loading && !analytics ? (
-                    <>
-                      <SkeletonMetric />
-                      <SkeletonText className="mt-1" />
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-2xl font-semibold text-gray-900">
-                        ${(purchaseInsights.summary.current_month_investment || 0).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(purchaseInsights.summary.current_month_asins || 0)} ASINs • {(purchaseInsights.summary.current_month_units || 0)} units
-                      </p>
-                    </>
-                  )}
-                </div>
+          {/* Purchase Insights Card - Always show */}
+          <div className="card">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <ShoppingBag className="h-8 w-8 text-indigo-500" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">
+                  Purchase Investment (Current Month)
+                </p>
+                {loading && !analytics ? (
+                  <>
+                    <SkeletonMetric />
+                    <SkeletonText className="mt-1" />
+                  </>
+                ) : purchaseInsights ? (
+                  <>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      ${(purchaseInsights.summary.current_month_investment || 0).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {(purchaseInsights.summary.current_month_asins || 0)} ASINs • {(purchaseInsights.summary.current_month_units || 0)} units
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-semibold text-gray-900">$0</p>
+                    <p className="text-xs text-gray-500">0 ASINs • 0 units</p>
+                  </>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -1013,8 +1017,10 @@ const Overview = () => {
         </div>
       </div>
 
-      {/* 30-Day Stockout Risk */}
-      {analytics && analytics.stockout_30d && Object.keys(analytics.stockout_30d).length > 0 && (
+      {/* 30-Day Stockout Risk - Always show */}
+      {loading && !analytics ? (
+        <SkeletonTable columns={6} rows={3} title="30-Day Stockout Risk" />
+      ) : (analytics && analytics.stockout_30d && Object.keys(analytics.stockout_30d).length > 0) ? (
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">30-Day Stockout Risk</h3>
           <div className="overflow-x-auto">
@@ -1044,7 +1050,7 @@ const Overview = () => {
             </table>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Purchase Insights - Integrated into existing sections above */}
 

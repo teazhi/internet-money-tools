@@ -7,7 +7,8 @@ import {
   Calendar,
   DollarSign,
   ExternalLink,
-  Download
+  Download,
+  Plus
 } from 'lucide-react';
 
 const ExpectedArrivals = () => {
@@ -53,6 +54,11 @@ const ExpectedArrivals = () => {
       style: 'currency',
       currency: 'USD'
     }).format(amount);
+  };
+
+  const createListing = (asin) => {
+    const listingUrl = `https://sellercentral.amazon.com/abis/listing/syh/ref=udp_sdp_sell?_encoding=UTF8&mons_sel_best_mkid=amzn1.mp.o.ATVPDKIKX0DER&ld=AMZUDP&coliid=&asin=${asin}&colid=&qid=&sr=`;
+    window.open(listingUrl, '_blank', 'noopener,noreferrer');
   };
 
   const exportToCSV = () => {
@@ -212,6 +218,9 @@ const ExpectedArrivals = () => {
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Sources
                     </th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -281,6 +290,16 @@ const ExpectedArrivals = () => {
                             <span className="text-gray-400">-</span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => createListing(item.asin)}
+                          className="inline-flex items-center px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors duration-200"
+                          title={`Create listing for ${item.asin}`}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Create Listing
+                        </button>
                       </td>
                     </tr>
                   ))}

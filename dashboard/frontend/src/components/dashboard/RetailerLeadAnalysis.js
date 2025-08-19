@@ -15,6 +15,7 @@ import {
   Upload,
   Plus
 } from 'lucide-react';
+import StandardTable from '../common/StandardTable';
 
 const RetailerLeadAnalysis = () => {
   const [activeTab, setActiveTab] = useState('analysis');
@@ -155,6 +156,199 @@ const RetailerLeadAnalysis = () => {
       setError(error.response?.data?.message || error.response?.data?.error || 'Failed to sync leads to spreadsheet');
     } finally {
       setSyncLoading(false);
+    }
+  };
+
+  // Table configuration for StandardTable
+  const getTableColumns = () => {
+    const columns = {
+      asin: {
+        key: 'asin',
+        label: 'ASIN',
+        sortKey: 'asin',
+        draggable: true
+      },
+      source: {
+        key: 'source',
+        label: 'Source',
+        sortKey: null,
+        draggable: true
+      },
+      product_name: {
+        key: 'product_name',
+        label: 'Product Name',
+        sortKey: 'product_name',
+        draggable: true
+      },
+      recommendation: {
+        key: 'recommendation',
+        label: 'Recommendation',
+        sortKey: 'recommendation',
+        draggable: true
+      },
+      stock_info: {
+        key: 'stock_info',
+        label: 'Stock Info',
+        sortKey: null,
+        draggable: true
+      },
+      restock_priority: {
+        key: 'restock_priority',
+        label: 'Restock Priority',
+        sortKey: null,
+        draggable: true
+      },
+      recent_purchases: {
+        key: 'recent_purchases',
+        label: 'Recent Purchases',
+        sortKey: 'recent_purchases',
+        draggable: true
+      }
+    };
+
+    // Add retailer column if showing all leads
+    if (analysis?.worksheet === 'All Leads') {
+      columns.retailer = {
+        key: 'retailer',
+        label: 'Retailer',
+        sortKey: 'retailer',
+        draggable: true
+      };
+    }
+
+    return columns;
+  };
+
+  const getDefaultColumnOrder = () => {
+    const baseOrder = ['asin', 'source', 'product_name', 'recommendation', 'stock_info', 'restock_priority', 'recent_purchases'];
+    
+    if (analysis?.worksheet === 'All Leads') {
+      return ['asin', 'source', 'product_name', 'retailer', 'recommendation', 'stock_info', 'restock_priority', 'recent_purchases'];
+    }
+    
+    return baseOrder;
+  };
+
+  const renderTableCell = (columnKey, item, index) => {
+    switch (columnKey) {
+      case 'asin':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <a
+              href={`https://www.amazon.com/dp/${item.asin}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-blue-600 hover:text-blue-800"
+            >
+              {item.asin}
+            </a>
+          </td>
+        );
+      
+      case 'source':
+        return (
+          <td key={columnKey} className="px-3 py-3 text-center">
+            {item.source_link ? (
+              <a
+                href={item.source_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </td>
+        );
+      
+      case 'product_name':
+        return (
+          <td key={columnKey} className="px-3 py-3">
+            <div className="text-sm text-gray-900">
+              {item.product_name ? (
+                <span title={item.product_name}>
+                  {item.product_name.length > 80 ? 
+                    `${item.product_name.substring(0, 80)}...` : 
+                    item.product_name
+                  }
+                  {!item.in_inventory && (
+                    <span className="text-xs text-orange-500 ml-2">(New)</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic">
+                  {item.in_inventory ? 'Product name not available' : 'New Product (name not in sheet)'}
+                </span>
+              )}
+            </div>
+          </td>
+        );
+      
+      case 'retailer':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <span className="text-sm text-gray-600">{item.retailer}</span>
+          </td>
+        );
+      
+      case 'recommendation':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <div className="flex items-center">
+              {getRecommendationIcon(item.recommendation)}
+              <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full border ${getRecommendationBadge(item.recommendation)}`}>
+                {item.recommendation}
+              </span>
+            </div>
+          </td>
+        );
+      
+      case 'stock_info':
+        return (
+          <td key={columnKey} className="px-3 py-3 text-center">
+            {item.inventory_details ? (
+              <div className="text-sm">
+                <div className="font-medium">{item.inventory_details.current_stock} units</div>
+                <div className="text-xs text-gray-500">
+                  Need: {item.inventory_details.suggested_quantity}
+                </div>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">N/A</span>
+            )}
+          </td>
+        );
+      
+      case 'restock_priority':
+        return (
+          <td key={columnKey} className="px-3 py-3 text-center">
+            {item.inventory_details ? (
+              <div className="text-sm">
+                <div className="font-medium">{item.inventory_details.units_per_day.toFixed(1)}/day</div>
+                <div className="text-xs text-gray-500">
+                  {item.inventory_details.days_of_stock} days left
+                </div>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">-</span>
+            )}
+          </td>
+        );
+      
+      case 'recent_purchases':
+        return (
+          <td key={columnKey} className="px-3 py-3 text-center">
+            <div className="text-sm">
+              <div className="font-medium">{item.recent_purchases || 0}</div>
+              <div className="text-xs text-gray-500">last 2 months</div>
+            </div>
+          </td>
+        );
+      
+      default:
+        return <td key={columnKey}></td>;
     }
   };
 
@@ -517,151 +711,32 @@ const RetailerLeadAnalysis = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      ASIN
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Source
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Product Name
-                    </th>
-                    {analysis.worksheet === 'All Leads' && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Retailer
-                      </th>
-                    )}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Recommendation
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Stock Info
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Restock Priority
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Recent Purchases
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredRecommendations.map((item, index) => (
-                    <tr key={`${item.asin}-${index}`} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <a
-                            href={`https://www.amazon.com/dp/${item.asin}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                          >
-                            {item.asin}
-                          </a>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {item.source_link ? (
-                          <a
-                            href={item.source_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {item.product_name ? (
-                            <span title={item.product_name}>
-                              {item.product_name.length > 80 ? 
-                                `${item.product_name.substring(0, 80)}...` : 
-                                item.product_name
-                              }
-                              {!item.in_inventory && (
-                                <span className="text-xs text-orange-500 ml-2">(New)</span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 italic">
-                              {item.in_inventory ? 'Product name not available' : 'New Product (name not in sheet)'}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      {analysis.worksheet === 'All Leads' && (
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-600">{item.retailer}</span>
-                        </td>
-                      )}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          {getRecommendationIcon(item.recommendation)}
-                          <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full border ${getRecommendationBadge(item.recommendation)}`}>
-                            {item.recommendation}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {item.inventory_details ? (
-                          <div className="text-sm">
-                            <div className="font-medium">{item.inventory_details.current_stock} units</div>
-                            <div className="text-xs text-gray-500">
-                              Need: {item.inventory_details.suggested_quantity}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">N/A</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {item.inventory_details ? (
-                          <div className="text-sm">
-                            <div className="font-medium">{item.inventory_details.units_per_day.toFixed(1)}/day</div>
-                            <div className="text-xs text-gray-500">
-                              {item.inventory_details.days_of_stock} days left
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="text-sm">
-                          <div className="font-medium">{item.recent_purchases || 0}</div>
-                          <div className="text-xs text-gray-500">last 2 months</div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              
-              {filteredRecommendations.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  No recommendations found matching your filter criteria.
+            <StandardTable
+              data={filteredRecommendations || []}
+              tableKey="lead-analysis"
+              columns={getTableColumns()}
+              defaultColumnOrder={getDefaultColumnOrder()}
+              renderCell={renderTableCell}
+              enableSearch={false}  // Search handled in parent component
+              enableFilters={false}  // Filters handled in parent component
+              enableSorting={true}
+              enableColumnReordering={true}
+              enableColumnResetting={true}
+              emptyIcon={Package}
+              emptyTitle="No Recommendations"
+              emptyDescription="No recommendations found matching your filter criteria."
+            />
+            
+            {analysis?.recommendations && filteredRecommendations.length !== analysis.recommendations.length && (
+              <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
+                <div className="text-sm text-blue-800">
+                  Showing {filteredRecommendations.length} of {analysis.recommendations.length} recommendations
+                  {excludeKeywords.trim() && (
+                    <span> (filtered out products containing: {excludeKeywords})</span>
+                  )}
                 </div>
-              )}
-              
-              {analysis?.recommendations && filteredRecommendations.length !== analysis.recommendations.length && (
-                <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
-                  <div className="text-sm text-blue-800">
-                    Showing {filteredRecommendations.length} of {analysis.recommendations.length} recommendations
-                    {excludeKeywords.trim() && (
-                      <span> (filtered out products containing: {excludeKeywords})</span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </>
         )}

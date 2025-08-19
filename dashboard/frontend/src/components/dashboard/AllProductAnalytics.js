@@ -7,9 +7,113 @@ import {
   Activity,
   AlertTriangle
 } from 'lucide-react';
+import StandardTable from '../common/StandardTable';
 
 const AllProductAnalytics = () => {
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Table configuration functions (placeholder for when data is available)
+  const getOverviewColumns = () => ({
+    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+    sales: { key: 'sales', label: 'Sales', sortKey: 'total_sales', draggable: true },
+    revenue: { key: 'revenue', label: 'Revenue', sortKey: 'revenue', draggable: true },
+    profit: { key: 'profit', label: 'Profit', sortKey: 'profit', draggable: true },
+    stock: { key: 'stock', label: 'Stock', sortKey: 'current_stock', draggable: true },
+    trend: { key: 'trend', label: 'Trend', sortKey: null, draggable: true }
+  });
+
+  const getPerformanceColumns = () => ({
+    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+    velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
+    conversion: { key: 'conversion', label: 'Conversion', sortKey: 'conversion_rate', draggable: true },
+    sessions: { key: 'sessions', label: 'Sessions', sortKey: 'sessions', draggable: true },
+    rank: { key: 'rank', label: 'BSR', sortKey: 'bsr', draggable: true },
+    competition: { key: 'competition', label: 'Competition', sortKey: null, draggable: true }
+  });
+
+  const getInventoryColumns = () => ({
+    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+    current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
+    days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
+    turnover: { key: 'turnover', label: 'Turnover Rate', sortKey: 'turnover_rate', draggable: true },
+    reorder_point: { key: 'reorder_point', label: 'Reorder Point', sortKey: 'reorder_point', draggable: true },
+    status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true }
+  });
+
+  const getInsightsColumns = () => ({
+    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+    insight_type: { key: 'insight_type', label: 'Type', sortKey: 'insight_type', draggable: true },
+    recommendation: { key: 'recommendation', label: 'Recommendation', sortKey: null, draggable: true },
+    priority: { key: 'priority', label: 'Priority', sortKey: 'priority', draggable: true },
+    impact: { key: 'impact', label: 'Impact', sortKey: 'impact_score', draggable: true },
+    action: { key: 'action', label: 'Action', sortKey: null, draggable: false }
+  });
+
+  const getInventoryFilters = () => [
+    {
+      key: 'status',
+      label: 'Status',
+      defaultValue: 'all',
+      options: [
+        { value: 'in_stock', label: 'In Stock' },
+        { value: 'low_stock', label: 'Low Stock' },
+        { value: 'out_of_stock', label: 'Out of Stock' },
+        { value: 'reorder_needed', label: 'Reorder Needed' }
+      ],
+      filterFn: (item, value) => item.status === value
+    }
+  ];
+
+  const getInsightsFilters = () => [
+    {
+      key: 'insight_type',
+      label: 'Type',
+      defaultValue: 'all',
+      options: [
+        { value: 'opportunity', label: 'Opportunity' },
+        { value: 'warning', label: 'Warning' },
+        { value: 'optimization', label: 'Optimization' },
+        { value: 'trend', label: 'Trend' }
+      ],
+      filterFn: (item, value) => item.insight_type === value
+    },
+    {
+      key: 'priority',
+      label: 'Priority',
+      defaultValue: 'all',
+      options: [
+        { value: 'high', label: 'High' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'low', label: 'Low' }
+      ],
+      filterFn: (item, value) => item.priority === value
+    }
+  ];
+
+  // Placeholder render functions for when data is available
+  const renderOverviewCell = (columnKey, item) => (
+    <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+      {/* Cell content based on columnKey */}
+    </td>
+  );
+
+  const renderPerformanceCell = (columnKey, item) => (
+    <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+      {/* Cell content based on columnKey */}
+    </td>
+  );
+
+  const renderInventoryCell = (columnKey, item) => (
+    <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+      {/* Cell content based on columnKey */}
+    </td>
+  );
+
+  const renderInsightsCell = (columnKey, item) => (
+    <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+      {/* Cell content based on columnKey */}
+    </td>
+  );
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: BarChart3 },
@@ -68,6 +172,26 @@ const AllProductAnalytics = () => {
               </div>
             </div>
           </div>
+          {/* Placeholder table structure for when data is available */}
+          <div className="hidden">
+            <StandardTable
+              data={[]}
+              tableKey="all-products-overview"
+              columns={getOverviewColumns()}
+              defaultColumnOrder={['product', 'sales', 'revenue', 'profit', 'stock', 'trend']}
+              renderCell={renderOverviewCell}
+              enableSearch={true}
+              enableFilters={true}
+              enableSorting={true}
+              enableColumnReordering={true}
+              enableColumnResetting={true}
+              searchPlaceholder="Search products by ASIN, name..."
+              searchFields={['asin', 'product_name']}
+              emptyIcon={Package}
+              emptyTitle="No Products"
+              emptyDescription="No product data available"
+            />
+          </div>
         </div>
       )}
 
@@ -85,6 +209,26 @@ const AllProductAnalytics = () => {
                 <span className="text-sm text-yellow-800">Coming Soon</span>
               </div>
             </div>
+          </div>
+          {/* Placeholder table structure for when data is available */}
+          <div className="hidden">
+            <StandardTable
+              data={[]}
+              tableKey="all-products-performance"
+              columns={getPerformanceColumns()}
+              defaultColumnOrder={['product', 'velocity', 'conversion', 'sessions', 'rank', 'competition']}
+              renderCell={renderPerformanceCell}
+              enableSearch={true}
+              enableFilters={true}
+              enableSorting={true}
+              enableColumnReordering={true}
+              enableColumnResetting={true}
+              searchPlaceholder="Search by product name, ASIN..."
+              searchFields={['asin', 'product_name', 'category']}
+              emptyIcon={TrendingUp}
+              emptyTitle="No Performance Data"
+              emptyDescription="No performance metrics available"
+            />
           </div>
         </div>
       )}
@@ -104,6 +248,27 @@ const AllProductAnalytics = () => {
               </div>
             </div>
           </div>
+          {/* Placeholder table structure for when data is available */}
+          <div className="hidden">
+            <StandardTable
+              data={[]}
+              tableKey="all-products-inventory"
+              columns={getInventoryColumns()}
+              defaultColumnOrder={['product', 'current_stock', 'days_left', 'turnover', 'reorder_point', 'status']}
+              renderCell={renderInventoryCell}
+              enableSearch={true}
+              enableFilters={true}
+              enableSorting={true}
+              enableColumnReordering={true}
+              enableColumnResetting={true}
+              searchPlaceholder="Search by ASIN, product name..."
+              searchFields={['asin', 'product_name']}
+              filters={getInventoryFilters()}
+              emptyIcon={Package}
+              emptyTitle="No Inventory Data"
+              emptyDescription="No inventory information available"
+            />
+          </div>
         </div>
       )}
 
@@ -121,6 +286,27 @@ const AllProductAnalytics = () => {
                 <span className="text-sm text-yellow-800">Coming Soon</span>
               </div>
             </div>
+          </div>
+          {/* Placeholder table structure for when data is available */}
+          <div className="hidden">
+            <StandardTable
+              data={[]}
+              tableKey="all-products-insights"
+              columns={getInsightsColumns()}
+              defaultColumnOrder={['product', 'insight_type', 'recommendation', 'priority', 'impact', 'action']}
+              renderCell={renderInsightsCell}
+              enableSearch={true}
+              enableFilters={true}
+              enableSorting={true}
+              enableColumnReordering={true}
+              enableColumnResetting={true}
+              searchPlaceholder="Search insights, recommendations..."
+              searchFields={['product_name', 'insight_type', 'recommendation']}
+              filters={getInsightsFilters()}
+              emptyIcon={Activity}
+              emptyTitle="No Insights"
+              emptyDescription="No business insights available"
+            />
           </div>
         </div>
       )}

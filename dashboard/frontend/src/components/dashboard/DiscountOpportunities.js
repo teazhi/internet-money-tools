@@ -15,6 +15,7 @@ import {
   Calendar
 } from 'lucide-react';
 import axios from 'axios';
+import StandardTable from '../common/StandardTable';
 
 // Simple component to display product images with fallback
 const ProductImage = ({ asin, productName }) => {
@@ -191,6 +192,215 @@ const DiscountOpportunities = () => {
     }
   };
 
+  // Table configuration for StandardTable
+  const tableColumns = {
+    product: {
+      key: 'product',
+      label: 'Product',
+      sortKey: 'product_name',
+      draggable: true
+    },
+    retailer: {
+      key: 'retailer',
+      label: 'Retailer',
+      sortKey: 'retailer',
+      draggable: true
+    },
+    status: {
+      key: 'status',
+      label: 'Status',
+      sortKey: 'status',
+      draggable: true
+    },
+    inventory: {
+      key: 'inventory',
+      label: 'Inventory',
+      sortKey: 'current_stock',
+      draggable: true
+    },
+    alert_time: {
+      key: 'alert_time',
+      label: 'Alert Time',
+      sortKey: 'alert_time',
+      draggable: true
+    },
+    actions: {
+      key: 'actions',
+      label: 'Actions',
+      draggable: false
+    }
+  };
+
+  const defaultColumnOrder = ['product', 'retailer', 'status', 'inventory', 'alert_time', 'actions'];
+
+  const tableFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      defaultValue: 'all',
+      options: [
+        { value: 'restock_needed', label: 'Restock Needed' },
+        { value: 'not_needed', label: 'Not Needed' },
+        { value: 'not_tracked', label: 'Not Tracked' }
+      ],
+      filterFn: (item, value) => {
+        switch (value) {
+          case 'restock_needed': return item.status === 'Restock Needed';
+          case 'not_needed': return item.status === 'Not Needed';
+          case 'not_tracked': return item.status === 'Not Tracked';
+          default: return true;
+        }
+      }
+    },
+    {
+      key: 'retailer',
+      label: 'Retailer',
+      defaultValue: 'all',
+      options: [
+        { value: 'walmart', label: 'Walmart' },
+        { value: 'target', label: 'Target' },
+        { value: 'lowes', label: 'Lowes' },
+        { value: 'vitacost', label: 'Vitacost' },
+        { value: 'kohls', label: "Kohl's" }
+      ],
+      filterFn: (item, value) => item.retailer.toLowerCase().includes(value.toLowerCase())
+    }
+  ];
+
+  const renderTableCell = (columnKey, opportunity, index) => {
+    switch (columnKey) {
+      case 'product':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 h-12 w-12">
+                <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
+              </div>
+              <div className="ml-4">
+                <div className="text-sm font-medium text-gray-900">
+                  {opportunity.product_name || opportunity.asin}
+                </div>
+                <div className="text-sm text-gray-500">
+                  ASIN: {opportunity.asin}
+                </div>
+                {opportunity.note && (
+                  <div className="text-xs text-blue-600 mt-1">
+                    {opportunity.note}
+                  </div>
+                )}
+              </div>
+            </div>
+          </td>
+        );
+      
+      case 'retailer':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <div className="text-sm text-gray-900">{opportunity.retailer}</div>
+            {opportunity.promo_message && (
+              <div className="text-xs text-green-600 mt-1">
+                {opportunity.promo_message}
+              </div>
+            )}
+          </td>
+        );
+      
+      case 'status':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
+              {opportunity.status}
+            </div>
+          </td>
+        );
+      
+      case 'inventory':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            {opportunity.status === 'Not Tracked' ? (
+              <div className="text-sm text-gray-500 italic">
+                Product not in inventory
+              </div>
+            ) : (
+              <>
+                <div className="text-sm text-gray-900">
+                  <div className="flex items-center space-x-2">
+                    <Package className="h-4 w-4 text-gray-500" />
+                    <span>{opportunity.current_stock || 0} units</span>
+                  </div>
+                  {opportunity.needs_restock && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Need: {opportunity.suggested_quantity || 0} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left
+                    </div>
+                  )}
+                  {opportunity.velocity > 0 && (
+                    <div className="text-xs text-gray-500">
+                      Velocity: {(opportunity.velocity || 0).toFixed(2)}/day
+                    </div>
+                  )}
+                </div>
+                {opportunity.restock_priority !== 'not_tracked' && opportunity.restock_priority !== 'normal' && (
+                  <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getPriorityColor(opportunity.restock_priority)}`}>
+                    {opportunity.restock_priority.replace('_', ' ')}
+                  </div>
+                )}
+              </>
+            )}
+          </td>
+        );
+      
+      case 'alert_time':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
+            <div className="text-sm text-gray-900">
+              <div className="flex items-center space-x-1">
+                <Clock className="h-4 w-4 text-gray-500" />
+                <span>{formatTimeAgo(opportunity.alert_time)}</span>
+              </div>
+            </div>
+          </td>
+        );
+      
+      case 'actions':
+        return (
+          <td key={columnKey} className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium">
+            <div className="flex items-center justify-end space-x-2">
+              {opportunity.source_link ? (
+                <a
+                  href={opportunity.source_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center space-x-1 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    opportunity.status === 'Restock Needed' 
+                      ? 'text-white bg-blue-600 hover:bg-blue-700' 
+                      : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                  }`}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>{opportunity.status === 'Restock Needed' ? 'Buy Now' : 'View Deal'}</span>
+                </a>
+              ) : (
+                <span className="text-gray-400 text-sm">No link</span>
+              )}
+              {opportunity.status === 'Not Needed' && (
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                  ✓ Stocked
+                </span>
+              )}
+              {opportunity.status === 'Not Tracked' && (
+                <span className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                  Not Tracked
+                </span>
+              )}
+            </div>
+          </td>
+        );
+      
+      default:
+        return <td key={columnKey}></td>;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -312,159 +522,27 @@ const DiscountOpportunities = () => {
             </div>
           )}
 
-          {/* Opportunities List */}
+          {/* Opportunities Table */}
           {!loading && !error && (
-            <div className="bg-white rounded-lg shadow">
-              {!opportunities || opportunities.length === 0 ? (
-                <div className="p-8 text-center">
-                  <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Opportunities Found</h3>
-                  <p className="text-gray-600">
-                    No discount leads found in recent email alerts from the last 7 days.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-48">
-                          Product
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Retailer
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Inventory
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Alert Time
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {opportunities.map((opportunity, index) => (
-                        <tr key={`${opportunity.asin}-${index}`} className="hover:bg-gray-50">
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0 h-12 w-12">
-                                <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
-                              </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {opportunity.product_name || opportunity.asin}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  ASIN: {opportunity.asin}
-                                </div>
-                                {opportunity.note && (
-                                  <div className="text-xs text-blue-600 mt-1">
-                                    {opportunity.note}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{opportunity.retailer}</div>
-                            {opportunity.promo_message && (
-                              <div className="text-xs text-green-600 mt-1">
-                                {opportunity.promo_message}
-                              </div>
-                            )}
-                          </td>
-                          
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
-                              {opportunity.status}
-                            </div>
-                          </td>
-                          
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            {opportunity.status === 'Not Tracked' ? (
-                              <div className="text-sm text-gray-500 italic">
-                                Product not in inventory
-                              </div>
-                            ) : (
-                              <>
-                                <div className="text-sm text-gray-900">
-                                  <div className="flex items-center space-x-2">
-                                    <Package className="h-4 w-4 text-gray-500" />
-                                    <span>{opportunity.current_stock || 0} units</span>
-                                  </div>
-                                  {opportunity.needs_restock && (
-                                    <div className="text-xs text-gray-500 mt-1">
-                                      Need: {opportunity.suggested_quantity || 0} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left
-                                    </div>
-                                  )}
-                                  {opportunity.velocity > 0 && (
-                                    <div className="text-xs text-gray-500">
-                                      Velocity: {(opportunity.velocity || 0).toFixed(2)}/day
-                                    </div>
-                                  )}
-                                </div>
-                                {opportunity.restock_priority !== 'not_tracked' && opportunity.restock_priority !== 'normal' && (
-                                  <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getPriorityColor(opportunity.restock_priority)}`}>
-                                    {opportunity.restock_priority.replace('_', ' ')}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </td>
-                          
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              <div className="flex items-center space-x-1">
-                                <Clock className="h-4 w-4 text-gray-500" />
-                                <span>{formatTimeAgo(opportunity.alert_time)}</span>
-                              </div>
-                            </div>
-                          </td>
-                          
-                          <td className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex items-center justify-end space-x-2">
-                              {opportunity.source_link ? (
-                                <a
-                                  href={opportunity.source_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`inline-flex items-center space-x-1 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                                    opportunity.status === 'Restock Needed' 
-                                      ? 'text-white bg-blue-600 hover:bg-blue-700' 
-                                      : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
-                                  }`}
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                  <span>{opportunity.status === 'Restock Needed' ? 'Buy Now' : 'View Deal'}</span>
-                                </a>
-                              ) : (
-                                <span className="text-gray-400 text-sm">No link</span>
-                              )}
-                              {opportunity.status === 'Not Needed' && (
-                                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                                  ✓ Stocked
-                                </span>
-                              )}
-                              {opportunity.status === 'Not Tracked' && (
-                                <span className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                                  Not Tracked
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <div className="bg-white rounded-lg shadow p-6">
+              <StandardTable
+                data={opportunities || []}
+                tableKey="discount-opportunities"
+                columns={tableColumns}
+                defaultColumnOrder={defaultColumnOrder}
+                renderCell={renderTableCell}
+                enableSearch={true}
+                enableFilters={true}
+                enableSorting={true}
+                enableColumnReordering={true}
+                enableColumnResetting={true}
+                searchPlaceholder="Search opportunities by ASIN, product name, retailer..."
+                searchFields={['asin', 'product_name', 'retailer', 'note']}
+                filters={tableFilters}
+                emptyIcon={Mail}
+                emptyTitle="No Opportunities Found"
+                emptyDescription="No discount leads found in recent email alerts from the last 7 days."
+              />
             </div>
           )}
         </div>

@@ -782,7 +782,9 @@ def get_dummy_discount_opportunities():
                 'note': 'Locally',
                 'alert_time': (datetime.now() - timedelta(hours=4)).isoformat(),
                 'priority_score': 95,
-                'restock_priority': 'critical_high_velocity'
+                'restock_priority': 'critical_high_velocity',
+                'status': 'Restock Needed',
+                'needs_restock': True
             },
             {
                 'asin': 'B07XJ8C8F7',
@@ -797,29 +799,53 @@ def get_dummy_discount_opportunities():
                 'note': 'Flash sale - 20% off',
                 'alert_time': (datetime.now() - timedelta(hours=8)).isoformat(),
                 'priority_score': 85,
-                'restock_priority': 'warning_high_velocity'
+                'restock_priority': 'warning_high_velocity',
+                'status': 'Restock Needed',
+                'needs_restock': True
             },
             {
                 'asin': 'B00TW2XZ04',
                 'product_name': 'Wireless Charging Pad',
                 'retailer': 'Lowes',
                 'current_stock': 25,
-                'suggested_quantity': 50,
-                'days_left': 8.3,
+                'suggested_quantity': 0,
+                'days_left': float('inf'),
                 'velocity': 3.0,
                 'source_link': 'https://www.lowes.com/search?searchTerm=B00TW2XZ04',
                 'promo_message': None,
-                'note': 'TESTING',
+                'note': 'Good stock level',
                 'alert_time': (datetime.now() - timedelta(hours=12)).isoformat(),
-                'priority_score': 75,
-                'restock_priority': 'warning_moderate'
+                'priority_score': 0,
+                'restock_priority': 'normal',
+                'status': 'Not Needed',
+                'needs_restock': False
+            },
+            {
+                'asin': 'B09ABCD123',
+                'product_name': 'Product not tracked',
+                'retailer': 'Home Depot',
+                'current_stock': 0,
+                'suggested_quantity': 0,
+                'days_left': float('inf'),
+                'velocity': 0,
+                'source_link': None,
+                'promo_message': None,
+                'note': 'Price drop alert',
+                'alert_time': (datetime.now() - timedelta(hours=16)).isoformat(),
+                'priority_score': 0,
+                'restock_priority': 'not_tracked',
+                'status': 'Not Tracked',
+                'needs_restock': False
             }
         ],
-        'total_alerts_processed': 15,
-        'matched_products': 3,
+        'total_alerts_processed': 4,
+        'matched_products': 4,
+        'restock_needed_count': 2,
+        'not_needed_count': 1,
+        'not_tracked_count': 1,
         'retailer_filter': '',
         'analyzed_at': datetime.now().isoformat(),
-        'message': 'Found 3 discount opportunities for products that need restocking'
+        'message': 'Found 4 discount leads (2 need restocking, 1 not needed, 1 not tracked)'
     }
 
 def get_dummy_sheet_data():
@@ -6150,68 +6176,118 @@ def analyze_discount_opportunities():
             if retailer_filter and retailer_filter.lower() not in retailer.lower():
                 continue
             
-            # Check if this ASIN is in user's inventory and needs restocking
+            # Check if this ASIN is in user's inventory
             if asin in enhanced_analytics:
                 inventory_data = enhanced_analytics[asin]
                 restock_data = inventory_data.get('restock', {})
                 
-                # Apply same restock logic as Smart Restock recommendations
+                # Get restock information
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
                 days_left = restock_data.get('days_left', float('inf'))
                 
-                # Only include if restocking is actually needed (same as Smart Restock filter)
-                if suggested_quantity > 0:
-                    # Look for source link in CSV data
-                    source_link = None
-                    asin_mask = source_df.astype(str).apply(
-                        lambda x: x.str.contains(asin, case=False, na=False)
-                    ).any(axis=1)
-                    
-                    if asin_mask.any():
-                        matching_rows = source_df[asin_mask]
-                        if len(matching_rows) > 0:
-                            # Look for URL/link columns
-                            for col in matching_rows.columns:
-                                if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
-                                    potential_link = matching_rows.iloc[0][col]
-                                    if pd.notna(potential_link) and str(potential_link).startswith('http'):
-                                        source_link = str(potential_link)
-                                        break
-                    
-                    # Extract special promotional text for Vitacost
-                    promo_message = None
-                    if retailer.lower() == 'vitacost':
-                        html_content = email_alert.get('html_content', '')
-                        promo_message = extract_vitacost_promo_message(html_content)
-                    
-                    opportunity = {
-                        'asin': asin,
-                        'retailer': retailer,
-                        'product_name': inventory_data.get('product_name', ''),
-                        'current_stock': current_stock,
-                        'suggested_quantity': suggested_quantity,
-                        'days_left': days_left,
-                        'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
-                        'source_link': source_link,
-                        'promo_message': promo_message,
-                        'note': email_alert.get('note'),
-                        'alert_time': email_alert['alert_time'],
-                        'priority_score': calculate_opportunity_priority(inventory_data, days_left, suggested_quantity),
-                        'restock_priority': inventory_data.get('priority', {}).get('category', 'normal')
-                    }
-                    opportunities.append(opportunity)
+                # Determine if restocking is needed
+                needs_restock = suggested_quantity > 0
+                
+                # Look for source link in CSV data
+                source_link = None
+                asin_mask = source_df.astype(str).apply(
+                    lambda x: x.str.contains(asin, case=False, na=False)
+                ).any(axis=1)
+                
+                if asin_mask.any():
+                    matching_rows = source_df[asin_mask]
+                    if len(matching_rows) > 0:
+                        # Look for URL/link columns
+                        for col in matching_rows.columns:
+                            if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
+                                potential_link = matching_rows.iloc[0][col]
+                                if pd.notna(potential_link) and str(potential_link).startswith('http'):
+                                    source_link = str(potential_link)
+                                    break
+                
+                # Extract special promotional text for Vitacost
+                promo_message = None
+                if retailer.lower() == 'vitacost':
+                    html_content = email_alert.get('html_content', '')
+                    promo_message = extract_vitacost_promo_message(html_content)
+                
+                # Determine status based on restock need
+                if needs_restock:
+                    status = 'Restock Needed'
+                    priority_score = calculate_opportunity_priority(inventory_data, days_left, suggested_quantity)
+                else:
+                    status = 'Not Needed'
+                    priority_score = 0  # Lower priority for items not needed
+                
+                opportunity = {
+                    'asin': asin,
+                    'retailer': retailer,
+                    'product_name': inventory_data.get('product_name', ''),
+                    'current_stock': current_stock,
+                    'suggested_quantity': suggested_quantity if needs_restock else 0,
+                    'days_left': days_left if needs_restock else float('inf'),
+                    'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
+                    'source_link': source_link,
+                    'promo_message': promo_message,
+                    'note': email_alert.get('note'),
+                    'alert_time': email_alert['alert_time'],
+                    'priority_score': priority_score,
+                    'restock_priority': inventory_data.get('priority', {}).get('category', 'normal'),
+                    'status': status,
+                    'needs_restock': needs_restock
+                }
+                opportunities.append(opportunity)
+            else:
+                # ASIN not in inventory - still show it but mark as not tracked
+                opportunity = {
+                    'asin': asin,
+                    'retailer': retailer,
+                    'product_name': 'Product not tracked',
+                    'current_stock': 0,
+                    'suggested_quantity': 0,
+                    'days_left': float('inf'),
+                    'velocity': 0,
+                    'source_link': None,
+                    'promo_message': None,
+                    'note': email_alert.get('note'),
+                    'alert_time': email_alert['alert_time'],
+                    'priority_score': 0,
+                    'restock_priority': 'not_tracked',
+                    'status': 'Not Tracked',
+                    'needs_restock': False
+                }
+                opportunities.append(opportunity)
         
-        # Sort by priority score
-        opportunities.sort(key=lambda x: x['priority_score'], reverse=True)
+        # Sort by restock need first, then by priority score
+        def sort_key(x):
+            # Priority order: Restock Needed (1), Not Needed (2), Not Tracked (3)
+            if x['status'] == 'Restock Needed':
+                status_priority = 1
+            elif x['status'] == 'Not Needed':
+                status_priority = 2
+            else:  # Not Tracked
+                status_priority = 3
+            
+            return (status_priority, -x['priority_score'])  # Negative for descending order
+        
+        opportunities.sort(key=sort_key)
+        
+        # Count different status types
+        restock_needed_count = len([o for o in opportunities if o['status'] == 'Restock Needed'])
+        not_needed_count = len([o for o in opportunities if o['status'] == 'Not Needed'])
+        not_tracked_count = len([o for o in opportunities if o['status'] == 'Not Tracked'])
         
         return jsonify({
             'opportunities': opportunities,
             'total_alerts_processed': len(email_alerts),
             'matched_products': len(opportunities),
+            'restock_needed_count': restock_needed_count,
+            'not_needed_count': not_needed_count,
+            'not_tracked_count': not_tracked_count,
             'retailer_filter': retailer_filter,
             'analyzed_at': datetime.now(pytz.UTC).isoformat(),
-            'message': f'Found {len(opportunities)} discount opportunities for products that need restocking'
+            'message': f'Found {len(opportunities)} discount leads ({restock_needed_count} need restocking, {not_needed_count} not needed, {not_tracked_count} not tracked)'
         })
         
     except Exception as e:

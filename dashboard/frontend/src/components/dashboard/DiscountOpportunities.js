@@ -77,6 +77,19 @@ const DiscountOpportunities = () => {
     }
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Restock Needed':
+        return 'text-red-700 bg-red-100';
+      case 'Not Needed':
+        return 'text-green-700 bg-green-100';
+      case 'Not Tracked':
+        return 'text-gray-700 bg-gray-100';
+      default:
+        return 'text-blue-700 bg-blue-100';
+    }
+  };
+
   const formatTimeAgo = (timestamp) => {
     const now = new Date();
     const alertTime = new Date(timestamp);
@@ -208,7 +221,7 @@ const DiscountOpportunities = () => {
                   <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No Opportunities Found</h3>
                   <p className="text-gray-600">
-                    No ASINs from recent email alerts need restocking, or no emails found in the last 7 days.
+                    No discount leads found in recent email alerts from the last 7 days.
                   </p>
                 </div>
               ) : (
@@ -221,6 +234,9 @@ const DiscountOpportunities = () => {
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Retailer
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Inventory Status
@@ -269,21 +285,41 @@ const DiscountOpportunities = () => {
                           </td>
                           
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              <div className="flex items-center space-x-2">
-                                <Package className="h-4 w-4 text-gray-500" />
-                                <span>{opportunity.current_stock} units</span>
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Need: {opportunity.suggested_quantity} • {opportunity.days_left.toFixed(1)} days left
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Velocity: {opportunity.velocity.toFixed(2)}/day
-                              </div>
+                            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(opportunity.status)}`}>
+                              {opportunity.status}
                             </div>
-                            <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getPriorityColor(opportunity.restock_priority)}`}>
-                              {opportunity.restock_priority.replace('_', ' ')}
-                            </div>
+                          </td>
+                          
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {opportunity.status === 'Not Tracked' ? (
+                              <div className="text-sm text-gray-500 italic">
+                                Product not in inventory
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-sm text-gray-900">
+                                  <div className="flex items-center space-x-2">
+                                    <Package className="h-4 w-4 text-gray-500" />
+                                    <span>{opportunity.current_stock} units</span>
+                                  </div>
+                                  {opportunity.needs_restock && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      Need: {opportunity.suggested_quantity} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left
+                                    </div>
+                                  )}
+                                  {opportunity.velocity > 0 && (
+                                    <div className="text-xs text-gray-500">
+                                      Velocity: {opportunity.velocity.toFixed(2)}/day
+                                    </div>
+                                  )}
+                                </div>
+                                {opportunity.restock_priority !== 'not_tracked' && opportunity.restock_priority !== 'normal' && (
+                                  <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-2 ${getPriorityColor(opportunity.restock_priority)}`}>
+                                    {opportunity.restock_priority.replace('_', ' ')}
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </td>
                           
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -296,19 +332,35 @@ const DiscountOpportunities = () => {
                           </td>
                           
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            {opportunity.source_link ? (
-                              <a
-                                href={opportunity.source_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-900"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                                <span>View Product</span>
-                              </a>
-                            ) : (
-                              <span className="text-gray-400">No link available</span>
-                            )}
+                            <div className="flex items-center justify-end space-x-2">
+                              {opportunity.source_link ? (
+                                <a
+                                  href={opportunity.source_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`inline-flex items-center space-x-1 px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                                    opportunity.status === 'Restock Needed' 
+                                      ? 'text-white bg-blue-600 hover:bg-blue-700' 
+                                      : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                                  }`}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                  <span>{opportunity.status === 'Restock Needed' ? 'Buy Now' : 'View Deal'}</span>
+                                </a>
+                              ) : (
+                                <span className="text-gray-400 text-sm">No link</span>
+                              )}
+                              {opportunity.status === 'Not Needed' && (
+                                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                                  ✓ Stocked
+                                </span>
+                              )}
+                              {opportunity.status === 'Not Tracked' && (
+                                <span className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                                  Not Tracked
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

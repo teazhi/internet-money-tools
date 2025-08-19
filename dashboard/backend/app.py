@@ -8280,12 +8280,13 @@ def calculate_opportunity_priority(inventory_data, days_left, suggested_quantity
     score = 0
     
     # Higher priority for products that need restocking soon
-    if days_left < 7:
-        score += 100
-    elif days_left < 14:
-        score += 50
-    elif days_left < 30:
-        score += 25
+    if days_left is not None:
+        if days_left < 7:
+            score += 100
+        elif days_left < 14:
+            score += 50
+        elif days_left < 30:
+            score += 25
     
     # Higher priority for products with high suggested quantities
     if suggested_quantity > 100:

@@ -13,43 +13,68 @@ import {
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
 
-// Simple component to display product images with fallback
+// Product image component that fetches image URL from backend
 const ProductImage = ({ asin, productName }) => {
-  const [imageError, setImageError] = useState(false);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  // Reset error state when ASIN changes
   useEffect(() => {
-    setImageError(false);
+    const fetchProductImage = async () => {
+      if (!asin) return;
+      
+      setLoading(true);
+      setError(false);
+      
+      try {
+        const response = await axios.get(`/api/product-image/${asin}`, { 
+          withCredentials: true 
+        });
+        
+        if (response.data.imageUrl) {
+          setImageUrl(response.data.imageUrl);
+        } else {
+          setError(true);
+        }
+      } catch (err) {
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProductImage();
   }, [asin]);
 
-  const handleImageError = () => {
-    setImageError(true);
-  };
-
-  const handleImageLoad = () => {
-    // Image loaded successfully
-  };
-
-  if (imageError) {
+  // Show loading state
+  if (loading) {
     return (
-      <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center" title={`No image available for ${asin}`}>
-        <Package className="h-6 w-6 text-gray-600" />
+      <div className="h-10 w-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <div className="h-4 w-4 bg-gray-300 rounded animate-pulse" />
       </div>
     );
   }
 
-  // Use the most reliable Amazon image endpoint
-  const imageUrl = `https://m.media-amazon.com/images/I/${asin}._AC_SL160_.jpg`;
+  // Show error state with package icon
+  if (error || !imageUrl) {
+    return (
+      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
+        <Package className="h-5 w-5 text-blue-600" />
+      </div>
+    );
+  }
 
+  // Show the actual product image
   return (
-    <img
-      src={imageUrl}
-      alt={productName || `Product ${asin}`}
-      className="h-12 w-12 rounded-lg object-cover bg-gray-100"
-      onError={handleImageError}
-      onLoad={handleImageLoad}
-      loading="lazy"
-    />
+    <div className="h-10 w-10 rounded-lg overflow-hidden border border-gray-200 bg-white">
+      <img
+        src={imageUrl}
+        alt={productName || `Product ${asin}`}
+        className="h-full w-full object-cover"
+        onError={() => setError(true)}
+        loading="lazy"
+      />
+    </div>
   );
 };
 
@@ -249,16 +274,30 @@ const DiscountOpportunities = () => {
         return (
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap w-80">
             <div className="flex items-center">
-              <div className="flex-shrink-0 h-10 w-10">
-                <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
+              <div className="flex-shrink-0">
+                <a 
+                  href={`https://www.amazon.com/dp/${opportunity.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
+                </a>
               </div>
               <div className="ml-3 min-w-0 flex-1">
-                <div className="text-sm font-medium text-gray-900 truncate" title={opportunity.product_name || opportunity.asin}>
-                  {opportunity.product_name ? (
-                    opportunity.product_name.length > 35 
-                      ? `${opportunity.product_name.substring(0, 35)}...`
-                      : opportunity.product_name
-                  ) : opportunity.asin}
+                <div className="text-sm font-medium truncate" title={opportunity.product_name || opportunity.asin}>
+                  <a 
+                    href={`https://www.amazon.com/dp/${opportunity.asin}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-900 hover:text-blue-600 transition-colors"
+                  >
+                    {opportunity.product_name ? (
+                      opportunity.product_name.length > 35 
+                        ? `${opportunity.product_name.substring(0, 35)}...`
+                        : opportunity.product_name
+                    ) : opportunity.asin}
+                  </a>
                 </div>
                 <div className="text-xs text-gray-500 truncate">
                   {opportunity.asin}

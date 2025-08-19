@@ -46,40 +46,34 @@ const DiscountOpportunities = () => {
         retailer: retailerFilter
       }, { withCredentials: true });
       
-      console.log('Full response:', response);
-      console.log('Response status:', response.status);
-      console.log('Response data:', response.data);
-      console.log('Response data type:', typeof response.data);
-      console.log('Response keys:', Object.keys(response.data));
-      console.log('Has opportunities key:', 'opportunities' in response.data);
-      console.log('Opportunities value:', response.data.opportunities);
-      console.log('Opportunities count:', response.data.opportunities?.length);
-      console.log('First opportunity:', response.data.opportunities?.[0]);
-      
-      // Check if response.data is directly an array of opportunities
-      let opportunitiesData = [];
-      let statsData = {};
-      
-      if (Array.isArray(response.data)) {
-        // Response data is directly an array of opportunities
-        opportunitiesData = response.data;
-        statsData = {
-          totalAlertsProcessed: response.data.length,
-          matchedProducts: response.data.length,
-          message: `Found ${response.data.length} opportunities`
-        };
-      } else if (response.data.opportunities) {
-        // Response data has an opportunities property
-        opportunitiesData = response.data.opportunities;
-        statsData = {
-          totalAlertsProcessed: response.data.total_alerts_processed,
-          matchedProducts: response.data.matched_products,
-          restockNeededCount: response.data.restock_needed_count,
-          notNeededCount: response.data.not_needed_count,
-          notTrackedCount: response.data.not_tracked_count,
-          message: response.data.message
-        };
+      // Parse response data if it's a string
+      let responseData = response.data;
+      if (typeof response.data === 'string') {
+        console.log('Response is string, parsing JSON...');
+        try {
+          responseData = JSON.parse(response.data);
+          console.log('Parsed response data:', responseData);
+        } catch (e) {
+          console.error('Failed to parse JSON:', e);
+          throw new Error('Invalid JSON response from server');
+        }
       }
+      
+      console.log('Final response data:', responseData);
+      console.log('Response data type:', typeof responseData);
+      console.log('Has opportunities key:', 'opportunities' in responseData);
+      console.log('Opportunities count:', responseData.opportunities?.length);
+      
+      // Extract opportunities data
+      const opportunitiesData = responseData.opportunities || [];
+      const statsData = {
+        totalAlertsProcessed: responseData.total_alerts_processed,
+        matchedProducts: responseData.matched_products,
+        restockNeededCount: responseData.restock_needed_count,
+        notNeededCount: responseData.not_needed_count,
+        notTrackedCount: responseData.not_tracked_count,
+        message: responseData.message
+      };
       
       console.log('Extracted opportunities:', opportunitiesData);
       console.log('Is array?', Array.isArray(opportunitiesData));

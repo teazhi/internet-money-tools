@@ -57,6 +57,7 @@ const StandardTable = ({
   const [activeFilters, setActiveFilters] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [draggedColumn, setDraggedColumn] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
   
   // Column ordering
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -110,11 +111,26 @@ const StandardTable = ({
     e.dataTransfer.dropEffect = 'move';
   };
   
+  const handleDragEnter = (e, columnKey) => {
+    if (!enableColumnReordering || !draggedColumn) return;
+    e.preventDefault();
+    setDragOverColumn(columnKey);
+  };
+  
+  const handleDragLeave = (e) => {
+    // Only clear drag over if we're actually leaving the column area
+    // Check if the related target is not a child of the current target
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverColumn(null);
+    }
+  };
+  
   const handleDrop = (e, targetColumnKey) => {
     e.preventDefault();
     
     if (!draggedColumn || !enableColumnReordering) {
       setDraggedColumn(null);
+      setDragOverColumn(null);
       return;
     }
     
@@ -137,10 +153,12 @@ const StandardTable = ({
     }
     
     setDraggedColumn(null);
+    setDragOverColumn(null);
   };
   
   const handleDragEnd = () => {
     setDraggedColumn(null);
+    setDragOverColumn(null);
   };
   
   // Reset column order
@@ -272,14 +290,20 @@ const StandardTable = ({
                 return (
                   <th 
                     key={columnKey}
-                    className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide ${
+                    className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-200 ${
                       enableColumnReordering && column.draggable !== false ? 'cursor-move' : ''
                     } ${
                       draggedColumn?.key === columnKey ? 'opacity-50' : ''
+                    } ${
+                      dragOverColumn === columnKey && draggedColumn?.key !== columnKey 
+                        ? 'bg-blue-50 border-l-4 border-blue-400 transform scale-105' 
+                        : ''
                     }`}
                     draggable={enableColumnReordering && column.draggable !== false}
                     onDragStart={(e) => handleDragStart(e, columnKey)}
                     onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, columnKey)}
+                    onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, columnKey)}
                     onDragEnd={handleDragEnd}
                   >

@@ -809,7 +809,7 @@ def get_dummy_discount_opportunities():
                 'retailer': 'Lowes',
                 'current_stock': 25,
                 'suggested_quantity': 0,
-                'days_left': float('inf'),
+                'days_left': None,
                 'velocity': 3.0,
                 'source_link': 'https://www.lowes.com/search?searchTerm=B00TW2XZ04',
                 'promo_message': None,
@@ -826,7 +826,7 @@ def get_dummy_discount_opportunities():
                 'retailer': 'Home Depot',
                 'current_stock': 0,
                 'suggested_quantity': 0,
-                'days_left': float('inf'),
+                'days_left': None,
                 'velocity': 0,
                 'source_link': None,
                 'promo_message': None,
@@ -6193,7 +6193,7 @@ def analyze_discount_opportunities():
                 # Get restock information
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
-                days_left = restock_data.get('days_left', float('inf'))
+                days_left = restock_data.get('days_left', None)
                 
                 # Determine if restocking is needed
                 needs_restock = suggested_quantity > 0
@@ -6235,7 +6235,7 @@ def analyze_discount_opportunities():
                     'product_name': inventory_data.get('product_name', ''),
                     'current_stock': current_stock,
                     'suggested_quantity': suggested_quantity if needs_restock else 0,
-                    'days_left': days_left if needs_restock else float('inf'),
+                    'days_left': days_left if needs_restock else None,
                     'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
                     'source_link': source_link,
                     'promo_message': promo_message,
@@ -6256,7 +6256,7 @@ def analyze_discount_opportunities():
                     'product_name': 'Product not tracked',
                     'current_stock': 0,
                     'suggested_quantity': 0,
-                    'days_left': float('inf'),
+                    'days_left': None,
                     'velocity': 0,
                     'source_link': None,
                     'promo_message': None,

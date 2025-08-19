@@ -25,6 +25,12 @@ const DiscountOpportunities = () => {
   const [retailerFilter, setRetailerFilter] = useState('');
   const [stats, setStats] = useState(null);
 
+  // Debug: Log when opportunities state changes
+  useEffect(() => {
+    console.log('Opportunities state updated:', opportunities);
+    console.log('Opportunities length:', opportunities?.length);
+  }, [opportunities]);
+
   const tabs = [
     { id: 'opportunities', name: 'Opportunities', icon: Target },
     { id: 'pricing', name: 'Pricing Analysis', icon: Percent },
@@ -41,10 +47,17 @@ const DiscountOpportunities = () => {
       }, { withCredentials: true });
       
       console.log('Discount opportunities response:', response.data);
+      console.log('Response keys:', Object.keys(response.data));
       console.log('Opportunities count:', response.data.opportunities?.length);
       console.log('First opportunity:', response.data.opportunities?.[0]);
       
-      setOpportunities(response.data.opportunities || []);
+      // The opportunities are in response.data.opportunities
+      const opportunitiesData = response.data.opportunities || [];
+      console.log('Extracted opportunities:', opportunitiesData);
+      console.log('Is array?', Array.isArray(opportunitiesData));
+      console.log('Length:', opportunitiesData.length);
+      
+      setOpportunities(opportunitiesData);
       setStats({
         totalAlertsProcessed: response.data.total_alerts_processed,
         matchedProducts: response.data.matched_products,

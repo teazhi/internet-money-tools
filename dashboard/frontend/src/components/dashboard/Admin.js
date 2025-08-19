@@ -443,13 +443,10 @@ const Admin = () => {
       const response = await axios.get('/api/admin/users', { withCredentials: true });
       const allUsers = response.data.users;
       
-      console.log('Fetched users:', allUsers);
-      console.log('Subusers found:', allUsers.filter(u => u.user_type === 'subuser'));
       
       setUsers(allUsers);
       setRawUserData(JSON.stringify(allUsers, null, 2));
     } catch (error) {
-      console.error('Fetch users error:', error);
       setError(error.response?.data?.error || 'Failed to fetch users');
     } finally {
       setLoading(false);
@@ -504,9 +501,6 @@ const Admin = () => {
     const mainUsers = filtered.filter(user => user.user_type !== 'subuser');
     const subUsers = filtered.filter(user => user.user_type === 'subuser');
     
-    console.log('Main users:', mainUsers.length);
-    console.log('Sub users:', subUsers.length);
-    console.log('All subuser data:', subUsers);
     
     const hierarchicalUsers = [];
     
@@ -520,7 +514,6 @@ const Admin = () => {
       
       // Add their subusers right after
       const userSubUsers = subUsers.filter(sub => sub.parent_user_id === mainUser.discord_id);
-      console.log(`Subusers for ${mainUser.discord_username} (${mainUser.discord_id}):`, userSubUsers);
       userSubUsers.forEach(subUser => {
         hierarchicalUsers.push({
           ...subUser,
@@ -722,13 +715,10 @@ const Admin = () => {
     try {
       setError('');
       setSuccess('');
-      console.log('Deleting invitation with token:', token);
       const response = await axios.delete(`/api/admin/invitations/${token}`, { withCredentials: true });
-      console.log('Delete response:', response.data);
       setSuccess('Invitation deleted successfully');
       fetchInvitations();
     } catch (error) {
-      console.error('Delete invitation error:', error);
       setError(error.response?.data?.error || 'Failed to delete invitation');
     }
   };

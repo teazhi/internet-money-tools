@@ -75,13 +75,12 @@ const SheetConfig = () => {
             setConfiguredSpreadsheetName(spreadsheet.name);
           }
         } catch (error) {
-          console.error('Failed to fetch spreadsheet name:', error);
           // Fallback to showing the ID if we can't get the name
           setConfiguredSpreadsheetName(userRecord.sheet_id);
         }
       }
     } catch (error) {
-      console.error('Error loading existing configuration:', error);
+      // Error loading existing configuration - continue with defaults
     }
   };
 

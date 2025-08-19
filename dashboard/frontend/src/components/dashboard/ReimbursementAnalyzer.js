@@ -85,7 +85,6 @@ const ReimbursementAnalyzer = () => {
         });
       }
     } catch (error) {
-      console.error('Analysis error:', error);
       
       if (error.response?.data?.setup_required) {
         setMessage({ 

@@ -76,7 +76,6 @@ const LambdaDeployment = () => {
       const response = await axios.get('/api/admin/lambda-diagnostics', { withCredentials: true });
       setLambdaDiagnostics(response.data);
     } catch (error) {
-      console.error('Failed to fetch diagnostics:', error);
       setMessage({ 
         type: 'error', 
         text: 'Failed to load Lambda diagnostics' 
@@ -92,7 +91,7 @@ const LambdaDeployment = () => {
       setScriptConfigs(response.data);
       setEditingConfigs(response.data);
     } catch (error) {
-      console.error('Failed to fetch script configs:', error);
+      // Failed to fetch script configs - continue silently
     }
   };
 
@@ -110,7 +109,6 @@ const LambdaDeployment = () => {
         [deploymentType]: response.data.logs || []
       }));
     } catch (error) {
-      console.error(`Failed to fetch logs for ${deploymentType}:`, error);
       setMessage({
         type: 'error',
         text: `Failed to fetch logs: ${error.response?.data?.error || error.message}`

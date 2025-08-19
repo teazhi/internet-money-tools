@@ -84,7 +84,7 @@ const Settings = () => {
         const response = await axios.get('/api/demo/status');
         setDemoMode(response.data.demo_mode);
       } catch (error) {
-        console.log('Failed to check demo mode:', error);
+        // Failed to check demo mode - continue silently
       }
     };
     checkDemoMode();
@@ -101,7 +101,6 @@ const Settings = () => {
         text: response.data.message 
       });
     } catch (error) {
-      console.error('Failed to toggle demo mode:', error);
       setMessage({ 
         type: 'error', 
         text: 'Failed to toggle demo mode' 
@@ -116,7 +115,6 @@ const Settings = () => {
         const response = await axios.get('/api/amazon-seller/status', { withCredentials: true });
         setAmazonStatus({ ...response.data, loading: false });
       } catch (error) {
-        console.error('Failed to load Amazon status:', error);
         setAmazonStatus({ connected: false, loading: false });
       }
     };

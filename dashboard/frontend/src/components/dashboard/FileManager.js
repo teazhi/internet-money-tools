@@ -47,7 +47,6 @@ const FileManager = () => {
         setMessage({ type: '', text: '' });
       }
     } catch (error) {
-      console.error('Error fetching files:', error);
       setMessage({ type: 'error', text: 'Failed to load files' });
     } finally {
       setLoading(false);
@@ -143,15 +142,12 @@ const FileManager = () => {
     setMessage({ type: 'info', text: 'Deleting file...' });
 
     try {
-      console.log('Deleting file with key:', fileKey);
-      console.log('Encoded file key:', encodeURIComponent(fileKey));
       
       const response = await axios.delete(`/api/files/sellerboard/${encodeURIComponent(fileKey)}`, { 
         withCredentials: true,
         timeout: 30000 // 30 second timeout
       });
       
-      console.log('Delete response:', response.data);
       
       // Handle partial success case
       if (response.data.partial_success) {
@@ -169,8 +165,6 @@ const FileManager = () => {
       }, 1000);
       
     } catch (error) {
-      console.error('Delete error:', error);
-      console.error('Error response:', error.response?.data);
       
       let errorMessage = 'Failed to delete file';
       
@@ -189,7 +183,6 @@ const FileManager = () => {
         
         // Show debug info if available (for troubleshooting)
         if (error.response.data.debug) {
-          console.log('Debug info:', error.response.data.debug);
           const debugInfo = error.response.data.debug;
           errorMessage += ` (Requested: "${debugInfo.requested_key}", Available: ${debugInfo.available_keys?.length || 0} files)`;
         }
@@ -249,7 +242,6 @@ const FileManager = () => {
         type: 'success', 
         text: `${response.data.message} Check console for details.` 
       });
-      console.log('Migration results:', response.data.results);
       
       // Refresh file list after migration
       setTimeout(() => {

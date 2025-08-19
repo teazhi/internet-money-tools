@@ -43,7 +43,6 @@ const ExpectedArrivals = () => {
         setHasRunAnalysis(true);
       }
     } catch (error) {
-      console.error('Missing listings error:', error);
       setError(error.response?.data?.error || 'Failed to fetch missing listings data');
     } finally {
       setLoading(false);

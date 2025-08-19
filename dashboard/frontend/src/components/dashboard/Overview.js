@@ -49,8 +49,6 @@ const Overview = () => {
         setError(response.data.error);
       }
     } catch (error) {
-      console.error('Error fetching analytics:', error);
-      
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {
         setError({
           type: 'setup_required',

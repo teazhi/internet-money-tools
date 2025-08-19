@@ -43,7 +43,6 @@ const RetailerLeadAnalysis = () => {
       const response = await axios.get('/api/retailer-leads/worksheets', { withCredentials: true });
       setWorksheets(response.data.worksheets || []);
     } catch (error) {
-      console.error('Failed to fetch worksheets:', error);
       setError('Failed to load available worksheets');
     } finally {
       setLoadingWorksheets(false);
@@ -55,7 +54,6 @@ const RetailerLeadAnalysis = () => {
       const response = await axios.get('/api/retailer-leads/target-worksheets', { withCredentials: true });
       setTargetWorksheets(response.data.worksheets || []);
     } catch (error) {
-      console.error('Failed to fetch target worksheets:', error);
       // Not critical - we'll use a default list
       setTargetWorksheets(['Unknown', 'Other', 'Misc', 'No Source']);
     }
@@ -78,7 +76,6 @@ const RetailerLeadAnalysis = () => {
 
       setAnalysis(response.data);
     } catch (error) {
-      console.error('Analysis error:', error);
       setError(error.response?.data?.message || error.response?.data?.error || 'Failed to analyze worksheet leads');
       
       // If worksheets are available, show them
@@ -152,7 +149,6 @@ const RetailerLeadAnalysis = () => {
 
       setSyncResults(response.data);
     } catch (error) {
-      console.error('Sync error:', error);
       setError(error.response?.data?.message || error.response?.data?.error || 'Failed to sync leads to spreadsheet');
     } finally {
       setSyncLoading(false);

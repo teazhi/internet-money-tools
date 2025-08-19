@@ -40,7 +40,6 @@ const SmartRestockRecommendations = () => {
         response = await axios.get(url, { withCredentials: true });
       } catch (axiosError) {
         // Re-throw with better error handling
-        console.error('Axios error:', axiosError);
         throw axiosError;
       }
       
@@ -52,7 +51,6 @@ const SmartRestockRecommendations = () => {
     } catch (error) {
       // Handle the TypeError first
       if (error.message && error.message.includes('isCheckout')) {
-        console.error('isCheckout error caught:', error);
         // This might be an error from middleware or interceptor
         // Try to extract the actual error
         if (error.response) {
@@ -60,12 +58,6 @@ const SmartRestockRecommendations = () => {
         }
       }
       
-      console.error('Error fetching analytics:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
-      console.error('User authenticated:', !!user);
-      console.error('API URL:', url || 'URL not yet defined');
       
       // Check if this is a setup requirement error
       if (error.response?.status === 400 && error.response?.data?.requires_setup) {
@@ -75,7 +67,6 @@ const SmartRestockRecommendations = () => {
           title: 'Setup Required'
         });
       } else if (error.response?.status === 401 || error.status === 401) {
-        console.error('401 Authentication error - user needs to login');
         setError({
           type: 'auth_required',
           message: 'Please log in with Discord to access your analytics dashboard.',

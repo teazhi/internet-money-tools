@@ -59,7 +59,7 @@ const Dashboard = () => {
         const response = await axios.get('/api/demo/status');
         setDemoMode(response.data.demo_mode);
       } catch (error) {
-        console.log('Failed to check demo mode:', error);
+        // Failed to check demo mode, continue with normal operation
       }
     };
     checkDemoMode();
@@ -74,7 +74,7 @@ const Dashboard = () => {
       // Refresh user data to reflect demo mode changes
       await refreshUser();
     } catch (error) {
-      console.error('Failed to toggle demo mode:', error);
+      // Failed to toggle demo mode
     }
   };
 
@@ -92,7 +92,7 @@ const Dashboard = () => {
       navigate('/dashboard/admin');
       
     } catch (error) {
-      console.error('Failed to stop impersonation:', error);
+      // Failed to stop impersonation
       // Force navigate back even if API call fails
       navigate('/dashboard/admin');
     }

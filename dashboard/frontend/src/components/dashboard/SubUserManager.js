@@ -30,8 +30,7 @@ const SubUserManager = () => {
       setSubUsers(subUsersResponse.data.subusers || []);
       setInvitations(invitationsResponse.data.invitations || []);
     } catch (error) {
-      console.error('Error fetching sub-user data:', error);
-      // TODO: Add proper error state handling
+      // Error fetching sub-user data - continue with empty state
     } finally {
       setLoading(false);
     }

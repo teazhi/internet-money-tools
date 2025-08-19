@@ -23,18 +23,15 @@ const ProductImage = ({ asin, productName }) => {
 
   // Reset error state when ASIN changes
   useEffect(() => {
-    console.log(`[ProductImage] Loading image for ASIN: ${asin}`);
     setImageError(false);
   }, [asin]);
 
-  const handleImageError = (e) => {
-    console.log(`[ProductImage] Failed to load image for ASIN: ${asin}`);
-    console.log(`[ProductImage] Failed URL: ${e.target.src}`);
+  const handleImageError = () => {
     setImageError(true);
   };
 
   const handleImageLoad = () => {
-    console.log(`[ProductImage] ✅ Successfully loaded image for ASIN: ${asin}`);
+    // Image loaded successfully
   };
 
   if (imageError) {
@@ -69,11 +66,6 @@ const DiscountOpportunities = () => {
   const [retailerFilter, setRetailerFilter] = useState('');
   const [stats, setStats] = useState(null);
 
-  // Debug: Log when opportunities state changes
-  useEffect(() => {
-    console.log('Opportunities state updated:', opportunities);
-    console.log('Opportunities length:', opportunities?.length);
-  }, [opportunities]);
 
   const tabs = [
     { id: 'opportunities', name: 'Opportunities', icon: Target },
@@ -93,20 +85,12 @@ const DiscountOpportunities = () => {
       // Parse response data if it's a string
       let responseData = response.data;
       if (typeof response.data === 'string') {
-        console.log('Response is string, parsing JSON...');
         try {
           responseData = JSON.parse(response.data);
-          console.log('Parsed response data:', responseData);
         } catch (e) {
-          console.error('Failed to parse JSON:', e);
           throw new Error('Invalid JSON response from server');
         }
       }
-      
-      console.log('Final response data:', responseData);
-      console.log('Response data type:', typeof responseData);
-      console.log('Has opportunities key:', 'opportunities' in responseData);
-      console.log('Opportunities count:', responseData.opportunities?.length);
       
       // Extract opportunities data
       const opportunitiesData = responseData.opportunities || [];
@@ -119,16 +103,11 @@ const DiscountOpportunities = () => {
         message: responseData.message
       };
       
-      console.log('Extracted opportunities:', opportunitiesData);
-      console.log('Is array?', Array.isArray(opportunitiesData));
-      console.log('Length:', opportunitiesData.length);
-      
       setOpportunities(opportunitiesData);
       setStats(statsData);
       setLastUpdated(new Date());
       
     } catch (error) {
-      console.error('Error fetching opportunities:', error);
       setError(error.response?.data?.message || 'Failed to fetch discount opportunities');
     } finally {
       setLoading(false);
@@ -519,12 +498,6 @@ const DiscountOpportunities = () => {
             </div>
           )}
 
-          {/* Debug info */}
-          {!loading && !error && opportunities && (
-            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-2">
-              Debug: {opportunities.length} opportunities loaded
-            </div>
-          )}
 
           {/* Opportunities Table */}
           {!loading && !error && (

@@ -68,28 +68,8 @@ const AdminCompact = () => {
       setDiscountMonitoring(discountRes.data);
       
       // Organize users hierarchically
-      console.log('DEBUG: All users from API:', users.length);
-      console.log('DEBUG: First user sample:', users[0]);
-      
       const mainUsers = users.filter(user => user.user_type !== 'subuser');
       const subUsers = users.filter(user => user.user_type === 'subuser');
-      
-      console.log('DEBUG: Main users:', mainUsers.length);
-      console.log('DEBUG: Main user IDs:', mainUsers.map(u => ({
-        username: u.discord_username,
-        discord_id: u.discord_id,
-        type: typeof u.discord_id
-      })));
-      
-      console.log('DEBUG: Sub users found:', subUsers.length);
-      if (subUsers.length > 0) {
-        console.log('DEBUG: Sub users:', subUsers.map(u => ({
-          username: u.discord_username,
-          user_type: u.user_type,
-          parent_user_id: u.parent_user_id,
-          parentType: typeof u.parent_user_id
-        })));
-      }
       
       // Manual assignment based on usernames (fallback for correct relationships)
       const manualAssignments = {
@@ -120,12 +100,6 @@ const AdminCompact = () => {
           }
         });
         
-        console.log(`DEBUG: Sub users for ${mainUser.discord_username} (ID: ${mainUser.discord_id}):`, allSubUsers.length);
-        console.log(`DEBUG: Auto-matched: ${userSubUsers.length}, Manual-matched: ${manualSubUsers.length}`);
-        
-        if (allSubUsers.length > 0) {
-          console.log('DEBUG: Found subusers:', allSubUsers.map(s => s.discord_username));
-        }
         
         allSubUsers.forEach(subUser => {
           hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
@@ -144,19 +118,10 @@ const AdminCompact = () => {
         !assignedSubUserIds.has(sub.discord_id)
       );
       
-      console.log('DEBUG: Orphaned subusers:', orphanedSubs.length);
-      if (orphanedSubs.length > 0) {
-        console.log('DEBUG: Orphaned subusers details:', orphanedSubs.map(s => ({
-          username: s.discord_username,
-          parent_user_id: s.parent_user_id,
-          type: typeof s.parent_user_id
-        })));
-      }
       orphanedSubs.forEach(subUser => {
         hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: null});
       });
       
-      console.log('DEBUG: Final hierarchical users:', hierarchicalUsers.length);
       setFilteredUsers(hierarchicalUsers);
     } catch (error) {
       setError('Failed to load admin data');
@@ -588,13 +553,6 @@ const AdminCompact = () => {
                             ? true // Subusers inherit setup from parent
                             : (user.profile_configured && user.google_linked && user.sheet_configured);
                           
-                          console.log(`DEBUG: Rendering user ${index + 1}:`, {
-                            username: user.discord_username,
-                            user_type: user.user_type,
-                            isSubUser: user.isSubUser,
-                            isSubuser: isSubuser,
-                            parent_user_id: user.parent_user_id
-                          });
                           
                           return (
                             <tr key={user.discord_id} className={`hover:bg-gray-50 ${isSubuser ? 'bg-blue-25 border-l-4 border-blue-200' : ''}`}>

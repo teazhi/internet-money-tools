@@ -6124,61 +6124,122 @@ def analyze_discount_opportunities():
         else:
             today = datetime.now(pytz.UTC).date()
         
-        # Get user's inventory analysis
-        try:
-            from orders_analysis import EnhancedOrdersAnalysis
-            
-            orders_url = config_user_record.get('sellerboard_orders_url')
-            stock_url = config_user_record.get('sellerboard_stock_url')
-            
-            if not orders_url or not stock_url:
-                return jsonify({
-                    'opportunities': [],
-                    'message': 'Sellerboard URLs not configured. Please configure in Settings.'
-                })
-            
-            orders_analysis = EnhancedOrdersAnalysis(
-                orders_url=orders_url,
-                stock_url=stock_url
-            )
-            
-            analysis = orders_analysis.analyze(
-                for_date=today,
-                user_timezone=user_timezone,
-                user_settings={
-                    'enable_source_links': config_user_record.get('enable_source_links', False),
-                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
-                    'disable_sp_api': config_user_record.get('disable_sp_api', False),
-                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
-                    'discord_id': discord_id
-                }
-            )
-            
-            if not analysis or not analysis.get('enhanced_analytics'):
-                return jsonify({
-                    'opportunities': [],
-                    'message': 'No inventory data available for analysis'
-                })
+        # Get user's inventory analysis (with aggressive caching)
+        enhanced_analytics = None
+        analytics_cache_key = f"enhanced_analytics_{discord_id}_{today}"
+        
+        # Check for cached enhanced analytics (10 minute cache for discount opportunities)
+        if analytics_cache_key in analytics_cache:
+            cache_entry = analytics_cache[analytics_cache_key]
+            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=10):
+                print(f"[DEBUG] Using cached enhanced analytics")
+                enhanced_analytics = cache_entry['data']
+        
+        if enhanced_analytics is None:
+            print(f"[DEBUG] Generating fresh enhanced analytics (this may take a moment)")
+            try:
+                from orders_analysis import EnhancedOrdersAnalysis
                 
-            enhanced_analytics = analysis['enhanced_analytics']
-            
-        except Exception as e:
-            return jsonify({
-                'opportunities': [],
-                'message': f'Failed to generate analytics: {str(e)}'
-            }), 500
+                orders_url = config_user_record.get('sellerboard_orders_url')
+                stock_url = config_user_record.get('sellerboard_stock_url')
+                
+                if not orders_url or not stock_url:
+                    return jsonify({
+                        'opportunities': [],
+                        'message': 'Sellerboard URLs not configured. Please configure in Settings.'
+                    })
+                
+                orders_analysis = EnhancedOrdersAnalysis(
+                    orders_url=orders_url,
+                    stock_url=stock_url
+                )
+                
+                analysis = orders_analysis.analyze(
+                    for_date=today,
+                    user_timezone=user_timezone,
+                    user_settings={
+                        'enable_source_links': config_user_record.get('enable_source_links', False),
+                        'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                        'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                        'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                        'discord_id': discord_id
+                    }
+                )
+                
+                if not analysis or not analysis.get('enhanced_analytics'):
+                    return jsonify({
+                        'opportunities': [],
+                        'message': 'No inventory data available for analysis'
+                    })
+                    
+                enhanced_analytics = analysis['enhanced_analytics']
+                
+                # Cache the enhanced analytics
+                analytics_cache[analytics_cache_key] = {
+                    'data': enhanced_analytics,
+                    'timestamp': datetime.now()
+                }
+                print(f"[DEBUG] Cached enhanced analytics for 10 minutes")
+                
+            except Exception as e:
+                print(f"[ERROR] Failed to generate analytics: {str(e)}")
+                return jsonify({
+                    'opportunities': [],
+                    'message': f'Failed to generate analytics: {str(e)}'
+                }), 500
         
         # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
         
-        # Fetch source links CSV for ASIN matching
-        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
-        response = requests.get(csv_url, timeout=30)
-        response.raise_for_status()
+        # Fetch source links CSV for ASIN matching with caching
+        csv_cache_key = "source_links_csv"
+        source_df = None
         
-        csv_data = StringIO(response.text)
-        source_df = pd.read_csv(csv_data)
+        if csv_cache_key in analytics_cache:
+            cache_entry = analytics_cache[csv_cache_key]
+            # Cache CSV for 30 minutes (longer than analytics since it changes less frequently)
+            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=30):
+                print(f"[DEBUG] Using cached CSV data")
+                source_df = cache_entry['data']
         
+        if source_df is None:
+            print(f"[DEBUG] Fetching fresh CSV data")
+            try:
+                csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+                response = requests.get(csv_url, timeout=10)  # Further reduced timeout
+                response.raise_for_status()
+                
+                csv_data = StringIO(response.text)
+                source_df = pd.read_csv(csv_data)
+                
+                # Cache the DataFrame
+                analytics_cache[csv_cache_key] = {
+                    'data': source_df,
+                    'timestamp': datetime.now()
+                }
+            except Exception as e:
+                print(f"[WARNING] Failed to fetch CSV data: {str(e)}, continuing without source links")
+                source_df = pd.DataFrame()  # Empty DataFrame
+        
+        # Pre-process CSV data for faster ASIN lookups
+        print(f"[DEBUG] Pre-processing CSV data for faster lookups")
+        asin_to_source_link = {}
+        if source_df is not None and not source_df.empty:
+            for _, row in source_df.iterrows():
+                # Look for ASINs in any column
+                for col in source_df.columns:
+                    cell_value = str(row[col]) if pd.notna(row[col]) else ""
+                    # Simple ASIN detection (10 characters starting with B)
+                    if len(cell_value) == 10 and cell_value.startswith('B'):
+                        # Look for URL/link columns in this row
+                        for link_col in source_df.columns:
+                            if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
+                                potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
+                                if potential_link.startswith('http'):
+                                    asin_to_source_link[cell_value.upper()] = potential_link
+                                    break
+        
+        print(f"[DEBUG] Pre-processed {len(asin_to_source_link)} ASIN-to-source mappings")
         opportunities = []
         
         print(f"[DEBUG] Processing {len(email_alerts)} email alerts against inventory")
@@ -6192,16 +6253,12 @@ def analyze_discount_opportunities():
             retailer = email_alert['retailer']
             asin = email_alert['asin']
             
-            print(f"[DEBUG] Checking ASIN {asin} from {retailer}")
-            
             # Skip if retailer filter is specified and doesn't match
             if retailer_filter and retailer_filter.lower() not in retailer.lower():
-                print(f"[DEBUG] Skipping due to retailer filter: {retailer_filter}")
                 return None
             
             # Check if this ASIN is in user's inventory
             if asin in enhanced_analytics:
-                print(f"[DEBUG] ASIN {asin} found in inventory")
                 inventory_data = enhanced_analytics[asin]
                 restock_data = inventory_data.get('restock', {})
                 
@@ -6213,22 +6270,8 @@ def analyze_discount_opportunities():
                 # Determine if restocking is needed
                 needs_restock = suggested_quantity > 0
                 
-                # Look for source link in CSV data
-                source_link = None
-                asin_mask = source_df.astype(str).apply(
-                    lambda x: x.str.contains(asin, case=False, na=False)
-                ).any(axis=1)
-                
-                if asin_mask.any():
-                    matching_rows = source_df[asin_mask]
-                    if len(matching_rows) > 0:
-                        # Look for URL/link columns
-                        for col in matching_rows.columns:
-                            if any(keyword in col.lower() for keyword in ['url', 'link', 'source']):
-                                potential_link = matching_rows.iloc[0][col]
-                                if pd.notna(potential_link) and str(potential_link).startswith('http'):
-                                    source_link = str(potential_link)
-                                    break
+                # Fast lookup for source link using pre-processed dictionary
+                source_link = asin_to_source_link.get(asin.upper())
                 
                 # Extract special promotional text for Vitacost
                 promo_message = None
@@ -6264,7 +6307,6 @@ def analyze_discount_opportunities():
                 return opportunity
             else:
                 # ASIN not in inventory - still show it but mark as not tracked
-                print(f"[DEBUG] ASIN {asin} NOT found in inventory - marking as 'Not Tracked'")
                 opportunity = {
                     'asin': asin,
                     'retailer': retailer,
@@ -6285,7 +6327,7 @@ def analyze_discount_opportunities():
                 return opportunity
         
         # Use ThreadPoolExecutor to process alerts in parallel
-        max_workers = min(10, len(email_alerts))  # Limit to 10 threads maximum
+        max_workers = min(20, len(email_alerts))  # Increased to 20 threads since operations are now much faster
         print(f"[DEBUG] Using {max_workers} threads to process {len(email_alerts)} alerts")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -6167,17 +6167,26 @@ def analyze_discount_opportunities():
         
         opportunities = []
         
+        print(f"[DEBUG] Processing {len(email_alerts)} email alerts against inventory")
+        print(f"[DEBUG] User has {len(enhanced_analytics)} ASINs in inventory")
+        if enhanced_analytics:
+            print(f"[DEBUG] Sample inventory ASINs: {list(enhanced_analytics.keys())[:5]}")
+        
         # Process email alerts
         for email_alert in email_alerts:
             retailer = email_alert['retailer']
             asin = email_alert['asin']
             
+            print(f"[DEBUG] Checking ASIN {asin} from {retailer}")
+            
             # Skip if retailer filter is specified and doesn't match
             if retailer_filter and retailer_filter.lower() not in retailer.lower():
+                print(f"[DEBUG] Skipping due to retailer filter: {retailer_filter}")
                 continue
             
             # Check if this ASIN is in user's inventory
             if asin in enhanced_analytics:
+                print(f"[DEBUG] ASIN {asin} found in inventory")
                 inventory_data = enhanced_analytics[asin]
                 restock_data = inventory_data.get('restock', {})
                 
@@ -6240,6 +6249,7 @@ def analyze_discount_opportunities():
                 opportunities.append(opportunity)
             else:
                 # ASIN not in inventory - still show it but mark as not tracked
+                print(f"[DEBUG] ASIN {asin} NOT found in inventory - marking as 'Not Tracked'")
                 opportunity = {
                     'asin': asin,
                     'retailer': retailer,
@@ -6277,6 +6287,9 @@ def analyze_discount_opportunities():
         restock_needed_count = len([o for o in opportunities if o['status'] == 'Restock Needed'])
         not_needed_count = len([o for o in opportunities if o['status'] == 'Not Needed'])
         not_tracked_count = len([o for o in opportunities if o['status'] == 'Not Tracked'])
+        
+        print(f"[DEBUG] Final opportunities count: {len(opportunities)}")
+        print(f"[DEBUG] Breakdown - Restock Needed: {restock_needed_count}, Not Needed: {not_needed_count}, Not Tracked: {not_tracked_count}")
         
         return jsonify({
             'opportunities': opportunities,

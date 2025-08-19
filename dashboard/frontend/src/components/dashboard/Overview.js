@@ -20,6 +20,14 @@ import {
   User
 } from 'lucide-react';
 import axios from 'axios';
+import {
+  SkeletonCard,
+  SkeletonProductItem,
+  SkeletonStockAlert,
+  SkeletonWelcomeHeader,
+  SkeletonMetric,
+  SkeletonText
+} from '../common/SkeletonLoaders';
 
 const Overview = () => {
   const { user } = useAuth();
@@ -564,87 +572,6 @@ const Overview = () => {
     );
   }
 
-  // Skeleton loading component
-  const SkeletonCard = () => (
-    <div className="card animate-pulse">
-      <div className="flex items-center">
-        <div className="flex-shrink-0">
-          <div className="h-8 w-8 bg-gray-300 rounded"></div>
-        </div>
-        <div className="ml-4 flex-1">
-          <div className="h-4 bg-gray-300 rounded w-24 mb-2"></div>
-          <div className="h-8 bg-gray-300 rounded w-16"></div>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (loading && !analytics) {
-    return (
-      <div className="space-y-6">
-        {/* Welcome Header Skeleton */}
-        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="h-8 bg-white/20 rounded w-64 mb-2"></div>
-              <div className="h-4 bg-white/20 rounded w-96 mb-2"></div>
-              <div className="h-3 bg-white/20 rounded w-48"></div>
-            </div>
-            <div className="h-10 w-10 bg-white/20 rounded-lg"></div>
-          </div>
-        </div>
-
-        {/* Stats Grid Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-
-        {/* Content Skeleton */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card animate-pulse">
-            <div className="h-6 bg-gray-300 rounded w-40 mb-4"></div>
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="h-6 w-6 bg-gray-300 rounded-full"></div>
-                    <div className="h-4 bg-gray-300 rounded w-20"></div>
-                  </div>
-                  <div className="h-4 bg-gray-300 rounded w-16"></div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="card animate-pulse">
-            <div className="h-6 bg-gray-300 rounded w-32 mb-4"></div>
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-300 rounded w-24 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-32"></div>
-                  </div>
-                  <div className="text-right">
-                    <div className="h-4 bg-gray-300 rounded w-16 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-12"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Loading indicator */}
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
-          <p className="text-gray-600 text-sm">Loading your business analytics...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Show setup required alert
   if (error?.type === 'setup_required') {
@@ -809,59 +736,63 @@ const Overview = () => {
       )}
       
       {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold mb-2">
-              Welcome back, {user?.discord_username}!
-            </h1>
-            <p className="text-builders-100">
-              Here's your business overview for {dateDisplayInfo.text}
-            </p>
-            {dateDisplayInfo.subtitle && (
-              <p className="text-builders-200 text-sm mt-1">
-                📅 {dateDisplayInfo.subtitle}
+      {loading && !analytics ? (
+        <SkeletonWelcomeHeader />
+      ) : (
+        <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg shadow-sm p-6 text-white">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">
+                Welcome back, {user?.discord_username}!
+              </h1>
+              <p className="text-builders-100">
+                Here's your business overview for {dateDisplayInfo.text}
               </p>
-            )}
-            {lastUpdated && (
-              <p className="text-builders-200 text-sm mt-1">
-                Last updated: {lastUpdated.toLocaleTimeString()}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => fetchAnalytics(true)}
-            disabled={loading}
-            className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
-            title={loading ? "Loading..." : "Refresh Data"}
-          >
-            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-        {error && (
-          <div className="mt-3 p-3 bg-red-500/20 border border-red-400/30 rounded-md">
-            <p className="text-red-100 text-sm">{error}</p>
-          </div>
-        )}
-        {analytics?.fallback_mode && (
-          <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-md">
-            <p className="text-yellow-100 text-sm">⚠️ Running in basic mode. Some features may be limited.</p>
-          </div>
-        )}
-        {analytics?.basic_mode && (
-          <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-md">
-            <p className="text-blue-100 text-sm">📊 {analytics.message}</p>
-          </div>
-        )}
-        {loading && analytics && (
-          <div className="mt-3 p-3 bg-white/20 border border-white/30 rounded-md">
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              <p className="text-white text-sm">Refreshing analytics data...</p>
+              {dateDisplayInfo.subtitle && (
+                <p className="text-builders-200 text-sm mt-1">
+                  📅 {dateDisplayInfo.subtitle}
+                </p>
+              )}
+              {lastUpdated && (
+                <p className="text-builders-200 text-sm mt-1">
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </p>
+              )}
             </div>
+            <button
+              onClick={() => fetchAnalytics(true)}
+              disabled={loading}
+              className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors duration-200 disabled:opacity-50"
+              title={loading ? "Loading..." : "Refresh Data"}
+            >
+              <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-        )}
-      </div>
+          {error && (
+            <div className="mt-3 p-3 bg-red-500/20 border border-red-400/30 rounded-md">
+              <p className="text-red-100 text-sm">{error}</p>
+            </div>
+          )}
+          {analytics?.fallback_mode && (
+            <div className="mt-3 p-3 bg-yellow-500/20 border border-yellow-400/30 rounded-md">
+              <p className="text-yellow-100 text-sm">⚠️ Running in basic mode. Some features may be limited.</p>
+            </div>
+          )}
+          {analytics?.basic_mode && (
+            <div className="mt-3 p-3 bg-blue-500/20 border border-blue-400/30 rounded-md">
+              <p className="text-blue-100 text-sm">📊 {analytics.message}</p>
+            </div>
+          )}
+          {loading && analytics && (
+            <div className="mt-3 p-3 bg-white/20 border border-white/30 rounded-md">
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <p className="text-white text-sm">Refreshing analytics data...</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Setup Progress Card (only show if not fully configured) */}
       {setupProgress.progress < 100 && (
@@ -903,9 +834,13 @@ const Overview = () => {
                 <p className="text-sm font-medium text-gray-500">
                   {dateDisplayInfo.text.includes('Yesterday') ? "Yesterday's Orders" : "Today's Orders"}
                 </p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {analyticsStats.todayOrders || '—'}
-                </p>
+                {loading && !analytics ? (
+                  <SkeletonMetric />
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {analyticsStats.todayOrders || '—'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -917,9 +852,13 @@ const Overview = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">ASIN's Sold</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {analyticsStats.activeProducts || '—'}
-                </p>
+                {loading && !analytics ? (
+                  <SkeletonMetric />
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {analyticsStats.activeProducts || '—'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -931,9 +870,13 @@ const Overview = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Low Stock Alerts</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {analyticsStats.lowStockCount || '—'}
-                </p>
+                {loading && !analytics ? (
+                  <SkeletonMetric />
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {analyticsStats.lowStockCount || '—'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -945,9 +888,13 @@ const Overview = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Restock Priority</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {analyticsStats.restockPriorityCount || '—'}
-                </p>
+                {loading && !analytics ? (
+                  <SkeletonMetric />
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {analyticsStats.restockPriorityCount || '—'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -964,10 +911,14 @@ const Overview = () => {
                 <p className="text-sm font-medium text-gray-500">
                   {dateDisplayInfo.text.includes('Yesterday') ? "Yesterday's Revenue" : "Today's Revenue"}
                 </p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {analyticsStats.yesterdayRevenue ? 
-                    `$${analyticsStats.yesterdayRevenue.toFixed(2)}` : '—'}
-                </p>
+                {loading && !analytics ? (
+                  <SkeletonMetric />
+                ) : (
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {analyticsStats.yesterdayRevenue ? 
+                      `$${analyticsStats.yesterdayRevenue.toFixed(2)}` : '—'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -983,12 +934,21 @@ const Overview = () => {
                   <p className="text-sm font-medium text-gray-500">
                     Purchase Investment (Current Month)
                   </p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    ${(purchaseInsights.summary.current_month_investment || 0).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {(purchaseInsights.summary.current_month_asins || 0)} ASINs • {(purchaseInsights.summary.current_month_units || 0)} units
-                  </p>
+                  {loading && !analytics ? (
+                    <>
+                      <SkeletonMetric />
+                      <SkeletonText className="mt-1" />
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-semibold text-gray-900">
+                        ${(purchaseInsights.summary.current_month_investment || 0).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {(purchaseInsights.summary.current_month_asins || 0)} ASINs • {(purchaseInsights.summary.current_month_units || 0)} units
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1001,10 +961,16 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Yesterday's Top Products</h3>
           <div className="space-y-3">
-            {topProducts.length > 0 ? 
+            {loading && !analytics ? (
+              // Show skeleton loaders while loading
+              [1, 2, 3, 4, 5].map(i => (
+                <SkeletonProductItem key={i} />
+              ))
+            ) : topProducts.length > 0 ? (
               topProducts.map(([asin, count], index) => (
                 <TopProductItem key={asin} asin={asin} count={count} index={index} />
-              )) : (
+              ))
+            ) : (
               <div className="text-center py-8">
                 <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 text-sm">
@@ -1026,10 +992,16 @@ const Overview = () => {
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
           <div className="space-y-3">
-            {stockAlertsData.map((item) => (
-              <StockAlertItem key={item.asin} item={item} />
-            ))}
-            {!loading && stockAlertsData.length === 0 && (
+            {loading && !analytics ? (
+              // Show skeleton loaders while loading
+              [1, 2, 3, 4, 5].map(i => (
+                <SkeletonStockAlert key={i} />
+              ))
+            ) : stockAlertsData.length > 0 ? (
+              stockAlertsData.map((item) => (
+                <StockAlertItem key={item.asin} item={item} />
+              ))
+            ) : (
               <p className="text-gray-500 text-sm">No stock alerts</p>
             )}
           </div>

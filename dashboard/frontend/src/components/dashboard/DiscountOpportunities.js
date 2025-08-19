@@ -16,6 +16,49 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 
+// Simple component to display product images with fallback
+const ProductImage = ({ asin, productName }) => {
+  const [imageError, setImageError] = useState(false);
+
+  // Reset error state when ASIN changes
+  useEffect(() => {
+    console.log(`[ProductImage] Loading image for ASIN: ${asin}`);
+    setImageError(false);
+  }, [asin]);
+
+  const handleImageError = (e) => {
+    console.log(`[ProductImage] Failed to load image for ASIN: ${asin}`);
+    console.log(`[ProductImage] Failed URL: ${e.target.src}`);
+    setImageError(true);
+  };
+
+  const handleImageLoad = () => {
+    console.log(`[ProductImage] ✅ Successfully loaded image for ASIN: ${asin}`);
+  };
+
+  if (imageError) {
+    return (
+      <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center" title={`No image available for ${asin}`}>
+        <Package className="h-6 w-6 text-gray-600" />
+      </div>
+    );
+  }
+
+  // Use the most reliable Amazon image endpoint
+  const imageUrl = `https://m.media-amazon.com/images/I/${asin}._AC_SL160_.jpg`;
+
+  return (
+    <img
+      src={imageUrl}
+      alt={productName || `Product ${asin}`}
+      className="h-12 w-12 rounded-lg object-cover bg-gray-100"
+      onError={handleImageError}
+      onLoad={handleImageLoad}
+      loading="lazy"
+    />
+  );
+};
+
 const DiscountOpportunities = () => {
   const [activeTab, setActiveTab] = useState('opportunities');
   const [opportunities, setOpportunities] = useState([]);
@@ -311,18 +354,7 @@ const DiscountOpportunities = () => {
                           <td className="px-3 py-3 whitespace-nowrap">
                             <div className="flex items-center">
                               <div className="flex-shrink-0 h-12 w-12">
-                                <img
-                                  src={`https://images-na.ssl-images-amazon.com/images/P/${opportunity.asin}.01.THUMBZZZ.jpg`}
-                                  alt={opportunity.product_name || opportunity.asin}
-                                  className="h-12 w-12 rounded-lg object-cover bg-gray-100"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.nextElementSibling.style.display = 'flex';
-                                  }}
-                                />
-                                <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center" style={{display: 'none'}}>
-                                  <Package className="h-6 w-6 text-gray-600" />
-                                </div>
+                                <ProductImage asin={opportunity.asin} productName={opportunity.product_name} />
                               </div>
                               <div className="ml-4">
                                 <div className="text-sm font-medium text-gray-900">

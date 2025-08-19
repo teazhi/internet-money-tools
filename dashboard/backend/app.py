@@ -7208,6 +7208,9 @@ def fetch_discount_email_alerts():
             print(f"[DEBUG] Checking user: email={user_email}, has_tokens={has_tokens}")
             if user_email == monitor_email and has_tokens:
                 admin_user_record = user
+                print(f"[DEBUG] ✅ FOUND MATCHING USER: {user_email}")
+                print(f"[DEBUG] User Discord ID: {user.get('discord_id')}")
+                print(f"[DEBUG] User has Google linked: {user.get('google_linked', False)}")
                 break
         
         if not admin_user_record:
@@ -7233,6 +7236,11 @@ def fetch_discount_email_alerts():
         print(f"[DEBUG] Date string (slash): {date_str_slash}")
         print(f"[DEBUG] Date string (dash): {date_str_dash}")
         
+        # Also show current time for debugging
+        now_utc = datetime.now(pytz.UTC)
+        print(f"[DEBUG] Current time (UTC): {now_utc}")
+        print(f"[DEBUG] Timezone info - Looking for emails newer than {cutoff_date}")
+        
         # Create search query for Gmail - try with dash format first
         query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_dash}'
         
@@ -7240,6 +7248,27 @@ def fetch_discount_email_alerts():
         
         # First, test basic Gmail API access with a simple query
         print("[DEBUG] Testing basic Gmail API access...")
+        print(f"[DEBUG] About to search Gmail for user: {admin_user_record.get('email')}")
+        
+        # Try to get the Gmail profile to verify which account we're accessing
+        try:
+            access_token = refresh_google_token(admin_user_record)
+            if access_token:
+                import requests
+                profile_response = requests.get(
+                    'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    gmail_email = profile_data.get('emailAddress')
+                    print(f"[DEBUG] 🔍 ACTUALLY SEARCHING GMAIL ACCOUNT: {gmail_email}")
+                    print(f"[DEBUG] Total messages in account: {profile_data.get('messagesTotal', 'Unknown')}")
+                else:
+                    print(f"[DEBUG] Could not get Gmail profile: {profile_response.status_code}")
+        except Exception as e:
+            print(f"[DEBUG] Error getting Gmail profile: {e}")
+        
         basic_query = 'is:inbox'
         basic_results = search_gmail_messages(admin_user_record, basic_query, max_results=5)
         if basic_results and basic_results.get('messages'):

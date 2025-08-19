@@ -7232,15 +7232,59 @@ def fetch_discount_email_alerts():
         
         print(f"Gmail search query: {query}")
         
+        # First, test basic Gmail API access with a simple query
+        print("[DEBUG] Testing basic Gmail API access...")
+        basic_query = 'is:inbox'
+        basic_results = search_gmail_messages(admin_user_record, basic_query, max_results=5)
+        if basic_results and basic_results.get('messages'):
+            print(f"[DEBUG] Gmail API working - found {len(basic_results['messages'])} inbox messages")
+        else:
+            print("[DEBUG] Gmail API issue - no inbox messages found")
+        
         # Search for messages
         search_results = search_gmail_messages(admin_user_record, query, max_results=100)
         if not search_results:
-            print("No search results from Gmail API")
+            print("[DEBUG] No search results from Gmail API")
+            # Try a broader search to see what emails exist
+            print("[DEBUG] Trying broader search...")
+            broader_query = f'after:{date_str}'
+            print(f"[DEBUG] Broader query: {broader_query}")
+            broader_results = search_gmail_messages(admin_user_record, broader_query, max_results=10)
+            if broader_results and broader_results.get('messages'):
+                print(f"[DEBUG] Found {len(broader_results['messages'])} emails with broader search")
+                # Get details of first few emails to check senders
+                for i, msg in enumerate(broader_results['messages'][:3]):
+                    msg_details = get_gmail_message(admin_user_record, msg.get('id'))
+                    if msg_details:
+                        content = extract_email_content(msg_details)
+                        if content:
+                            print(f"[DEBUG] Email {i+1}: From: {content.get('sender', 'Unknown')}, Subject: {content.get('subject', 'No subject')[:50]}...")
+            else:
+                print("[DEBUG] No emails found even with broader search")
             return fetch_mock_discount_alerts()
         
         messages = search_results.get('messages', [])
         if not messages:
             print("No messages found in search results")
+            # Try searching for any Distill emails without date filter
+            print("[DEBUG] Trying search without date filter...")
+            no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
+            no_date_results = search_gmail_messages(admin_user_record, no_date_query, max_results=5)
+            if no_date_results and no_date_results.get('messages'):
+                print(f"[DEBUG] Found {len(no_date_results['messages'])} Distill emails without date filter")
+            else:
+                print("[DEBUG] No Distill emails found even without date filter")
+                # Try searching for 'distill' in subject
+                distill_query = 'subject:distill'
+                distill_results = search_gmail_messages(admin_user_record, distill_query, max_results=5)
+                if distill_results and distill_results.get('messages'):
+                    print(f"[DEBUG] Found {len(distill_results['messages'])} emails with 'distill' in subject")
+                    # Check the first one to see the actual sender
+                    first_msg = get_gmail_message(admin_user_record, distill_results['messages'][0].get('id'))
+                    if first_msg:
+                        content = extract_email_content(first_msg)
+                        if content:
+                            print(f"[DEBUG] Actual sender of Distill email: {content.get('sender')}")
             return fetch_mock_discount_alerts()
         
         print(f"Found {len(messages)} messages from Gmail search")

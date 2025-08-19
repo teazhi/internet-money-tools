@@ -1,19 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import { 
   TrendingUp, 
   ShoppingCart,
   Target,
-  BarChart3,
-  ArrowLeft
+  BarChart3
 } from 'lucide-react';
-import SmartRestockRecommendations from './SmartRestockRecommendations';
-import RetailerLeadAnalysis from './RetailerLeadAnalysis';
-import DiscountOpportunities from './DiscountOpportunities';
-import AllProductAnalytics from './AllProductAnalytics';
 
 const EnhancedAnalytics = () => {
-  const [selectedAnalytic, setSelectedAnalytic] = useState(null);
-
   const analytics = [
     {
       id: 'smart-restock',
@@ -21,7 +15,7 @@ const EnhancedAnalytics = () => {
       description: 'AI-powered inventory recommendations based on sales velocity and trends',
       icon: TrendingUp,
       color: 'bg-blue-500',
-      component: SmartRestockRecommendations
+      href: '/dashboard/smart-restock'
     },
     {
       id: 'lead-analysis',
@@ -29,7 +23,7 @@ const EnhancedAnalytics = () => {
       description: 'Analyze competitor prices and identify buying opportunities',
       icon: ShoppingCart,
       color: 'bg-green-500',
-      component: RetailerLeadAnalysis
+      href: '/dashboard/lead-analysis'
     },
     {
       id: 'discount-opportunities',
@@ -37,7 +31,7 @@ const EnhancedAnalytics = () => {
       description: 'Find products with pricing opportunities and profit margins',
       icon: Target,
       color: 'bg-purple-500',
-      component: DiscountOpportunities
+      href: '/dashboard/discount-opportunities'
     },
     {
       id: 'all-product-analytics',
@@ -45,40 +39,9 @@ const EnhancedAnalytics = () => {
       description: 'Comprehensive analytics dashboard for all your products',
       icon: BarChart3,
       color: 'bg-orange-500',
-      component: AllProductAnalytics
+      href: '/dashboard/all-product-analytics'
     }
   ];
-
-  const handleSelectAnalytic = (analytic) => {
-    if (analytic.component) {
-      setSelectedAnalytic(analytic);
-    }
-  };
-
-  const handleBackToMenu = () => {
-    setSelectedAnalytic(null);
-  };
-
-  if (selectedAnalytic) {
-    const SelectedComponent = selectedAnalytic.component;
-    return (
-      <div className="space-y-6">
-        {/* Back Button */}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={handleBackToMenu}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            <span>Back to Analytics Menu</span>
-          </button>
-        </div>
-
-        {/* Selected Component */}
-        <SelectedComponent />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -95,16 +58,16 @@ const EnhancedAnalytics = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {analytics.map((analytic) => {
           const Icon = analytic.icon;
-          const isAvailable = analytic.component !== null;
+          const isAvailable = analytic.href !== null;
           
           return (
-            <div
+            <Link
               key={analytic.id}
-              onClick={() => isAvailable && handleSelectAnalytic(analytic)}
-              className={`relative bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 ${
+              to={analytic.href}
+              className={`group relative bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 ${
                 isAvailable 
                   ? 'hover:shadow-md hover:border-gray-300 cursor-pointer' 
-                  : 'opacity-50 cursor-not-allowed'
+                  : 'opacity-50 cursor-not-allowed pointer-events-none'
               }`}
             >
               {/* Icon */}
@@ -124,26 +87,18 @@ const EnhancedAnalytics = () => {
 
               {/* Status Badge */}
               <div className="absolute top-4 right-4">
-                {isAvailable ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Available
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                    Coming Soon
-                  </span>
-                )}
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Available
+                </span>
               </div>
 
               {/* Hover Effect Arrow */}
-              {isAvailable && (
-                <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                    <ArrowLeft className="h-3 w-3 text-gray-600 transform rotate-180" />
-                  </div>
+              <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                  <div className="h-3 w-3 border-r-2 border-t-2 border-gray-600 transform rotate-45" />
                 </div>
-              )}
-            </div>
+              </div>
+            </Link>
           );
         })}
       </div>

@@ -21,6 +21,8 @@ from werkzeug.utils import secure_filename
 import base64
 import secrets
 from cryptography.fernet import Fernet
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Load environment variables
 try:
@@ -6077,13 +6079,25 @@ def analyze_discount_opportunities():
         data = request.get_json() or {}
         retailer_filter = data.get('retailer', '')
         
+        # Get user's current analytics data
+        discord_id = session['discord_id']
+        
+        # Check cache first
+        cache_key = f"discount_opportunities_{discord_id}_{retailer_filter}"
+        if cache_key in analytics_cache:
+            cache_entry = analytics_cache[cache_key]
+            # Check if cache is still valid (5 minutes)
+            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=5):
+                print(f"[DEBUG] Returning cached discount opportunities for user {discord_id}")
+                return jsonify(cache_entry['data'])
+            else:
+                print(f"[DEBUG] Cache expired for discount opportunities, regenerating...")
+                del analytics_cache[cache_key]
+        
         # Log environment configuration
         print(f"[DEBUG] DISCOUNT_MONITOR_EMAIL: {DISCOUNT_MONITOR_EMAIL}")
         print(f"[DEBUG] DISCOUNT_SENDER_EMAIL: {DISCOUNT_SENDER_EMAIL}")
         print(f"[DEBUG] Days back: {get_discount_email_days_back()}")
-        
-        # Get user's current analytics data
-        discord_id = session['discord_id']
         user = get_user_record(discord_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -6172,8 +6186,9 @@ def analyze_discount_opportunities():
         if enhanced_analytics:
             print(f"[DEBUG] Sample inventory ASINs: {list(enhanced_analytics.keys())[:5]}")
         
-        # Process email alerts
-        for email_alert in email_alerts:
+        # Process email alerts using multithreading
+        def process_email_alert(email_alert):
+            """Process a single email alert and return opportunity data"""
             retailer = email_alert['retailer']
             asin = email_alert['asin']
             
@@ -6182,7 +6197,7 @@ def analyze_discount_opportunities():
             # Skip if retailer filter is specified and doesn't match
             if retailer_filter and retailer_filter.lower() not in retailer.lower():
                 print(f"[DEBUG] Skipping due to retailer filter: {retailer_filter}")
-                continue
+                return None
             
             # Check if this ASIN is in user's inventory
             if asin in enhanced_analytics:
@@ -6246,7 +6261,7 @@ def analyze_discount_opportunities():
                     'status': status,
                     'needs_restock': needs_restock
                 }
-                opportunities.append(opportunity)
+                return opportunity
             else:
                 # ASIN not in inventory - still show it but mark as not tracked
                 print(f"[DEBUG] ASIN {asin} NOT found in inventory - marking as 'Not Tracked'")
@@ -6267,7 +6282,26 @@ def analyze_discount_opportunities():
                     'status': 'Not Tracked',
                     'needs_restock': False
                 }
-                opportunities.append(opportunity)
+                return opportunity
+        
+        # Use ThreadPoolExecutor to process alerts in parallel
+        max_workers = min(10, len(email_alerts))  # Limit to 10 threads maximum
+        print(f"[DEBUG] Using {max_workers} threads to process {len(email_alerts)} alerts")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all email alerts for processing
+            future_to_alert = {executor.submit(process_email_alert, alert): alert for alert in email_alerts}
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_alert):
+                try:
+                    opportunity = future.result()
+                    if opportunity is not None:  # Skip filtered alerts
+                        opportunities.append(opportunity)
+                except Exception as e:
+                    alert = future_to_alert[future]
+                    print(f"[ERROR] Failed to process alert for ASIN {alert.get('asin', 'unknown')}: {str(e)}")
+                    # Continue processing other alerts even if one fails
         
         # Sort by restock need first, then by priority score
         def sort_key(x):
@@ -6291,7 +6325,7 @@ def analyze_discount_opportunities():
         print(f"[DEBUG] Final opportunities count: {len(opportunities)}")
         print(f"[DEBUG] Breakdown - Restock Needed: {restock_needed_count}, Not Needed: {not_needed_count}, Not Tracked: {not_tracked_count}")
         
-        return jsonify({
+        result = {
             'opportunities': opportunities,
             'total_alerts_processed': len(email_alerts),
             'matched_products': len(opportunities),
@@ -6301,7 +6335,16 @@ def analyze_discount_opportunities():
             'retailer_filter': retailer_filter,
             'analyzed_at': datetime.now(pytz.UTC).isoformat(),
             'message': f'Found {len(opportunities)} discount leads ({restock_needed_count} need restocking, {not_needed_count} not needed, {not_tracked_count} not tracked)'
-        })
+        }
+        
+        # Cache the result for 5 minutes
+        analytics_cache[cache_key] = {
+            'data': result,
+            'timestamp': datetime.now()
+        }
+        print(f"[DEBUG] Cached discount opportunities for user {discord_id}")
+        
+        return jsonify(result)
         
     except Exception as e:
         import traceback

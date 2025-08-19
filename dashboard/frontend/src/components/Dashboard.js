@@ -27,6 +27,10 @@ import {
 
 import Overview from './dashboard/Overview';
 import EnhancedAnalytics from './dashboard/EnhancedAnalytics';
+import SmartRestockRecommendations from './dashboard/SmartRestockRecommendations';
+import RetailerLeadAnalysis from './dashboard/RetailerLeadAnalysis';
+import DiscountOpportunities from './dashboard/DiscountOpportunities';
+import AllProductAnalytics from './dashboard/AllProductAnalytics';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 import FileManager from './dashboard/FileManager';
@@ -109,7 +113,7 @@ const Dashboard = () => {
 
   const navigation = [
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
-    { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' },
+    { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics') },
     { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
     { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
@@ -438,6 +442,10 @@ const Dashboard = () => {
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
+              <Route path="/smart-restock" element={<SmartRestockRecommendations />} />
+              <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
+              <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
+              <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
               <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
               <Route path="/files" element={<FileManager />} />

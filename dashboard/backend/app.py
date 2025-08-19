@@ -8040,9 +8040,11 @@ def fetch_discount_email_alerts():
             
             # Parse email subject to extract retailer and ASIN
             subject = email_content.get('subject', '')
+            print(f"[DEBUG] Parsing subject: {subject}")
             parsed_alert = parse_email_subject(subject)
             
             if parsed_alert:
+                print(f"[DEBUG] Successfully parsed - Retailer: {parsed_alert['retailer']}, ASIN: {parsed_alert['asin']}")
                 email_alerts.append({
                     'retailer': parsed_alert['retailer'],
                     'asin': parsed_alert['asin'],
@@ -8054,6 +8056,43 @@ def fetch_discount_email_alerts():
                 })
             else:
                 print(f"[DEBUG] Could not parse subject: {subject}")
+                # Try to extract ASIN from email body if subject parsing fails
+                html_content = email_content.get('html_content', '')
+                text_content = email_content.get('text_content', '')
+                
+                # Look for ASIN pattern in content
+                import re
+                asin_pattern = r'[B-Z][0-9A-Z]{9}'
+                
+                # Try HTML content first
+                asin_match = re.search(asin_pattern, html_content)
+                if not asin_match and text_content:
+                    asin_match = re.search(asin_pattern, text_content)
+                
+                if asin_match:
+                    asin = asin_match.group()
+                    print(f"[DEBUG] Found ASIN in email body: {asin}")
+                    
+                    # Try to identify retailer from subject or content
+                    retailer = "Unknown"
+                    subject_lower = subject.lower()
+                    for potential_retailer in ['walmart', 'target', 'vitacost', 'lowes', 'home depot', 'cvs', 'amazon']:
+                        if potential_retailer in subject_lower or potential_retailer in html_content.lower():
+                            retailer = potential_retailer.title()
+                            break
+                    
+                    email_alerts.append({
+                        'retailer': retailer,
+                        'asin': asin,
+                        'note': f"From subject: {subject[:50]}...",
+                        'subject': subject,
+                        'html_content': html_content,
+                        'alert_time': iso_date,
+                        'message_id': message_id
+                    })
+                    print(f"[DEBUG] Created fallback alert - Retailer: {retailer}, ASIN: {asin}")
+                else:
+                    print(f"[DEBUG] No ASIN found in email body either")
         
         print(f"[DEBUG] Processed {processed_count} emails, filtered out {date_filtered_count} by date")
         

@@ -1867,6 +1867,12 @@ def get_discount_gmail_status():
             'is_system_wide': True
         })
 
+@app.route('/admin/gmail-setup')
+@admin_required
+def gmail_setup_page():
+    """Admin page for setting up Gmail for discount monitoring"""
+    return send_from_directory('.', 'gmail-setup.html')
+
 @app.route('/api/google/spreadsheets')
 @login_required
 def list_spreadsheets():

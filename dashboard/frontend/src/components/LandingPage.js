@@ -147,94 +147,152 @@ const LandingPage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-20 pb-12 bg-gradient-to-br from-slate-900 to-slate-800">
+      <section className="pt-24 pb-20 bg-gradient-to-br from-slate-900 to-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="mb-6">
-              <div className="inline-flex items-center px-3 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
+            <div className="mb-8">
+              <div className="inline-flex items-center px-4 py-2 bg-amber-100 text-amber-800 text-sm font-medium rounded-full">
                 <span className="w-2 h-2 bg-amber-400 rounded-full mr-2"></span>
                 Trusted by 1000+ Amazon Sellers
               </div>
             </div>
             
-            <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
               Your Amazon Business
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600"> Command Center</span>
+              <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600">Command Center</span>
             </h1>
-            <p className="text-lg text-slate-300 mb-8 max-w-2xl mx-auto">
+            <p className="text-xl md:text-2xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
               Professional dashboard for Amazon sellers. Smart analytics, inventory management, and automated workflows - all in one powerful platform.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mb-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
               <Link 
                 to="/login"
-                className="inline-flex items-center bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-6 py-3 rounded-lg font-medium shadow-lg shadow-amber-500/25 transition-all"
+                className="inline-flex items-center bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-8 py-4 rounded-lg font-semibold text-lg shadow-lg shadow-amber-500/25 transition-all hover:scale-105"
               >
                 Start Free Trial
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
-              <button className="text-slate-300 hover:text-white font-medium px-6 py-3 transition-colors">
+              <button className="text-slate-300 hover:text-white font-semibold px-8 py-4 text-lg transition-colors">
                 View Demo
               </button>
             </div>
 
             {/* Dashboard Preview */}
-            <div className="relative max-w-4xl mx-auto mt-8">
-              <div className="bg-white rounded-lg shadow-2xl p-2">
-                <div className="bg-gray-100 rounded-lg overflow-hidden">
-                  {/* Mock dashboard header */}
-                  <div className="bg-white border-b border-gray-200 px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-900">Overview</h3>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-xs text-gray-600">Live Data</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Mock dashboard content */}
-                  <div className="p-4 bg-gray-50">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                      <div className="card">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="caption-text">Total Revenue</p>
-                            <p className="heading-md text-green-600">$24,582</p>
-                          </div>
-                          <TrendingUp className="h-4 w-4 text-green-500" />
+            <div className="relative max-w-6xl mx-auto">
+              <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
+                {/* Mock Sidebar */}
+                <div className="flex">
+                  <div className="w-16 md:w-64 bg-gradient-to-b from-slate-900 to-slate-800 flex-shrink-0">
+                    <div className="p-4">
+                      <div className="flex items-center">
+                        <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg shadow-lg">
+                          <ShoppingCart className="h-4 w-4 text-white" />
                         </div>
-                      </div>
-                      <div className="card">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="caption-text">Active Listings</p>
-                            <p className="heading-md">342</p>
-                          </div>
-                          <Package className="h-4 w-4 text-blue-500" />
-                        </div>
-                      </div>
-                      <div className="card">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="caption-text">Reimbursements</p>
-                            <p className="heading-md text-amber-600">$1,247</p>
-                          </div>
-                          <TrendingDown className="h-4 w-4 text-amber-500" />
+                        <div className="ml-3 hidden md:block">
+                          <span className="text-lg font-bold text-white">DMS</span>
+                          <p className="text-xs text-slate-400">Dashboard</p>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="card">
-                      <h4 className="heading-sm mb-3">Recent Activity</h4>
-                      <div className="space-y-2">
-                        {[1,2,3].map(i => (
-                          <div key={i} className="flex items-center space-x-3 py-1">
-                            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                            <span className="body-text text-gray-600">Smart restock recommendation generated</span>
-                            <span className="caption-text">2min ago</span>
+                    <nav className="px-3 space-y-1">
+                      <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-3 py-2 rounded-lg flex items-center">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">Overview</span>
+                      </div>
+                      <div className="text-slate-300 px-3 py-2 rounded-lg flex items-center">
+                        <Package className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">Smart Restock</span>
+                      </div>
+                      <div className="text-slate-300 px-3 py-2 rounded-lg flex items-center">
+                        <TrendingDown className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">Reimbursements</span>
+                      </div>
+                    </nav>
+                  </div>
+                  
+                  {/* Main Content */}
+                  <div className="flex-1 min-h-96">
+                    {/* Header */}
+                    <div className="bg-white border-b border-gray-200 px-6 py-4">
+                      <h2 className="text-lg font-semibold text-gray-900">Overview</h2>
+                    </div>
+                    
+                    {/* Welcome Header */}
+                    <div className="p-6">
+                      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-6 text-white mb-6">
+                        <h3 className="text-xl font-bold mb-2">Welcome back, John!</h3>
+                        <p className="text-builders-100">Here's your business overview for today</p>
+                        <p className="text-builders-200 text-sm mt-1">Last updated: 2:35 PM</p>
+                      </div>
+                      
+                      {/* Stats Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="card">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="caption-text">Today's Orders</p>
+                              <p className="heading-lg text-green-600">47</p>
+                              <p className="text-xs text-green-600">↗ +12% from yesterday</p>
+                            </div>
+                            <div className="p-2 bg-green-50 rounded-lg">
+                              <ShoppingCart className="h-5 w-5 text-green-600" />
+                            </div>
                           </div>
-                        ))}
+                        </div>
+                        <div className="card">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="caption-text">Revenue</p>
+                              <p className="heading-lg">$24,582</p>
+                              <p className="text-xs text-blue-600">↗ +8% this week</p>
+                            </div>
+                            <div className="p-2 bg-blue-50 rounded-lg">
+                              <TrendingUp className="h-5 w-5 text-blue-600" />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="card">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="caption-text">Reimbursements</p>
+                              <p className="heading-lg text-amber-600">$1,247</p>
+                              <p className="text-xs text-amber-600">3 pending claims</p>
+                            </div>
+                            <div className="p-2 bg-amber-50 rounded-lg">
+                              <TrendingDown className="h-5 w-5 text-amber-600" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Stock Alerts */}
+                      <div className="card">
+                        <h4 className="heading-sm mb-4">Stock Alerts</h4>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                            <div>
+                              <p className="emphasis-text">B08XYZ123</p>
+                              <p className="caption-text">Wireless Headphones - Black</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-red-600 font-medium">3 days left</p>
+                              <p className="caption-text">Stock: 12 • Reorder: 50</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                            <div>
+                              <p className="emphasis-text">B07ABC456</p>
+                              <p className="caption-text">Phone Case - Clear</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-amber-600 font-medium">7 days left</p>
+                              <p className="caption-text">Stock: 25 • Reorder: 100</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

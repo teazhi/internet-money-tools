@@ -7265,24 +7265,16 @@ def fetch_discount_email_alerts():
             search_results = search_gmail_messages(admin_user_record, query_newer, max_results=100)
         
         if not search_results:
-            print("[DEBUG] No search results from Gmail API")
-            # Try a broader search to see what emails exist
-            print("[DEBUG] Trying broader search...")
-            broader_query = f'after:{date_str_dash}'
-            print(f"[DEBUG] Broader query: {broader_query}")
-            broader_results = search_gmail_messages(admin_user_record, broader_query, max_results=10)
-            if broader_results and broader_results.get('messages'):
-                print(f"[DEBUG] Found {len(broader_results['messages'])} emails with broader search")
-                # Get details of first few emails to check senders
-                for i, msg in enumerate(broader_results['messages'][:3]):
-                    msg_details = get_gmail_message(admin_user_record, msg.get('id'))
-                    if msg_details:
-                        content = extract_email_content(msg_details)
-                        if content:
-                            print(f"[DEBUG] Email {i+1}: From: {content.get('sender', 'Unknown')}, Subject: {content.get('subject', 'No subject')[:50]}...")
-            else:
-                print("[DEBUG] No emails found even with broader search")
-            return fetch_mock_discount_alerts()
+            print("[DEBUG] No search results from Gmail API with date filtering")
+            print("[DEBUG] Falling back to fetching all Distill emails and filtering client-side...")
+            
+            # Fetch all Distill emails without date filter, then filter client-side
+            no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
+            search_results = search_gmail_messages(admin_user_record, no_date_query, max_results=100)
+            
+            if not search_results:
+                print("[DEBUG] No Distill emails found at all")
+                return fetch_mock_discount_alerts()
         
         messages = search_results.get('messages', [])
         if not messages:
@@ -7311,6 +7303,8 @@ def fetch_discount_email_alerts():
         print(f"Found {len(messages)} messages from Gmail search")
         
         email_alerts = []
+        processed_count = 0
+        date_filtered_count = 0
         
         # Process each message
         for message_info in messages[:50]:  # Limit to 50 most recent
@@ -7328,20 +7322,37 @@ def fetch_discount_email_alerts():
             if not email_content:
                 continue
             
+            processed_count += 1
+            
             # Verify sender is from alert service
             sender = email_content.get('sender', '')
             if DISCOUNT_SENDER_EMAIL not in sender:
                 continue
+            
+            # Convert Gmail date to ISO format and check if within date range
+            gmail_date = email_content.get('date', '')
+            iso_date = convert_gmail_date_to_iso(gmail_date)
+            
+            # Client-side date filtering
+            try:
+                from email.utils import parsedate_to_datetime
+                if gmail_date:
+                    email_datetime = parsedate_to_datetime(gmail_date)
+                    if email_datetime < cutoff_date:
+                        print(f"[DEBUG] Filtering out email from {email_datetime} (before cutoff {cutoff_date})")
+                        date_filtered_count += 1
+                        continue
+                    else:
+                        print(f"[DEBUG] Including email from {email_datetime} (after cutoff {cutoff_date})")
+            except Exception as e:
+                print(f"[DEBUG] Date parsing error for {gmail_date}: {e}")
+                # Include email if we can't parse the date
             
             # Parse email subject to extract retailer and ASIN
             subject = email_content.get('subject', '')
             parsed_alert = parse_email_subject(subject)
             
             if parsed_alert:
-                # Convert Gmail date to ISO format
-                gmail_date = email_content.get('date', '')
-                iso_date = convert_gmail_date_to_iso(gmail_date)
-                
                 email_alerts.append({
                     'retailer': parsed_alert['retailer'],
                     'asin': parsed_alert['asin'],
@@ -7351,6 +7362,10 @@ def fetch_discount_email_alerts():
                     'alert_time': iso_date,
                     'message_id': message_id
                 })
+            else:
+                print(f"[DEBUG] Could not parse subject: {subject}")
+        
+        print(f"[DEBUG] Processed {processed_count} emails, filtered out {date_filtered_count} by date")
         
         print(f"Processed {len(email_alerts)} email alerts")
         

@@ -4,7 +4,6 @@ import {
   Package, 
   RefreshCw, 
   AlertCircle, 
-  Calendar,
   DollarSign,
   ExternalLink,
   Download,
@@ -70,14 +69,11 @@ const ExpectedArrivals = () => {
   const exportToCSV = () => {
     if (!missingListings.length) return;
 
-    const headers = ['ASIN', 'Product Name', 'Qty Purchased', 'Purchase Count', 'Last Purchase', 'Avg COGS', 'Total Cost', 'Source Worksheets', 'Status'];
+    const headers = ['ASIN', 'Product Name', 'Last Purchase', 'Total Cost', 'Source Worksheets', 'Status'];
     const rows = missingListings.map(item => [
       item.asin,
       item.product_name || '',
-      item.quantity_purchased,
-      item.purchase_count,
       formatDate(item.last_purchase_date),
-      item.avg_cogs?.toFixed(2) || '0.00',
       item.total_cost?.toFixed(2) || '0.00',
       item.source_worksheets?.join('; ') || '',
       item.status || 'No Amazon listing created'
@@ -153,22 +149,13 @@ const ExpectedArrivals = () => {
       {missingListings.length > 0 && (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
                 <Package className="h-8 w-8 text-red-500" />
                 <div className="ml-4">
                   <div className="text-sm font-medium text-gray-600">Missing Listings</div>
                   <div className="text-2xl font-bold text-gray-900">{summary.total_items}</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <Calendar className="h-8 w-8 text-green-500" />
-                <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-600">Total Quantity</div>
-                  <div className="text-2xl font-bold text-gray-900">{summary.total_quantity}</div>
                 </div>
               </div>
             </div>
@@ -218,16 +205,7 @@ const ExpectedArrivals = () => {
                       Product Name
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Qty Purchased
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Purchase Count
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Last Purchase
-                    </th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Avg COGS
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Total Cost
@@ -271,23 +249,8 @@ const ExpectedArrivals = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="text-sm font-medium text-gray-900">
-                          {item.quantity_purchased}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-sm text-gray-600">
-                          {item.purchase_count} {item.purchase_count === 1 ? 'purchase' : 'purchases'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
                         <span className="text-sm text-gray-600">
                           {formatDate(item.last_purchase_date)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-sm font-medium text-gray-900">
-                          {formatCurrency(item.avg_cogs)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">

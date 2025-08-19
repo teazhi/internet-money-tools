@@ -2,17 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Target, 
   TrendingDown, 
-  BarChart3,
   Percent,
   AlertTriangle,
   ExternalLink,
   Package,
   Clock,
-  TrendingUp,
   RefreshCw,
-  Mail,
-  ShoppingCart,
-  Calendar
+  Mail
 } from 'lucide-react';
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
@@ -118,6 +114,7 @@ const DiscountOpportunities = () => {
     if (activeTab === 'opportunities') {
       fetchOpportunities();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, retailerFilter]);
 
   const getPriorityColor = (priority) => {

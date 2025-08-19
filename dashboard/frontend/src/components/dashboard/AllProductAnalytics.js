@@ -3,7 +3,6 @@ import {
   BarChart3, 
   Package, 
   TrendingUp,
-  PieChart,
   Activity,
   AlertTriangle
 } from 'lucide-react';

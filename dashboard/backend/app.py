@@ -4,6 +4,7 @@ import os
 import json
 import requests
 import boto3
+from botocore.exceptions import ClientError
 from datetime import datetime, timedelta, date
 import pytz
 import uuid

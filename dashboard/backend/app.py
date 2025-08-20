@@ -8803,11 +8803,14 @@ def internal_error(error):
     """Handle 500 errors"""
     return jsonify({'error': 'Internal server error'}), 500
 
-# Product image caching and rate limiting
+# Product image caching and queue system
 product_image_cache = {}
 IMAGE_CACHE_EXPIRY_HOURS = 24
+image_queue = []
+queue_lock = threading.Lock()
+queue_worker_running = False
 last_amazon_request_time = 0
-MIN_REQUEST_INTERVAL = 1.0  # Minimum 1 second between requests
+MIN_REQUEST_INTERVAL = 5.0  # Much longer interval - 5 seconds between requests
 
 import time
 import random
@@ -9002,10 +9005,80 @@ def fetch_amazon_page_with_retry(asin, max_retries=2):
     print(f"All attempts failed for {asin}")
     return None
 
+def queue_worker():
+    """Background worker that processes image requests one at a time with long delays"""
+    global queue_worker_running, image_queue, product_image_cache
+    
+    while queue_worker_running:
+        try:
+            with queue_lock:
+                if not image_queue:
+                    time.sleep(1)
+                    continue
+                asin = image_queue.pop(0)
+            
+            print(f"Processing queued image request for {asin}")
+            
+            # Check if already cached while in queue
+            cache_key = f"image_{asin}"
+            if cache_key in product_image_cache:
+                cached_data = product_image_cache[cache_key]
+                if cached_data.get('timestamp') and (datetime.now() - cached_data['timestamp']).total_seconds() < IMAGE_CACHE_EXPIRY_HOURS * 3600:
+                    continue
+            
+            # Try to fetch the image with very conservative approach
+            response = fetch_amazon_page_with_retry(asin, max_retries=1)
+            
+            if response:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Use your identified selector
+                img_tag_wrapper = soup.select_one('#imgTagWrapperId')
+                if img_tag_wrapper:
+                    img_elements = img_tag_wrapper.select('img')
+                    for img in img_elements:
+                        for attr in ['data-old-hires', 'data-a-hires', 'src', 'data-src']:
+                            url = img.get(attr)
+                            if url and url.startswith('http'):
+                                product_image_cache[cache_key] = {
+                                    'image_url': url,
+                                    'timestamp': datetime.now()
+                                }
+                                print(f"Successfully cached image for {asin}")
+                                break
+                        if cache_key in product_image_cache:
+                            break
+            
+            # Long delay between requests to avoid any detection
+            time.sleep(random.uniform(8, 15))
+            
+        except Exception as e:
+            print(f"Queue worker error for {asin}: {str(e)}")
+            time.sleep(5)
+
+def start_queue_worker():
+    """Start the background queue worker"""
+    global queue_worker_running
+    if not queue_worker_running:
+        queue_worker_running = True
+        worker_thread = threading.Thread(target=queue_worker, daemon=True)
+        worker_thread.start()
+        print("Image queue worker started")
+
+def stop_queue_worker():
+    """Stop the background queue worker"""
+    global queue_worker_running
+    queue_worker_running = False
+    print("Image queue worker stopped")
+
+# Start the queue worker when the module loads
+start_queue_worker()
+
 @app.route('/api/product-image/<asin>', methods=['GET'])
 @login_required
 def get_product_image(asin):
-    """Get product image URL from Amazon with caching"""
+    """Get product image URL with queue-based background processing"""
     try:
         # Check cache first
         cache_key = f"image_{asin}"
@@ -9022,186 +9095,28 @@ def get_product_image(asin):
                     'cache_age': int((now - cache_time).total_seconds())
                 })
         
-        # Fetch from Amazon using retry logic
-        response = fetch_amazon_page_with_retry(asin)
+        # Add to queue for background processing
+        with queue_lock:
+            if asin not in image_queue:
+                image_queue.append(asin)
+                print(f"Added {asin} to processing queue (position {len(image_queue)})")
         
-        if not response:
-            # If scraping failed, try constructed URLs immediately
-            print(f"Scraping failed for {asin}, trying constructed URLs")
-            primary_urls = [
-                f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
-                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
-                f'https://m.media-amazon.com/images/P/{asin}.01._AC_SX300_.jpg'
-            ]
-            
-            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-            for url in primary_urls:
-                try:
-                    test_response = requests.head(url, timeout=3, headers=headers)
-                    if test_response.status_code == 200:
-                        product_image_cache[cache_key] = {
-                            'image_url': url,
-                            'timestamp': now
-                        }
-                        return jsonify({
-                            'asin': asin,
-                            'image_url': url,
-                            'cached': False,
-                            'method': 'constructed_url'
-                        })
-                except:
-                    continue
-            
-            # Last resort - return the most likely URL even if we can't verify it
-            # This gives the frontend a chance to try loading it
-            fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
-            product_image_cache[cache_key] = {
-                'image_url': fallback_url,
-                'timestamp': now
-            }
-            return jsonify({
-                'asin': asin,
-                'image_url': fallback_url,
-                'cached': False,
-                'method': 'unverified_fallback',
-                'warning': 'Could not verify image exists'
-            })
+        # Return a placeholder/fallback immediately
+        fallback_url = f'https://via.placeholder.com/300x300.png?text={asin}'
         
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Focus on imgTagWrapperId as the user identified this as the key selector
-        image_url = None
-        
-        # First check the specific div the user mentioned
-        img_tag_wrapper = soup.select_one('#imgTagWrapperId')
-        if img_tag_wrapper:
-            # Look for any img element within this div
-            img_elements = img_tag_wrapper.select('img')
-            for img in img_elements:
-                # Try all possible image attributes
-                potential_attrs = [
-                    'data-old-hires',
-                    'data-a-hires', 
-                    'data-zoom-hires',
-                    'data-a-dynamic-image',
-                    'src',
-                    'data-src',
-                    'data-lazy-src'
-                ]
-                
-                for attr in potential_attrs:
-                    url = img.get(attr)
-                    if url:
-                        # Handle JSON-encoded dynamic image data
-                        if url.startswith('{'):
-                            try:
-                                import json
-                                image_data = json.loads(url)
-                                if image_data and isinstance(image_data, dict):
-                                    # Get the largest image
-                                    sorted_images = sorted(image_data.items(), 
-                                                         key=lambda x: x[1][0] * x[1][1] if isinstance(x[1], list) and len(x[1]) >= 2 else 0, 
-                                                         reverse=True)
-                                    if sorted_images:
-                                        image_url = sorted_images[0][0]
-                                        break
-                            except:
-                                continue
-                        elif url.startswith('http'):
-                            image_url = url
-                            break
-                
-                if image_url:
-                    break
-        
-        # Fallback to other selectors if imgTagWrapperId didn't work
-        if not image_url:
-            fallback_selectors = ['#landingImage', '.a-dynamic-image', '#imageBlock img']
-            for selector in fallback_selectors:
-                img = soup.select_one(selector)
-                if img:
-                    for attr in ['data-old-hires', 'src', 'data-src']:
-                        url = img.get(attr)
-                        if url and url.startswith('http'):
-                            image_url = url
-                            break
-                    if image_url:
-                        break
-        
-        # If scraping failed, try constructed URLs immediately (more reliable)
-        if not image_url:
-            # Try the most common and reliable patterns first
-            primary_urls = [
-                f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
-                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
-                f'https://m.media-amazon.com/images/P/{asin}.01._AC_SX300_.jpg'
-            ]
-            
-            for url in primary_urls:
-                try:
-                    test_response = requests.head(url, timeout=3, headers={'User-Agent': headers['User-Agent']})
-                    if test_response.status_code == 200:
-                        image_url = url
-                        break
-                except:
-                    continue
-            
-            # If primary URLs failed, try more patterns
-            if not image_url:
-                secondary_urls = [
-                    f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SX300_.jpg',
-                    f'https://m.media-amazon.com/images/I/{asin}.jpg',
-                    f'https://images-na.ssl-images-amazon.com/images/I/{asin}.jpg',
-                    f'https://m.media-amazon.com/images/P/{asin}.01.L.jpg',
-                    f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.L.jpg'
-                ]
-                
-                for url in secondary_urls:
-                    try:
-                        test_response = requests.head(url, timeout=2, headers={'User-Agent': headers['User-Agent']})
-                        if test_response.status_code == 200:
-                            image_url = url
-                            break
-                    except:
-                        continue
-        
-        if image_url:
-            # Cache the result
-            product_image_cache[cache_key] = {
-                'image_url': image_url,
-                'timestamp': now
-            }
-            
-            return jsonify({
-                'asin': asin,
-                'image_url': image_url,
-                'cached': False,
-                'method': 'scraped_imgTagWrapperId'
-            })
-        else:
-            return jsonify({
-                'asin': asin,
-                'image_url': None,
-                'error': 'No image found'
-            }), 404
-            
-    except requests.exceptions.Timeout:
         return jsonify({
             'asin': asin,
-            'image_url': None,
-            'error': 'Request timeout'
-        }), 408
-    except requests.exceptions.RequestException as e:
-        return jsonify({
-            'asin': asin,
-            'image_url': None,
-            'error': f'Request failed: {str(e)}'
-        }), 400
+            'image_url': fallback_url,
+            'cached': False,
+            'method': 'queued_for_processing',
+            'queue_position': len(image_queue),
+            'message': 'Image queued for background processing'
+        })
+            
     except Exception as e:
         return jsonify({
             'asin': asin,
-            'image_url': None,
+            'image_url': f'https://via.placeholder.com/300x300.png?text={asin}',
             'error': f'Unexpected error: {str(e)}'
         }), 500
 
@@ -9488,8 +9403,51 @@ def get_image_status():
         'last_request_ago_seconds': time_since_last,
         'min_interval_seconds': MIN_REQUEST_INTERVAL,
         'can_make_request_now': time_since_last >= MIN_REQUEST_INTERVAL,
-        'cache_sample': list(product_image_cache.keys())[:5] if product_image_cache else []
+        'cache_sample': list(product_image_cache.keys())[:5] if product_image_cache else [],
+        'queue_size': len(image_queue),
+        'queue_sample': image_queue[:5] if image_queue else []
     })
+
+@app.route('/api/check-images', methods=['POST'])
+@login_required
+def check_images_ready():
+    """Check if images are ready for given ASINs"""
+    try:
+        data = request.get_json()
+        asins = data.get('asins', [])
+        
+        results = {}
+        for asin in asins:
+            cache_key = f"image_{asin}"
+            if cache_key in product_image_cache:
+                cached_data = product_image_cache[cache_key]
+                cache_time = cached_data.get('timestamp')
+                if cache_time and (datetime.now() - cache_time).total_seconds() < IMAGE_CACHE_EXPIRY_HOURS * 3600:
+                    results[asin] = {
+                        'ready': True,
+                        'image_url': cached_data['image_url'],
+                        'cached_since': cache_time.isoformat()
+                    }
+                    continue
+            
+            # Check if in queue
+            with queue_lock:
+                queue_position = image_queue.index(asin) + 1 if asin in image_queue else None
+            
+            results[asin] = {
+                'ready': False,
+                'in_queue': queue_position is not None,
+                'queue_position': queue_position
+            }
+        
+        return jsonify({
+            'results': results,
+            'total_cached': len(product_image_cache),
+            'queue_size': len(image_queue)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Check failed: {str(e)}'}), 500
 
 # Demo control endpoints
 @app.route('/api/demo/status', methods=['GET'])

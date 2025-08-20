@@ -116,11 +116,12 @@ export const useProductImages = (asins) => {
   return { images, loading, error };
 };
 
-// Hook for single product image
+// Hook for single product image with queue-based processing
 export const useProductImage = (asin) => {
   const [imageUrl, setImageUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [queuePosition, setQueuePosition] = useState(null);
 
   useEffect(() => {
     if (!asin) {
@@ -128,6 +129,8 @@ export const useProductImage = (asin) => {
       setError(true);
       return;
     }
+
+    let checkInterval;
 
     const fetchImage = async () => {
       setLoading(true);
@@ -147,48 +150,79 @@ export const useProductImage = (asin) => {
       }
 
       try {
+        // Initial request - this will queue the image for processing
         const response = await axios.get(`/api/product-image/${asin}`, { withCredentials: true });
         
-        if (response.data && response.data.image_url) {
-          setImageUrl(response.data.image_url);
-          
-          // Log method used for debugging
-          if (response.data.method) {
-            console.log(`Image for ${asin} loaded via: ${response.data.method}`);
+        if (response.data) {
+          if (response.data.cached && response.data.image_url) {
+            // Already cached - use it
+            setImageUrl(response.data.image_url);
+            setLoading(false);
+          } else if (response.data.method === 'queued_for_processing') {
+            // Queued for processing - show placeholder and start checking
+            setImageUrl(response.data.image_url); // Placeholder
+            setQueuePosition(response.data.queue_position);
+            
+            // Start periodic checking for the real image
+            checkInterval = setInterval(async () => {
+              try {
+                const checkResponse = await axios.post('/api/check-images', {
+                  asins: [asin]
+                }, { withCredentials: true });
+                
+                const result = checkResponse.data.results[asin];
+                if (result && result.ready) {
+                  setImageUrl(result.image_url);
+                  setLoading(false);
+                  setQueuePosition(null);
+                  
+                  // Cache the result
+                  try {
+                    const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
+                    cache[asin] = {
+                      url: result.image_url,
+                      timestamp: Date.now(),
+                      method: 'queue_processed'
+                    };
+                    localStorage.setItem('productImages', JSON.stringify(cache));
+                  } catch (e) {
+                    // Ignore cache save errors
+                  }
+                  
+                  clearInterval(checkInterval);
+                } else if (result && result.queue_position) {
+                  setQueuePosition(result.queue_position);
+                }
+              } catch (checkErr) {
+                console.warn(`Failed to check image status for ${asin}:`, checkErr);
+              }
+            }, 5000); // Check every 5 seconds
+            
+            setLoading(false);
+          } else {
+            // Fallback
+            setImageUrl(response.data.image_url || `https://via.placeholder.com/300x300.png?text=${asin}`);
+            setLoading(false);
           }
-          
-          // Cache the result
-          try {
-            const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
-            cache[asin] = {
-              url: response.data.image_url,
-              timestamp: Date.now(),
-              method: response.data.method || 'unknown'
-            };
-            localStorage.setItem('productImages', JSON.stringify(cache));
-          } catch (e) {
-            // Ignore cache save errors
-          }
-        } else {
-          console.error(`No image URL returned for ASIN ${asin}:`, response.data);
-          setError(true);
         }
       } catch (err) {
         console.error(`Failed to fetch image for ASIN ${asin}:`, err.response?.data || err.message);
         
-        // If backend failed, try a fallback URL directly
-        const fallbackUrl = `https://m.media-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`;
-        console.log(`Trying fallback URL for ${asin}: ${fallbackUrl}`);
-        setImageUrl(fallbackUrl);
-        
-        // Don't set error since we're trying a fallback
-      } finally {
+        // Fallback placeholder
+        setImageUrl(`https://via.placeholder.com/300x300.png?text=${asin}`);
         setLoading(false);
       }
     };
 
     fetchImage();
+
+    // Cleanup interval on unmount
+    return () => {
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
+    };
   }, [asin]);
 
-  return { imageUrl, loading, error };
+  return { imageUrl, loading, error, queuePosition };
 };

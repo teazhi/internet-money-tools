@@ -9326,51 +9326,51 @@ def test_image_patterns(asin):
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1'
-                }
+            }
+            
+            response = requests.get(amazon_url, headers=scrape_headers, timeout=10)
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, 'html.parser')
                 
-                response = requests.get(amazon_url, headers=scrape_headers, timeout=10)
-                if response.status_code == 200:
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    
-                    img_wrapper = soup.select_one('#imgTagWrapperId')
-                    if img_wrapper:
-                        img = img_wrapper.select_one('img')
-                        if img:
-                            scraped_url = img.get('data-old-hires') or img.get('src')
-                            if scraped_url and scraped_url.startswith('http'):
-                                scraping_result = {
-                                    'url': scraped_url,
-                                    'method': 'html_scraping',
-                                    'selector': '#imgTagWrapperId img',
-                                    'attribute_used': 'data-old-hires' if img.get('data-old-hires') else 'src',
-                                    'valid_image': True
-                                }
-                            else:
-                                scraping_result = {
-                                    'error': 'No valid image URL found in HTML',
-                                    'method': 'html_scraping_failed'
-                                }
+                img_wrapper = soup.select_one('#imgTagWrapperId')
+                if img_wrapper:
+                    img = img_wrapper.select_one('img')
+                    if img:
+                        scraped_url = img.get('data-old-hires') or img.get('src')
+                        if scraped_url and scraped_url.startswith('http'):
+                            scraping_result = {
+                                'url': scraped_url,
+                                'method': 'html_scraping',
+                                'selector': '#imgTagWrapperId img',
+                                'attribute_used': 'data-old-hires' if img.get('data-old-hires') else 'src',
+                                'valid_image': True
+                            }
                         else:
                             scraping_result = {
-                                'error': 'No img tag found in #imgTagWrapperId',
+                                'error': 'No valid image URL found in HTML',
                                 'method': 'html_scraping_failed'
                             }
                     else:
                         scraping_result = {
-                            'error': '#imgTagWrapperId not found',
+                            'error': 'No img tag found in #imgTagWrapperId',
                             'method': 'html_scraping_failed'
                         }
                 else:
                     scraping_result = {
-                        'error': f'HTTP {response.status_code}',
+                        'error': '#imgTagWrapperId not found',
                         'method': 'html_scraping_failed'
                     }
-            except Exception as e:
+            else:
                 scraping_result = {
-                    'error': str(e),
+                    'error': f'HTTP {response.status_code}',
                     'method': 'html_scraping_failed'
                 }
+        except Exception as e:
+            scraping_result = {
+                'error': str(e),
+                'method': 'html_scraping_failed'
+            }
 
         # Test Amazon Associates widget as fallback
         associate_result = None

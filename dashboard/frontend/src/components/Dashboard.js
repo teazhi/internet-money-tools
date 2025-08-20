@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeatureFlags } from '../contexts/FeatureFlagsContext';
 import { 
   Settings as SettingsIcon, 
   ShoppingCart, 
@@ -46,6 +47,7 @@ import ImageTest from './ImageTest';
 
 const Dashboard = () => {
   const { user, logout, refreshUser } = useAuth();
+  const { hasFeatureAccess, isFeatureBeta } = useFeatureFlags();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -115,16 +117,74 @@ const Dashboard = () => {
   };
 
   const navigation = [
+    // Overview is always visible
     { name: 'Overview', href: '/dashboard', icon: Home, current: location.pathname === '/dashboard' },
-    { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics') },
-    { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
-    { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
-    { name: 'eBay Lister', href: '/dashboard/ebay-lister', icon: ShoppingBag, current: location.pathname === '/dashboard/ebay-lister' },
-    { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
+    
+    // Feature-flagged navigation items
+    ...(hasFeatureAccess('smart_restock') ? [{
+      name: 'Smart Restock', 
+      href: '/dashboard/enhanced-analytics', 
+      icon: TrendingUp, 
+      current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics'),
+      beta: isFeatureBeta('smart_restock')
+    }] : []),
+    
+    ...(hasFeatureAccess('missing_listings') ? [{
+      name: 'Missing Listings', 
+      href: '/dashboard/expected-arrivals', 
+      icon: Package, 
+      current: location.pathname === '/dashboard/expected-arrivals',
+      beta: isFeatureBeta('missing_listings')
+    }] : []),
+    
+    ...(hasFeatureAccess('reimbursements') ? [{
+      name: 'Reimbursements', 
+      href: '/dashboard/reimbursements', 
+      icon: TrendingDown, 
+      current: location.pathname === '/dashboard/reimbursements',
+      beta: isFeatureBeta('reimbursements')
+    }] : []),
+    
+    ...(hasFeatureAccess('ebay_lister') ? [{
+      name: 'eBay Lister', 
+      href: '/dashboard/ebay-lister', 
+      icon: ShoppingBag, 
+      current: location.pathname === '/dashboard/ebay-lister',
+      beta: isFeatureBeta('ebay_lister')
+    }] : []),
+    
+    ...(hasFeatureAccess('file_manager') ? [{
+      name: 'File Manager', 
+      href: '/dashboard/files', 
+      icon: FileText, 
+      current: location.pathname === '/dashboard/files',
+      beta: isFeatureBeta('file_manager')
+    }] : []),
+    
+    // Sheet Setup is always visible
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
-    ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
+    
+    // VA Management - only for main users with feature access
+    ...(isMainUser && hasFeatureAccess('va_management') ? [{
+      name: 'VA Management', 
+      href: '/dashboard/subusers', 
+      icon: Users, 
+      current: location.pathname === '/dashboard/subusers',
+      beta: isFeatureBeta('va_management')
+    }] : []),
+    
+    // Admin features
     ...(isAdmin ? [{ name: 'Admin', href: '/dashboard/admin', icon: Shield, current: location.pathname === '/dashboard/admin' }] : []),
-    ...(isAdmin ? [{ name: 'Lambda Deploy', href: '/dashboard/automation', icon: Zap, current: location.pathname === '/dashboard/automation' }] : []),
+    
+    ...(isAdmin && hasFeatureAccess('lambda_deployment') ? [{
+      name: 'Lambda Deploy', 
+      href: '/dashboard/automation', 
+      icon: Zap, 
+      current: location.pathname === '/dashboard/automation',
+      beta: isFeatureBeta('lambda_deployment')
+    }] : []),
+    
+    // Settings is always visible
     { name: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, current: location.pathname === '/dashboard/settings' },
   ];
 
@@ -244,7 +304,14 @@ const Dashboard = () => {
                         item.current ? 'text-white' : 'text-slate-400 group-hover:text-white'
                       }`}
                     />
-                    {item.name}
+                    <span className="flex items-center">
+                      {item.name}
+                      {item.beta && (
+                        <span className="ml-1 px-1 py-0.5 text-xs bg-orange-200 text-orange-800 rounded-full font-medium">
+                          β
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 );
               })}
@@ -339,7 +406,14 @@ const Dashboard = () => {
                     }`}
                   />
                   {!sidebarCollapsed && (
-                    <span className="truncate">{item.name}</span>
+                    <span className="flex items-center truncate">
+                      {item.name}
+                      {item.beta && (
+                        <span className="ml-1 px-1 py-0.5 text-xs bg-orange-200 text-orange-800 rounded-full font-medium">
+                          β
+                        </span>
+                      )}
+                    </span>
                   )}
                 </Link>
               );
@@ -444,22 +518,51 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto bg-gray-50">
           <div className="px-4 sm:px-6 lg:px-8 py-8">
             <Routes>
+              {/* Always available routes */}
               <Route path="/" element={<Overview />} />
-              <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
-              <Route path="/smart-restock" element={<SmartRestockRecommendations />} />
-              <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
-              <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
-              <Route path="/image-test" element={<ImageTest />} />
-              <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
-              <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
-              <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
-              <Route path="/ebay-lister" element={<EbayLister />} />
-              <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />
-              {isMainUser && <Route path="/subusers" element={<SubUserManager />} />}
+              
+              {/* Feature-flagged routes */}
+              {hasFeatureAccess('smart_restock') && (
+                <>
+                  <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
+                  <Route path="/smart-restock" element={<SmartRestockRecommendations />} />
+                  <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
+                  <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
+                  <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
+                </>
+              )}
+              
+              {hasFeatureAccess('missing_listings') && (
+                <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
+              )}
+              
+              {hasFeatureAccess('reimbursements') && (
+                <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
+              )}
+              
+              {hasFeatureAccess('ebay_lister') && (
+                <Route path="/ebay-lister" element={<EbayLister />} />
+              )}
+              
+              {hasFeatureAccess('file_manager') && (
+                <Route path="/files" element={<FileManager />} />
+              )}
+              
+              {/* Admin-only routes */}
               {isAdmin && <Route path="/admin" element={<AdminCompact />} />}
-              {isAdmin && <Route path="/automation" element={<LambdaDeployment />} />}
+              {isAdmin && <Route path="/image-test" element={<ImageTest />} />}
+              
+              {/* VA Management for main users only */}
+              {isMainUser && hasFeatureAccess('va_management') && (
+                <Route path="/subusers" element={<SubUserManager />} />
+              )}
+              
+              {/* Lambda deployment for admin with feature access */}
+              {isAdmin && hasFeatureAccess('lambda_deployment') && (
+                <Route path="/automation" element={<LambdaDeployment />} />
+              )}
             </Routes>
           </div>
         </main>

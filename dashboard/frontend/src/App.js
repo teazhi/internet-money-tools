@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext';
 import LandingPage from './components/LandingPage';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -15,22 +16,24 @@ axios.defaults.withCredentials = true;
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<Login />} />
-            <Route 
-              path="/dashboard/*" 
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } 
-            />
-          </Routes>
-        </div>
-      </Router>
+      <FeatureFlagsProvider>
+        <Router>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<Login />} />
+              <Route 
+                path="/dashboard/*" 
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                } 
+              />
+            </Routes>
+          </div>
+        </Router>
+      </FeatureFlagsProvider>
     </AuthProvider>
   );
 }

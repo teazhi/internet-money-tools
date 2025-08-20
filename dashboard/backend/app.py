@@ -6522,6 +6522,245 @@ def check_stale_opportunities():
     except Exception as e:
         return jsonify({'error': f'Error checking cache status: {str(e)}'}), 500
 
+# ===== FEATURE FLAG SYSTEM =====
+
+def init_feature_flags():
+    """Initialize feature flags database tables"""
+    try:
+        # Create features table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS features (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feature_key TEXT UNIQUE NOT NULL,
+                feature_name TEXT NOT NULL,
+                description TEXT,
+                is_beta BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create user_feature_access table for per-user permissions
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_feature_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                has_access BOOLEAN DEFAULT 0,
+                granted_by TEXT,
+                granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (feature_key) REFERENCES features (feature_key),
+                UNIQUE (discord_id, feature_key)
+            )
+        ''')
+        
+        # Create feature launch status table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS feature_launches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feature_key TEXT UNIQUE NOT NULL,
+                is_public BOOLEAN DEFAULT 0,
+                launched_by TEXT,
+                launched_at TIMESTAMP,
+                launch_notes TEXT,
+                FOREIGN KEY (feature_key) REFERENCES features (feature_key)
+            )
+        ''')
+        
+        conn.commit()
+        
+        # Insert default features
+        default_features = [
+            ('smart_restock', 'Smart Restock Analytics', 'Advanced restock recommendations and analytics', False),
+            ('discount_opportunities', 'Discount Opportunities', 'Email-based discount opportunity analysis', False),
+            ('reimbursements', 'Reimbursement Analyzer', 'FBA reimbursement tracking and analysis', False),
+            ('ebay_lister', 'eBay Lister', 'Automated eBay listing management', True),
+            ('missing_listings', 'Missing Listings', 'Track expected arrivals and missing listings', False),
+            ('va_management', 'VA Management', 'Virtual assistant user management', False),
+            ('file_manager', 'File Manager', 'File upload and management system', False),
+            ('lambda_deployment', 'Lambda Deployment', 'AWS Lambda function deployment', True)
+        ]
+        
+        for feature_key, name, description, is_beta in default_features:
+            cursor.execute('''
+                INSERT OR IGNORE INTO features (feature_key, feature_name, description, is_beta)
+                VALUES (?, ?, ?, ?)
+            ''', (feature_key, name, description, is_beta))
+        
+        conn.commit()
+        print("[DEBUG] Feature flags system initialized")
+        
+    except Exception as e:
+        print(f"Error initializing feature flags: {e}")
+
+def has_feature_access(discord_id, feature_key):
+    """Check if user has access to a specific feature"""
+    try:
+        # Admin always has access to everything
+        user = get_user_record(discord_id)
+        if user and user.get('discord_id') == '712147636463075389':  # Admin discord ID
+            return True
+            
+        # Check if feature is publicly launched
+        cursor.execute('''
+            SELECT is_public FROM feature_launches WHERE feature_key = ?
+        ''', (feature_key,))
+        launch_result = cursor.fetchone()
+        
+        if launch_result and launch_result[0]:  # is_public = True
+            return True
+        
+        # Check user-specific access
+        cursor.execute('''
+            SELECT has_access FROM user_feature_access 
+            WHERE discord_id = ? AND feature_key = ?
+        ''', (discord_id, feature_key))
+        
+        access_result = cursor.fetchone()
+        return access_result[0] if access_result else False
+        
+    except Exception as e:
+        print(f"Error checking feature access for {discord_id}, {feature_key}: {e}")
+        return False
+
+def get_user_features(discord_id):
+    """Get all features accessible to a user"""
+    try:
+        user_features = {}
+        
+        # Get all features
+        cursor.execute('SELECT feature_key, feature_name, description, is_beta FROM features')
+        all_features = cursor.fetchall()
+        
+        for feature_key, name, description, is_beta in all_features:
+            has_access = has_feature_access(discord_id, feature_key)
+            user_features[feature_key] = {
+                'name': name,
+                'description': description,
+                'is_beta': bool(is_beta),
+                'has_access': has_access
+            }
+        
+        return user_features
+        
+    except Exception as e:
+        print(f"Error getting user features for {discord_id}: {e}")
+        return {}
+
+# Initialize feature flags on startup
+init_feature_flags()
+
+@app.route('/api/admin/features', methods=['GET'])
+@login_required
+def get_all_features():
+    """Admin endpoint to get all features and their status"""
+    try:
+        discord_id = session['discord_id']
+        if discord_id != '712147636463075389':  # Only admin can access
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        cursor.execute('''
+            SELECT f.feature_key, f.feature_name, f.description, f.is_beta,
+                   fl.is_public, fl.launched_at, fl.launch_notes
+            FROM features f
+            LEFT JOIN feature_launches fl ON f.feature_key = fl.feature_key
+            ORDER BY f.feature_name
+        ''')
+        
+        features = []
+        for row in cursor.fetchall():
+            feature_key, name, description, is_beta, is_public, launched_at, launch_notes = row
+            features.append({
+                'feature_key': feature_key,
+                'name': name,
+                'description': description,
+                'is_beta': bool(is_beta),
+                'is_public': bool(is_public) if is_public is not None else False,
+                'launched_at': launched_at,
+                'launch_notes': launch_notes
+            })
+        
+        return jsonify({'features': features})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error fetching features: {str(e)}'}), 500
+
+@app.route('/api/admin/features/launch', methods=['POST'])
+@login_required 
+def launch_feature():
+    """Admin endpoint to launch a feature publicly"""
+    try:
+        discord_id = session['discord_id']
+        if discord_id != '712147636463075389':  # Only admin can access
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        data = request.get_json()
+        feature_key = data.get('feature_key')
+        launch_notes = data.get('notes', '')
+        
+        if not feature_key:
+            return jsonify({'error': 'Feature key required'}), 400
+        
+        # Insert or update launch status
+        cursor.execute('''
+            INSERT OR REPLACE INTO feature_launches 
+            (feature_key, is_public, launched_by, launched_at, launch_notes)
+            VALUES (?, 1, ?, datetime('now'), ?)
+        ''', (feature_key, discord_id, launch_notes))
+        
+        conn.commit()
+        
+        return jsonify({'message': f'Feature {feature_key} launched successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error launching feature: {str(e)}'}), 500
+
+@app.route('/api/admin/features/unlaunch', methods=['POST'])
+@login_required
+def unlaunch_feature():
+    """Admin endpoint to remove a feature from public access"""
+    try:
+        discord_id = session['discord_id']
+        if discord_id != '712147636463075389':  # Only admin can access
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        data = request.get_json()
+        feature_key = data.get('feature_key')
+        
+        if not feature_key:
+            return jsonify({'error': 'Feature key required'}), 400
+        
+        # Update launch status to not public
+        cursor.execute('''
+            UPDATE feature_launches SET is_public = 0 WHERE feature_key = ?
+        ''', (feature_key,))
+        
+        if cursor.rowcount == 0:
+            # Insert if not exists
+            cursor.execute('''
+                INSERT INTO feature_launches (feature_key, is_public, launched_by, launched_at)
+                VALUES (?, 0, ?, datetime('now'))
+            ''', (feature_key, discord_id))
+        
+        conn.commit()
+        
+        return jsonify({'message': f'Feature {feature_key} removed from public access'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error unlaunching feature: {str(e)}'}), 500
+
+@app.route('/api/user/features', methods=['GET'])
+@login_required
+def get_user_accessible_features():
+    """Get features accessible to current user"""
+    try:
+        discord_id = session['discord_id']
+        features = get_user_features(discord_id)
+        return jsonify({'features': features})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error fetching user features: {str(e)}'}), 500
+
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required
 def get_expected_arrivals():
@@ -9733,7 +9972,7 @@ def check_images_ready():
 @app.route('/api/products/asin/<asin>', methods=['GET'])
 @login_required
 def get_product_by_asin(asin):
-    """Get product information by ASIN for eBay listing creation"""
+    """Get product information by ASIN for eBay listing creation using Sellerboard data"""
     try:
         # Validate ASIN format
         if not asin or len(asin) != 10:
@@ -9742,37 +9981,138 @@ def get_product_by_asin(asin):
                 'message': 'Invalid ASIN format. ASIN must be 10 characters.'
             }), 400
             
-        # For demo/development, return mock data
-        # In production, this would connect to Amazon SP-API or your product database
-        mock_product_data = {
-            'asin': asin.upper(),
-            'title': f'Premium Wireless Headphones - {asin.upper()}',
-            'brand': 'TechBrand',
-            'category': 'Electronics > Headphones',
-            'price': '49.99',
-            'image_url': f'https://via.placeholder.com/300x300?text={asin.upper()}',
-            'dimensions': '7.5 x 6.8 x 3.2 inches',
-            'weight': '0.8 lbs',
-            'description': f'High-quality wireless headphones with premium sound quality. ASIN: {asin.upper()}',
-            'bullet_points': [
-                'Premium sound quality with deep bass',
-                'Long-lasting battery life up to 30 hours',
-                'Comfortable over-ear design',
-                'Built-in microphone for calls',
-                'Quick charge technology'
-            ],
-            'features': {
-                'Color': 'Black',
-                'Connectivity': 'Wireless',
-                'Battery Life': '30 hours',
-                'Warranty': '1 year'
-            }
-        }
+        # Get user's Discord ID for configuration lookup
+        discord_id = session['discord_id']
+        user_record = get_user_config(discord_id)
         
-        return jsonify({
-            'success': True,
-            'product': mock_product_data
-        })
+        if not user_record:
+            return jsonify({
+                'success': False,
+                'message': 'User configuration not found. Please complete your setup first.'
+            }), 400
+        
+        # Get Sellerboard URLs
+        orders_url = user_record.get('sellerboard_orders_url')
+        stock_url = user_record.get('sellerboard_stock_url')
+        
+        if not orders_url or not stock_url:
+            return jsonify({
+                'success': False,
+                'message': 'Sellerboard URLs not configured. Please set up your Sellerboard integration in Settings first.'
+            }), 400
+            
+        # Use OrdersAnalysis to get real product data
+        from orders_analysis import EnhancedOrdersAnalysis
+        from datetime import date, timedelta
+        import pytz
+        
+        # Get user timezone or default to UTC
+        user_timezone = user_record.get('timezone', 'UTC')
+        target_date = date.today()
+        
+        try:
+            # Initialize with user's Sellerboard URLs
+            analyzer = EnhancedOrdersAnalysis(orders_url, stock_url)
+            
+            # Get stock information (contains product details)
+            stock_df = analyzer.download_csv(stock_url)
+            stock_info = analyzer.get_stock_info(stock_df)
+            
+            # Check if ASIN exists in stock data
+            asin_upper = asin.upper()
+            if asin_upper not in stock_info:
+                return jsonify({
+                    'success': False,
+                    'message': f'ASIN {asin_upper} not found in your inventory. Please verify the ASIN is correct and exists in your Sellerboard data.'
+                }), 404
+                
+            # Get product information from stock data
+            product_info = stock_info[asin_upper]
+            
+            # Try to get sales data for pricing context
+            orders_df = analyzer.download_csv(orders_url)
+            orders_for_week = analyzer.get_orders_for_date_range(
+                orders_df, 
+                target_date - timedelta(days=7), 
+                target_date, 
+                user_timezone
+            )
+            weekly_sales = analyzer.asin_sales_count(orders_for_week)
+            
+            # Extract available data from Sellerboard
+            product_title = product_info.get('Title', f'Product {asin_upper}')
+            
+            # Get current stock and pricing info
+            current_stock = 0
+            try:
+                stock_fields = ['FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock']
+                for field in stock_fields:
+                    if field in product_info and product_info[field]:
+                        current_stock = int(float(str(product_info[field]).replace(',', '')))
+                        break
+            except (ValueError, TypeError):
+                current_stock = 0
+            
+            # Try to get pricing from recent sales or stock data
+            estimated_price = '0.00'
+            try:
+                price_fields = ['Price', 'Current Price', 'Sale Price', 'Unit Price']
+                for field in price_fields:
+                    if field in product_info and product_info[field]:
+                        price_val = str(product_info[field]).replace('$', '').replace(',', '')
+                        if price_val and price_val != '0':
+                            estimated_price = f"{float(price_val):.2f}"
+                            break
+            except (ValueError, TypeError):
+                estimated_price = '0.00'
+            
+            # Get weekly sales for velocity context  
+            weekly_sales_count = weekly_sales.get(asin_upper, 0)
+            
+            # Build comprehensive product data
+            product_data = {
+                'asin': asin_upper,
+                'title': product_title,
+                'brand': 'Unknown Brand',  # Sellerboard doesn't typically include brand
+                'category': 'General Merchandise',  # Generic category
+                'price': estimated_price,
+                'current_stock': current_stock,
+                'weekly_sales': weekly_sales_count,
+                'image_url': f'https://via.placeholder.com/300x300?text={asin_upper}',  # Placeholder since Sellerboard doesn't include images
+                'dimensions': 'Not available from Sellerboard',
+                'weight': 'Not available from Sellerboard',
+                'description': f'{product_title} - High-quality product available through Amazon FBA. ASIN: {asin_upper}',
+                'bullet_points': [
+                    f'Product Title: {product_title}',
+                    f'Current Stock: {current_stock} units',
+                    f'Weekly Sales Velocity: {weekly_sales_count} units/week',
+                    'Shipped via Amazon FBA for fast delivery',
+                    'Professional seller with high ratings'
+                ],
+                'features': {
+                    'ASIN': asin_upper,
+                    'Current Stock': str(current_stock),
+                    'Weekly Sales': str(weekly_sales_count),
+                    'Data Source': 'Sellerboard Integration'
+                },
+                'sellerboard_data': {
+                    'stock_info': {k: v for k, v in product_info.items() if k not in ['Title']},  # Include all extra fields
+                    'weekly_sales': weekly_sales_count,
+                    'data_freshness': 'Real-time from your Sellerboard account'
+                }
+            }
+            
+            return jsonify({
+                'success': True,
+                'product': product_data
+            })
+            
+        except Exception as sellerboard_error:
+            print(f"Sellerboard integration error: {sellerboard_error}")
+            return jsonify({
+                'success': False,
+                'message': f'Failed to fetch data from Sellerboard: {str(sellerboard_error)}. Please check your Sellerboard URL configuration.'
+            }), 500
         
     except Exception as e:
         print(f"Error fetching product data for ASIN {asin}: {e}")
@@ -9799,7 +10139,12 @@ def generate_ebay_listing():
         # Generate eBay-optimized listing
         ebay_title = f"{product_data['title'][:70]}..." if len(product_data['title']) > 70 else product_data['title']
         
-        # Create description with HTML formatting for eBay
+        # Get additional data for enhanced description
+        current_stock = product_data.get('current_stock', 0)
+        weekly_sales = product_data.get('weekly_sales', 0)
+        sellerboard_data = product_data.get('sellerboard_data', {})
+        
+        # Create description with HTML formatting for eBay using real Sellerboard data
         ebay_description = f"""
 <div style="font-family: Arial, sans-serif; line-height: 1.6;">
     <h2>{product_data['title']}</h2>
@@ -9811,20 +10156,31 @@ def generate_ebay_listing():
     
     <h3>Product Details:</h3>
     <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
-        <tr><td><strong>Brand:</strong></td><td>{product_data.get('brand', 'N/A')}</td></tr>
-        <tr><td><strong>Dimensions:</strong></td><td>{product_data.get('dimensions', 'N/A')}</td></tr>
-        <tr><td><strong>Weight:</strong></td><td>{product_data.get('weight', 'N/A')}</td></tr>
         <tr><td><strong>ASIN:</strong></td><td>{asin}</td></tr>
+        <tr><td><strong>Brand:</strong></td><td>{product_data.get('brand', 'Professional Brand')}</td></tr>
+        <tr><td><strong>Current Stock:</strong></td><td>{current_stock} units available</td></tr>
+        <tr><td><strong>Sales Velocity:</strong></td><td>{weekly_sales} units sold per week</td></tr>
+        <tr><td><strong>Shipping:</strong></td><td>Fulfilled by Amazon (FBA)</td></tr>
     </table>
     
     <h3>About This Item:</h3>
     <p>{product_data.get('description', 'High-quality product with excellent features.')}</p>
     
+    <h3>Why Buy From Us:</h3>
+    <ul>
+        <li>✅ Fast shipping via Amazon FBA network</li>
+        <li>✅ Professional seller with high customer satisfaction</li>
+        <li>✅ Authentic products - no counterfeits</li>
+        <li>✅ Excellent customer service</li>
+        {"<li>✅ High demand item - " + str(weekly_sales) + " sold weekly</li>" if weekly_sales > 0 else ""}
+    </ul>
+    
     <h3>Shipping & Returns:</h3>
-    <p>Fast and secure shipping. 30-day return policy.</p>
+    <p>Items ship quickly via Amazon's fulfillment network. Standard return policy applies.</p>
     
     <div style="text-align: center; margin-top: 20px; padding: 10px; background-color: #f0f0f0;">
-        <p><strong>Thank you for shopping with us!</strong></p>
+        <p><strong>Thank you for your business!</strong></p>
+        <p><em>Data sourced from Sellerboard analytics - {sellerboard_data.get('data_freshness', 'Live data')}</em></p>
     </div>
 </div>
         """.strip()

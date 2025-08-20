@@ -176,6 +176,20 @@ const EbayLister = () => {
                 <label className="label-text">Current Price</label>
                 <p className="body-text text-gray-900">${productData.price || 'N/A'}</p>
               </div>
+              
+              {productData.current_stock !== undefined && (
+                <div>
+                  <label className="label-text">Current Stock</label>
+                  <p className="body-text text-gray-900">{productData.current_stock} units</p>
+                </div>
+              )}
+              
+              {productData.weekly_sales !== undefined && (
+                <div>
+                  <label className="label-text">Weekly Sales</label>
+                  <p className="body-text text-gray-900">{productData.weekly_sales} units/week</p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -207,6 +221,28 @@ const EbayLister = () => {
               </div>
             </div>
           </div>
+
+          {/* Sellerboard Data Section */}
+          {productData.sellerboard_data && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h4 className="heading-sm mb-3 text-blue-800">Live Sellerboard Data</h4>
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Data Source:</span> Your Sellerboard Account
+                  </div>
+                  <div>
+                    <span className="font-medium">Freshness:</span> {productData.sellerboard_data.data_freshness}
+                  </div>
+                  {productData.sellerboard_data.weekly_sales !== undefined && (
+                    <div>
+                      <span className="font-medium">Weekly Velocity:</span> {productData.sellerboard_data.weekly_sales} units
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-6 pt-4 border-t border-gray-200">
             <div className="flex space-x-3">
@@ -361,11 +397,12 @@ const EbayLister = () => {
       <div className="card bg-blue-50 border border-blue-200">
         <h3 className="heading-sm mb-3 text-blue-800">How to Use</h3>
         <div className="space-y-2 text-sm text-blue-700">
-          <p>1. Enter a valid Amazon ASIN (10 characters)</p>
-          <p>2. Click "Lookup Product" to fetch product information</p>
-          <p>3. Review the product details and click "Generate eBay Listing"</p>
-          <p>4. Copy the generated listing data to create your eBay listing</p>
-          <p>5. Adjust pricing and details as needed for your eBay store</p>
+          <p>1. Enter a valid Amazon ASIN from your inventory (10 characters)</p>
+          <p>2. Click "Lookup Product" to fetch live data from your Sellerboard account</p>
+          <p>3. Review the product details including current stock and sales velocity</p>
+          <p>4. Click "Generate eBay Listing" to create optimized listing content</p>
+          <p>5. Copy and paste the generated content into your eBay listing</p>
+          <p><strong>Note:</strong> This tool uses your real Sellerboard data, so only ASINs in your inventory will be found.</p>
         </div>
       </div>
     </div>

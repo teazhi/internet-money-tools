@@ -145,23 +145,36 @@ export const useProductImage = (asin) => {
         if (response.data && response.data.image_url) {
           setImageUrl(response.data.image_url);
           
+          // Log method used for debugging
+          if (response.data.method) {
+            console.log(`Image for ${asin} loaded via: ${response.data.method}`);
+          }
+          
           // Cache the result
           try {
             const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
             cache[asin] = {
               url: response.data.image_url,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              method: response.data.method || 'unknown'
             };
             localStorage.setItem('productImages', JSON.stringify(cache));
           } catch (e) {
             // Ignore cache save errors
           }
         } else {
+          console.error(`No image URL returned for ASIN ${asin}:`, response.data);
           setError(true);
         }
       } catch (err) {
-        console.error(`Failed to fetch image for ASIN ${asin}:`, err);
-        setError(true);
+        console.error(`Failed to fetch image for ASIN ${asin}:`, err.response?.data || err.message);
+        
+        // If backend failed, try a fallback URL directly
+        const fallbackUrl = `https://m.media-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`;
+        console.log(`Trying fallback URL for ${asin}: ${fallbackUrl}`);
+        setImageUrl(fallbackUrl);
+        
+        // Don't set error since we're trying a fallback
       } finally {
         setLoading(false);
       }

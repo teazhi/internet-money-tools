@@ -24,6 +24,18 @@ const ImageTest = () => {
       const response = await axios.get(`/api/product-image/${asin}`, { withCredentials: true });
       setResult(response.data);
     } catch (error) {
+      setResult({ error: error.message, response: error.response?.data });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkImageStatus = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get('/api/image-status', { withCredentials: true });
+      setResult(response.data);
+    } catch (error) {
       setResult({ error: error.message });
     } finally {
       setLoading(false);
@@ -60,6 +72,14 @@ const ImageTest = () => {
           className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
         >
           Test Product Image API
+        </button>
+        
+        <button
+          onClick={checkImageStatus}
+          disabled={loading}
+          className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 disabled:opacity-50"
+        >
+          Check Rate Limit Status
         </button>
       </div>
 

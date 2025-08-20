@@ -8843,47 +8843,78 @@ def get_product_image(asin):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Try multiple selectors for product images
+        # Try multiple selectors for product images (more comprehensive)
         image_url = None
         selectors = [
             '#landingImage',
-            'img[data-old-hires]',
             '#imgTagWrapperId img',
+            'img[data-old-hires]',
             '.a-dynamic-image',
-            '#imageBlock img'
+            '#imageBlock img',
+            '#imageBlock_feature_div img',
+            '.a-carousel-container img',
+            '#altImages img',
+            '.image img',
+            '.imgTagWrapper img',
+            '[data-action="main-image-click"] img'
         ]
         
         for selector in selectors:
-            img_element = soup.select_one(selector)
-            if img_element:
+            img_elements = soup.select(selector)
+            for img_element in img_elements:
                 # Get the highest quality image URL
-                image_url = (
-                    img_element.get('data-old-hires') or
-                    img_element.get('data-a-dynamic-image') or
-                    img_element.get('src') or
-                    img_element.get('data-src')
-                )
+                potential_urls = [
+                    img_element.get('data-old-hires'),
+                    img_element.get('data-a-hires'),
+                    img_element.get('data-zoom-hires'), 
+                    img_element.get('data-a-dynamic-image'),
+                    img_element.get('src'),
+                    img_element.get('data-src'),
+                    img_element.get('data-lazy-src')
+                ]
                 
-                # If data-a-dynamic-image contains JSON, parse it
-                if image_url and image_url.startswith('{'):
-                    try:
-                        import json
-                        image_data = json.loads(image_url)
-                        # Get the largest image (highest resolution)
-                        if image_data:
-                            image_url = max(image_data.keys(), key=lambda k: image_data[k] if isinstance(image_data[k], list) and len(image_data[k]) >= 2 else [0, 0])
-                    except:
-                        pass
+                for potential_url in potential_urls:
+                    if not potential_url:
+                        continue
+                        
+                    # If data-a-dynamic-image contains JSON, parse it
+                    if potential_url.startswith('{'):
+                        try:
+                            import json
+                            image_data = json.loads(potential_url)
+                            # Get the largest image (highest resolution)
+                            if image_data and isinstance(image_data, dict):
+                                # Sort by dimensions and get largest
+                                sorted_images = sorted(image_data.items(), 
+                                                     key=lambda x: x[1][0] * x[1][1] if isinstance(x[1], list) and len(x[1]) >= 2 else 0, 
+                                                     reverse=True)
+                                if sorted_images:
+                                    image_url = sorted_images[0][0]
+                                    break
+                        except:
+                            continue
+                    elif potential_url.startswith('http') and any(domain in potential_url for domain in ['amazon.com', 'ssl-images-amazon', 'media-amazon']):
+                        image_url = potential_url
+                        break
                 
                 if image_url and image_url.startswith('http'):
                     break
+            
+            if image_url and image_url.startswith('http'):
+                break
         
         # Fallback to constructed URLs if scraping failed
         if not image_url:
             fallback_urls = [
                 f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
                 f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
-                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SX300_.jpg'
+                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SX300_.jpg',
+                f'https://m.media-amazon.com/images/I/{asin}.jpg',
+                f'https://images-na.ssl-images-amazon.com/images/I/{asin}.jpg',
+                f'https://m.media-amazon.com/images/P/{asin}.01.L.jpg',
+                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.L.jpg',
+                f'https://m.media-amazon.com/images/P/{asin}.01._AC_SX300_.jpg',
+                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._AC_SX300_.jpg'
             ]
             
             for url in fallback_urls:
@@ -8968,27 +8999,81 @@ def get_product_images_batch():
         def fetch_single_image(asin):
             try:
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
                 }
-                response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=8)
+                response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=10)
                 
                 if response.status_code == 200:
                     from bs4 import BeautifulSoup
                     soup = BeautifulSoup(response.content, 'html.parser')
                     
-                    # Try to find image
-                    selectors = ['#landingImage', 'img[data-old-hires]', '#imgTagWrapperId img']
+                    # Use comprehensive image detection (same as single endpoint)
+                    selectors = [
+                        '#landingImage',
+                        '#imgTagWrapperId img',
+                        'img[data-old-hires]',
+                        '.a-dynamic-image',
+                        '#imageBlock img',
+                        '#imageBlock_feature_div img',
+                        '.a-carousel-container img',
+                        '#altImages img',
+                        '.image img',
+                        '.imgTagWrapper img',
+                        '[data-action="main-image-click"] img'
+                    ]
+                    
                     for selector in selectors:
-                        img = soup.select_one(selector)
-                        if img:
-                            img_url = img.get('data-old-hires') or img.get('src')
-                            if img_url and img_url.startswith('http'):
-                                # Cache the result
-                                product_image_cache[f"image_{asin}"] = {
-                                    'image_url': img_url,
-                                    'timestamp': now
-                                }
-                                return asin, img_url
+                        img_elements = soup.select(selector)
+                        for img_element in img_elements:
+                            potential_urls = [
+                                img_element.get('data-old-hires'),
+                                img_element.get('data-a-hires'),
+                                img_element.get('data-zoom-hires'), 
+                                img_element.get('data-a-dynamic-image'),
+                                img_element.get('src'),
+                                img_element.get('data-src'),
+                                img_element.get('data-lazy-src')
+                            ]
+                            
+                            for potential_url in potential_urls:
+                                if not potential_url:
+                                    continue
+                                    
+                                if potential_url.startswith('{'):
+                                    try:
+                                        import json
+                                        image_data = json.loads(potential_url)
+                                        if image_data and isinstance(image_data, dict):
+                                            sorted_images = sorted(image_data.items(), 
+                                                                 key=lambda x: x[1][0] * x[1][1] if isinstance(x[1], list) and len(x[1]) >= 2 else 0, 
+                                                                 reverse=True)
+                                            if sorted_images:
+                                                img_url = sorted_images[0][0]
+                                                if img_url and img_url.startswith('http'):
+                                                    product_image_cache[f"image_{asin}"] = {
+                                                        'image_url': img_url,
+                                                        'timestamp': now
+                                                    }
+                                                    return asin, img_url
+                                    except:
+                                        continue
+                                elif potential_url.startswith('http') and any(domain in potential_url for domain in ['amazon.com', 'ssl-images-amazon', 'media-amazon']):
+                                    product_image_cache[f"image_{asin}"] = {
+                                        'image_url': potential_url,
+                                        'timestamp': now
+                                    }
+                                    return asin, potential_url
+                            
+                            # If we found a valid image, break out
+                            break
+                        
+                        # If we found an image from this selector, break
+                        break
                 
                 return asin, None
             except:
@@ -9015,6 +9100,79 @@ def get_product_images_batch():
         
     except Exception as e:
         return jsonify({'error': f'Batch image fetch failed: {str(e)}'}), 500
+
+@app.route('/api/product-image/<asin>/debug', methods=['GET'])
+@login_required
+def debug_product_image(asin):
+    """Debug endpoint to see what selectors and URLs are found for a specific ASIN"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5'
+        }
+        
+        response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        debug_info = {
+            'asin': asin,
+            'selectors_found': [],
+            'all_images_found': [],
+            'final_image': None
+        }
+        
+        selectors = [
+            '#landingImage',
+            '#imgTagWrapperId img',
+            'img[data-old-hires]',
+            '.a-dynamic-image',
+            '#imageBlock img',
+            '#imageBlock_feature_div img',
+            '.a-carousel-container img',
+            '#altImages img',
+            '.image img',
+            '.imgTagWrapper img',
+            '[data-action="main-image-click"] img'
+        ]
+        
+        for selector in selectors:
+            img_elements = soup.select(selector)
+            if img_elements:
+                selector_info = {
+                    'selector': selector,
+                    'count': len(img_elements),
+                    'images': []
+                }
+                
+                for img in img_elements[:3]:  # Limit to first 3 for debugging
+                    img_info = {}
+                    attrs = ['data-old-hires', 'data-a-hires', 'data-zoom-hires', 'data-a-dynamic-image', 'src', 'data-src', 'data-lazy-src']
+                    for attr in attrs:
+                        value = img.get(attr)
+                        if value:
+                            img_info[attr] = value[:100] + '...' if len(value) > 100 else value
+                    
+                    if img_info:
+                        selector_info['images'].append(img_info)
+                        debug_info['all_images_found'].append({
+                            'selector': selector,
+                            'attributes': img_info
+                        })
+                
+                if selector_info['images']:
+                    debug_info['selectors_found'].append(selector_info)
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({
+            'asin': asin,
+            'error': f'Debug failed: {str(e)}'
+        }), 500
 
 # Demo control endpoints
 @app.route('/api/demo/status', methods=['GET'])

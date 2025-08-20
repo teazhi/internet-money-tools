@@ -6067,6 +6067,69 @@ def fetch_discount_leads():
     except Exception as e:
         return jsonify({'error': f'Error processing CSV data: {str(e)}'}), 500
 
+def get_cached_discount_opportunities(discord_id, retailer_filter=''):
+    """Get cached discount opportunities from database"""
+    try:
+        # Create discount_opportunities_cache table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS discount_opportunities_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                retailer_filter TEXT NOT NULL DEFAULT '',
+                data TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL
+            )
+        ''')
+        conn.commit()
+        
+        # Check for valid cached data (30 minute expiry)
+        cursor.execute('''
+            SELECT data FROM discount_opportunities_cache 
+            WHERE discord_id = ? AND retailer_filter = ? AND expires_at > datetime('now')
+            ORDER BY created_at DESC LIMIT 1
+        ''', (discord_id, retailer_filter))
+        
+        result = cursor.fetchone()
+        if result:
+            data = json.loads(result[0])
+            # Add cache indicator
+            data['cached'] = True
+            return data
+        return None
+        
+    except Exception as e:
+        print(f"Error retrieving cached discount opportunities: {e}")
+        return None
+
+def cache_discount_opportunities(discord_id, retailer_filter, data):
+    """Cache discount opportunities data to database"""
+    try:
+        # Delete old cache entries for this user/filter combination
+        cursor.execute('''
+            DELETE FROM discount_opportunities_cache 
+            WHERE discord_id = ? AND retailer_filter = ?
+        ''', (discord_id, retailer_filter))
+        
+        # Insert new cache entry with 30-minute expiry
+        expires_at = (datetime.now() + timedelta(minutes=30)).isoformat()
+        cursor.execute('''
+            INSERT INTO discount_opportunities_cache (discord_id, retailer_filter, data, expires_at)
+            VALUES (?, ?, ?, ?)
+        ''', (discord_id, retailer_filter, json.dumps(data), expires_at))
+        
+        conn.commit()
+        
+        # Cleanup old expired entries (housekeeping)
+        cursor.execute('''
+            DELETE FROM discount_opportunities_cache 
+            WHERE expires_at < datetime('now')
+        ''')
+        conn.commit()
+        
+    except Exception as e:
+        print(f"Error caching discount opportunities: {e}")
+
 @app.route('/api/discount-opportunities/analyze', methods=['POST'])
 @login_required
 def analyze_discount_opportunities():
@@ -6082,17 +6145,11 @@ def analyze_discount_opportunities():
         # Get user's current analytics data
         discord_id = session['discord_id']
         
-        # Check cache first
-        cache_key = f"discount_opportunities_{discord_id}_{retailer_filter}"
-        if cache_key in analytics_cache:
-            cache_entry = analytics_cache[cache_key]
-            # Check if cache is still valid (5 minutes)
-            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=5):
-                print(f"[DEBUG] Returning cached discount opportunities for user {discord_id}")
-                return jsonify(cache_entry['data'])
-            else:
-                print(f"[DEBUG] Cache expired for discount opportunities, regenerating...")
-                del analytics_cache[cache_key]
+        # Check database cache first (30 minute expiry for better performance)
+        cached_opportunities = get_cached_discount_opportunities(discord_id, retailer_filter)
+        if cached_opportunities:
+            print(f"[DEBUG] Returning cached discount opportunities from database for user {discord_id}")
+            return jsonify(cached_opportunities)
         
         # Log environment configuration
         print(f"[DEBUG] DISCOUNT_MONITOR_EMAIL: {DISCOUNT_MONITOR_EMAIL}")
@@ -6379,12 +6436,9 @@ def analyze_discount_opportunities():
             'message': f'Found {len(opportunities)} discount leads ({restock_needed_count} need restocking, {not_needed_count} not needed, {not_tracked_count} not tracked)'
         }
         
-        # Cache the result for 5 minutes
-        analytics_cache[cache_key] = {
-            'data': result,
-            'timestamp': datetime.now()
-        }
-        print(f"[DEBUG] Cached discount opportunities for user {discord_id}")
+        # Cache the result in database for 30 minutes
+        cache_discount_opportunities(discord_id, retailer_filter, result)
+        print(f"[DEBUG] Cached discount opportunities in database for user {discord_id}")
         
         return jsonify(result)
         
@@ -6392,6 +6446,28 @@ def analyze_discount_opportunities():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Error analyzing opportunities: {str(e)}'}), 500
+
+@app.route('/api/discount-opportunities/refresh', methods=['POST'])
+@login_required
+def refresh_discount_opportunities():
+    """Force refresh discount opportunities cache"""
+    try:
+        data = request.get_json() or {}
+        retailer_filter = data.get('retailer', '')
+        discord_id = session['discord_id']
+        
+        # Clear existing cache
+        cursor.execute('''
+            DELETE FROM discount_opportunities_cache 
+            WHERE discord_id = ? AND retailer_filter = ?
+        ''', (discord_id, retailer_filter))
+        conn.commit()
+        
+        # Redirect to analyze endpoint to regenerate data
+        return analyze_discount_opportunities()
+        
+    except Exception as e:
+        return jsonify({'error': f'Error refreshing opportunities: {str(e)}'}), 500
 
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required

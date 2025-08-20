@@ -62,12 +62,16 @@ const DiscountOpportunities = () => {
     { id: 'trends', name: 'Market Trends', icon: TrendingDown }
   ];
 
-  const fetchOpportunities = async () => {
+  const fetchOpportunities = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await axios.post('/api/discount-opportunities/analyze', {
+      const endpoint = forceRefresh 
+        ? '/api/discount-opportunities/refresh' 
+        : '/api/discount-opportunities/analyze';
+      
+      const response = await axios.post(endpoint, {
         retailer: retailerFilter
       }, { withCredentials: true });
       
@@ -461,6 +465,11 @@ const DiscountOpportunities = () => {
                 {stats && (
                   <div className="mt-2 text-xs text-gray-500">
                     {stats.message} • {stats.totalAlertsProcessed} emails processed • Showing {stats.uniqueCount} restock opportunities
+                    {stats.cached && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                        Cached (fast load)
+                      </span>
+                    )}
                     {(stats.duplicatesRemoved > 0 || stats.notNeededFiltered > 0) && (
                       <span className="ml-2 text-orange-600 font-medium">
                         (filtered: {stats.duplicatesRemoved > 0 && `${stats.duplicatesRemoved} duplicate${stats.duplicatesRemoved !== 1 ? 's' : ''}`}{stats.duplicatesRemoved > 0 && stats.notNeededFiltered > 0 && ', '}{stats.notNeededFiltered > 0 && `${stats.notNeededFiltered} non-restock`})
@@ -490,15 +499,28 @@ const DiscountOpportunities = () => {
                   <option value="kohls">Kohl's</option>
                 </select>
                 
-                {/* Refresh Button */}
-                <button
-                  onClick={fetchOpportunities}
-                  disabled={loading}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>
+                {/* Refresh Buttons */}
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => fetchOpportunities(false)}
+                    disabled={loading}
+                    className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="Load from cache (fast)"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => fetchOpportunities(true)}
+                    disabled={loading}
+                    className="flex items-center space-x-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    title="Force refresh from source data (slower but most up-to-date)"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Force</span>
+                  </button>
+                </div>
               </div>
             </div>
             

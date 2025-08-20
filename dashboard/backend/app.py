@@ -9078,7 +9078,7 @@ start_queue_worker()
 @app.route('/api/product-image/<asin>', methods=['GET'])
 @login_required
 def get_product_image(asin):
-    """Get product image URL using reliable third-party services"""
+    """Get product image URL by scraping Amazon HTML"""
     try:
         # Check cache first
         cache_key = f"image_{asin}"
@@ -9095,112 +9095,54 @@ def get_product_image(asin):
                     'cache_age': int((now - cache_time).total_seconds())
                 })
         
-        # Method 1: Try reliable Amazon image CDN patterns that work without authentication
+        # Primary method: HTML scraping with the correct selector
         image_url = None
         method_used = None
         
-        reliable_patterns = [
-            # Most reliable Amazon image URLs
-            f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_QL70_FMwebp_.jpg',
-            f'https://m.media-amazon.com/images/P/{asin}.01._AC_SL1500_.jpg',
-            f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SL1500_.jpg',
-            f'https://m.media-amazon.com/images/P/{asin}.01._SX466_.jpg',
-            f'https://images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
-        ]
-        
-        # Test each pattern quickly
-        for pattern in reliable_patterns:
-            try:
-                response = requests.head(pattern, timeout=3, headers={
-                    'User-Agent': 'Mozilla/5.0 (compatible; ProductImageBot/1.0)',
-                    'Accept': 'image/*,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1'
-                })
+        try:
+            amazon_url = f'https://www.amazon.com/dp/{asin}'
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none'
+            }
+            
+            response = requests.get(amazon_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # Check if image exists and has reasonable size
-                if (response.status_code == 200 and 
-                    response.headers.get('content-type', '').startswith('image/') and
-                    int(response.headers.get('content-length', '0')) > 1000):  # At least 1KB
-                    
-                    image_url = pattern
-                    method_used = 'amazon_cdn_verified'
-                    break
-                    
-            except Exception as e:
-                continue
+                # Use the exact selector: #imgTagWrapperId
+                img_wrapper = soup.select_one('#imgTagWrapperId')
+                if img_wrapper:
+                    img = img_wrapper.select_one('img')
+                    if img:
+                        # Try data-old-hires first (high-res), then src
+                        scraped_url = img.get('data-old-hires') or img.get('src')
+                        if scraped_url and scraped_url.startswith('http'):
+                            image_url = scraped_url
+                            method_used = 'html_scraping'
+                            
+        except Exception as e:
+            # Log the error but continue to fallback
+            print(f"HTML scraping failed for {asin}: {str(e)}")
         
-        # Method 2: Try Amazon Associate image widget (very reliable)
+        # Fallback: Try Amazon Associates widget (often bypasses restrictions)
         if not image_url:
             try:
-                associate_patterns = [
-                    f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1',
-                    f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL160_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
-                ]
-                
-                for pattern in associate_patterns:
-                    response = requests.head(pattern, timeout=5)
-                    if response.status_code == 200:
-                        image_url = pattern
-                        method_used = 'amazon_associates'
-                        break
-            except:
-                pass
-        
-        # Method 3: Use RapidAPI Amazon Product Data service (if API key available)
-        if not image_url:
-            try:
-                # This would require RapidAPI key configuration
-                # rapidapi_url = "https://amazon-product-reviews-keywords.p.rapidapi.com/product/search"
-                # headers = {
-                #     "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
-                #     "X-RapidAPI-Host": "amazon-product-reviews-keywords.p.rapidapi.com"
-                # }
-                # querystring = {"keyword": asin, "country": "US", "category": "aps"}
-                # response = requests.get(rapidapi_url, headers=headers, params=querystring)
-                pass
-            except:
-                pass
-        
-        # Method 4: HTML scraping with correct selector (last resort)
-        if not image_url:
-            try:
-                # Only use scraping if CDN patterns fail
-                amazon_url = f'https://www.amazon.com/dp/{asin}'
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none'
-                }
-                
-                response = requests.get(amazon_url, headers=headers, timeout=10)
+                associate_url = f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
+                response = requests.head(associate_url, timeout=5)
                 if response.status_code == 200:
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    
-                    # Use the exact selector you showed me
-                    img_wrapper = soup.select_one('#imgTagWrapperId')
-                    if img_wrapper:
-                        img = img_wrapper.select_one('img')
-                        if img:
-                            # Try data-old-hires first (high-res), then src
-                            scraped_url = img.get('data-old-hires') or img.get('src')
-                            if scraped_url and scraped_url.startswith('http'):
-                                image_url = scraped_url
-                                method_used = 'html_scraping_imgTagWrapper'
-                                
-            except Exception as e:
-                # Scraping failed, continue to fallback
+                    image_url = associate_url
+                    method_used = 'amazon_associates'
+            except:
                 pass
         
         # If we found an image, cache it and return
@@ -9217,7 +9159,7 @@ def get_product_image(asin):
                 'method': method_used
             })
         
-        # Generate a more meaningful placeholder with ASIN
+        # Generate a meaningful placeholder with ASIN
         placeholder_url = f'https://via.placeholder.com/300x300/f0f0f0/666666?text={asin[:8]}'
         
         return jsonify({
@@ -9267,92 +9209,92 @@ def get_product_images_batch():
             else:
                 uncached_asins.append(asin)
         
-        # For batch processing, process sequentially with proper delays
+        # For batch processing, use the same simplified approach
         for asin in uncached_asins:
             try:
-                # First try constructed URLs (fast and reliable)
-                primary_urls = [
-                    f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
-                    f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
-                    f'https://m.media-amazon.com/images/P/{asin}.01._AC_SX300_.jpg'
-                ]
-                
                 found_image = False
-                headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
                 
-                for url in primary_urls:
-                    try:
-                        test_response = requests.head(url, timeout=3, headers=headers)
-                        if test_response.status_code == 200:
-                            product_image_cache[f"image_{asin}"] = {
-                                'image_url': url,
-                                'timestamp': now
-                            }
-                            results[asin] = {
-                                'image_url': url,
-                                'cached': False,
-                                'method': 'constructed_verified'
-                            }
-                            found_image = True
-                            break
-                    except:
-                        continue
-                
-                # If constructed URLs failed, try scraping with the correct selector
-                if not found_image:
-                    print(f"Constructed URLs failed for {asin}, trying scraping...")
-                    response = fetch_amazon_page_with_retry(asin, max_retries=1)
+                # Primary method: HTML scraping with the correct selector
+                try:
+                    amazon_url = f'https://www.amazon.com/dp/{asin}'
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.5',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'DNT': '1',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1'
+                    }
                     
-                    if response:
+                    response = requests.get(amazon_url, headers=headers, timeout=10)
+                    if response.status_code == 200:
                         from bs4 import BeautifulSoup
                         soup = BeautifulSoup(response.content, 'html.parser')
                         
-                        # Use the correct selector you identified
-                        img_tag_wrapper = soup.select_one('#imgTagWrapperId')
-                        if img_tag_wrapper:
-                            img_elements = img_tag_wrapper.select('img')
-                            for img in img_elements:
-                                for attr in ['data-old-hires', 'data-a-hires', 'src', 'data-src']:
-                                    url = img.get(attr)
-                                    if url and url.startswith('http'):
-                                        product_image_cache[f"image_{asin}"] = {
-                                            'image_url': url,
-                                            'timestamp': now
-                                        }
-                                        results[asin] = {
-                                            'image_url': url,
-                                            'cached': False,
-                                            'method': 'scraped_imgTagWrapperId'
-                                        }
-                                        found_image = True
-                                        break
-                                if found_image:
-                                    break
+                        # Use the exact selector: #imgTagWrapperId
+                        img_wrapper = soup.select_one('#imgTagWrapperId')
+                        if img_wrapper:
+                            img = img_wrapper.select_one('img')
+                            if img:
+                                # Try data-old-hires first (high-res), then src
+                                scraped_url = img.get('data-old-hires') or img.get('src')
+                                if scraped_url and scraped_url.startswith('http'):
+                                    product_image_cache[f"image_{asin}"] = {
+                                        'image_url': scraped_url,
+                                        'timestamp': now
+                                    }
+                                    results[asin] = {
+                                        'image_url': scraped_url,
+                                        'cached': False,
+                                        'method': 'html_scraping'
+                                    }
+                                    found_image = True
                     
                     # Add delay between scraping attempts to avoid detection
-                    if not found_image:
-                        time.sleep(random.uniform(1, 3))
+                    if len(uncached_asins) > 1:
+                        time.sleep(random.uniform(1, 2))
+                        
+                except Exception as e:
+                    print(f"HTML scraping failed for {asin}: {str(e)}")
                 
-                # Last resort fallback
+                # Fallback: Try Amazon Associates widget
                 if not found_image:
-                    fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
-                    product_image_cache[f"image_{asin}"] = {
-                        'image_url': fallback_url,
-                        'timestamp': now
-                    }
+                    try:
+                        associate_url = f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
+                        response = requests.head(associate_url, timeout=5)
+                        if response.status_code == 200:
+                            product_image_cache[f"image_{asin}"] = {
+                                'image_url': associate_url,
+                                'timestamp': now
+                            }
+                            results[asin] = {
+                                'image_url': associate_url,
+                                'cached': False,
+                                'method': 'amazon_associates'
+                            }
+                            found_image = True
+                    except:
+                        pass
+                
+                # If still no image, use placeholder
+                if not found_image:
+                    placeholder_url = f'https://via.placeholder.com/300x300/f0f0f0/666666?text={asin[:8]}'
                     results[asin] = {
-                        'image_url': fallback_url,
+                        'image_url': placeholder_url,
                         'cached': False,
-                        'method': 'unverified_fallback'
+                        'method': 'placeholder',
+                        'error': 'Failed to find image'
                     }
                 
             except Exception as e:
                 print(f"Error processing {asin}: {str(e)}")
-                fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
+                placeholder_url = f'https://via.placeholder.com/300x300/ffcccc/cc0000?text=ERROR'
                 results[asin] = {
-                    'image_url': fallback_url,
+                    'image_url': placeholder_url,
                     'cached': False,
-                    'method': 'error_fallback'
+                    'method': 'error_placeholder',
+                    'error': str(e)
                 }
         
         return jsonify({
@@ -9368,54 +9310,22 @@ def get_product_images_batch():
 @app.route('/api/test-image-patterns/<asin>', methods=['GET'])
 @login_required
 def test_image_patterns(asin):
-    """Test all image URL patterns for debugging"""
+    """Test HTML scraping and fallback methods for debugging"""
     try:
-        patterns = [
-            f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_QL70_FMwebp_.jpg',
-            f'https://m.media-amazon.com/images/P/{asin}.01._AC_SL1500_.jpg',
-            f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SL1500_.jpg',
-            f'https://m.media-amazon.com/images/P/{asin}.01._SX466_.jpg',
-            f'https://images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
-            f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
-        ]
-        
         results = []
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (compatible; ProductImageBot/1.0)',
-            'Accept': 'image/*,*/*;q=0.8'
-        }
         
-        for pattern in patterns:
-            try:
-                response = requests.head(pattern, timeout=5, headers=headers)
-                content_type = response.headers.get('content-type', '')
-                content_length = response.headers.get('content-length', '0')
-                
-                results.append({
-                    'url': pattern,
-                    'status_code': response.status_code,
-                    'content_type': content_type,
-                    'content_length': content_length,
-                    'valid_image': (response.status_code == 200 and 
-                                  content_type.startswith('image/') and 
-                                  int(content_length) > 1000)
-                })
-            except Exception as e:
-                results.append({
-                    'url': pattern,
-                    'error': str(e),
-                    'valid_image': False
-                })
-        
-        # Also test HTML scraping method if no patterns worked
+        # Test HTML scraping method (primary method)
         scraping_result = None
-        working_patterns = [r for r in results if r.get('valid_image', False)]
-        
-        if len(working_patterns) == 0:
-            try:
-                amazon_url = f'https://www.amazon.com/dp/{asin}'
-                scrape_headers = {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        try:
+            amazon_url = f'https://www.amazon.com/dp/{asin}'
+            scrape_headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
                 }
                 
                 response = requests.get(amazon_url, headers=scrape_headers, timeout=10)
@@ -9462,11 +9372,29 @@ def test_image_patterns(asin):
                     'method': 'html_scraping_failed'
                 }
 
+        # Test Amazon Associates widget as fallback
+        associate_result = None
+        try:
+            associate_url = f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
+            response = requests.head(associate_url, timeout=5)
+            associate_result = {
+                'url': associate_url,
+                'status_code': response.status_code,
+                'valid': response.status_code == 200,
+                'method': 'amazon_associates'
+            }
+        except Exception as e:
+            associate_result = {
+                'error': str(e),
+                'valid': False,
+                'method': 'amazon_associates_failed'
+            }
+
         return jsonify({
             'asin': asin,
-            'tested_patterns': results,
-            'working_urls': working_patterns,
-            'html_scraping_result': scraping_result
+            'html_scraping_result': scraping_result,
+            'associate_widget_result': associate_result,
+            'recommendation': 'HTML scraping is the primary method, Associates widget is fallback'
         })
         
     except Exception as e:

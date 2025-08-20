@@ -148,35 +148,37 @@ const ImageTest = () => {
             </div>
           )}
 
-          {result.working_urls && result.working_urls.length > 0 && (
+          {result.associate_widget_result && (
             <div className="mt-4">
-              <h4 className="font-semibold mb-2">Working Image URLs ({result.working_urls.length} found):</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {result.working_urls.map((urlData, index) => (
-                  <div key={index} className="border border-gray-300 rounded p-3">
-                    <div className="mb-2">
-                      <img 
-                        src={urlData.url} 
-                        alt={`Pattern ${index + 1}`}
-                        className="w-full h-32 object-contain border border-gray-200 rounded"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'block';
-                        }}
-                      />
-                      <div style={{display: 'none'}} className="text-red-500 text-xs">
-                        Failed to load
-                      </div>
-                    </div>
-                    <div className="text-xs">
-                      <div className="font-medium text-green-600">✓ Valid Image</div>
-                      <div className="text-gray-600">Size: {urlData.content_length} bytes</div>
-                      <div className="text-gray-600">Type: {urlData.content_type}</div>
-                      <div className="text-gray-500 break-all mt-1">{urlData.url}</div>
-                    </div>
+              <h4 className="font-semibold mb-2">Associates Widget Result:</h4>
+              <div className={`p-3 rounded ${result.associate_widget_result.valid ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <div className="flex items-center mb-2">
+                  <span className={`font-medium ${result.associate_widget_result.valid ? 'text-green-600' : 'text-red-600'}`}>
+                    {result.associate_widget_result.valid ? '✓' : '✗'} Associates Widget {result.associate_widget_result.valid ? 'Available' : 'Failed'}
+                  </span>
+                </div>
+                {result.associate_widget_result.valid && (
+                  <div>
+                    <img 
+                      src={result.associate_widget_result.url} 
+                      alt="Associates Widget"
+                      className="w-24 h-24 object-contain border border-gray-200 rounded mb-2"
+                    />
+                    <div className="text-xs text-gray-600 break-all">{result.associate_widget_result.url}</div>
                   </div>
-                ))}
+                )}
+                {result.associate_widget_result.error && (
+                  <div className="text-sm text-red-600">{result.associate_widget_result.error}</div>
+                )}
               </div>
+            </div>
+          )}
+          
+          {result.recommendation && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">
+                <strong>Recommendation:</strong> {result.recommendation}
+              </p>
             </div>
           )}
 
@@ -223,29 +225,6 @@ const ImageTest = () => {
             </div>
           )}
 
-          {result.tested_patterns && (
-            <div className="mt-4">
-              <h4 className="font-semibold mb-2">All Tested Patterns:</h4>
-              <div className="space-y-2">
-                {result.tested_patterns.map((pattern, index) => (
-                  <div key={index} className={`p-2 rounded text-sm ${pattern.valid_image ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className={`font-medium ${pattern.valid_image ? 'text-green-600' : 'text-red-600'}`}>
-                        {pattern.valid_image ? '✓' : '✗'} {pattern.status_code || 'Error'}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {pattern.content_length && `${pattern.content_length} bytes`}
-                      </span>
-                    </div>
-                    <div className="text-gray-600 break-all mt-1">{pattern.url}</div>
-                    {pattern.error && (
-                      <div className="text-red-500 text-xs mt-1">Error: {pattern.error}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

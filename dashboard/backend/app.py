@@ -10059,9 +10059,11 @@ def get_product_by_asin(asin):
             
         # Get user's Discord ID for configuration lookup
         discord_id = session['discord_id']
+        print(f"eBay Lister: Looking up ASIN {asin} for user {discord_id}")
         user_record = get_user_config(discord_id)
         
         if not user_record:
+            print(f"eBay Lister: No user configuration found for {discord_id}")
             return jsonify({
                 'success': False,
                 'message': 'User configuration not found. Please complete your setup first.'
@@ -10071,7 +10073,11 @@ def get_product_by_asin(asin):
         orders_url = user_record.get('sellerboard_orders_url')
         stock_url = user_record.get('sellerboard_stock_url')
         
+        print(f"eBay Lister: Orders URL configured: {bool(orders_url)}")
+        print(f"eBay Lister: Stock URL configured: {bool(stock_url)}")
+        
         if not orders_url or not stock_url:
+            print(f"eBay Lister: Missing URLs - orders: {bool(orders_url)}, stock: {bool(stock_url)}")
             return jsonify({
                 'success': False,
                 'message': 'Sellerboard URLs not configured. Please set up your Sellerboard integration in Settings first.'
@@ -10088,11 +10094,16 @@ def get_product_by_asin(asin):
         
         try:
             # Initialize with user's Sellerboard URLs
+            print(f"eBay Lister: Initializing analyzer for ASIN {asin_upper}")
             analyzer = EnhancedOrdersAnalysis(orders_url, stock_url)
             
             # Get stock information (contains product details)
+            print(f"eBay Lister: Downloading stock CSV from Sellerboard")
             stock_df = analyzer.download_csv(stock_url)
+            print(f"eBay Lister: Stock CSV downloaded, shape: {stock_df.shape}")
+            
             stock_info = analyzer.get_stock_info(stock_df)
+            print(f"eBay Lister: Processed {len(stock_info)} products from stock data")
             
             # Check if ASIN exists in stock data
             asin_upper = asin.upper()
@@ -10185,16 +10196,49 @@ def get_product_by_asin(asin):
             
         except Exception as sellerboard_error:
             print(f"Sellerboard integration error: {sellerboard_error}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback to basic mock data if Sellerboard fails
+            print(f"eBay Lister: Falling back to mock data for ASIN {asin_upper}")
+            mock_product_data = {
+                'asin': asin_upper,
+                'title': f'Product {asin_upper} (Fallback Data)',
+                'brand': 'Unknown Brand',
+                'category': 'General Merchandise',
+                'price': '29.99',
+                'current_stock': 0,
+                'weekly_sales': 0,
+                'image_url': f'https://via.placeholder.com/300x300?text={asin_upper}',
+                'dimensions': 'Not available',
+                'weight': 'Not available',
+                'description': f'Product {asin_upper} - Sellerboard integration failed, using fallback data.',
+                'bullet_points': [
+                    f'ASIN: {asin_upper}',
+                    'Sellerboard integration temporarily unavailable',
+                    'Please check your Sellerboard URL configuration',
+                    'Contact support if this persists'
+                ],
+                'features': {
+                    'ASIN': asin_upper,
+                    'Data Source': 'Fallback (Sellerboard Failed)'
+                },
+                'sellerboard_error': str(sellerboard_error)
+            }
+            
             return jsonify({
-                'success': False,
-                'message': f'Failed to fetch data from Sellerboard: {str(sellerboard_error)}. Please check your Sellerboard URL configuration.'
-            }), 500
+                'success': True,
+                'product': mock_product_data,
+                'warning': f'Sellerboard integration failed: {str(sellerboard_error)}'
+            })
         
     except Exception as e:
         print(f"Error fetching product data for ASIN {asin}: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
-            'message': 'Failed to fetch product data. Please try again.'
+            'message': f'Failed to fetch product data: {str(e)}. Check server logs for details.'
         }), 500
 
 @app.route('/api/ebay/generate-listing', methods=['POST'])

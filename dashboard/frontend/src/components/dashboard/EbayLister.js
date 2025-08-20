@@ -44,12 +44,20 @@ const EbayLister = () => {
 
       if (response.data.success) {
         setProductData(response.data.product);
+        // Show warning if there was a Sellerboard issue
+        if (response.data.warning) {
+          setError(`Warning: ${response.data.warning}`);
+        }
       } else {
         setError(response.data.message || 'Product not found');
       }
     } catch (err) {
       if (err.response?.status === 404) {
         setError('Product not found. Please verify the ASIN is correct.');
+      } else if (err.response?.status === 400) {
+        setError(err.response.data?.message || 'Configuration error. Please check your Sellerboard setup in Settings.');
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
       } else {
         setError('Failed to fetch product data. Please try again.');
       }

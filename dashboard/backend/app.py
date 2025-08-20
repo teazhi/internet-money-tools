@@ -9078,7 +9078,7 @@ start_queue_worker()
 @app.route('/api/product-image/<asin>', methods=['GET'])
 @login_required
 def get_product_image(asin):
-    """Get product image URL with queue-based background processing"""
+    """Get product image URL using reliable third-party services"""
     try:
         # Check cache first
         cache_key = f"image_{asin}"
@@ -9095,29 +9095,120 @@ def get_product_image(asin):
                     'cache_age': int((now - cache_time).total_seconds())
                 })
         
-        # Add to queue for background processing
-        with queue_lock:
-            if asin not in image_queue:
-                image_queue.append(asin)
-                print(f"Added {asin} to processing queue (position {len(image_queue)})")
+        # Method 1: Try reliable Amazon image CDN patterns that work without authentication
+        image_url = None
+        method_used = None
         
-        # Return a placeholder/fallback immediately
-        fallback_url = f'https://via.placeholder.com/300x300.png?text={asin}'
+        reliable_patterns = [
+            # Most reliable Amazon image URLs
+            f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_QL70_FMwebp_.jpg',
+            f'https://m.media-amazon.com/images/P/{asin}.01._AC_SL1500_.jpg',
+            f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SL1500_.jpg',
+            f'https://m.media-amazon.com/images/P/{asin}.01._SX466_.jpg',
+            f'https://images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
+        ]
+        
+        # Test each pattern quickly
+        for pattern in reliable_patterns:
+            try:
+                response = requests.head(pattern, timeout=3, headers={
+                    'User-Agent': 'Mozilla/5.0 (compatible; ProductImageBot/1.0)',
+                    'Accept': 'image/*,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
+                })
+                
+                # Check if image exists and has reasonable size
+                if (response.status_code == 200 and 
+                    response.headers.get('content-type', '').startswith('image/') and
+                    int(response.headers.get('content-length', '0')) > 1000):  # At least 1KB
+                    
+                    image_url = pattern
+                    method_used = 'amazon_cdn_verified'
+                    break
+                    
+            except Exception as e:
+                continue
+        
+        # Method 2: Try Amazon Associate image widget (very reliable)
+        if not image_url:
+            try:
+                associate_patterns = [
+                    f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1',
+                    f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL160_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
+                ]
+                
+                for pattern in associate_patterns:
+                    response = requests.head(pattern, timeout=5)
+                    if response.status_code == 200:
+                        image_url = pattern
+                        method_used = 'amazon_associates'
+                        break
+            except:
+                pass
+        
+        # Method 3: Use RapidAPI Amazon Product Data service (if API key available)
+        if not image_url:
+            try:
+                # This would require RapidAPI key configuration
+                # rapidapi_url = "https://amazon-product-reviews-keywords.p.rapidapi.com/product/search"
+                # headers = {
+                #     "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+                #     "X-RapidAPI-Host": "amazon-product-reviews-keywords.p.rapidapi.com"
+                # }
+                # querystring = {"keyword": asin, "country": "US", "category": "aps"}
+                # response = requests.get(rapidapi_url, headers=headers, params=querystring)
+                pass
+            except:
+                pass
+        
+        # Method 4: Alternative image services
+        if not image_url:
+            try:
+                # Try using Amazon's search API approach
+                search_patterns = [
+                    f'https://completion.amazon.com/api/2017/suggestions?limit=1&prefix={asin}&suggestion-type=KEYWORD&page-type=Gateway&alias=aps&site-variant=desktop&version=3&event=onKeyPress&wc=',
+                    f'https://www.amazon.com/s?k={asin}&ref=nb_sb_noss'
+                ]
+                # This would require parsing but is more complex for this context
+                pass
+            except:
+                pass
+        
+        # If we found an image, cache it and return
+        if image_url:
+            product_image_cache[cache_key] = {
+                'image_url': image_url,
+                'timestamp': now
+            }
+            
+            return jsonify({
+                'asin': asin,
+                'image_url': image_url,
+                'cached': False,
+                'method': method_used
+            })
+        
+        # Generate a more meaningful placeholder with ASIN
+        placeholder_url = f'https://via.placeholder.com/300x300/f0f0f0/666666?text={asin[:8]}'
         
         return jsonify({
             'asin': asin,
-            'image_url': fallback_url,
+            'image_url': placeholder_url,
             'cached': False,
-            'method': 'queued_for_processing',
-            'queue_position': len(image_queue),
-            'message': 'Image queued for background processing'
+            'method': 'placeholder_fallback',
+            'note': f'No image found for ASIN {asin}'
         })
             
     except Exception as e:
         return jsonify({
             'asin': asin,
-            'image_url': f'https://via.placeholder.com/300x300.png?text={asin}',
-            'error': f'Unexpected error: {str(e)}'
+            'image_url': f'https://via.placeholder.com/300x300/ffcccc/cc0000?text=ERROR',
+            'error': f'Server error: {str(e)}',
+            'method': 'error_placeholder'
         }), 500
 
 @app.route('/api/product-images/batch', methods=['POST'])
@@ -9248,6 +9339,57 @@ def get_product_images_batch():
         
     except Exception as e:
         return jsonify({'error': f'Batch image fetch failed: {str(e)}'}), 500
+
+@app.route('/api/test-image-patterns/<asin>', methods=['GET'])
+@login_required
+def test_image_patterns(asin):
+    """Test all image URL patterns for debugging"""
+    try:
+        patterns = [
+            f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_QL70_FMwebp_.jpg',
+            f'https://m.media-amazon.com/images/P/{asin}.01._AC_SL1500_.jpg',
+            f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SL1500_.jpg',
+            f'https://m.media-amazon.com/images/P/{asin}.01._SX466_.jpg',
+            f'https://images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
+            f'https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN={asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1'
+        ]
+        
+        results = []
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; ProductImageBot/1.0)',
+            'Accept': 'image/*,*/*;q=0.8'
+        }
+        
+        for pattern in patterns:
+            try:
+                response = requests.head(pattern, timeout=5, headers=headers)
+                content_type = response.headers.get('content-type', '')
+                content_length = response.headers.get('content-length', '0')
+                
+                results.append({
+                    'url': pattern,
+                    'status_code': response.status_code,
+                    'content_type': content_type,
+                    'content_length': content_length,
+                    'valid_image': (response.status_code == 200 and 
+                                  content_type.startswith('image/') and 
+                                  int(content_length) > 1000)
+                })
+            except Exception as e:
+                results.append({
+                    'url': pattern,
+                    'error': str(e),
+                    'valid_image': False
+                })
+        
+        return jsonify({
+            'asin': asin,
+            'tested_patterns': results,
+            'working_urls': [r for r in results if r.get('valid_image', False)]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/product-image/<asin>/debug', methods=['GET'])
 @login_required

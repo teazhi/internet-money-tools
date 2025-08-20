@@ -10184,9 +10184,12 @@ def get_product_by_asin(asin):
                 
             # Get product information from stock data
             product_info = stock_info[asin_to_use]
+            print(f"eBay Lister: Successfully retrieved product info for {asin_to_use}")
             
             # Try to get sales data for pricing context
+            print(f"eBay Lister: Downloading orders CSV from Sellerboard")
             orders_df = analyzer.download_csv(orders_url)
+            print(f"eBay Lister: Orders CSV downloaded, shape: {orders_df.shape}")
             orders_for_week = analyzer.get_orders_for_date_range(
                 orders_df, 
                 target_date - timedelta(days=7), 

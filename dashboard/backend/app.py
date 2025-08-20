@@ -6748,10 +6748,10 @@ def get_all_features():
             feature_key, name, description, is_beta, is_public, launched_at, launch_notes = row
             features.append({
                 'feature_key': feature_key,
-                'name': name,
+                'display_name': name,  # Frontend expects display_name
                 'description': description,
                 'is_beta': bool(is_beta),
-                'is_public': bool(is_public) if is_public is not None else False,
+                'is_launched': bool(is_public) if is_public is not None else False,  # Frontend expects is_launched
                 'launched_at': launched_at,
                 'launch_notes': launch_notes
             })
@@ -10354,20 +10354,25 @@ def disable_demo_mode():
 def get_all_user_features():
     """Get all user feature access permissions"""
     try:
+        # Get users from config (S3)
+        users = get_users_config()
+        
+        # Get all user feature access from database
         cursor.execute('''
-            SELECT u.discord_id, u.discord_username, u.email, ufa.feature_key, ufa.has_access
-            FROM users u
-            LEFT JOIN user_feature_access ufa ON u.discord_id = ufa.discord_id
-            ORDER BY u.discord_username, ufa.feature_key
+            SELECT discord_id, feature_key, has_access
+            FROM user_feature_access
+            WHERE has_access = 1
         ''')
         
         user_features = {}
+        for user in users:
+            user_features[user['discord_id']] = {}
+            
         for row in cursor.fetchall():
-            discord_id, username, email, feature_key, has_access = row
+            discord_id, feature_key, has_access = row
             if discord_id not in user_features:
                 user_features[discord_id] = {}
-            if feature_key:
-                user_features[discord_id][feature_key] = bool(has_access)
+            user_features[discord_id][feature_key] = bool(has_access)
         
         return jsonify({'user_features': user_features})
     except Exception as e:
@@ -10494,23 +10499,28 @@ def create_group():
 def get_group_members(group_key):
     """Get members of a specific group"""
     try:
+        # Get all users from config
+        users = get_users_config()
+        users_dict = {user['discord_id']: user for user in users}
+        
+        # Get group members from database
         cursor.execute('''
-            SELECT u.discord_id, u.discord_username, u.email, ugm.added_at
-            FROM user_group_members ugm
-            JOIN users u ON ugm.discord_id = u.discord_id
-            WHERE ugm.group_key = ?
-            ORDER BY u.discord_username
+            SELECT discord_id, added_at
+            FROM user_group_members
+            WHERE group_key = ?
         ''', (group_key,))
         
         members = []
         for row in cursor.fetchall():
-            discord_id, username, email, added_at = row
-            members.append({
-                'discord_id': discord_id,
-                'discord_username': username,
-                'email': email,
-                'added_at': added_at
-            })
+            discord_id, added_at = row
+            if discord_id in users_dict:
+                user = users_dict[discord_id]
+                members.append({
+                    'discord_id': discord_id,
+                    'discord_username': user.get('discord_username', 'Unknown'),
+                    'email': user.get('email', ''),
+                    'added_at': added_at
+                })
         
         return jsonify({'members': members})
     except Exception as e:

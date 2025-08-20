@@ -10104,19 +10104,86 @@ def get_product_by_asin(asin):
             print(f"eBay Lister: Downloading stock CSV from Sellerboard")
             stock_df = analyzer.download_csv(stock_url)
             print(f"eBay Lister: Stock CSV downloaded, shape: {stock_df.shape}")
+            print(f"eBay Lister: Column names in stock CSV: {list(stock_df.columns)}")
             
-            stock_info = analyzer.get_stock_info(stock_df)
-            print(f"eBay Lister: Processed {len(stock_info)} products from stock data")
+            # Debug: Show first few rows to understand data structure
+            if not stock_df.empty:
+                print(f"eBay Lister: First row of data: {stock_df.iloc[0].to_dict()}")
             
-            # Check if ASIN exists in stock data
-            if asin_upper not in stock_info:
+            # Try to parse stock info, but handle errors gracefully
+            try:
+                stock_info = analyzer.get_stock_info(stock_df)
+                print(f"eBay Lister: Processed {len(stock_info)} products from stock data")
+            except ValueError as e:
+                print(f"eBay Lister: Error parsing stock data: {e}")
+                # Try to find ASIN column manually
+                possible_asin_cols = [col for col in stock_df.columns if 'asin' in col.lower() or 'sku' in col.lower()]
+                print(f"eBay Lister: Possible ASIN/SKU columns: {possible_asin_cols}")
+                
+                # If we can't find ASIN column, provide helpful error
                 return jsonify({
                     'success': False,
-                    'message': f'ASIN {asin_upper} not found in your inventory. Please verify the ASIN is correct and exists in your Sellerboard data.'
+                    'message': f'Could not find ASIN column in Sellerboard data. Available columns: {", ".join(stock_df.columns[:10])}... Please check your Sellerboard export format.',
+                    'debug_info': {
+                        'columns': list(stock_df.columns),
+                        'possible_asin_columns': possible_asin_cols
+                    }
+                }), 400
+            
+            # Debug: Show sample ASINs for troubleshooting
+            available_asins = list(stock_info.keys())[:10]  # First 10 ASINs
+            print(f"eBay Lister: Sample ASINs in inventory: {available_asins}")
+            
+            # Debug: Check exact ASIN matching
+            print(f"eBay Lister: Looking for ASIN '{asin_upper}' in stock_info keys")
+            print(f"eBay Lister: Type of asin_upper: {type(asin_upper)}, Value: '{asin_upper}'")
+            
+            # Check different variations
+            found = False
+            matched_key = None
+            for key in stock_info.keys():
+                print(f"eBay Lister: Comparing '{asin_upper}' with key '{key}' (type: {type(key)})")
+                if key == asin_upper:
+                    found = True
+                    matched_key = key
+                    break
+                # Also try case-insensitive match
+                if key.upper() == asin_upper:
+                    found = True
+                    matched_key = key
+                    print(f"eBay Lister: Found case-insensitive match: '{key}'")
+                    break
+                # Try stripping whitespace
+                if key.strip() == asin_upper:
+                    found = True
+                    matched_key = key
+                    print(f"eBay Lister: Found match after stripping: '{key}'")
+                    break
+            
+            # Check if ASIN exists in stock data
+            if not found:
+                print(f"eBay Lister: ASIN {asin_upper} not found. Available ASINs count: {len(stock_info)}")
+                # Show more detailed debug info
+                print(f"eBay Lister: First 5 raw keys: {list(stock_info.keys())[:5]}")
+                print(f"eBay Lister: First 5 keys repr: {[repr(k) for k in list(stock_info.keys())[:5]]}")
+                
+                return jsonify({
+                    'success': False,
+                    'message': f'ASIN {asin_upper} not found in your inventory. You have {len(stock_info)} products in your Sellerboard data. Sample ASINs: {", ".join(available_asins[:5])}',
+                    'debug_info': {
+                        'total_products': len(stock_info),
+                        'sample_asins': available_asins[:10],
+                        'searched_asin': asin_upper,
+                        'exact_keys': [repr(k) for k in available_asins[:5]]  # Show exact representation
+                    }
                 }), 404
+            
+            # Use the matched key to get product info
+            asin_to_use = matched_key if matched_key else asin_upper
+            print(f"eBay Lister: Using key '{asin_to_use}' to access product data")
                 
             # Get product information from stock data
-            product_info = stock_info[asin_upper]
+            product_info = stock_info[asin_to_use]
             
             # Try to get sales data for pricing context
             orders_df = analyzer.download_csv(orders_url)
@@ -10156,7 +10223,7 @@ def get_product_by_asin(asin):
                 estimated_price = '0.00'
             
             # Get weekly sales for velocity context  
-            weekly_sales_count = weekly_sales.get(asin_upper, 0)
+            weekly_sales_count = weekly_sales.get(asin_to_use, 0)
             
             # Build comprehensive product data
             product_data = {

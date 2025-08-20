@@ -53,7 +53,14 @@ const EbayLister = () => {
       }
     } catch (err) {
       if (err.response?.status === 404) {
-        setError('Product not found. Please verify the ASIN is correct.');
+        const message = err.response.data?.message || 'Product not found. Please verify the ASIN is correct.';
+        const debugInfo = err.response.data?.debug_info;
+        
+        if (debugInfo) {
+          setError(`${message}\n\nDebug Info:\n- Total products in inventory: ${debugInfo.total_products}\n- Sample ASINs: ${debugInfo.sample_asins?.join(', ')}`);
+        } else {
+          setError(message);
+        }
       } else if (err.response?.status === 400) {
         setError(err.response.data?.message || 'Configuration error. Please check your Sellerboard setup in Settings.');
       } else if (err.response?.data?.message) {

@@ -735,17 +735,43 @@ class EnhancedOrdersAnalysis:
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
         """Extract stock information from stock report"""
         asin_col = None
+        
+        # Try multiple variations for ASIN column
+        possible_names = ['ASIN', 'asin', 'Asin', 'SKU', 'sku', 'Sku', 'Product ID', 'product_id', 'Product Code']
         for col in stock_df.columns:
+            # Exact match (case-insensitive)
             if col.strip().upper() == 'ASIN':
                 asin_col = col
                 break
+            # Check if any of the possible names match
+            for name in possible_names:
+                if col.strip().lower() == name.lower():
+                    asin_col = col
+                    break
+            if asin_col:
+                break
+                
+        # If still not found, look for columns containing 'asin' or 'sku'
         if not asin_col:
-            raise ValueError("ASIN column not found in stock report.")
+            for col in stock_df.columns:
+                if 'asin' in col.lower() or 'sku' in col.lower():
+                    asin_col = col
+                    print(f"Using column '{col}' as ASIN column")
+                    break
+                    
+        if not asin_col:
+            # Debug: show all columns to help identify the issue
+            print(f"Available columns in stock report: {list(stock_df.columns)}")
+            raise ValueError(f"ASIN column not found in stock report. Available columns: {', '.join(stock_df.columns[:10])}...")
         
         stock_info = {}
         for _, row in stock_df.iterrows():
-            asin = str(row[asin_col])
-            stock_info[asin] = row.to_dict()
+            asin = str(row[asin_col]).strip()
+            # Skip empty ASINs
+            if asin and asin != 'nan' and asin != 'None':
+                stock_info[asin] = row.to_dict()
+            
+        print(f"Extracted {len(stock_info)} products from stock report using column '{asin_col}'")
         return stock_info
 
     def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:

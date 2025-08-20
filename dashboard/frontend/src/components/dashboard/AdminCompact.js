@@ -54,6 +54,9 @@ const AdminCompact = () => {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [newGroupData, setNewGroupData] = useState({ group_key: '', group_name: '', description: '' });
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [groupFeatures, setGroupFeatures] = useState({});
+  const [activeGroupTab, setActiveGroupTab] = useState('members');
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -289,6 +292,65 @@ const AdminCompact = () => {
       fetchData();
     } catch (error) {
       setError('Failed to launch/unlaunch feature');
+    }
+  };
+
+  const fetchGroupData = async (groupKey) => {
+    try {
+      const [membersRes, featuresRes] = await Promise.all([
+        axios.get(`/api/admin/groups/${groupKey}/members`, { withCredentials: true }),
+        axios.get(`/api/admin/groups/${groupKey}/features`, { withCredentials: true })
+      ]);
+      
+      setGroupMembers(membersRes.data.members || []);
+      setGroupFeatures(featuresRes.data.features || {});
+    } catch (error) {
+      setError('Failed to fetch group data');
+    }
+  };
+
+  const handleAddUserToGroup = async (userId, groupKey) => {
+    try {
+      await axios.post(`/api/admin/groups/${groupKey}/members`, {
+        user_id: userId
+      }, { withCredentials: true });
+      
+      setSuccess('User added to group successfully!');
+      fetchGroupData(groupKey);
+      fetchData(); // Refresh main data to update member counts
+    } catch (error) {
+      setError('Failed to add user to group');
+    }
+  };
+
+  const handleRemoveUserFromGroup = async (userId, groupKey) => {
+    try {
+      await axios.delete(`/api/admin/groups/${groupKey}/members/${userId}`, { withCredentials: true });
+      setSuccess('User removed from group successfully!');
+      fetchGroupData(groupKey);
+      fetchData(); // Refresh main data to update member counts
+    } catch (error) {
+      setError('Failed to remove user from group');
+    }
+  };
+
+  const handleToggleGroupFeatureAccess = async (groupKey, featureKey) => {
+    try {
+      setError('');
+      const currentAccess = groupFeatures[featureKey]?.has_access || false;
+      
+      if (currentAccess) {
+        await axios.delete(`/api/admin/groups/${groupKey}/features/${featureKey}`, { withCredentials: true });
+      } else {
+        await axios.post(`/api/admin/groups/${groupKey}/features`, {
+          feature_key: featureKey
+        }, { withCredentials: true });
+      }
+      
+      setSuccess(`Group feature access ${currentAccess ? 'removed' : 'granted'} successfully!`);
+      fetchGroupData(groupKey);
+    } catch (error) {
+      setError('Failed to update group feature access');
     }
   };
 
@@ -947,15 +1009,23 @@ const AdminCompact = () => {
                         
                         <div className="mt-4 flex space-x-2">
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               setSelectedGroup(group);
+                              setActiveGroupTab('members');
                               setShowGroupModal(true);
+                              await fetchGroupData(group.group_key);
                             }}
                             className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-md text-sm hover:bg-blue-100"
                           >
                             Manage Members
                           </button>
                           <button 
+                            onClick={async () => {
+                              setSelectedGroup(group);
+                              setActiveGroupTab('features');
+                              setShowGroupModal(true);
+                              await fetchGroupData(group.group_key);
+                            }}
                             className="flex-1 px-3 py-2 bg-green-50 text-green-700 rounded-md text-sm hover:bg-green-100"
                           >
                             Set Permissions
@@ -1308,6 +1378,7 @@ const AdminCompact = () => {
               ) : (
                 // Manage Existing Group
                 <div className="space-y-6">
+                  {/* Group Info Header */}
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Group Information</h4>
                     <p className="text-sm text-gray-600">{selectedGroup.description}</p>
@@ -1318,11 +1389,133 @@ const AdminCompact = () => {
                       <span>Created {new Date(selectedGroup.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  
-                  <div className="text-center py-8 text-gray-500">
-                    <p>Group member management will be implemented here.</p>
-                    <p className="text-sm mt-2">Coming soon...</p>
+
+                  {/* Tab Navigation */}
+                  <div className="border-b border-gray-200">
+                    <nav className="flex space-x-8">
+                      <button
+                        onClick={() => setActiveGroupTab('members')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                          activeGroupTab === 'members'
+                            ? 'border-builders-500 text-builders-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Members ({groupMembers.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveGroupTab('features')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                          activeGroupTab === 'features'
+                            ? 'border-builders-500 text-builders-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Features ({Object.keys(groupFeatures).filter(k => groupFeatures[k].has_access).length})
+                      </button>
+                    </nav>
                   </div>
+
+                  {/* Tab Content */}
+                  {activeGroupTab === 'members' && (
+                    <div className="space-y-4">
+                      {/* Add User Section */}
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h5 className="text-sm font-medium text-blue-900 mb-2">Add Users to Group</h5>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {users.filter(user => 
+                            user.user_type !== 'subuser' && 
+                            !groupMembers.some(member => member.discord_id === user.discord_id)
+                          ).map(user => (
+                            <div key={user.discord_id} className="flex items-center justify-between bg-white p-2 rounded">
+                              <div className="flex items-center">
+                                {user.discord_avatar ? (
+                                  <img
+                                    className="h-6 w-6 rounded-full mr-2"
+                                    src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
+                                    alt=""
+                                  />
+                                ) : (
+                                  <div className="h-6 w-6 bg-gray-300 rounded-full mr-2"></div>
+                                )}
+                                <span className="text-sm font-medium">{user.discord_username}</span>
+                              </div>
+                              <button
+                                onClick={() => handleAddUserToGroup(user.discord_id, selectedGroup.group_key)}
+                                className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Current Members */}
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-900 mb-2">Current Members</h5>
+                        {groupMembers.length > 0 ? (
+                          <div className="space-y-2">
+                            {groupMembers.map(member => (
+                              <div key={member.discord_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center">
+                                  <div className="h-8 w-8 bg-gray-300 rounded-full mr-3"></div>
+                                  <div>
+                                    <div className="text-sm font-medium">{member.discord_username}</div>
+                                    <div className="text-xs text-gray-500">{member.email}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveUserFromGroup(member.discord_id, selectedGroup.group_key)}
+                                  className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 text-center py-4">No members in this group yet</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeGroupTab === 'features' && (
+                    <div className="space-y-4">
+                      <h5 className="text-sm font-medium text-gray-900">Feature Access Control</h5>
+                      <div className="space-y-2">
+                        {features.map(feature => {
+                          const hasAccess = groupFeatures[feature.feature_key]?.has_access || false;
+                          return (
+                            <div key={feature.feature_key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900 flex items-center">
+                                  {feature.display_name || feature.feature_key}
+                                  {feature.is_beta && (
+                                    <span className="ml-2 px-1 py-0.5 text-xs bg-orange-200 text-orange-800 rounded-full">
+                                      β
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500">{feature.description}</div>
+                              </div>
+                              <button
+                                onClick={() => handleToggleGroupFeatureAccess(selectedGroup.group_key, feature.feature_key)}
+                                className={`px-3 py-1 rounded-md text-xs font-medium ${
+                                  hasAccess
+                                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                }`}
+                              >
+                                {hasAccess ? 'Remove Access' : 'Grant Access'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               

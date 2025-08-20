@@ -10060,7 +10060,7 @@ def get_product_by_asin(asin):
         # Get user's Discord ID for configuration lookup
         discord_id = session['discord_id']
         print(f"eBay Lister: Looking up ASIN {asin} for user {discord_id}")
-        user_record = get_user_config(discord_id)
+        user_record = get_user_record(discord_id)
         
         if not user_record:
             print(f"eBay Lister: No user configuration found for {discord_id}")

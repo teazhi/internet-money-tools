@@ -9165,17 +9165,42 @@ def get_product_image(asin):
             except:
                 pass
         
-        # Method 4: Alternative image services
+        # Method 4: HTML scraping with correct selector (last resort)
         if not image_url:
             try:
-                # Try using Amazon's search API approach
-                search_patterns = [
-                    f'https://completion.amazon.com/api/2017/suggestions?limit=1&prefix={asin}&suggestion-type=KEYWORD&page-type=Gateway&alias=aps&site-variant=desktop&version=3&event=onKeyPress&wc=',
-                    f'https://www.amazon.com/s?k={asin}&ref=nb_sb_noss'
-                ]
-                # This would require parsing but is more complex for this context
-                pass
-            except:
+                # Only use scraping if CDN patterns fail
+                amazon_url = f'https://www.amazon.com/dp/{asin}'
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none'
+                }
+                
+                response = requests.get(amazon_url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Use the exact selector you showed me
+                    img_wrapper = soup.select_one('#imgTagWrapperId')
+                    if img_wrapper:
+                        img = img_wrapper.select_one('img')
+                        if img:
+                            # Try data-old-hires first (high-res), then src
+                            scraped_url = img.get('data-old-hires') or img.get('src')
+                            if scraped_url and scraped_url.startswith('http'):
+                                image_url = scraped_url
+                                method_used = 'html_scraping_imgTagWrapper'
+                                
+            except Exception as e:
+                # Scraping failed, continue to fallback
                 pass
         
         # If we found an image, cache it and return
@@ -9382,10 +9407,66 @@ def test_image_patterns(asin):
                     'valid_image': False
                 })
         
+        # Also test HTML scraping method if no patterns worked
+        scraping_result = None
+        working_patterns = [r for r in results if r.get('valid_image', False)]
+        
+        if len(working_patterns) == 0:
+            try:
+                amazon_url = f'https://www.amazon.com/dp/{asin}'
+                scrape_headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                
+                response = requests.get(amazon_url, headers=scrape_headers, timeout=10)
+                if response.status_code == 200:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    img_wrapper = soup.select_one('#imgTagWrapperId')
+                    if img_wrapper:
+                        img = img_wrapper.select_one('img')
+                        if img:
+                            scraped_url = img.get('data-old-hires') or img.get('src')
+                            if scraped_url and scraped_url.startswith('http'):
+                                scraping_result = {
+                                    'url': scraped_url,
+                                    'method': 'html_scraping',
+                                    'selector': '#imgTagWrapperId img',
+                                    'attribute_used': 'data-old-hires' if img.get('data-old-hires') else 'src',
+                                    'valid_image': True
+                                }
+                            else:
+                                scraping_result = {
+                                    'error': 'No valid image URL found in HTML',
+                                    'method': 'html_scraping_failed'
+                                }
+                        else:
+                            scraping_result = {
+                                'error': 'No img tag found in #imgTagWrapperId',
+                                'method': 'html_scraping_failed'
+                            }
+                    else:
+                        scraping_result = {
+                            'error': '#imgTagWrapperId not found',
+                            'method': 'html_scraping_failed'
+                        }
+                else:
+                    scraping_result = {
+                        'error': f'HTTP {response.status_code}',
+                        'method': 'html_scraping_failed'
+                    }
+            except Exception as e:
+                scraping_result = {
+                    'error': str(e),
+                    'method': 'html_scraping_failed'
+                }
+
         return jsonify({
             'asin': asin,
             'tested_patterns': results,
-            'working_urls': [r for r in results if r.get('valid_image', False)]
+            'working_urls': working_patterns,
+            'html_scraping_result': scraping_result
         })
         
     except Exception as e:

@@ -180,6 +180,49 @@ const ImageTest = () => {
             </div>
           )}
 
+          {result.html_scraping_result && (
+            <div className="mt-4">
+              <h4 className="font-semibold mb-2">HTML Scraping Result:</h4>
+              <div className={`p-3 rounded ${result.html_scraping_result.valid_image ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                {result.html_scraping_result.valid_image ? (
+                  <div>
+                    <div className="flex items-center mb-2">
+                      <span className="font-medium text-green-600">✓ HTML Scraping Success</span>
+                    </div>
+                    <div className="mb-2">
+                      <img 
+                        src={result.html_scraping_result.url} 
+                        alt="Scraped from HTML"
+                        className="w-24 h-24 object-contain border border-gray-200 rounded"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'block';
+                        }}
+                      />
+                      <div style={{display: 'none'}} className="text-red-500 text-xs">
+                        Failed to load scraped image
+                      </div>
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <div><strong>Selector:</strong> {result.html_scraping_result.selector}</div>
+                      <div><strong>Attribute:</strong> {result.html_scraping_result.attribute_used}</div>
+                      <div className="text-gray-600 break-all"><strong>URL:</strong> {result.html_scraping_result.url}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center mb-2">
+                      <span className="font-medium text-yellow-600">⚠ HTML Scraping Failed</span>
+                    </div>
+                    <div className="text-sm text-yellow-700">
+                      {result.html_scraping_result.error}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {result.tested_patterns && (
             <div className="mt-4">
               <h4 className="font-semibold mb-2">All Tested Patterns:</h4>

@@ -10208,25 +10208,36 @@ def get_product_by_asin(asin):
             # Get current stock and pricing info
             current_stock = 0
             try:
-                stock_fields = ['FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock']
+                stock_fields = ['FBA/FBM Stock', 'FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock']
                 for field in stock_fields:
-                    if field in product_info and product_info[field]:
-                        current_stock = int(float(str(product_info[field]).replace(',', '')))
-                        break
-            except (ValueError, TypeError):
+                    if field in product_info and product_info[field] is not None:
+                        stock_val = str(product_info[field]).replace(',', '').strip()
+                        if stock_val and stock_val.lower() not in ['nan', 'none', '']:
+                            current_stock = int(float(stock_val))
+                            print(f"eBay Lister: Found stock value {current_stock} in field '{field}'")
+                            break
+            except (ValueError, TypeError) as e:
+                print(f"eBay Lister: Error parsing stock: {e}")
                 current_stock = 0
             
             # Try to get pricing from recent sales or stock data
             estimated_price = '0.00'
             try:
-                price_fields = ['Price', 'Current Price', 'Sale Price', 'Unit Price']
+                price_fields = ['Price', 'Current Price', 'Sale Price', 'Unit Price', 'Stock value']
                 for field in price_fields:
-                    if field in product_info and product_info[field]:
-                        price_val = str(product_info[field]).replace('$', '').replace(',', '')
-                        if price_val and price_val != '0':
-                            estimated_price = f"{float(price_val):.2f}"
+                    if field in product_info and product_info[field] is not None:
+                        price_val = str(product_info[field]).replace('$', '').replace(',', '').strip()
+                        if price_val and price_val.lower() not in ['nan', 'none', '', '0', '0.0']:
+                            # For stock value, calculate per-unit price
+                            if field == 'Stock value' and current_stock > 0:
+                                estimated_price = f"{float(price_val) / current_stock:.2f}"
+                                print(f"eBay Lister: Calculated price ${estimated_price} from stock value")
+                            else:
+                                estimated_price = f"{float(price_val):.2f}"
+                                print(f"eBay Lister: Found price ${estimated_price} in field '{field}'")
                             break
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                print(f"eBay Lister: Error parsing price: {e}")
                 estimated_price = '0.00'
             
             # Get weekly sales for velocity context  
@@ -10259,13 +10270,15 @@ def get_product_by_asin(asin):
                     'Data Source': 'Sellerboard Integration'
                 },
                 'sellerboard_data': {
-                    'stock_info': {k: v for k, v in product_info.items() if k not in ['Title']},  # Include all extra fields
+                    'stock_info': {k: (v if v is not None and str(v).lower() != 'nan' else 'N/A') for k, v in product_info.items() if k not in ['Title']},  # Include all extra fields, clean NaN values
                     'weekly_sales': weekly_sales_count,
                     'data_freshness': 'Real-time from your Sellerboard account'
                 }
             }
             
             print(f"eBay Lister: Returning successful product data for {asin_upper}")
+            print(f"eBay Lister: Final product data keys: {list(product_data.keys())}")
+            print(f"eBay Lister: Stock: {product_data['current_stock']}, Price: {product_data['price']}, Sales: {product_data['weekly_sales']}")
             return jsonify({
                 'success': True,
                 'product': product_data
@@ -10383,7 +10396,16 @@ def generate_ebay_listing():
         """.strip()
         
         # Calculate suggested pricing (markup from Amazon price)
-        base_price = float(product_data.get('price', '29.99'))
+        try:
+            base_price = float(product_data.get('price', '29.99'))
+            # If price is 0 or very low, use a reasonable default
+            if base_price <= 1.0:
+                base_price = 29.99
+                print(f"eBay Lister: Using default price ${base_price} as product price was too low")
+        except (ValueError, TypeError):
+            base_price = 29.99
+            print(f"eBay Lister: Using default price ${base_price} due to price parsing error")
+            
         suggested_price = round(base_price * 0.85, 2)  # Start at 85% for auction
         buy_it_now_price = round(base_price * 1.15, 2)  # 15% markup for BIN
         

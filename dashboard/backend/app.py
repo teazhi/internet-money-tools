@@ -8811,6 +8811,71 @@ MIN_REQUEST_INTERVAL = 1.0  # Minimum 1 second between requests
 
 import time
 import random
+import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+
+# Create a persistent session for Amazon requests with better anti-detection
+amazon_session = None
+session_last_used = 0
+SESSION_TIMEOUT = 300  # 5 minutes
+
+def get_amazon_session():
+    """Get or create a persistent Amazon session with anti-detection measures"""
+    global amazon_session, session_last_used
+    
+    current_time = time.time()
+    
+    # Create new session if doesn't exist or is too old
+    if not amazon_session or (current_time - session_last_used) > SESSION_TIMEOUT:
+        amazon_session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        amazon_session.mount("http://", adapter)
+        amazon_session.mount("https://", adapter)
+        
+        # Set realistic browser headers that rotate
+        user_agents = [
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0'
+        ]
+        
+        selected_ua = random.choice(user_agents)
+        
+        # More realistic browser headers
+        amazon_session.headers.update({
+            'User-Agent': selected_ua,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"'
+        })
+        
+        # Set a realistic referrer pattern
+        amazon_session.headers['Referer'] = 'https://www.amazon.com/'
+        
+        print(f"Created new Amazon session with UA: {selected_ua[:50]}...")
+    
+    session_last_used = current_time
+    return amazon_session
 
 def rate_limit_amazon_request():
     """Ensure we don't make requests too frequently to Amazon"""
@@ -8819,82 +8884,122 @@ def rate_limit_amazon_request():
     time_since_last = current_time - last_amazon_request_time
     
     if time_since_last < MIN_REQUEST_INTERVAL:
-        sleep_time = MIN_REQUEST_INTERVAL - time_since_last + random.uniform(0.1, 0.5)
+        sleep_time = MIN_REQUEST_INTERVAL - time_since_last + random.uniform(0.2, 0.8)
         time.sleep(sleep_time)
     
     last_amazon_request_time = time.time()
 
-def fetch_amazon_page_with_retry(asin, max_retries=3):
-    """Fetch Amazon page with retry logic and better headers"""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0'
-    }
+def fetch_amazon_page_with_retry(asin, max_retries=2):
+    """Fetch Amazon page with sophisticated anti-detection and retry logic"""
     
     for attempt in range(max_retries):
         try:
+            # Rate limiting with random jitter
             rate_limit_amazon_request()
             
-            response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=15)
+            # Get fresh session with rotating headers
+            session = get_amazon_session()
             
-            # Check for various blocking scenarios
+            # Add random delay to simulate human behavior
+            if attempt > 0:
+                human_delay = random.uniform(2, 6)
+                print(f"Human-like delay: {human_delay:.1f}s before retry {attempt + 1}")
+                time.sleep(human_delay)
+            
+            # Try different URL patterns to avoid detection
+            urls_to_try = [
+                f'https://www.amazon.com/dp/{asin}',
+                f'https://www.amazon.com/gp/product/{asin}',
+                f'https://amazon.com/dp/{asin}'
+            ]
+            
+            url = urls_to_try[attempt % len(urls_to_try)]
+            print(f"Attempting {url} (attempt {attempt + 1})")
+            
+            # Update referrer to look more natural
+            if attempt > 0:
+                session.headers['Referer'] = f'https://www.amazon.com/s?k={asin}'
+            
+            response = session.get(url, timeout=20)
+            
+            # Enhanced detection of blocking
             if response.status_code == 503:
-                print(f"Amazon returned 503 for {asin} on attempt {attempt + 1}")
+                print(f"Amazon returned 503 for {asin} - service unavailable")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt + random.uniform(1, 3))  # Exponential backoff
+                    time.sleep(3 ** attempt + random.uniform(2, 5))
                     continue
                 return None
             
             if response.status_code == 429:
-                print(f"Rate limited by Amazon for {asin} on attempt {attempt + 1}")
+                print(f"Rate limited by Amazon for {asin}")
                 if attempt < max_retries - 1:
-                    time.sleep(5 ** attempt + random.uniform(2, 5))
+                    time.sleep(5 + random.uniform(3, 8))
                     continue
+                return None
+            
+            if response.status_code == 404:
+                print(f"Product {asin} not found on Amazon")
                 return None
             
             if response.status_code != 200:
                 print(f"Amazon returned status {response.status_code} for {asin}")
-                return None
-            
-            if len(response.content) < 10000:
-                print(f"Amazon response too small for {asin}: {len(response.content)} bytes")
                 if attempt < max_retries - 1:
-                    time.sleep(1 + random.uniform(0.5, 2))
+                    time.sleep(2 + random.uniform(1, 3))
                     continue
                 return None
             
-            # Check for captcha or robot detection
+            # Check response size (blocked pages are often small)
+            if len(response.content) < 15000:
+                print(f"Amazon response too small for {asin}: {len(response.content)} bytes - likely blocked")
+                if attempt < max_retries - 1:
+                    time.sleep(2 + random.uniform(1, 4))
+                    continue
+                return None
+            
+            # Check for various blocking indicators
             content_text = response.text.lower()
-            if any(keyword in content_text for keyword in ['captcha', 'robot', 'blocked', 'access denied']):
-                print(f"Amazon detected automation for {asin} on attempt {attempt + 1}")
+            blocking_indicators = [
+                'sorry, we just need to make sure you\'re not a robot',
+                'enter the characters you see below',
+                'captcha',
+                'robot check',
+                'blocked',
+                'access denied',
+                'unusual traffic',
+                'automated requests'
+            ]
+            
+            if any(indicator in content_text for indicator in blocking_indicators):
+                print(f"Amazon detected automation for {asin} - found blocking indicator")
                 if attempt < max_retries - 1:
-                    time.sleep(3 ** attempt + random.uniform(2, 4))
+                    # Reset session on detection
+                    global amazon_session
+                    amazon_session = None
+                    time.sleep(5 + random.uniform(3, 8))
                     continue
                 return None
             
+            # Success - we got a valid page
+            print(f"Successfully fetched {asin} on attempt {attempt + 1}")
             return response
             
         except requests.exceptions.Timeout:
             print(f"Timeout fetching {asin} on attempt {attempt + 1}")
             if attempt < max_retries - 1:
-                time.sleep(1 + random.uniform(0.5, 1.5))
+                time.sleep(2 + random.uniform(1, 3))
+                continue
+        except requests.exceptions.ConnectionError:
+            print(f"Connection error fetching {asin} on attempt {attempt + 1}")
+            if attempt < max_retries - 1:
+                time.sleep(3 + random.uniform(1, 4))
                 continue
         except Exception as e:
-            print(f"Error fetching {asin} on attempt {attempt + 1}: {str(e)}")
+            print(f"Unexpected error fetching {asin} on attempt {attempt + 1}: {str(e)}")
             if attempt < max_retries - 1:
-                time.sleep(1 + random.uniform(0.5, 1.5))
+                time.sleep(2 + random.uniform(1, 3))
                 continue
     
+    print(f"All attempts failed for {asin}")
     return None
 
 @app.route('/api/product-image/<asin>', methods=['GET'])
@@ -9071,7 +9176,8 @@ def get_product_image(asin):
             return jsonify({
                 'asin': asin,
                 'image_url': image_url,
-                'cached': False
+                'cached': False,
+                'method': 'scraped_imgTagWrapperId'
             })
         else:
             return jsonify({
@@ -9107,8 +9213,8 @@ def get_product_images_batch():
         data = request.get_json()
         asins = data.get('asins', [])
         
-        if not asins or len(asins) > 20:  # Limit batch size
-            return jsonify({'error': 'Invalid ASIN list (max 20 ASINs)'}), 400
+        if not asins or len(asins) > 10:  # Reduced batch size to avoid rate limits
+            return jsonify({'error': 'Invalid ASIN list (max 10 ASINs)'}), 400
         
         results = {}
         uncached_asins = []
@@ -9130,54 +9236,93 @@ def get_product_images_batch():
             else:
                 uncached_asins.append(asin)
         
-        # For batch processing, use primarily constructed URLs to avoid rate limiting
-        def fetch_single_image(asin):
+        # For batch processing, process sequentially with proper delays
+        for asin in uncached_asins:
             try:
-                # For batch requests, prioritize constructed URLs to minimize Amazon requests
-                headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-                
-                # Try the most reliable constructed URL patterns
+                # First try constructed URLs (fast and reliable)
                 primary_urls = [
                     f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
                     f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
                     f'https://m.media-amazon.com/images/P/{asin}.01._AC_SX300_.jpg'
                 ]
                 
+                found_image = False
+                headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+                
                 for url in primary_urls:
                     try:
-                        # Use HEAD request to check if image exists
                         test_response = requests.head(url, timeout=3, headers=headers)
                         if test_response.status_code == 200:
                             product_image_cache[f"image_{asin}"] = {
                                 'image_url': url,
                                 'timestamp': now
                             }
-                            return asin, url
+                            results[asin] = {
+                                'image_url': url,
+                                'cached': False,
+                                'method': 'constructed_verified'
+                            }
+                            found_image = True
+                            break
                     except:
                         continue
                 
-                # For batch processing, don't attempt scraping to avoid rate limits
-                # Return most likely URL as fallback
-                fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
-                product_image_cache[f"image_{asin}"] = {
-                    'image_url': fallback_url,
-                    'timestamp': now
-                }
-                return asin, fallback_url
-            except:
-                return asin, None
-        
-        # Use ThreadPoolExecutor for concurrent requests (reduced workers to avoid rate limits)
-        if uncached_asins:
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                future_to_asin = {executor.submit(fetch_single_image, asin): asin for asin in uncached_asins}
+                # If constructed URLs failed, try scraping with the correct selector
+                if not found_image:
+                    print(f"Constructed URLs failed for {asin}, trying scraping...")
+                    response = fetch_amazon_page_with_retry(asin, max_retries=1)
+                    
+                    if response:
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(response.content, 'html.parser')
+                        
+                        # Use the correct selector you identified
+                        img_tag_wrapper = soup.select_one('#imgTagWrapperId')
+                        if img_tag_wrapper:
+                            img_elements = img_tag_wrapper.select('img')
+                            for img in img_elements:
+                                for attr in ['data-old-hires', 'data-a-hires', 'src', 'data-src']:
+                                    url = img.get(attr)
+                                    if url and url.startswith('http'):
+                                        product_image_cache[f"image_{asin}"] = {
+                                            'image_url': url,
+                                            'timestamp': now
+                                        }
+                                        results[asin] = {
+                                            'image_url': url,
+                                            'cached': False,
+                                            'method': 'scraped_imgTagWrapperId'
+                                        }
+                                        found_image = True
+                                        break
+                                if found_image:
+                                    break
+                    
+                    # Add delay between scraping attempts to avoid detection
+                    if not found_image:
+                        time.sleep(random.uniform(1, 3))
                 
-                for future in as_completed(future_to_asin):
-                    asin, image_url = future.result()
-                    results[asin] = {
-                        'image_url': image_url,
-                        'cached': False
+                # Last resort fallback
+                if not found_image:
+                    fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
+                    product_image_cache[f"image_{asin}"] = {
+                        'image_url': fallback_url,
+                        'timestamp': now
                     }
+                    results[asin] = {
+                        'image_url': fallback_url,
+                        'cached': False,
+                        'method': 'unverified_fallback'
+                    }
+                
+            except Exception as e:
+                print(f"Error processing {asin}: {str(e)}")
+                fallback_url = f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg'
+                results[asin] = {
+                    'image_url': fallback_url,
+                    'cached': False,
+                    'method': 'error_fallback'
+                }
         
         return jsonify({
             'results': results,

@@ -35,11 +35,13 @@ export const useProductImages = (asins) => {
         });
         setImages(imageResults);
 
-        // Fetch uncached images in batches
+        // Fetch uncached images in smaller batches to avoid rate limits
         if (uncachedAsins.length > 0) {
-          const batchSize = 10;
+          const batchSize = 5; // Reduced batch size
           for (let i = 0; i < uncachedAsins.length; i += batchSize) {
             const batch = uncachedAsins.slice(i, i + batchSize);
+            
+            console.log(`Fetching batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uncachedAsins.length/batchSize)} with ${batch.length} ASINs`);
             
             try {
               const response = await axios.post('/api/product-images/batch', {
@@ -67,6 +69,11 @@ export const useProductImages = (asins) => {
                 });
                 return updated;
               });
+              
+              // Add delay between batches to avoid overwhelming the backend
+              if (i + batchSize < uncachedAsins.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
               
             } catch (batchError) {
               console.warn('Batch image fetch failed:', batchError);

@@ -10190,13 +10190,17 @@ def get_product_by_asin(asin):
             print(f"eBay Lister: Downloading orders CSV from Sellerboard")
             orders_df = analyzer.download_csv(orders_url)
             print(f"eBay Lister: Orders CSV downloaded, shape: {orders_df.shape}")
+            print(f"eBay Lister: Processing orders for date range")
             orders_for_week = analyzer.get_orders_for_date_range(
                 orders_df, 
                 target_date - timedelta(days=7), 
                 target_date, 
                 user_timezone
             )
+            print(f"eBay Lister: Found {len(orders_for_week)} orders in the past week")
+            print(f"eBay Lister: Calculating ASIN sales counts")
             weekly_sales = analyzer.asin_sales_count(orders_for_week)
+            print(f"eBay Lister: Calculated sales for {len(weekly_sales)} ASINs")
             
             # Extract available data from Sellerboard
             product_title = product_info.get('Title', f'Product {asin_upper}')

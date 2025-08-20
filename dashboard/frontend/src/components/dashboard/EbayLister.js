@@ -44,15 +44,16 @@ const EbayLister = () => {
 
       console.log('eBay Lister Frontend: Received response:', response.data);
 
-      if (response.data.success) {
+      if (response.data.success === true) {
         console.log('eBay Lister Frontend: Success! Setting product data');
         setProductData(response.data.product);
+        setError(''); // Clear any previous errors
         // Show warning if there was a Sellerboard issue
         if (response.data.warning) {
           setError(`Warning: ${response.data.warning}`);
         }
       } else {
-        console.log('eBay Lister Frontend: Response indicated failure');
+        console.log('eBay Lister Frontend: Response indicated failure, success value:', response.data.success);
         setError(response.data.message || 'Product not found');
       }
     } catch (err) {

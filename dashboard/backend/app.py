@@ -10265,6 +10265,7 @@ def get_product_by_asin(asin):
                 }
             }
             
+            print(f"eBay Lister: Returning successful product data for {asin_upper}")
             return jsonify({
                 'success': True,
                 'product': product_data

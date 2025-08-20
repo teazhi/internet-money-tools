@@ -40,6 +40,7 @@ import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import ExpectedArrivals from './dashboard/ExpectedArrivals';
 import LambdaDeployment from './dashboard/LambdaDeployment';
 import Onboarding from './Onboarding';
+import ImageTest from './ImageTest';
 
 const Dashboard = () => {
   const { user, logout, refreshUser } = useAuth();
@@ -445,6 +446,7 @@ const Dashboard = () => {
               <Route path="/smart-restock" element={<SmartRestockRecommendations />} />
               <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
               <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
+              <Route path="/image-test" element={<ImageTest />} />
               <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
               <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />

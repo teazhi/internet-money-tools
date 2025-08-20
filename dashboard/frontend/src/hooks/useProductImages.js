@@ -116,37 +116,51 @@ export const useProductImage = (asin) => {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!asin) return;
+    if (!asin) {
+      setLoading(false);
+      setError(true);
+      return;
+    }
 
     const fetchImage = async () => {
       setLoading(true);
       setError(false);
+      setImageUrl(null);
 
       // Check localStorage cache first
-      const cached = JSON.parse(localStorage.getItem('productImages') || '{}')[asin];
-      if (cached && cached.timestamp && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
-        setImageUrl(cached.url);
-        setLoading(false);
-        return;
+      try {
+        const cached = JSON.parse(localStorage.getItem('productImages') || '{}')[asin];
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
+          setImageUrl(cached.url);
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        // Ignore cache errors
       }
 
       try {
         const response = await axios.get(`/api/product-image/${asin}`, { withCredentials: true });
         
-        if (response.data.image_url) {
+        if (response.data && response.data.image_url) {
           setImageUrl(response.data.image_url);
           
           // Cache the result
-          const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
-          cache[asin] = {
-            url: response.data.image_url,
-            timestamp: Date.now()
-          };
-          localStorage.setItem('productImages', JSON.stringify(cache));
+          try {
+            const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
+            cache[asin] = {
+              url: response.data.image_url,
+              timestamp: Date.now()
+            };
+            localStorage.setItem('productImages', JSON.stringify(cache));
+          } catch (e) {
+            // Ignore cache save errors
+          }
         } else {
           setError(true);
         }
       } catch (err) {
+        console.error(`Failed to fetch image for ASIN ${asin}:`, err);
         setError(true);
       } finally {
         setLoading(false);

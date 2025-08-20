@@ -42,13 +42,17 @@ const EbayLister = () => {
         withCredentials: true
       });
 
+      console.log('eBay Lister Frontend: Received response:', response.data);
+
       if (response.data.success) {
+        console.log('eBay Lister Frontend: Success! Setting product data');
         setProductData(response.data.product);
         // Show warning if there was a Sellerboard issue
         if (response.data.warning) {
           setError(`Warning: ${response.data.warning}`);
         }
       } else {
+        console.log('eBay Lister Frontend: Response indicated failure');
         setError(response.data.message || 'Product not found');
       }
     } catch (err) {

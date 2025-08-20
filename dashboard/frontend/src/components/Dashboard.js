@@ -22,7 +22,8 @@ import {
   X,
   Package,
   Zap,
-  TestTube
+  TestTube,
+  ShoppingBag
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -39,6 +40,7 @@ import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import ExpectedArrivals from './dashboard/ExpectedArrivals';
 import LambdaDeployment from './dashboard/LambdaDeployment';
+import EbayLister from './dashboard/EbayLister';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
 
@@ -117,6 +119,7 @@ const Dashboard = () => {
     { name: 'Smart Restock', href: '/dashboard/enhanced-analytics', icon: TrendingUp, current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics') },
     { name: 'Missing Listings', href: '/dashboard/expected-arrivals', icon: Package, current: location.pathname === '/dashboard/expected-arrivals' },
     { name: 'Reimbursements', href: '/dashboard/reimbursements', icon: TrendingDown, current: location.pathname === '/dashboard/reimbursements' },
+    { name: 'eBay Lister', href: '/dashboard/ebay-lister', icon: ShoppingBag, current: location.pathname === '/dashboard/ebay-lister' },
     { name: 'File Manager', href: '/dashboard/files', icon: FileText, current: location.pathname === '/dashboard/files' },
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
     ...(isMainUser ? [{ name: 'VA Management', href: '/dashboard/subusers', icon: Users, current: location.pathname === '/dashboard/subusers' }] : []),
@@ -450,6 +453,7 @@ const Dashboard = () => {
               <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
               <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
               <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
+              <Route path="/ebay-lister" element={<EbayLister />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/sheet-config" element={<SheetConfig />} />
               <Route path="/settings" element={<SettingsPage />} />

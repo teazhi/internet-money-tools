@@ -6083,9 +6083,9 @@ def get_cached_discount_opportunities(discord_id, retailer_filter=''):
         ''')
         conn.commit()
         
-        # Check for valid cached data (30 minute expiry)
+        # Check for valid cached data with smart expiry (24 hours for daily use, but allow refresh)
         cursor.execute('''
-            SELECT data FROM discount_opportunities_cache 
+            SELECT data, created_at FROM discount_opportunities_cache 
             WHERE discord_id = ? AND retailer_filter = ? AND expires_at > datetime('now')
             ORDER BY created_at DESC LIMIT 1
         ''', (discord_id, retailer_filter))
@@ -6093,8 +6093,20 @@ def get_cached_discount_opportunities(discord_id, retailer_filter=''):
         result = cursor.fetchone()
         if result:
             data = json.loads(result[0])
-            # Add cache indicator
+            created_at = result[1]
+            
+            # Add cache info
             data['cached'] = True
+            data['cache_created_at'] = created_at
+            
+            # Calculate cache age for display
+            try:
+                cache_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                cache_age_hours = (datetime.now() - cache_time).total_seconds() / 3600
+                data['cache_age_hours'] = round(cache_age_hours, 1)
+            except:
+                data['cache_age_hours'] = 0
+                
             return data
         return None
         
@@ -6111,8 +6123,8 @@ def cache_discount_opportunities(discord_id, retailer_filter, data):
             WHERE discord_id = ? AND retailer_filter = ?
         ''', (discord_id, retailer_filter))
         
-        # Insert new cache entry with 30-minute expiry
-        expires_at = (datetime.now() + timedelta(minutes=30)).isoformat()
+        # Insert new cache entry with 24-hour expiry for daily use
+        expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
         cursor.execute('''
             INSERT INTO discount_opportunities_cache (discord_id, retailer_filter, data, expires_at)
             VALUES (?, ?, ?, ?)
@@ -6436,9 +6448,13 @@ def analyze_discount_opportunities():
             'message': f'Found {len(opportunities)} discount leads ({restock_needed_count} need restocking, {not_needed_count} not needed, {not_tracked_count} not tracked)'
         }
         
-        # Cache the result in database for 30 minutes
+        # Cache the result in database for 24 hours
         cache_discount_opportunities(discord_id, retailer_filter, result)
         print(f"[DEBUG] Cached discount opportunities in database for user {discord_id}")
+        
+        # Add cache metadata for fresh data
+        result['cached'] = False  # This is fresh data
+        result['cache_age_hours'] = 0
         
         return jsonify(result)
         
@@ -6468,6 +6484,43 @@ def refresh_discount_opportunities():
         
     except Exception as e:
         return jsonify({'error': f'Error refreshing opportunities: {str(e)}'}), 500
+
+@app.route('/api/discount-opportunities/check-stale', methods=['POST'])
+@login_required
+def check_stale_opportunities():
+    """Check if opportunities data is stale and suggest refresh"""
+    try:
+        data = request.get_json() or {}
+        retailer_filter = data.get('retailer', '')
+        discord_id = session['discord_id']
+        
+        # Get cache info
+        cursor.execute('''
+            SELECT created_at FROM discount_opportunities_cache 
+            WHERE discord_id = ? AND retailer_filter = ? AND expires_at > datetime('now')
+            ORDER BY created_at DESC LIMIT 1
+        ''', (discord_id, retailer_filter))
+        
+        result = cursor.fetchone()
+        if result:
+            created_at = result[0]
+            try:
+                cache_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                hours_old = (datetime.now() - cache_time).total_seconds() / 3600
+                
+                return jsonify({
+                    'has_cache': True,
+                    'hours_old': round(hours_old, 1),
+                    'is_stale': hours_old > 8,  # Consider stale after 8 hours
+                    'recommend_update': hours_old > 12  # Strong recommendation after 12 hours
+                })
+            except:
+                return jsonify({'has_cache': False, 'hours_old': 0, 'is_stale': True})
+        else:
+            return jsonify({'has_cache': False, 'hours_old': 0, 'is_stale': True})
+            
+    except Exception as e:
+        return jsonify({'error': f'Error checking cache status: {str(e)}'}), 500
 
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required
@@ -9675,6 +9728,148 @@ def check_images_ready():
         
     except Exception as e:
         return jsonify({'error': f'Check failed: {str(e)}'}), 500
+
+# eBay Lister API Endpoints
+@app.route('/api/products/asin/<asin>', methods=['GET'])
+@login_required
+def get_product_by_asin(asin):
+    """Get product information by ASIN for eBay listing creation"""
+    try:
+        # Validate ASIN format
+        if not asin or len(asin) != 10:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid ASIN format. ASIN must be 10 characters.'
+            }), 400
+            
+        # For demo/development, return mock data
+        # In production, this would connect to Amazon SP-API or your product database
+        mock_product_data = {
+            'asin': asin.upper(),
+            'title': f'Premium Wireless Headphones - {asin.upper()}',
+            'brand': 'TechBrand',
+            'category': 'Electronics > Headphones',
+            'price': '49.99',
+            'image_url': f'https://via.placeholder.com/300x300?text={asin.upper()}',
+            'dimensions': '7.5 x 6.8 x 3.2 inches',
+            'weight': '0.8 lbs',
+            'description': f'High-quality wireless headphones with premium sound quality. ASIN: {asin.upper()}',
+            'bullet_points': [
+                'Premium sound quality with deep bass',
+                'Long-lasting battery life up to 30 hours',
+                'Comfortable over-ear design',
+                'Built-in microphone for calls',
+                'Quick charge technology'
+            ],
+            'features': {
+                'Color': 'Black',
+                'Connectivity': 'Wireless',
+                'Battery Life': '30 hours',
+                'Warranty': '1 year'
+            }
+        }
+        
+        return jsonify({
+            'success': True,
+            'product': mock_product_data
+        })
+        
+    except Exception as e:
+        print(f"Error fetching product data for ASIN {asin}: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch product data. Please try again.'
+        }), 500
+
+@app.route('/api/ebay/generate-listing', methods=['POST'])
+@login_required
+def generate_ebay_listing():
+    """Generate eBay listing data from Amazon product information"""
+    try:
+        data = request.get_json()
+        asin = data.get('asin')
+        product_data = data.get('productData')
+        
+        if not asin or not product_data:
+            return jsonify({
+                'success': False,
+                'message': 'Missing ASIN or product data'
+            }), 400
+            
+        # Generate eBay-optimized listing
+        ebay_title = f"{product_data['title'][:70]}..." if len(product_data['title']) > 70 else product_data['title']
+        
+        # Create description with HTML formatting for eBay
+        ebay_description = f"""
+<div style="font-family: Arial, sans-serif; line-height: 1.6;">
+    <h2>{product_data['title']}</h2>
+    
+    <h3>Product Features:</h3>
+    <ul>
+        {"".join(f"<li>{point}</li>" for point in product_data.get('bullet_points', []))}
+    </ul>
+    
+    <h3>Product Details:</h3>
+    <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
+        <tr><td><strong>Brand:</strong></td><td>{product_data.get('brand', 'N/A')}</td></tr>
+        <tr><td><strong>Dimensions:</strong></td><td>{product_data.get('dimensions', 'N/A')}</td></tr>
+        <tr><td><strong>Weight:</strong></td><td>{product_data.get('weight', 'N/A')}</td></tr>
+        <tr><td><strong>ASIN:</strong></td><td>{asin}</td></tr>
+    </table>
+    
+    <h3>About This Item:</h3>
+    <p>{product_data.get('description', 'High-quality product with excellent features.')}</p>
+    
+    <h3>Shipping & Returns:</h3>
+    <p>Fast and secure shipping. 30-day return policy.</p>
+    
+    <div style="text-align: center; margin-top: 20px; padding: 10px; background-color: #f0f0f0;">
+        <p><strong>Thank you for shopping with us!</strong></p>
+    </div>
+</div>
+        """.strip()
+        
+        # Calculate suggested pricing (markup from Amazon price)
+        base_price = float(product_data.get('price', '29.99'))
+        suggested_price = round(base_price * 0.85, 2)  # Start at 85% for auction
+        buy_it_now_price = round(base_price * 1.15, 2)  # 15% markup for BIN
+        
+        # Generate eBay category suggestion based on product category
+        ebay_category = "Consumer Electronics > Portable Audio & Headphones"
+        if 'phone' in product_data.get('category', '').lower():
+            ebay_category = "Cell Phones & Accessories > Cell Phone Accessories"
+        elif 'computer' in product_data.get('category', '').lower():
+            ebay_category = "Computers/Tablets & Networking > Computer Components & Parts"
+            
+        listing_data = {
+            'title': ebay_title,
+            'description': ebay_description,
+            'category': ebay_category,
+            'condition': 'New',
+            'suggestedPrice': suggested_price,
+            'buyItNowPrice': buy_it_now_price,
+            'shipping': 'Free Standard Shipping',
+            'itemSpecifics': {
+                'Brand': product_data.get('brand', 'Unbranded'),
+                'Model': asin,
+                'Type': 'Consumer Electronics',
+                'Color': product_data.get('features', {}).get('Color', 'Black'),
+                'Condition': 'New',
+                'Country/Region of Manufacture': 'China'
+            }
+        }
+        
+        return jsonify({
+            'success': True,
+            'listing': listing_data
+        })
+        
+    except Exception as e:
+        print(f"Error generating eBay listing: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to generate eBay listing. Please try again.'
+        }), 500
 
 # Demo control endpoints
 @app.route('/api/demo/status', methods=['GET'])

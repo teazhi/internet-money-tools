@@ -467,7 +467,12 @@ const DiscountOpportunities = () => {
                     {stats.message} • {stats.totalAlertsProcessed} emails processed • Showing {stats.uniqueCount} restock opportunities
                     {stats.cached && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        Cached (fast load)
+                        Cached {stats.cache_age_hours < 1 
+                          ? `(${Math.round(stats.cache_age_hours * 60)}m ago)` 
+                          : stats.cache_age_hours < 24 
+                            ? `(${Math.round(stats.cache_age_hours)}h ago)`
+                            : `(${Math.round(stats.cache_age_hours / 24)}d ago)`
+                        }
                       </span>
                     )}
                     {(stats.duplicatesRemoved > 0 || stats.notNeededFiltered > 0) && (
@@ -505,7 +510,7 @@ const DiscountOpportunities = () => {
                     onClick={() => fetchOpportunities(false)}
                     disabled={loading}
                     className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    title="Load from cache (fast)"
+                    title="Load from cache (instant load, up to 24h old)"
                   >
                     <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                     <span>Refresh</span>
@@ -514,11 +519,15 @@ const DiscountOpportunities = () => {
                   <button
                     onClick={() => fetchOpportunities(true)}
                     disabled={loading}
-                    className="flex items-center space-x-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    title="Force refresh from source data (slower but most up-to-date)"
+                    className={`flex items-center space-x-1 px-3 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+                      stats?.cache_age_hours > 6 
+                        ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                        : 'bg-gray-600 text-white hover:bg-gray-700'
+                    }`}
+                    title={`Get fresh data from source (${stats?.cache_age_hours > 6 ? 'recommended - data is ' + Math.round(stats.cache_age_hours) + 'h old' : 'slower but most current'})`}
                   >
                     <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-                    <span>Force</span>
+                    <span>{stats?.cache_age_hours > 12 ? 'Update' : 'Force'}</span>
                   </button>
                 </div>
               </div>

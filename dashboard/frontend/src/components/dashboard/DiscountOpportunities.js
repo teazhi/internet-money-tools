@@ -96,10 +96,12 @@ const ProductImage = ({ asin, productName }) => {
             }, 3000);
           });
           
+          // Don't set crossOrigin as Amazon doesn't support CORS
           img.src = url;
           await imageLoadPromise;
           
           // If we get here, the image loaded successfully
+          console.log(`[ProductImage] Setting imageUrl to: ${url}`);
           setImageUrl(url);
           setLoading(false);
           debug.push(`✅ Success with URL ${i + 1}: ${url}`);
@@ -175,14 +177,21 @@ const ProductImage = ({ asin, productName }) => {
   }
 
   // Show the actual product image
+  console.log(`[ProductImage] Rendering image for ${asin}: ${imageUrl}`);
   return (
     <div className="h-10 w-10 rounded-lg overflow-hidden border border-gray-200 bg-white">
       <img
+        key={imageUrl} // Force re-render when URL changes
         src={imageUrl}
         alt={productName || `Product ${asin}`}
         className="h-full w-full object-cover"
-        onError={() => setError(true)}
-        loading="lazy"
+        onError={(e) => {
+          console.log(`[ProductImage] Display error for ${asin}:`, e);
+          setError(true);
+        }}
+        onLoad={() => {
+          console.log(`[ProductImage] Successfully displayed image for ${asin}`);
+        }}
       />
     </div>
   );

@@ -13,67 +13,136 @@ import {
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
 
-// Product image component with fallback to direct Amazon URLs
+// Product image component with extensive debugging and fallback options
 const ProductImage = ({ asin, productName }) => {
   const [imageUrl, setImageUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [debugInfo, setDebugInfo] = useState([]);
 
   useEffect(() => {
     const fetchProductImage = async () => {
       if (!asin) return;
       
+      console.log(`[ProductImage] Starting fetch for ASIN: ${asin}`);
       setLoading(true);
       setError(false);
+      setDebugInfo([]);
       
-      // First try the backend API
+      const debug = [];
+      
+      // Method 1: Try the backend API
       try {
+        console.log(`[ProductImage] Trying backend API for ${asin}`);
         const response = await axios.get(`/api/product-image/${asin}`, { 
-          withCredentials: true 
+          withCredentials: true,
+          timeout: 5000
         });
         
+        console.log(`[ProductImage] Backend response:`, response.data);
+        
         if (response.data.imageUrl) {
+          console.log(`[ProductImage] ✅ Backend success: ${response.data.imageUrl}`);
           setImageUrl(response.data.imageUrl);
           setLoading(false);
           return;
         }
+        debug.push('Backend: No imageUrl in response');
       } catch (err) {
-        // Backend failed, try direct URLs
+        console.log(`[ProductImage] Backend failed:`, err.message);
+        debug.push(`Backend error: ${err.message}`);
       }
       
-      // Fallback: Try direct Amazon image URLs
+      // Method 2: Try direct Amazon image URLs with various patterns
       const directUrls = [
+        // High quality images
         `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
         `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`,
         `https://m.media-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`,
-        `https://images-amazon.com/images/P/${asin}.jpg`
+        
+        // Alternative formats
+        `https://images-amazon.com/images/P/${asin}.jpg`,
+        `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SX200_.jpg`,
+        `https://m.media-amazon.com/images/P/${asin}.01._SL160_.jpg`,
+        
+        // Try with different image IDs (sometimes Amazon uses different IDs)
+        `https://images-na.ssl-images-amazon.com/images/I/${asin}._AC_SX300_SY300_.jpg`,
+        `https://m.media-amazon.com/images/I/${asin}._AC_SL300_.jpg`,
+        `https://images-amazon.com/images/I/${asin}.jpg`
       ];
       
-      // Test each URL
-      for (const url of directUrls) {
+      console.log(`[ProductImage] Trying ${directUrls.length} direct URLs for ${asin}`);
+      
+      for (let i = 0; i < directUrls.length; i++) {
+        const url = directUrls[i];
         try {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
+          console.log(`[ProductImage] Testing URL ${i + 1}/${directUrls.length}: ${url}`);
           
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = url;
+          const img = new Image();
+          
+          const imageLoadPromise = new Promise((resolve, reject) => {
+            img.onload = () => {
+              console.log(`[ProductImage] ✅ Image loaded successfully: ${url}`);
+              resolve();
+            };
+            img.onerror = (e) => {
+              console.log(`[ProductImage] ❌ Image failed to load: ${url}`, e);
+              reject(new Error('Image load error'));
+            };
+            
+            // Set a timeout for the image load
+            setTimeout(() => {
+              reject(new Error('Image load timeout'));
+            }, 3000);
           });
+          
+          img.src = url;
+          await imageLoadPromise;
           
           // If we get here, the image loaded successfully
           setImageUrl(url);
           setLoading(false);
+          debug.push(`✅ Success with URL ${i + 1}: ${url}`);
+          setDebugInfo(debug);
           return;
+          
         } catch (err) {
-          // This URL failed, try the next one
+          console.log(`[ProductImage] URL ${i + 1} failed: ${err.message}`);
+          debug.push(`❌ URL ${i + 1} failed: ${err.message}`);
           continue;
         }
       }
       
+      // Method 3: Try a simple img tag test
+      console.log(`[ProductImage] All direct URLs failed, trying simple test for ${asin}`);
+      try {
+        const testUrl = `https://m.media-amazon.com/images/I/${asin}.jpg`;
+        const img = new Image();
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          setTimeout(reject, 2000); // 2 second timeout
+          img.src = testUrl;
+        });
+        
+        console.log(`[ProductImage] ✅ Simple test succeeded: ${testUrl}`);
+        setImageUrl(testUrl);
+        setLoading(false);
+        debug.push(`✅ Simple test success: ${testUrl}`);
+        setDebugInfo(debug);
+        return;
+      } catch (err) {
+        console.log(`[ProductImage] Simple test failed: ${err.message}`);
+        debug.push(`❌ Simple test failed: ${err.message}`);
+      }
+      
       // All methods failed
+      console.log(`[ProductImage] ❌ All methods failed for ASIN: ${asin}`);
+      debug.push('❌ All methods exhausted');
       setError(true);
       setLoading(false);
+      setDebugInfo(debug);
     };
 
     fetchProductImage();
@@ -88,11 +157,19 @@ const ProductImage = ({ asin, productName }) => {
     );
   }
 
-  // Show error state with package icon
+  // Show error state with package icon and debug info
   if (error || !imageUrl) {
+    const debugTitle = `Product: ${asin}\nDebug info:\n${debugInfo.join('\n')}`;
     return (
-      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
-        <Package className="h-5 w-5 text-blue-600" />
+      <div 
+        className="h-10 w-10 rounded-lg bg-gradient-to-br from-red-50 to-red-100 border border-red-200 flex items-center justify-center cursor-help" 
+        title={debugTitle}
+        onClick={() => {
+          console.log(`[ProductImage] Debug info for ${asin}:`, debugInfo);
+          console.log(`[ProductImage] Testing manual URL: https://m.media-amazon.com/images/I/${asin}.jpg`);
+        }}
+      >
+        <Package className="h-5 w-5 text-red-600" />
       </div>
     );
   }

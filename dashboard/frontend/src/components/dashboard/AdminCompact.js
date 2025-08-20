@@ -65,7 +65,10 @@ const AdminCompact = () => {
     
     try {
       setLoading(true);
-      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, groupsRes] = await Promise.all([
+      setError(''); // Clear any previous errors
+      
+      // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, groupsRes] = await Promise.allSettled([
         axios.get('/api/admin/users', { withCredentials: true }),
         axios.get('/api/admin/stats', { withCredentials: true }),
         axios.get('/api/admin/invitations', { withCredentials: true }),
@@ -75,73 +78,130 @@ const AdminCompact = () => {
         axios.get('/api/admin/groups', { withCredentials: true })
       ]);
       
-      const users = usersRes.data.users;
-      setUsers(users);
-      setSystemStats(statsRes.data);
-      setInvitations(invitesRes.data.invitations || []);
-      setDiscountMonitoring(discountRes.data);
-      setFeatures(featuresRes.data.features || []);
-      setUserFeatureAccess(userFeaturesRes.data.user_features || {});
-      setGroups(groupsRes.data.groups || []);
+      // Handle results with partial failure support
+      let failedEndpoints = [];
       
-      // Organize users hierarchically
-      const mainUsers = users.filter(user => user.user_type !== 'subuser');
-      const subUsers = users.filter(user => user.user_type === 'subuser');
-      
-      // Manual assignment based on usernames (fallback for correct relationships)
-      const manualAssignments = {
-        'jhoi': 'teazhii',
-        'jayvee': 'teazhii', 
-        'xiela': 'davfong'
-      };
+      // Users (critical)
+      if (usersRes.status === 'fulfilled') {
+        const users = usersRes.value.data.users;
+        setUsers(users);
+        
+        // Organize users hierarchically
+        const mainUsers = users.filter(user => user.user_type !== 'subuser');
+        const subUsers = users.filter(user => user.user_type === 'subuser');
+        
+        // Manual assignment based on usernames (fallback for correct relationships)
+        const manualAssignments = {
+          'jhoi': 'teazhii',
+          'jayvee': 'teazhii', 
+          'xiela': 'davfong'
+        };
 
-      const hierarchicalUsers = [];
-      mainUsers.forEach(mainUser => {
-        hierarchicalUsers.push({...mainUser, isMainUser: true});
+        const hierarchicalUsers = [];
+        mainUsers.forEach(mainUser => {
+          hierarchicalUsers.push({...mainUser, isMainUser: true});
+          
+          // First try automatic matching by parent_user_id
+          const userSubUsers = subUsers.filter(sub => 
+            String(sub.parent_user_id) === String(mainUser.discord_id)
+          );
+          
+          // Then try manual username-based matching for known VAs
+          const manualSubUsers = subUsers.filter(sub => 
+            manualAssignments[sub.discord_username?.toLowerCase()] === mainUser.discord_username?.toLowerCase()
+          );
+          
+          // Combine both and remove duplicates
+          const allSubUsers = [...userSubUsers];
+          manualSubUsers.forEach(manualSub => {
+            if (!allSubUsers.some(existing => existing.discord_id === manualSub.discord_id)) {
+              allSubUsers.push(manualSub);
+            }
+          });
+          
+          allSubUsers.forEach(subUser => {
+            hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
+          });
+        });
         
-        // First try automatic matching by parent_user_id
-        const userSubUsers = subUsers.filter(sub => 
-          String(sub.parent_user_id) === String(mainUser.discord_id)
-        );
-        
-        // Then try manual username-based matching for known VAs
-        const manualSubUsers = subUsers.filter(sub => 
-          manualAssignments[sub.discord_username?.toLowerCase()] === mainUser.discord_username?.toLowerCase()
-        );
-        
-        // Combine both and remove duplicates
-        const allSubUsers = [...userSubUsers];
-        manualSubUsers.forEach(manualSub => {
-          if (!allSubUsers.some(existing => existing.discord_id === manualSub.discord_id)) {
-            allSubUsers.push(manualSub);
+        // Add any remaining orphaned subusers (not matched by ID or manually assigned)
+        const assignedSubUserIds = new Set();
+        hierarchicalUsers.forEach(user => {
+          if (user.isSubUser) {
+            assignedSubUserIds.add(user.discord_id);
           }
         });
         
+        const orphanedSubs = subUsers.filter(sub => 
+          !assignedSubUserIds.has(sub.discord_id)
+        );
         
-        allSubUsers.forEach(subUser => {
-          hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: mainUser});
+        orphanedSubs.forEach(subUser => {
+          hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: null});
         });
-      });
+        
+        setFilteredUsers(hierarchicalUsers);
+      } else {
+        failedEndpoints.push('Users');
+        console.error('Failed to load users:', usersRes.reason);
+      }
       
-      // Add any remaining orphaned subusers (not matched by ID or manually assigned)
-      const assignedSubUserIds = new Set();
-      hierarchicalUsers.forEach(user => {
-        if (user.isSubUser) {
-          assignedSubUserIds.add(user.discord_id);
-        }
-      });
+      // Stats (non-critical)
+      if (statsRes.status === 'fulfilled') {
+        setSystemStats(statsRes.value.data);
+      } else {
+        failedEndpoints.push('Stats');
+        console.error('Failed to load stats:', statsRes.reason);
+      }
       
-      const orphanedSubs = subUsers.filter(sub => 
-        !assignedSubUserIds.has(sub.discord_id)
-      );
+      // Invitations (non-critical)
+      if (invitesRes.status === 'fulfilled') {
+        setInvitations(invitesRes.value.data.invitations || []);
+      } else {
+        failedEndpoints.push('Invitations');
+        console.error('Failed to load invitations:', invitesRes.reason);
+      }
       
-      orphanedSubs.forEach(subUser => {
-        hierarchicalUsers.push({...subUser, isSubUser: true, parentUser: null});
-      });
+      // Discount monitoring (non-critical)
+      if (discountRes.status === 'fulfilled') {
+        setDiscountMonitoring(discountRes.value.data);
+      } else {
+        failedEndpoints.push('Discount Monitoring');
+        console.error('Failed to load discount monitoring:', discountRes.reason);
+      }
       
-      setFilteredUsers(hierarchicalUsers);
+      // Features (non-critical)
+      if (featuresRes.status === 'fulfilled') {
+        setFeatures(featuresRes.value.data.features || []);
+      } else {
+        failedEndpoints.push('Features');
+        console.error('Failed to load features:', featuresRes.reason);
+      }
+      
+      // User features (non-critical)
+      if (userFeaturesRes.status === 'fulfilled') {
+        setUserFeatureAccess(userFeaturesRes.value.data.user_features || {});
+      } else {
+        failedEndpoints.push('User Features');
+        console.error('Failed to load user features:', userFeaturesRes.reason);
+      }
+      
+      // Groups (non-critical)
+      if (groupsRes.status === 'fulfilled') {
+        setGroups(groupsRes.value.data.groups || []);
+      } else {
+        failedEndpoints.push('Groups');
+        console.error('Failed to load groups:', groupsRes.reason);
+      }
+      
+      // Show warning if some endpoints failed but don't block the UI
+      if (failedEndpoints.length > 0) {
+        setError(`Warning: Some data failed to load (${failedEndpoints.join(', ')}). Core functionality is available.`);
+      }
+      
     } catch (error) {
-      setError('Failed to load admin data');
+      setError(`Failed to load admin data: ${error.message}`);
+      console.error('Admin data loading error:', error);
     } finally {
       setLoading(false);
     }

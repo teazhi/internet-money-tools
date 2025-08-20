@@ -46,6 +46,14 @@ const AdminCompact = () => {
   const [assigningVA, setAssigningVA] = useState(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedParentUser, setSelectedParentUser] = useState('');
+  const [features, setFeatures] = useState([]);
+  const [userFeatureAccess, setUserFeatureAccess] = useState({});
+  const [showFeatureModal, setShowFeatureModal] = useState(false);
+  const [selectedFeatureUser, setSelectedFeatureUser] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [newGroupData, setNewGroupData] = useState({ group_key: '', group_name: '', description: '' });
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -54,11 +62,14 @@ const AdminCompact = () => {
     
     try {
       setLoading(true);
-      const [usersRes, statsRes, invitesRes, discountRes] = await Promise.all([
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, groupsRes] = await Promise.all([
         axios.get('/api/admin/users', { withCredentials: true }),
         axios.get('/api/admin/stats', { withCredentials: true }),
         axios.get('/api/admin/invitations', { withCredentials: true }),
-        axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true })
+        axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true }),
+        axios.get('/api/admin/features', { withCredentials: true }),
+        axios.get('/api/admin/user-features', { withCredentials: true }),
+        axios.get('/api/admin/groups', { withCredentials: true })
       ]);
       
       const users = usersRes.data.users;
@@ -66,6 +77,9 @@ const AdminCompact = () => {
       setSystemStats(statsRes.data);
       setInvitations(invitesRes.data.invitations || []);
       setDiscountMonitoring(discountRes.data);
+      setFeatures(featuresRes.data.features || []);
+      setUserFeatureAccess(userFeaturesRes.data.user_features || {});
+      setGroups(groupsRes.data.groups || []);
       
       // Organize users hierarchically
       const mainUsers = users.filter(user => user.user_type !== 'subuser');
@@ -215,6 +229,69 @@ const AdminCompact = () => {
     }
   };
 
+  const handleToggleFeatureAccess = async (userId, featureKey) => {
+    try {
+      setError('');
+      const currentAccess = userFeatureAccess[userId]?.[featureKey] || false;
+      
+      if (currentAccess) {
+        // Remove access
+        await axios.delete(`/api/admin/user-features/${userId}/${featureKey}`, { withCredentials: true });
+      } else {
+        // Grant access
+        await axios.post('/api/admin/user-features', {
+          user_id: userId,
+          feature_key: featureKey
+        }, { withCredentials: true });
+      }
+      
+      setSuccess(`Feature access ${currentAccess ? 'removed' : 'granted'} successfully!`);
+      fetchData();
+    } catch (error) {
+      setError('Failed to update feature access');
+    }
+  };
+
+  const handleToggleFeatureBeta = async (featureKey) => {
+    try {
+      setError('');
+      const feature = features.find(f => f.feature_key === featureKey);
+      
+      await axios.put(`/api/admin/features/${featureKey}`, {
+        is_beta: !feature.is_beta
+      }, { withCredentials: true });
+      
+      setSuccess(`Feature ${feature.is_beta ? 'moved to stable' : 'marked as beta'}!`);
+      fetchData();
+    } catch (error) {
+      setError('Failed to update feature');
+    }
+  };
+
+  const handleLaunchFeature = async (featureKey) => {
+    try {
+      setError('');
+      const feature = features.find(f => f.feature_key === featureKey);
+      
+      if (feature.is_launched) {
+        // Unlaunch feature
+        await axios.post('/api/admin/features/unlaunch', {
+          feature_key: featureKey
+        }, { withCredentials: true });
+      } else {
+        // Launch feature
+        await axios.post('/api/admin/features/launch', {
+          feature_key: featureKey
+        }, { withCredentials: true });
+      }
+      
+      setSuccess(`Feature ${feature.is_launched ? 'unlaunched' : 'launched'} successfully!`);
+      fetchData();
+    } catch (error) {
+      setError('Failed to launch/unlaunch feature');
+    }
+  };
+
   // UserEditModal component
   const UserEditModal = ({ user, onSave, onCancel }) => {
     const [editData, setEditData] = useState({
@@ -338,7 +415,9 @@ const AdminCompact = () => {
   }
 
   const tabs = [
-    { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length }
+    { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
+    { id: 'features', name: 'Features', icon: Settings, count: features.length },
+    { id: 'groups', name: 'Groups', icon: UserPlus, count: groups.length }
   ];
 
   return (
@@ -647,7 +726,266 @@ const AdminCompact = () => {
                 </div>
               )}
 
+              {/* Features Tab */}
+              {activeTab === 'features' && (
+                <div className="space-y-6">
+                  {/* Features Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <Settings className="h-5 w-5 text-blue-500 mr-2" />
+                        <div>
+                          <p className="text-xs text-blue-600">Total Features</p>
+                          <p className="text-lg font-bold text-blue-900">{features.length}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <Play className="h-5 w-5 text-green-500 mr-2" />
+                        <div>
+                          <p className="text-xs text-green-600">Launched</p>
+                          <p className="text-lg font-bold text-green-900">
+                            {features.filter(f => f.is_launched).length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg">
+                      <div className="flex items-center">
+                        <Bell className="h-5 w-5 text-orange-500 mr-2" />
+                        <div>
+                          <p className="text-xs text-orange-600">Beta</p>
+                          <p className="text-lg font-bold text-orange-900">
+                            {features.filter(f => f.is_beta).length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
+                  {/* Features Management */}
+                  <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <div className="px-6 py-4 border-b border-gray-200">
+                      <h3 className="text-lg font-medium text-gray-900">Feature Management</h3>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Control which features are available and who has access to them.
+                      </p>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Feature
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Users with Access
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {features.map((feature) => {
+                            const usersWithAccess = Object.entries(userFeatureAccess)
+                              .filter(([userId, features]) => features[feature.feature_key])
+                              .map(([userId]) => users.find(u => u.discord_id === userId))
+                              .filter(Boolean);
+
+                            return (
+                              <tr key={feature.feature_key} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {feature.display_name || feature.feature_key}
+                                    </div>
+                                    <div className="text-sm text-gray-500">
+                                      {feature.description || `${feature.feature_key} feature access`}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <div className="flex flex-col space-y-1">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                      feature.is_launched 
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-red-100 text-red-800'
+                                    }`}>
+                                      {feature.is_launched ? 'Launched' : 'Unlaunched'}
+                                    </span>
+                                    {feature.is_beta && (
+                                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                                        Beta
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm text-gray-900">
+                                    {usersWithAccess.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {usersWithAccess.slice(0, 3).map((user) => (
+                                          <div key={user.discord_id} className="flex items-center">
+                                            {user.discord_avatar ? (
+                                              <img
+                                                className="h-4 w-4 rounded-full mr-2"
+                                                src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
+                                                alt=""
+                                              />
+                                            ) : (
+                                              <div className="h-4 w-4 bg-gray-300 rounded-full mr-2"></div>
+                                            )}
+                                            <span className="text-xs">{user.discord_username}</span>
+                                          </div>
+                                        ))}
+                                        {usersWithAccess.length > 3 && (
+                                          <div className="text-xs text-gray-500">
+                                            +{usersWithAccess.length - 3} more
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-sm text-gray-500 italic">No users have access</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <div className="flex justify-end space-x-2">
+                                    <button
+                                      onClick={() => handleLaunchFeature(feature.feature_key)}
+                                      className={`inline-flex items-center px-2 py-1 text-xs rounded-md ${
+                                        feature.is_launched
+                                          ? 'text-red-700 bg-red-100 hover:bg-red-200'
+                                          : 'text-green-700 bg-green-100 hover:bg-green-200'
+                                      }`}
+                                    >
+                                      {feature.is_launched ? 'Unlaunch' : 'Launch'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleToggleFeatureBeta(feature.feature_key)}
+                                      className={`inline-flex items-center px-2 py-1 text-xs rounded-md ${
+                                        feature.is_beta
+                                          ? 'text-orange-700 bg-orange-100 hover:bg-orange-200'
+                                          : 'text-blue-700 bg-blue-100 hover:bg-blue-200'
+                                      }`}
+                                    >
+                                      {feature.is_beta ? 'Remove Beta' : 'Mark Beta'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedFeatureUser(feature);
+                                        setShowFeatureModal(true);
+                                      }}
+                                      className="text-indigo-600 hover:text-indigo-900"
+                                    >
+                                      Manage Access
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Groups Tab */}
+              {activeTab === 'groups' && (
+                <div className="space-y-6">
+                  {/* Groups Overview */}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">User Groups</h3>
+                      <p className="text-sm text-gray-600">
+                        Organize users into groups for easier feature access management.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setNewGroupData({ group_key: '', group_name: '', description: '' });
+                        setShowGroupModal(true);
+                      }}
+                      className="flex items-center px-3 py-2 bg-builders-600 text-white rounded-md text-sm hover:bg-builders-700"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Create Group
+                    </button>
+                  </div>
+
+                  {/* Groups List */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {groups.map((group) => (
+                      <div key={group.group_key} className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="text-lg font-medium text-gray-900">{group.group_name}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{group.description}</p>
+                            <div className="mt-3 flex items-center text-sm text-gray-500">
+                              <UserPlus className="h-4 w-4 mr-1" />
+                              <span>{group.member_count} members</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedGroup(group);
+                              setShowGroupModal(true);
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            <Settings className="h-5 w-5" />
+                          </button>
+                        </div>
+                        
+                        <div className="mt-4 flex space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedGroup(group);
+                              setShowGroupModal(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-md text-sm hover:bg-blue-100"
+                          >
+                            Manage Members
+                          </button>
+                          <button 
+                            className="flex-1 px-3 py-2 bg-green-50 text-green-700 rounded-md text-sm hover:bg-green-100"
+                          >
+                            Set Permissions
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {groups.length === 0 && (
+                      <div className="col-span-full text-center py-8">
+                        <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No Groups Yet</h3>
+                        <p className="text-gray-600 mb-4">
+                          Create user groups to manage feature access more efficiently.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setNewGroupData({ group_key: '', group_name: '', description: '' });
+                            setShowGroupModal(true);
+                          }}
+                          className="inline-flex items-center px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create Your First Group
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
             </>
           )}
@@ -777,6 +1115,233 @@ const AdminCompact = () => {
           onSave={handleUpdateUser}
           onCancel={() => setEditingUser(null)}
         />
+      )}
+
+      {/* Feature Access Management Modal */}
+      {showFeatureModal && selectedFeatureUser && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white max-h-screen overflow-y-auto">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Manage Access: {selectedFeatureUser.display_name || selectedFeatureUser.feature_key}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowFeatureModal(false);
+                    setSelectedFeatureUser(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Feature Information</h4>
+                  <p className="text-sm text-gray-600">
+                    {selectedFeatureUser.description || `Control access to the ${selectedFeatureUser.feature_key} feature`}
+                  </p>
+                  <div className="mt-2 flex space-x-2">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      selectedFeatureUser.is_launched 
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedFeatureUser.is_launched ? 'Launched' : 'Unlaunched'}
+                    </span>
+                    {selectedFeatureUser.is_beta && (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                        Beta
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">User Access</h4>
+                  <div className="max-h-96 overflow-y-auto">
+                    <div className="space-y-2">
+                      {users.filter(user => user.user_type !== 'subuser').map((user) => {
+                        const hasAccess = userFeatureAccess[user.discord_id]?.[selectedFeatureUser.feature_key] || false;
+                        
+                        return (
+                          <div key={user.discord_id} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
+                            <div className="flex items-center">
+                              {user.discord_avatar ? (
+                                <img
+                                  className="h-8 w-8 rounded-full mr-3"
+                                  src={`https://cdn.discordapp.com/avatars/${user.discord_id}/${user.discord_avatar}.png`}
+                                  alt=""
+                                />
+                              ) : (
+                                <div className="h-8 w-8 bg-gray-300 rounded-full mr-3"></div>
+                              )}
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{user.discord_username}</div>
+                                <div className="text-xs text-gray-500">{user.email}</div>
+                              </div>
+                            </div>
+                            
+                            <button
+                              onClick={() => handleToggleFeatureAccess(user.discord_id, selectedFeatureUser.feature_key)}
+                              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                                hasAccess
+                                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                            >
+                              {hasAccess ? 'Remove Access' : 'Grant Access'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => {
+                    setShowFeatureModal(false);
+                    setSelectedFeatureUser(null);
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Group Management Modal */}
+      {showGroupModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white max-h-screen overflow-y-auto">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {selectedGroup ? `Manage Group: ${selectedGroup.group_name}` : 'Create New Group'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowGroupModal(false);
+                    setSelectedGroup(null);
+                    setNewGroupData({ group_key: '', group_name: '', description: '' });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {!selectedGroup ? (
+                // Create New Group Form
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Group Key</label>
+                    <input
+                      type="text"
+                      value={newGroupData.group_key}
+                      onChange={(e) => setNewGroupData({...newGroupData, group_key: e.target.value})}
+                      placeholder="e.g., premium_users"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Unique identifier (lowercase, underscores only)</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
+                    <input
+                      type="text"
+                      value={newGroupData.group_name}
+                      onChange={(e) => setNewGroupData({...newGroupData, group_name: e.target.value})}
+                      placeholder="e.g., Premium Users"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={newGroupData.description}
+                      onChange={(e) => setNewGroupData({...newGroupData, description: e.target.value})}
+                      placeholder="Describe this group's purpose..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setShowGroupModal(false);
+                        setNewGroupData({ group_key: '', group_name: '', description: '' });
+                      }}
+                      className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await axios.post('/api/admin/groups', newGroupData, { withCredentials: true });
+                          setSuccess('Group created successfully!');
+                          setShowGroupModal(false);
+                          setNewGroupData({ group_key: '', group_name: '', description: '' });
+                          fetchData();
+                        } catch (error) {
+                          setError('Failed to create group');
+                        }
+                      }}
+                      disabled={!newGroupData.group_key || !newGroupData.group_name}
+                      className="px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700 disabled:opacity-50"
+                    >
+                      Create Group
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Manage Existing Group
+                <div className="space-y-6">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Group Information</h4>
+                    <p className="text-sm text-gray-600">{selectedGroup.description}</p>
+                    <div className="mt-2 flex items-center text-sm text-gray-500">
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      <span>{selectedGroup.member_count} members</span>
+                      <span className="mx-2">•</span>
+                      <span>Created {new Date(selectedGroup.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center py-8 text-gray-500">
+                    <p>Group member management will be implemented here.</p>
+                    <p className="text-sm mt-2">Coming soon...</p>
+                  </div>
+                </div>
+              )}
+              
+              {selectedGroup && (
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={() => {
+                      setShowGroupModal(false);
+                      setSelectedGroup(null);
+                    }}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -6567,6 +6567,47 @@ def init_feature_flags():
             )
         ''')
         
+        # Create user groups table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_key TEXT UNIQUE NOT NULL,
+                group_name TEXT NOT NULL,
+                description TEXT,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create user group membership table  
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_group_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                group_key TEXT NOT NULL,
+                added_by TEXT NOT NULL,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_key) REFERENCES user_groups (group_key),
+                UNIQUE (discord_id, group_key)
+            )
+        ''')
+        
+        # Create group feature access table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS group_feature_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_key TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                has_access BOOLEAN DEFAULT 0,
+                granted_by TEXT NOT NULL,
+                granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_key) REFERENCES user_groups (group_key),
+                FOREIGN KEY (feature_key) REFERENCES features (feature_key),
+                UNIQUE (group_key, feature_key)
+            )
+        ''')
+        
         conn.commit()
         
         # Insert default features
@@ -6587,14 +6628,28 @@ def init_feature_flags():
                 VALUES (?, ?, ?, ?)
             ''', (feature_key, name, description, is_beta))
         
+        # Insert default user groups
+        default_groups = [
+            ('beta_testers', 'Beta Testers', 'Users who test new features before general release', '712147636463075389'),
+            ('power_users', 'Power Users', 'Advanced users with access to premium features', '712147636463075389'),
+            ('basic_users', 'Basic Users', 'Standard users with core feature access', '712147636463075389'),
+            ('va_users', 'VA Users', 'Virtual assistants with limited feature access', '712147636463075389')
+        ]
+        
+        for group_key, group_name, description, created_by in default_groups:
+            cursor.execute('''
+                INSERT OR IGNORE INTO user_groups (group_key, group_name, description, created_by)
+                VALUES (?, ?, ?, ?)
+            ''', (group_key, group_name, description, created_by))
+        
         conn.commit()
-        print("[DEBUG] Feature flags system initialized")
+        print("[DEBUG] Feature flags system initialized with user groups")
         
     except Exception as e:
         print(f"Error initializing feature flags: {e}")
 
 def has_feature_access(discord_id, feature_key):
-    """Check if user has access to a specific feature"""
+    """Check if user has access to a specific feature (individual or group-based)"""
     try:
         # Admin always has access to everything
         user = get_user_record(discord_id)
@@ -6617,7 +6672,18 @@ def has_feature_access(discord_id, feature_key):
         ''', (discord_id, feature_key))
         
         access_result = cursor.fetchone()
-        return access_result[0] if access_result else False
+        if access_result and access_result[0]:
+            return True
+        
+        # Check group-based access
+        cursor.execute('''
+            SELECT gfa.has_access FROM group_feature_access gfa
+            JOIN user_group_members ugm ON gfa.group_key = ugm.group_key
+            WHERE ugm.discord_id = ? AND gfa.feature_key = ? AND gfa.has_access = 1
+        ''', (discord_id, feature_key))
+        
+        group_access_result = cursor.fetchone()
+        return bool(group_access_result)
         
     except Exception as e:
         print(f"Error checking feature access for {discord_id}, {feature_key}: {e}")
@@ -10270,6 +10336,273 @@ def disable_demo_mode():
         'demo_mode': False,
         'message': 'Demo mode disabled - using real data'
     })
+
+# ===== ADMIN USER GROUPS API ENDPOINTS =====
+
+@app.route('/api/admin/user-features', methods=['GET'])
+@admin_required  
+def get_all_user_features():
+    """Get all user feature access permissions"""
+    try:
+        cursor.execute('''
+            SELECT u.discord_id, u.discord_username, u.email, ufa.feature_key, ufa.has_access
+            FROM users u
+            LEFT JOIN user_feature_access ufa ON u.discord_id = ufa.discord_id
+            ORDER BY u.discord_username, ufa.feature_key
+        ''')
+        
+        user_features = {}
+        for row in cursor.fetchall():
+            discord_id, username, email, feature_key, has_access = row
+            if discord_id not in user_features:
+                user_features[discord_id] = {}
+            if feature_key:
+                user_features[discord_id][feature_key] = bool(has_access)
+        
+        return jsonify({'user_features': user_features})
+    except Exception as e:
+        return jsonify({'error': f'Error fetching user features: {str(e)}'}), 500
+
+@app.route('/api/admin/user-features', methods=['POST'])
+@admin_required
+def grant_user_feature_access():
+    """Grant a user access to a specific feature"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        feature_key = data.get('feature_key')
+        discord_id = session['discord_id']
+        
+        if not user_id or not feature_key:
+            return jsonify({'error': 'User ID and feature key required'}), 400
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO user_feature_access (discord_id, feature_key, has_access, granted_by)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, feature_key, True, discord_id))
+        
+        conn.commit()
+        return jsonify({'message': 'Feature access granted successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error granting feature access: {str(e)}'}), 500
+
+@app.route('/api/admin/user-features/<user_id>/<feature_key>', methods=['DELETE'])
+@admin_required
+def revoke_user_feature_access(user_id, feature_key):
+    """Revoke a user's access to a specific feature"""
+    try:
+        cursor.execute('''
+            DELETE FROM user_feature_access 
+            WHERE discord_id = ? AND feature_key = ?
+        ''', (user_id, feature_key))
+        
+        conn.commit()
+        return jsonify({'message': 'Feature access revoked successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error revoking feature access: {str(e)}'}), 500
+
+@app.route('/api/admin/features/<feature_key>', methods=['PUT'])
+@admin_required
+def update_feature_settings(feature_key):
+    """Update feature settings (beta status, etc)"""
+    try:
+        data = request.get_json()
+        is_beta = data.get('is_beta')
+        
+        if is_beta is not None:
+            cursor.execute('''
+                UPDATE features SET is_beta = ? WHERE feature_key = ?
+            ''', (is_beta, feature_key))
+            conn.commit()
+            
+        return jsonify({'message': 'Feature settings updated successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error updating feature settings: {str(e)}'}), 500
+
+# ===== USER GROUPS API ENDPOINTS =====
+
+@app.route('/api/admin/groups', methods=['GET'])
+@admin_required  
+def get_all_groups():
+    """Get all user groups"""
+    try:
+        cursor.execute('''
+            SELECT group_key, group_name, description, created_by, created_at
+            FROM user_groups
+            ORDER BY group_name
+        ''')
+        
+        groups = []
+        for row in cursor.fetchall():
+            group_key, group_name, description, created_by, created_at = row
+            
+            # Get member count
+            cursor.execute('''
+                SELECT COUNT(*) FROM user_group_members WHERE group_key = ?
+            ''', (group_key,))
+            member_count = cursor.fetchone()[0]
+            
+            groups.append({
+                'group_key': group_key,
+                'group_name': group_name,
+                'description': description,
+                'created_by': created_by,
+                'created_at': created_at,
+                'member_count': member_count
+            })
+        
+        return jsonify({'groups': groups})
+    except Exception as e:
+        return jsonify({'error': f'Error fetching groups: {str(e)}'}), 500
+
+@app.route('/api/admin/groups', methods=['POST'])
+@admin_required
+def create_group():
+    """Create a new user group"""
+    try:
+        data = request.get_json()
+        group_key = data.get('group_key')
+        group_name = data.get('group_name')
+        description = data.get('description', '')
+        discord_id = session['discord_id']
+        
+        if not group_key or not group_name:
+            return jsonify({'error': 'Group key and name required'}), 400
+        
+        cursor.execute('''
+            INSERT INTO user_groups (group_key, group_name, description, created_by)
+            VALUES (?, ?, ?, ?)
+        ''', (group_key, group_name, description, discord_id))
+        
+        conn.commit()
+        return jsonify({'message': 'Group created successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error creating group: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/members', methods=['GET'])
+@admin_required
+def get_group_members(group_key):
+    """Get members of a specific group"""
+    try:
+        cursor.execute('''
+            SELECT u.discord_id, u.discord_username, u.email, ugm.added_at
+            FROM user_group_members ugm
+            JOIN users u ON ugm.discord_id = u.discord_id
+            WHERE ugm.group_key = ?
+            ORDER BY u.discord_username
+        ''', (group_key,))
+        
+        members = []
+        for row in cursor.fetchall():
+            discord_id, username, email, added_at = row
+            members.append({
+                'discord_id': discord_id,
+                'discord_username': username,
+                'email': email,
+                'added_at': added_at
+            })
+        
+        return jsonify({'members': members})
+    except Exception as e:
+        return jsonify({'error': f'Error fetching group members: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/members', methods=['POST'])
+@admin_required
+def add_group_member(group_key):
+    """Add a user to a group"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        discord_id = session['discord_id']
+        
+        if not user_id:
+            return jsonify({'error': 'User ID required'}), 400
+        
+        cursor.execute('''
+            INSERT OR IGNORE INTO user_group_members (discord_id, group_key, added_by)
+            VALUES (?, ?, ?)
+        ''', (user_id, group_key, discord_id))
+        
+        conn.commit()
+        return jsonify({'message': 'User added to group successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error adding user to group: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/members/<user_id>', methods=['DELETE'])
+@admin_required
+def remove_group_member(group_key, user_id):
+    """Remove a user from a group"""
+    try:
+        cursor.execute('''
+            DELETE FROM user_group_members 
+            WHERE group_key = ? AND discord_id = ?
+        ''', (group_key, user_id))
+        
+        conn.commit()
+        return jsonify({'message': 'User removed from group successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error removing user from group: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/features', methods=['GET'])
+@admin_required
+def get_group_features(group_key):
+    """Get feature access for a specific group"""
+    try:
+        cursor.execute('''
+            SELECT feature_key, has_access, granted_at
+            FROM group_feature_access
+            WHERE group_key = ?
+            ORDER BY feature_key
+        ''', (group_key,))
+        
+        features = {}
+        for row in cursor.fetchall():
+            feature_key, has_access, granted_at = row
+            features[feature_key] = {
+                'has_access': bool(has_access),
+                'granted_at': granted_at
+            }
+        
+        return jsonify({'features': features})
+    except Exception as e:
+        return jsonify({'error': f'Error fetching group features: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/features', methods=['POST'])
+@admin_required
+def grant_group_feature_access(group_key):
+    """Grant a group access to a specific feature"""
+    try:
+        data = request.get_json()
+        feature_key = data.get('feature_key')
+        discord_id = session['discord_id']
+        
+        if not feature_key:
+            return jsonify({'error': 'Feature key required'}), 400
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO group_feature_access (group_key, feature_key, has_access, granted_by)
+            VALUES (?, ?, ?, ?)
+        ''', (group_key, feature_key, True, discord_id))
+        
+        conn.commit()
+        return jsonify({'message': 'Group feature access granted successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error granting group feature access: {str(e)}'}), 500
+
+@app.route('/api/admin/groups/<group_key>/features/<feature_key>', methods=['DELETE'])
+@admin_required
+def revoke_group_feature_access(group_key, feature_key):
+    """Revoke a group's access to a specific feature"""
+    try:
+        cursor.execute('''
+            DELETE FROM group_feature_access 
+            WHERE group_key = ? AND feature_key = ?
+        ''', (group_key, feature_key))
+        
+        conn.commit()
+        return jsonify({'message': 'Group feature access revoked successfully'})
+    except Exception as e:
+        return jsonify({'error': f'Error revoking group feature access: {str(e)}'}), 500
 
 if __name__ == '__main__':
     try:

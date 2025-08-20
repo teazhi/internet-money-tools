@@ -65,6 +65,11 @@ if os.environ.get('FRONTEND_URL'):
 if os.environ.get('RAILWAY_STATIC_URL'):
     allowed_origins.append(f"https://{os.environ.get('RAILWAY_STATIC_URL')}")
 
+# Database setup
+DATABASE_FILE = 'app_data.db'
+conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+cursor = conn.cursor()
+
 try:
     CORS(app, supports_credentials=True, origins=allowed_origins)
     pass  # CORS configured
@@ -6527,8 +6532,12 @@ def check_stale_opportunities():
 def init_feature_flags():
     """Initialize feature flags database tables"""
     try:
+        # Create a local connection for initialization
+        init_conn = sqlite3.connect(DATABASE_FILE)
+        init_cursor = init_conn.cursor()
+        
         # Create features table
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS features (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 feature_key TEXT UNIQUE NOT NULL,
@@ -6541,7 +6550,7 @@ def init_feature_flags():
         ''')
         
         # Create user_feature_access table for per-user permissions
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_feature_access (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 discord_id TEXT NOT NULL,
@@ -6555,7 +6564,7 @@ def init_feature_flags():
         ''')
         
         # Create feature launch status table
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS feature_launches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 feature_key TEXT UNIQUE NOT NULL,
@@ -6568,7 +6577,7 @@ def init_feature_flags():
         ''')
         
         # Create user groups table
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 group_key TEXT UNIQUE NOT NULL,
@@ -6581,7 +6590,7 @@ def init_feature_flags():
         ''')
         
         # Create user group membership table  
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_group_members (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 discord_id TEXT NOT NULL,
@@ -6594,7 +6603,7 @@ def init_feature_flags():
         ''')
         
         # Create group feature access table
-        cursor.execute('''
+        init_cursor.execute('''
             CREATE TABLE IF NOT EXISTS group_feature_access (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 group_key TEXT NOT NULL,
@@ -6608,7 +6617,7 @@ def init_feature_flags():
             )
         ''')
         
-        conn.commit()
+        init_conn.commit()
         
         # Insert default features
         default_features = [
@@ -6623,7 +6632,7 @@ def init_feature_flags():
         ]
         
         for feature_key, name, description, is_beta in default_features:
-            cursor.execute('''
+            init_cursor.execute('''
                 INSERT OR IGNORE INTO features (feature_key, feature_name, description, is_beta)
                 VALUES (?, ?, ?, ?)
             ''', (feature_key, name, description, is_beta))
@@ -6637,12 +6646,13 @@ def init_feature_flags():
         ]
         
         for group_key, group_name, description, created_by in default_groups:
-            cursor.execute('''
+            init_cursor.execute('''
                 INSERT OR IGNORE INTO user_groups (group_key, group_name, description, created_by)
                 VALUES (?, ?, ?, ?)
             ''', (group_key, group_name, description, created_by))
         
-        conn.commit()
+        init_conn.commit()
+        init_conn.close()
         print("[DEBUG] Feature flags system initialized with user groups")
         
     except Exception as e:

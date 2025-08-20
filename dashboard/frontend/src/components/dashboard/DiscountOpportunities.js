@@ -92,8 +92,35 @@ const DiscountOpportunities = () => {
         message: responseData.message
       };
       
-      setOpportunities(opportunitiesData);
-      setStats(statsData);
+      // Filter out duplicate ASINs and non-restock items
+      const filteredOpportunities = [];
+      const seenASINs = new Set();
+      let notNeededFiltered = 0;
+      
+      opportunitiesData.forEach(opportunity => {
+        // Skip if duplicate ASIN
+        if (seenASINs.has(opportunity.asin)) {
+          return;
+        }
+        
+        // Skip if doesn't need restocking
+        if (opportunity.status === 'Not Needed' || !opportunity.needs_restock) {
+          notNeededFiltered++;
+          return;
+        }
+        
+        seenASINs.add(opportunity.asin);
+        filteredOpportunities.push(opportunity);
+      });
+      
+      setOpportunities(filteredOpportunities);
+      setStats({
+        ...statsData,
+        originalCount: opportunitiesData.length,
+        uniqueCount: filteredOpportunities.length,
+        duplicatesRemoved: opportunitiesData.length - filteredOpportunities.length - notNeededFiltered,
+        notNeededFiltered: notNeededFiltered
+      });
       setLastUpdated(new Date());
       
     } catch (error) {
@@ -209,13 +236,11 @@ const DiscountOpportunities = () => {
       defaultValue: 'all',
       options: [
         { value: 'restock_needed', label: 'Restock Needed' },
-        { value: 'not_needed', label: 'Not Needed' },
         { value: 'not_tracked', label: 'Not Tracked' }
       ],
       filterFn: (item, value) => {
         switch (value) {
           case 'restock_needed': return item.status === 'Restock Needed';
-          case 'not_needed': return item.status === 'Not Needed';
           case 'not_tracked': return item.status === 'Not Tracked';
           default: return true;
         }
@@ -435,10 +460,15 @@ const DiscountOpportunities = () => {
                 </p>
                 {stats && (
                   <div className="mt-2 text-xs text-gray-500">
-                    {stats.message} • {stats.totalAlertsProcessed} emails processed
+                    {stats.message} • {stats.totalAlertsProcessed} emails processed • Showing {stats.uniqueCount} restock opportunities
+                    {(stats.duplicatesRemoved > 0 || stats.notNeededFiltered > 0) && (
+                      <span className="ml-2 text-orange-600 font-medium">
+                        (filtered: {stats.duplicatesRemoved > 0 && `${stats.duplicatesRemoved} duplicate${stats.duplicatesRemoved !== 1 ? 's' : ''}`}{stats.duplicatesRemoved > 0 && stats.notNeededFiltered > 0 && ', '}{stats.notNeededFiltered > 0 && `${stats.notNeededFiltered} non-restock`})
+                      </span>
+                    )}
                     {stats.restockNeededCount !== undefined && (
                       <div className="mt-1">
-                        Breakdown: {stats.restockNeededCount} need restocking, {stats.notNeededCount} not needed, {stats.notTrackedCount} not tracked
+                        Original breakdown: {stats.restockNeededCount} need restocking, {stats.notNeededCount} not needed, {stats.notTrackedCount} not tracked
                       </div>
                     )}
                   </div>

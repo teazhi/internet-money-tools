@@ -50,13 +50,6 @@ const AdminCompact = () => {
   const [userFeatureAccess, setUserFeatureAccess] = useState({});
   const [showFeatureModal, setShowFeatureModal] = useState(false);
   const [selectedFeatureUser, setSelectedFeatureUser] = useState(null);
-  const [groups, setGroups] = useState([]);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState(null);
-  const [newGroupData, setNewGroupData] = useState({ group_key: '', group_name: '', description: '' });
-  const [groupMembers, setGroupMembers] = useState([]);
-  const [groupFeatures, setGroupFeatures] = useState({});
-  const [activeGroupTab, setActiveGroupTab] = useState('members');
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -68,14 +61,13 @@ const AdminCompact = () => {
       setError(''); // Clear any previous errors
       
       // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
-      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, groupsRes] = await Promise.allSettled([
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes] = await Promise.allSettled([
         axios.get('/api/admin/users', { withCredentials: true }),
         axios.get('/api/admin/stats', { withCredentials: true }),
         axios.get('/api/admin/invitations', { withCredentials: true }),
         axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true }),
         axios.get('/api/admin/features', { withCredentials: true }),
-        axios.get('/api/admin/user-features', { withCredentials: true }),
-        axios.get('/api/admin/groups', { withCredentials: true })
+        axios.get('/api/admin/user-features', { withCredentials: true })
       ]);
       
       // Handle results with partial failure support
@@ -186,13 +178,6 @@ const AdminCompact = () => {
         console.error('Failed to load user features:', userFeaturesRes.reason);
       }
       
-      // Groups (non-critical)
-      if (groupsRes.status === 'fulfilled') {
-        setGroups(groupsRes.value.data.groups || []);
-      } else {
-        failedEndpoints.push('Groups');
-        console.error('Failed to load groups:', groupsRes.reason);
-      }
       
       // Show warning if some endpoints failed but don't block the UI
       if (failedEndpoints.length > 0) {
@@ -538,8 +523,7 @@ const AdminCompact = () => {
 
   const tabs = [
     { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
-    { id: 'features', name: 'Features', icon: Settings, count: features.length },
-    { id: 'groups', name: 'Groups', icon: UserPlus, count: groups.length }
+    { id: 'features', name: 'Features', icon: Settings, count: features.length }
   ];
 
   return (
@@ -886,6 +870,57 @@ const AdminCompact = () => {
                     </div>
                   </div>
 
+                  {/* Quick Actions */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-900 mb-3">Quick Actions</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const allFeatures = ['smart_restock', 'missing_listings', 'reimbursements', 'file_manager', 'va_management'];
+                            for (const userId of users.filter(u => u.user_type !== 'subuser').map(u => u.discord_id)) {
+                              for (const featureKey of allFeatures) {
+                                await axios.post('/api/admin/user-features', {
+                                  user_id: userId,
+                                  feature_key: featureKey
+                                }, { withCredentials: true });
+                              }
+                            }
+                            setSuccess('All main features granted to all users!');
+                            fetchData();
+                          } catch (error) {
+                            setError('Failed to grant features to all users');
+                          }
+                        }}
+                        className="px-3 py-1 bg-green-100 text-green-700 rounded-md text-sm hover:bg-green-200"
+                      >
+                        Grant All Core Features to All Users
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const betaFeatures = ['ebay_lister', 'discount_opportunities'];
+                            for (const userId of users.filter(u => u.user_type !== 'subuser').map(u => u.discord_id)) {
+                              for (const featureKey of betaFeatures) {
+                                await axios.post('/api/admin/user-features', {
+                                  user_id: userId,
+                                  feature_key: featureKey
+                                }, { withCredentials: true });
+                              }
+                            }
+                            setSuccess('All beta features granted to all users!');
+                            fetchData();
+                          } catch (error) {
+                            setError('Failed to grant beta features');
+                          }
+                        }}
+                        className="px-3 py-1 bg-orange-100 text-orange-700 rounded-md text-sm hover:bg-orange-200"
+                      >
+                        Grant Beta Features to All Users
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Features Management */}
                   <div className="bg-white rounded-lg shadow overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-200">
@@ -1020,102 +1055,6 @@ const AdminCompact = () => {
                 </div>
               )}
 
-              {/* Groups Tab */}
-              {activeTab === 'groups' && (
-                <div className="space-y-6">
-                  {/* Groups Overview */}
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">User Groups</h3>
-                      <p className="text-sm text-gray-600">
-                        Organize users into groups for easier feature access management.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setNewGroupData({ group_key: '', group_name: '', description: '' });
-                        setShowGroupModal(true);
-                      }}
-                      className="flex items-center px-3 py-2 bg-builders-600 text-white rounded-md text-sm hover:bg-builders-700"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Create Group
-                    </button>
-                  </div>
-
-                  {/* Groups List */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {groups.map((group) => (
-                      <div key={group.group_key} className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h4 className="text-lg font-medium text-gray-900">{group.group_name}</h4>
-                            <p className="text-sm text-gray-600 mt-1">{group.description}</p>
-                            <div className="mt-3 flex items-center text-sm text-gray-500">
-                              <UserPlus className="h-4 w-4 mr-1" />
-                              <span>{group.member_count} members</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setSelectedGroup(group);
-                              setShowGroupModal(true);
-                            }}
-                            className="text-gray-400 hover:text-gray-600"
-                          >
-                            <Settings className="h-5 w-5" />
-                          </button>
-                        </div>
-                        
-                        <div className="mt-4 flex space-x-2">
-                          <button
-                            onClick={async () => {
-                              setSelectedGroup(group);
-                              setActiveGroupTab('members');
-                              setShowGroupModal(true);
-                              await fetchGroupData(group.group_key);
-                            }}
-                            className="flex-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-md text-sm hover:bg-blue-100"
-                          >
-                            Manage Members
-                          </button>
-                          <button 
-                            onClick={async () => {
-                              setSelectedGroup(group);
-                              setActiveGroupTab('features');
-                              setShowGroupModal(true);
-                              await fetchGroupData(group.group_key);
-                            }}
-                            className="flex-1 px-3 py-2 bg-green-50 text-green-700 rounded-md text-sm hover:bg-green-100"
-                          >
-                            Set Permissions
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {groups.length === 0 && (
-                      <div className="col-span-full text-center py-8">
-                        <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No Groups Yet</h3>
-                        <p className="text-gray-600 mb-4">
-                          Create user groups to manage feature access more efficiently.
-                        </p>
-                        <button
-                          onClick={() => {
-                            setNewGroupData({ group_key: '', group_name: '', description: '' });
-                            setShowGroupModal(true);
-                          }}
-                          className="inline-flex items-center px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create Your First Group
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
             </>
           )}

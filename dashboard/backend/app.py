@@ -10092,6 +10092,9 @@ def get_product_by_asin(asin):
         user_timezone = user_record.get('timezone', 'UTC')
         target_date = date.today()
         
+        # Define asin_upper outside the try block so it's available in except
+        asin_upper = asin.upper()
+        
         try:
             # Initialize with user's Sellerboard URLs
             print(f"eBay Lister: Initializing analyzer for ASIN {asin_upper}")
@@ -10106,7 +10109,6 @@ def get_product_by_asin(asin):
             print(f"eBay Lister: Processed {len(stock_info)} products from stock data")
             
             # Check if ASIN exists in stock data
-            asin_upper = asin.upper()
             if asin_upper not in stock_info:
                 return jsonify({
                     'success': False,

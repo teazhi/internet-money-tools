@@ -8803,6 +8803,219 @@ def internal_error(error):
     """Handle 500 errors"""
     return jsonify({'error': 'Internal server error'}), 500
 
+# Product image caching
+product_image_cache = {}
+IMAGE_CACHE_EXPIRY_HOURS = 24
+
+@app.route('/api/product-image/<asin>', methods=['GET'])
+@login_required
+def get_product_image(asin):
+    """Get product image URL from Amazon with caching"""
+    try:
+        # Check cache first
+        cache_key = f"image_{asin}"
+        now = datetime.now()
+        
+        if cache_key in product_image_cache:
+            cached_data = product_image_cache[cache_key]
+            cache_time = cached_data.get('timestamp')
+            if cache_time and (now - cache_time).total_seconds() < IMAGE_CACHE_EXPIRY_HOURS * 3600:
+                return jsonify({
+                    'asin': asin,
+                    'image_url': cached_data['image_url'],
+                    'cached': True,
+                    'cache_age': int((now - cache_time).total_seconds())
+                })
+        
+        # Fetch from Amazon
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Try multiple selectors for product images
+        image_url = None
+        selectors = [
+            '#landingImage',
+            'img[data-old-hires]',
+            '#imgTagWrapperId img',
+            '.a-dynamic-image',
+            '#imageBlock img'
+        ]
+        
+        for selector in selectors:
+            img_element = soup.select_one(selector)
+            if img_element:
+                # Get the highest quality image URL
+                image_url = (
+                    img_element.get('data-old-hires') or
+                    img_element.get('data-a-dynamic-image') or
+                    img_element.get('src') or
+                    img_element.get('data-src')
+                )
+                
+                # If data-a-dynamic-image contains JSON, parse it
+                if image_url and image_url.startswith('{'):
+                    try:
+                        import json
+                        image_data = json.loads(image_url)
+                        # Get the largest image (highest resolution)
+                        if image_data:
+                            image_url = max(image_data.keys(), key=lambda k: image_data[k] if isinstance(image_data[k], list) and len(image_data[k]) >= 2 else [0, 0])
+                    except:
+                        pass
+                
+                if image_url and image_url.startswith('http'):
+                    break
+        
+        # Fallback to constructed URLs if scraping failed
+        if not image_url:
+            fallback_urls = [
+                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01.LZZZZZZZ.jpg',
+                f'https://m.media-amazon.com/images/P/{asin}.01._SX300_SY300_.jpg',
+                f'https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SX300_.jpg'
+            ]
+            
+            for url in fallback_urls:
+                try:
+                    test_response = requests.head(url, timeout=5)
+                    if test_response.status_code == 200:
+                        image_url = url
+                        break
+                except:
+                    continue
+        
+        if image_url:
+            # Cache the result
+            product_image_cache[cache_key] = {
+                'image_url': image_url,
+                'timestamp': now
+            }
+            
+            return jsonify({
+                'asin': asin,
+                'image_url': image_url,
+                'cached': False
+            })
+        else:
+            return jsonify({
+                'asin': asin,
+                'image_url': None,
+                'error': 'No image found'
+            }), 404
+            
+    except requests.exceptions.Timeout:
+        return jsonify({
+            'asin': asin,
+            'image_url': None,
+            'error': 'Request timeout'
+        }), 408
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            'asin': asin,
+            'image_url': None,
+            'error': f'Request failed: {str(e)}'
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'asin': asin,
+            'image_url': None,
+            'error': f'Unexpected error: {str(e)}'
+        }), 500
+
+@app.route('/api/product-images/batch', methods=['POST'])
+@login_required
+def get_product_images_batch():
+    """Get multiple product image URLs efficiently"""
+    try:
+        data = request.get_json()
+        asins = data.get('asins', [])
+        
+        if not asins or len(asins) > 20:  # Limit batch size
+            return jsonify({'error': 'Invalid ASIN list (max 20 ASINs)'}), 400
+        
+        results = {}
+        uncached_asins = []
+        now = datetime.now()
+        
+        # Check cache for all ASINs first
+        for asin in asins:
+            cache_key = f"image_{asin}"
+            if cache_key in product_image_cache:
+                cached_data = product_image_cache[cache_key]
+                cache_time = cached_data.get('timestamp')
+                if cache_time and (now - cache_time).total_seconds() < IMAGE_CACHE_EXPIRY_HOURS * 3600:
+                    results[asin] = {
+                        'image_url': cached_data['image_url'],
+                        'cached': True
+                    }
+                else:
+                    uncached_asins.append(asin)
+            else:
+                uncached_asins.append(asin)
+        
+        # Fetch uncached images in parallel
+        def fetch_single_image(asin):
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                response = requests.get(f'https://www.amazon.com/dp/{asin}', headers=headers, timeout=8)
+                
+                if response.status_code == 200:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Try to find image
+                    selectors = ['#landingImage', 'img[data-old-hires]', '#imgTagWrapperId img']
+                    for selector in selectors:
+                        img = soup.select_one(selector)
+                        if img:
+                            img_url = img.get('data-old-hires') or img.get('src')
+                            if img_url and img_url.startswith('http'):
+                                # Cache the result
+                                product_image_cache[f"image_{asin}"] = {
+                                    'image_url': img_url,
+                                    'timestamp': now
+                                }
+                                return asin, img_url
+                
+                return asin, None
+            except:
+                return asin, None
+        
+        # Use ThreadPoolExecutor for concurrent requests
+        if uncached_asins:
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_asin = {executor.submit(fetch_single_image, asin): asin for asin in uncached_asins}
+                
+                for future in as_completed(future_to_asin):
+                    asin, image_url = future.result()
+                    results[asin] = {
+                        'image_url': image_url,
+                        'cached': False
+                    }
+        
+        return jsonify({
+            'results': results,
+            'total_asins': len(asins),
+            'cached_count': len(asins) - len(uncached_asins),
+            'fetched_count': len(uncached_asins)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Batch image fetch failed: {str(e)}'}), 500
+
 # Demo control endpoints
 @app.route('/api/demo/status', methods=['GET'])
 def demo_status():

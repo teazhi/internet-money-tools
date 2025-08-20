@@ -12,87 +12,11 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
+import { useProductImage } from '../../hooks/useProductImages';
 
-// Product image component that uses a proxy service
+// Product image component that uses optimized backend API
 const ProductImage = ({ asin, productName }) => {
-  const [imageUrl, setImageUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    const fetchRealImageUrl = async () => {
-      if (!asin) return;
-      
-      setLoading(true);
-      setError(false);
-      
-      try {
-        // Use a CORS proxy to fetch the Amazon page and extract the real image URL
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://www.amazon.com/dp/${asin}`)}`;
-        
-        const response = await fetch(proxyUrl);
-        const data = await response.json();
-        
-        if (data.contents) {
-          // Parse the HTML to find the image
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(data.contents, 'text/html');
-          
-          // Look for the main product image
-          let imageElement = doc.querySelector('#landingImage');
-          if (!imageElement) {
-            imageElement = doc.querySelector('img[data-old-hires]');
-          }
-          if (!imageElement) {
-            imageElement = doc.querySelector('#imgTagWrapperId img');
-          }
-          
-          if (imageElement) {
-            // Get the high-res image URL
-            const imgUrl = imageElement.getAttribute('data-old-hires') || 
-                          imageElement.getAttribute('src') ||
-                          imageElement.getAttribute('data-src');
-            
-            if (imgUrl && imgUrl.startsWith('http')) {
-              setImageUrl(imgUrl);
-              setLoading(false);
-              return;
-            }
-          }
-        }
-        
-        // If we couldn't extract from HTML, try some common patterns
-        const fallbackUrls = [
-          `https://images-na.ssl-images-amazon.com/images/P/${asin}.01.LZZZZZZZ.jpg`,
-          `https://m.media-amazon.com/images/P/${asin}.01._SX300_SY300_.jpg`
-        ];
-        
-        for (const url of fallbackUrls) {
-          try {
-            // Test if the image actually exists
-            const testResponse = await fetch(url, { method: 'HEAD' });
-            if (testResponse.ok) {
-              setImageUrl(url);
-              setLoading(false);
-              return;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-        
-        // All methods failed
-        setError(true);
-        setLoading(false);
-        
-      } catch (err) {
-        setError(true);
-        setLoading(false);
-      }
-    };
-
-    fetchRealImageUrl();
-  }, [asin]);
+  const { imageUrl, loading, error } = useProductImage(asin);
 
   if (loading) {
     return (
@@ -116,7 +40,6 @@ const ProductImage = ({ asin, productName }) => {
         src={imageUrl}
         alt={productName || `Product ${asin}`}
         className="h-full w-full object-cover"
-        onError={() => setError(true)}
         loading="lazy"
       />
     </div>

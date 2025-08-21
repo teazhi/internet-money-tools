@@ -3089,101 +3089,11 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # File upload endpoint removed - using URL-based approach
-# @app.route('/api/upload/sellerboard', methods=['POST'])
-# @permission_required('sellerboard_upload')
-# def upload_sellerboard_file():
-#     try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        if not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type. Allowed: CSV, XLSX, XLSM, XLS'}), 400
-        
-        discord_id = session['discord_id']
-        filename = secure_filename(file.filename)
-        
-        # Determine target user (for sub-users, upload to parent's account)
-        current_user = get_user_record(discord_id)
-        if current_user and current_user.get('user_type') == 'subuser':
-            target_user_id = current_user.get('parent_user_id')
-            uploaded_by = discord_id  # Track who actually uploaded
-        else:
-            target_user_id = discord_id
-            uploaded_by = discord_id
-        
-        # Create user-specific filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        user_filename = f"{target_user_id}_{timestamp}_{filename}"
-        
-        # Upload to S3
-        s3_client = get_s3_client()
-        file_content = file.read()
-        
-        # Upload to S3 with user-specific key
-        s3_key = f"sellerboard_files/{user_filename}"
-        s3_client.put_object(
-            Bucket=CONFIG_S3_BUCKET,
-            Key=s3_key,
-            Body=file_content,
-            ContentType=file.content_type
-        )
-        
-        # Update target user record with uploaded file info
-        users = get_users_config()
-        user_record = next((u for u in users if u.get("discord_id") == target_user_id), None)
-        
-        if user_record is None:
-            user_record = {"discord_id": target_user_id}
-            users.append(user_record)
-        
-        # Store file information
-        if 'uploaded_files' not in user_record:
-            user_record['uploaded_files'] = []
-        
-        # File type management: Keep one of each type (sellerboard and listing loader)
-        # Determine file type based on filename using standardized function
-        file_type_category = determine_file_type_category(filename)
-        
-        # Default to sellerboard for 'other' category files (CSV and unrecognized files)
-        if file_type_category == 'other':
-            file_type_category = 'sellerboard'
-        
-        file_info = {
-            'filename': filename,
-            's3_key': s3_key,
-            'upload_date': datetime.utcnow().isoformat() + 'Z',  # Use UTC with Z suffix
-            'file_size': len(file_content),
-            'file_type': file.content_type,
-            'file_type_category': file_type_category,
-            'uploaded_by': uploaded_by  # Track who uploaded the file
-        }
-        
-        # Clean up old files of the same type using the new S3-based cleanup
-        cleanup_result = cleanup_old_files_on_upload(target_user_id, file_type_category, s3_key)
-        
-        # Note: We no longer maintain the uploaded_files array in user records
-        # since we now get files directly from S3 using proper discord_id filtering
-        # This ensures each user only sees their own files
-        
-        # Always return success since we no longer depend on user config updates for file management
-        success_message = 'File uploaded successfully'
-        if cleanup_result['deleted_count'] > 0:
-            success_message += f' (replaced {cleanup_result["deleted_count"]} old file{"s" if cleanup_result["deleted_count"] > 1 else ""})'
-        
-        return jsonify({
-            'message': success_message,
-            'file_info': file_info,
-            'cleanup_result': cleanup_result
-        })
-            
-    except Exception as e:
-        pass  # Debug print removed
-#         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
-    pass  # Function commented out - using URL-based approach
+@app.route('/api/upload/sellerboard', methods=['POST'])
+@permission_required('sellerboard_upload')
+def upload_sellerboard_file():
+    # This endpoint is deprecated - using URL-based approach
+    return jsonify({'error': 'File uploads are no longer supported. Please configure your Sellerboard URL in settings.'}), 400
 
 def determine_file_type_category(filename):
     """
@@ -3338,10 +3248,15 @@ def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
         }
 
 # File listing endpoint removed - using URL-based approach
-# @app.route('/api/files/sellerboard', methods=['GET'])
-# @login_required
-# def list_sellerboard_files():
-#     """List user's uploaded files - now with proper discord_id filtering"""
+@app.route('/api/files/sellerboard', methods=['GET'])
+@login_required
+def list_sellerboard_files():
+    """This endpoint is deprecated - using URL-based approach"""
+    return jsonify({'error': 'File management is no longer supported. Data is now fetched automatically from your Sellerboard URL.'}), 400
+
+# Original function commented out below
+"""
+def list_sellerboard_files_old():
     try:
         discord_id = session['discord_id']
         
@@ -3405,11 +3320,17 @@ def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
     except Exception as e:
         pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
+"""
 
 @app.route('/api/files/cleanup-duplicates', methods=['POST'])
 @login_required
 def cleanup_user_duplicates():
-    """Clean up duplicate files for the current user, keeping only the latest of each type"""
+    """This endpoint is deprecated - using URL-based approach"""
+    return jsonify({'error': 'File management is no longer supported. Data is now fetched automatically from your Sellerboard URL.'}), 400
+
+# Original function commented out
+"""
+def cleanup_user_duplicates_old():
     try:
         discord_id = session['discord_id']
         
@@ -3455,11 +3376,17 @@ def cleanup_user_duplicates():
     except Exception as e:
         pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
+"""
 
 @app.route('/api/admin/migrate-all-files', methods=['POST'])
 @login_required
 def migrate_all_user_files():
-    """Admin endpoint to migrate all existing files to proper directory structure"""
+    """This endpoint is deprecated - using URL-based approach"""
+    return jsonify({'error': 'File migration is no longer needed. Data is now fetched automatically from Sellerboard URLs.'}), 400
+
+# Original function commented out
+"""
+def migrate_all_user_files_old():
     try:
         discord_id = session['discord_id']
         
@@ -3582,6 +3509,7 @@ def migrate_all_user_files():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+"""
 
 @app.route('/api/admin/cleanup-all-updated', methods=['POST'])
 @admin_required
@@ -3620,7 +3548,12 @@ def admin_cleanup_all_updated_files():
 @app.route('/api/files/cleanup-updated', methods=['POST'])
 @login_required
 def cleanup_updated_files():
-    """Remove _updated files from user records - these are script outputs, not user files"""
+    """This endpoint is deprecated - using URL-based approach"""
+    return jsonify({'error': 'File management is no longer supported. Data is now fetched automatically from your Sellerboard URL.'}), 400
+
+# Original function commented out
+"""
+def cleanup_updated_files_old():
     try:
         discord_id = session['discord_id']
         users = get_users_config()
@@ -3659,11 +3592,17 @@ def cleanup_updated_files():
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+"""
 
 @app.route('/api/files/migrate', methods=['POST'])
 @login_required
 def migrate_existing_files():
-    """Migrate existing S3 files to user records"""
+    """This endpoint is deprecated - using URL-based approach"""
+    return jsonify({'error': 'File management is no longer supported. Data is now fetched automatically from your Sellerboard URL.'}), 400
+
+# Original function commented out
+"""
+def migrate_existing_files_old():
     try:
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
@@ -3851,38 +3790,22 @@ def migrate_existing_files():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+"""
 
 @app.route('/api/files/status', methods=['GET'])
 @login_required
 def files_upload_status():
-    """Check if user has uploaded both required file types"""
-    try:
-        discord_id = session['discord_id']
-        user_record = get_user_record(discord_id)
-        
-        if not user_record or 'uploaded_files' not in user_record:
-            return jsonify({
-                'has_sellerboard': False,
-                'has_listing_loader': False,
-                'files_complete': False
-            })
-        
-        uploaded_files = user_record['uploaded_files']
-        has_sellerboard = any(f.get('file_type_category') == 'sellerboard' for f in uploaded_files)
-        has_listing_loader = any(f.get('file_type_category') == 'listing_loader' for f in uploaded_files)
-        
-        return jsonify({
-            'has_sellerboard': has_sellerboard,
-            'has_listing_loader': has_listing_loader,
-            'files_complete': has_sellerboard and has_listing_loader
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    """This endpoint is deprecated - using URL-based approach"""
+    # Always return files complete since we're using URL-based approach
+    return jsonify({
+        'has_sellerboard': True,
+        'has_listing_loader': True,
+        'files_complete': True
+    })
 
 @app.route('/api/files/sellerboard/<path:file_key>', methods=['DELETE', 'OPTIONS'])
 def delete_sellerboard_file(file_key):
-    """Delete a specific Sellerboard file"""
+    """This endpoint is deprecated - using URL-based approach"""
     # Handle preflight OPTIONS request
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
@@ -3892,10 +3815,12 @@ def delete_sellerboard_file(file_key):
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
     
-    # Apply login check only for non-OPTIONS requests
-    if not session.get('discord_id'):
-        return jsonify({'error': 'Authentication required'}), 401
-    
+    # Return error for DELETE requests
+    return jsonify({'error': 'File management is no longer supported. Data is now fetched automatically from your Sellerboard URL.'}), 400
+
+# Original function commented out below
+"""
+def delete_sellerboard_file_old(file_key):
     try:
         from urllib.parse import unquote
         discord_id = session['discord_id']
@@ -4006,6 +3931,7 @@ def delete_sellerboard_file(file_key):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Delete operation failed: {str(e)}'}), 500
+"""
 
 # Admin API endpoints
 @app.route('/api/admin/users', methods=['GET'])

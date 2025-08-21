@@ -218,36 +218,36 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                 </div>
                 <div className="text-xs text-gray-500">
                   {alert.asin}
-                {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
-                  enhanced_analytics?.[alert.asin]?.stock_info?.source ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.link ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
-                  enhanced_analytics?.[alert.asin]?.stock_info?.url) && (
-                  <>
-                    {' • '}
-                    <a 
-                      href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
-                            enhanced_analytics[alert.asin]?.stock_info?.source ||
-                            enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
-                            enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
-                            enhanced_analytics[alert.asin]?.stock_info?.Link ||
-                            enhanced_analytics[alert.asin]?.stock_info?.link ||
-                            enhanced_analytics[alert.asin]?.stock_info?.URL ||
-                            enhanced_analytics[alert.asin]?.stock_info?.url ||
-                            `https://www.amazon.com/dp/${alert.asin}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800"
-                      title="View source"
-                    >
-                      <ExternalLink className="inline h-2 w-2" />
-                    </a>
-                  </>
-                )}
-              </div>
+                  {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
+                    enhanced_analytics?.[alert.asin]?.stock_info?.source ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.['source link'] ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.Link ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.link ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.URL ||
+                    enhanced_analytics?.[alert.asin]?.stock_info?.url) && (
+                    <>
+                      {' • '}
+                      <a 
+                        href={enhanced_analytics[alert.asin]?.stock_info?.Source ||
+                              enhanced_analytics[alert.asin]?.stock_info?.source ||
+                              enhanced_analytics[alert.asin]?.stock_info?.['Source Link'] ||
+                              enhanced_analytics[alert.asin]?.stock_info?.['source link'] ||
+                              enhanced_analytics[alert.asin]?.stock_info?.Link ||
+                              enhanced_analytics[alert.asin]?.stock_info?.link ||
+                              enhanced_analytics[alert.asin]?.stock_info?.URL ||
+                              enhanced_analytics[alert.asin]?.stock_info?.url ||
+                              `https://www.amazon.com/dp/${alert.asin}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800"
+                        title="View source"
+                      >
+                        <ExternalLink className="inline h-2 w-2" />
+                      </a>
+                    </>
+                  )}
+                </div>
             </div>
           </td>
         );

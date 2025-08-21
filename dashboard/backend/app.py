@@ -4202,6 +4202,26 @@ def admin_stop_impersonate():
         pass  # Debug print removed
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/session', methods=['GET'])
+@login_required
+def debug_session():
+    """Debug endpoint to check session state"""
+    try:
+        discord_id = session.get('discord_id')
+        user_record = get_user_record(discord_id)
+        
+        return jsonify({
+            'session_discord_id': discord_id,
+            'session_username': session.get('discord_username'),
+            'is_impersonating': 'admin_impersonating' in session,
+            'impersonation_data': session.get('admin_impersonating') if 'admin_impersonating' in session else None,
+            'user_record_found': bool(user_record),
+            'user_has_cogs_url': bool(user_record and user_record.get('sellerboard_cogs_url')) if user_record else False,
+            'cogs_url_preview': user_record.get('sellerboard_cogs_url', '')[:50] + '...' if user_record and user_record.get('sellerboard_cogs_url') else None
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/users/bulk', methods=['PUT'])
 @admin_required
 def admin_bulk_update():
@@ -7169,6 +7189,12 @@ def get_expected_arrivals():
         
         if not user_record:
             return jsonify({"error": "User not found"}), 404
+
+        # Security check: Ensure we're not mixing impersonation data
+        if 'admin_impersonating' in session:
+            target_user_id = session['admin_impersonating'].get('target_user_id')
+            if str(discord_id) != str(target_user_id):
+                return jsonify({"error": "Session impersonation mismatch"}), 403
 
         # Get user config for Google access (use parent config for subusers)
         config_user_record = user_record

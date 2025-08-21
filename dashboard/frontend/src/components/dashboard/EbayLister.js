@@ -288,6 +288,26 @@ const EbayLister = () => {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View on Amazon
               </a>
+              
+              <a
+                href={`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productData.title)}&_sacat=0&_sop=15`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary flex items-center bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Research on eBay
+              </a>
+              
+              <a
+                href={`https://www.ebay.com/sch/i.html?_nkw=${productData.asin}&_sacat=0&_sop=15`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary flex items-center bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Search by ASIN
+              </a>
             </div>
           </div>
         </div>
@@ -420,8 +440,10 @@ const EbayLister = () => {
           <p>1. Enter a valid Amazon ASIN from your inventory (10 characters)</p>
           <p>2. Click "Lookup Product" to fetch live data from your Sellerboard account</p>
           <p>3. Review the product details including current stock and sales velocity</p>
-          <p>4. Click "Generate eBay Listing" to create optimized listing content</p>
-          <p>5. Copy and paste the generated content into your eBay listing</p>
+          <p>4. Use "Research on eBay" to view competitor listings by product title</p>
+          <p>5. Use "Search by ASIN" to find exact matches on eBay</p>
+          <p>6. Click "Generate eBay Listing" to create optimized listing content</p>
+          <p>7. Copy and paste the generated content into your eBay listing</p>
           <p><strong>Note:</strong> This tool uses your real Sellerboard data, so only ASINs in your inventory will be found.</p>
         </div>
       </div>

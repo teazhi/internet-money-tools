@@ -6668,6 +6668,12 @@ def has_feature_access(discord_id, feature_key):
         if user and user.get('discord_id') == '712147636463075389':  # Admin discord ID
             return True
             
+        # If user is a subuser, check parent's access instead
+        if user and user.get('user_type') == 'subuser':
+            parent_user_id = user.get('parent_user_id')
+            if parent_user_id:
+                return has_feature_access(parent_user_id, feature_key)
+            
         # Check if feature is publicly launched
         cursor.execute('''
             SELECT is_public FROM feature_launches WHERE feature_key = ?
@@ -6711,6 +6717,7 @@ def get_user_features(discord_id):
         all_features = cursor.fetchall()
         
         for feature_key, name, description, is_beta in all_features:
+            # has_feature_access already handles subuser logic
             has_access = has_feature_access(discord_id, feature_key)
             user_features[feature_key] = {
                 'name': name,

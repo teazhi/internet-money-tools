@@ -6849,8 +6849,33 @@ def fetch_sellerboard_cogs_data(cogs_url):
     from io import StringIO
     
     try:
-        # Fetch the CSV data from the URL
-        response = requests.get(cogs_url, timeout=30)
+        # Check if this is a direct download URL vs automation report URL
+        if 'download-report' in cogs_url:
+            # This is a direct download URL that requires authentication
+            # These URLs are temporary and require session cookies
+            raise ValueError(
+                "Direct download URLs require authentication and are not supported. "
+                "Please use the automation report URL instead.\n\n"
+                "To get the correct URL:\n"
+                "1. Go to Sellerboard → Reports → Cost of Goods Sold\n"
+                "2. Click 'Share/Export' button\n"
+                "3. Select 'Automated Report URL'\n"
+                "4. Copy the URL (should look like: https://app.sellerboard.com/en/automation/reports?id=...&format=csv&t=...)\n\n"
+                "Note: The URL you provided appears to be a direct download link which requires login."
+            )
+        
+        # Add headers to mimic browser request
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/csv,application/csv,text/plain,*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        # Fetch the CSV data from the URL with proper headers
+        response = requests.get(cogs_url, headers=headers, timeout=30)
         response.raise_for_status()
         
         # Parse CSV data
@@ -6913,9 +6938,36 @@ def fetch_sellerboard_cogs_data(cogs_url):
             'total_products': len(inventory_data)
         }
         
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 401:
+            if 'download-report' in cogs_url:
+                raise ValueError(
+                    "Direct download URLs require authentication and are not supported. "
+                    "Please use the automation report URL instead.\n\n"
+                    "To get the correct URL:\n"
+                    "1. Go to Sellerboard → Reports → Cost of Goods Sold\n"
+                    "2. Click 'Share/Export' button\n"
+                    "3. Select 'Automated Report URL'\n"
+                    "4. Copy the URL (should look like: https://app.sellerboard.com/en/automation/reports?id=...&format=csv&t=...)"
+                )
+            else:
+                raise ValueError(
+                    "Authentication failed (401 Unauthorized). Please check that the automation report URL is correct and accessible."
+                )
+        elif e.response.status_code == 403:
+            raise ValueError(
+                "Access forbidden (403). Please check that the report URL is correct and accessible."
+            )
+        else:
+            raise ValueError(f"HTTP error {e.response.status_code}: {str(e)}")
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Network error when fetching Sellerboard COGS data: {str(e)}")
+    except ValueError:
+        # Re-raise ValueError (includes our custom error messages)
+        raise
     except Exception as e:
         print(f"ERROR - COGS Data fetch failed: {str(e)}")
-        raise e
+        raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required

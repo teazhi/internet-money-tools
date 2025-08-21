@@ -412,7 +412,12 @@ const AdminCompact = () => {
                   placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
                 />
-                <p className="mt-1 text-xs text-gray-500">Complete inventory data for Missing Listings feature</p>
+                <div className="mt-1 text-xs text-gray-500">
+                  <p className="mb-1">Complete inventory data for Missing Listings feature</p>
+                  <p className="text-amber-600">
+                    <strong>Note:</strong> Use report URL format, not direct download link
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center">

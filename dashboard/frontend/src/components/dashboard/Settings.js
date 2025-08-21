@@ -420,9 +420,13 @@ const Settings = () => {
                   className="input-field"
                   placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Complete inventory data for Missing Listings feature (includes all products, not just in-stock items)
-                </p>
+                <div className="text-xs text-gray-500 mt-1">
+                  <p className="mb-1">Complete inventory data for Missing Listings feature (includes all products, not just in-stock items)</p>
+                  <p className="text-amber-600">
+                    <strong>Important:</strong> Use the report URL format, NOT the direct download link. 
+                    Go to Reports → Cost of Goods Sold → Share/Export → Copy the "Automated Report URL"
+                  </p>
+                </div>
               </div>
           </>
           )}

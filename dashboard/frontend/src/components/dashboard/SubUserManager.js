@@ -14,7 +14,7 @@ const SubUserManager = () => {
   const [inviteForm, setInviteForm] = useState({
     email: '',
     va_name: '',
-    permissions: ['sellerboard_upload']
+    permissions: []
   });
   const [editForm, setEditForm] = useState({
     va_name: '',
@@ -47,7 +47,7 @@ const SubUserManager = () => {
     e.preventDefault();
     try {
       await axios.post('/api/invite-subuser', inviteForm, { withCredentials: true });
-      setInviteForm({ email: '', va_name: '', permissions: ['sellerboard_upload'] });
+      setInviteForm({ email: '', va_name: '', permissions: [] });
       setShowInviteForm(false);
       fetchData(); // Refresh data
       alert('Invitation sent successfully!');
@@ -254,24 +254,6 @@ const SubUserManager = () => {
                     Permissions
                   </label>
                   <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={inviteForm.permissions.includes('sellerboard_upload')}
-                        onChange={() => handlePermissionChange('sellerboard_upload')}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Upload Sellerboard Files</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={inviteForm.permissions.includes('reimbursements_analysis')}
-                        onChange={() => handlePermissionChange('reimbursements_analysis')}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Analyze Reimbursements</span>
-                    </label>
                     {availablePermissions.map((permission) => (
                       <label key={permission.key} className="flex items-center">
                         <input
@@ -357,24 +339,6 @@ const SubUserManager = () => {
                     Permissions
                   </label>
                   <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={editForm.permissions.includes('sellerboard_upload')}
-                        onChange={() => handleEditPermissionChange('sellerboard_upload')}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Upload Sellerboard Files</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={editForm.permissions.includes('reimbursements_analysis')}
-                        onChange={() => handleEditPermissionChange('reimbursements_analysis')}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Analyze Reimbursements</span>
-                    </label>
                     {availablePermissions.map((permission) => (
                       <label key={permission.key} className="flex items-center">
                         <input

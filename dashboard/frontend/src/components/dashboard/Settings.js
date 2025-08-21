@@ -47,6 +47,7 @@ const Settings = () => {
     run_prep_center: false,
     sellerboard_orders_url: '',
     sellerboard_stock_url: '',
+    sellerboard_cogs_url: '',
     timezone: '',
     enable_source_links: false,
     search_all_worksheets: false,
@@ -68,6 +69,7 @@ const Settings = () => {
         run_prep_center: user.user_record.run_prep_center !== false,
         sellerboard_orders_url: user.user_record.sellerboard_orders_url || '',
         sellerboard_stock_url: user.user_record.sellerboard_stock_url || '',
+        sellerboard_cogs_url: user.user_record.sellerboard_cogs_url || '',
         timezone: user.user_record.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         enable_source_links: user.user_record.enable_source_links || false,
         search_all_worksheets: user.user_record.search_all_worksheets || false,
@@ -400,6 +402,26 @@ const Settings = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   The automation URL for your Sellerboard stock report (includes inventory and stock data)
+                </p>
+              </div>
+
+              {/* Sellerboard COGS URL */}
+              <div>
+                <label htmlFor="sellerboard_cogs_url" className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
+                  <ShoppingBag className="h-4 w-4" />
+                  <span>Sellerboard COGS Report URL (Cost of Goods Sold)</span>
+                </label>
+                <input
+                  type="url"
+                  id="sellerboard_cogs_url"
+                  name="sellerboard_cogs_url"
+                  value={formData.sellerboard_cogs_url}
+                  onChange={handleChange}
+                  className="input-field"
+                  placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Complete inventory data for Missing Listings feature (includes all products, not just in-stock items)
                 </p>
               </div>
           </>

@@ -18,6 +18,115 @@ import axios from 'axios';
 import SmartRestockAlerts from '../SmartRestockAlerts';
 import { API_ENDPOINTS } from '../../config/api';
 
+// Skeleton component for Smart Restock Alerts
+const SmartRestockAlertsSkeleton = () => {
+  return (
+    <div className="bg-white rounded-lg shadow">
+      <div className="px-6 py-4">
+        <div className="h-4 bg-gray-300 rounded w-96 mb-3 animate-pulse"></div>
+        
+        {/* Filter Controls Skeleton */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="flex-1">
+            <div className="h-8 bg-gray-300 rounded animate-pulse"></div>
+          </div>
+          <div className="flex gap-2">
+            <div className="h-8 bg-gray-300 rounded w-24 animate-pulse"></div>
+            <div className="h-8 bg-gray-300 rounded w-20 animate-pulse"></div>
+          </div>
+        </div>
+        
+        {/* Table Headers Skeleton */}
+        <div className="overflow-x-auto">
+          <div className="min-w-full">
+            <div className="border-b border-gray-200">
+              <div className="flex bg-gray-50 py-2 px-3">
+                <div className="h-4 bg-gray-300 rounded w-20 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-16 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-20 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-16 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-16 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-12 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-16 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-20 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-20 mx-2 animate-pulse"></div>
+                <div className="h-4 bg-gray-300 rounded w-16 mx-2 animate-pulse"></div>
+              </div>
+            </div>
+            
+            {/* Table Rows Skeleton */}
+            <div className="divide-y divide-gray-200">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                <div key={i} className="flex py-3 px-3 animate-pulse">
+                  {/* Product column */}
+                  <div className="flex-1 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-32 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-24"></div>
+                  </div>
+                  
+                  {/* Priority column */}
+                  <div className="w-20 px-2">
+                    <div className="h-5 bg-gray-300 rounded w-16"></div>
+                  </div>
+                  
+                  {/* Stock column */}
+                  <div className="w-20 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-8"></div>
+                  </div>
+                  
+                  {/* Days left column */}
+                  <div className="w-16 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-12"></div>
+                  </div>
+                  
+                  {/* Velocity column */}
+                  <div className="w-16 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-12"></div>
+                  </div>
+                  
+                  {/* Trend column */}
+                  <div className="w-12 px-2">
+                    <div className="h-4 w-4 bg-gray-300 rounded mx-auto"></div>
+                  </div>
+                  
+                  {/* COGS column */}
+                  <div className="w-16 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-12 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-10"></div>
+                  </div>
+                  
+                  {/* Already ordered column */}
+                  <div className="w-20 px-2">
+                    <div className="h-4 bg-gray-300 rounded w-8"></div>
+                  </div>
+                  
+                  {/* Suggested order column */}
+                  <div className="w-20 px-2">
+                    <div className="h-5 bg-gray-300 rounded w-8 mb-1"></div>
+                    <div className="h-3 bg-gray-300 rounded w-12"></div>
+                  </div>
+                  
+                  {/* Actions column */}
+                  <div className="w-16 px-2">
+                    <div className="h-6 bg-gray-300 rounded w-14"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Loading indicator */}
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading smart restock recommendations...</p>
+          <p className="text-gray-500 text-xs mt-1">Analyzing inventory levels and sales velocity</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SmartRestockRecommendations = () => {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
@@ -155,77 +264,7 @@ const SmartRestockRecommendations = () => {
     linkElement.click();
   };
 
-  if (loading && !analytics) {
-    return (
-      <div className="space-y-6">
-        {/* Header Skeleton */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-          <div>
-            <div className="h-8 bg-gray-300 rounded w-48 mb-2 animate-pulse"></div>
-            <div className="h-4 bg-gray-300 rounded w-96 animate-pulse"></div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className="h-10 bg-gray-300 rounded w-32 animate-pulse"></div>
-            <div className="h-10 bg-gray-300 rounded w-20 animate-pulse"></div>
-            <div className="h-10 bg-gray-300 rounded w-20 animate-pulse"></div>
-          </div>
-        </div>
-
-        {/* Stats Grid Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
-              <div className="flex items-center">
-                <div className="h-8 w-8 bg-gray-300 rounded"></div>
-                <div className="ml-4 flex-1">
-                  <div className="h-4 bg-gray-300 rounded w-20 mb-2"></div>
-                  <div className="h-8 bg-gray-300 rounded w-12"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Restock Alerts Skeleton */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="h-6 bg-gray-300 rounded w-64 mb-2 animate-pulse"></div>
-            <div className="h-4 bg-gray-300 rounded w-96 animate-pulse"></div>
-          </div>
-          <div className="p-6 space-y-4">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="border-l-4 border-gray-200 p-4 animate-pulse">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-300 rounded w-32 mb-2"></div>
-                    <div className="h-6 bg-gray-300 rounded w-80 mb-2"></div>
-                    <div className="h-4 bg-gray-300 rounded w-64 mb-3"></div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[1, 2, 3, 4].map(j => (
-                        <div key={j} className="h-4 bg-gray-300 rounded w-16"></div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="ml-6 text-right">
-                    <div className="h-8 bg-gray-300 rounded w-12 mb-1"></div>
-                    <div className="h-3 bg-gray-300 rounded w-16 mb-2"></div>
-                    <div className="h-3 bg-gray-300 rounded w-12"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Loading indicator */}
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
-          <p className="text-gray-600 text-sm">Loading enhanced analytics and restock recommendations...</p>
-          <p className="text-gray-500 text-xs mt-1">This may take a moment to process all your data</p>
-        </div>
-      </div>
-    );
-  }
+  // Don't show full page skeleton - show header immediately and skeleton only the data
 
   // Show setup required alert
   if (error?.type === 'setup_required') {
@@ -427,7 +466,11 @@ const SmartRestockRecommendations = () => {
 
 
       {/* Smart Restock Alerts */}
-      <SmartRestockAlerts analytics={analytics} />
+      {loading && !analytics ? (
+        <SmartRestockAlertsSkeleton />
+      ) : (
+        <SmartRestockAlerts analytics={analytics} loading={loading} />
+      )}
 
     </div>
   );

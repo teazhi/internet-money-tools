@@ -18,7 +18,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-const SmartRestockAlerts = React.memo(({ analytics }) => {
+const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Removed tab state - SmartRestockAlerts now only shows recommendations
   
   // State for restock sources modal
@@ -532,8 +532,17 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
   try {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white rounded-lg shadow relative">
           <div className="px-6 py-4">
+            {loading && (
+              <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-builders-500"></div>
+                  <span className="text-sm text-gray-600">Refreshing data...</span>
+                </div>
+              </div>
+            )}
+            <div className={loading ? 'opacity-50' : ''}>
             <p className="text-xs text-gray-600 mb-3">
               Products requiring immediate restocking attention based on current stock levels and sales velocity.
             </p>
@@ -651,6 +660,7 @@ const SmartRestockAlerts = React.memo(({ analytics }) => {
                 <p className="text-gray-500">All products have adequate stock levels or sufficient lead time</p>
               </div>
             )}
+            </div>
           </div>
         </div>
 

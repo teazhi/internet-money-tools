@@ -61,13 +61,14 @@ const AdminCompact = () => {
       setError(''); // Clear any previous errors
       
       // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
+      const timestamp = Date.now();
       const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes] = await Promise.allSettled([
-        axios.get('/api/admin/users', { withCredentials: true }),
-        axios.get('/api/admin/stats', { withCredentials: true }),
-        axios.get('/api/admin/invitations', { withCredentials: true }),
-        axios.get(API_ENDPOINTS.DISCOUNT_MONITORING_STATUS, { withCredentials: true }),
-        axios.get('/api/admin/features', { withCredentials: true }),
-        axios.get('/api/admin/user-features', { withCredentials: true })
+        axios.get(`/api/admin/users?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/stats?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/invitations?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`${API_ENDPOINTS.DISCOUNT_MONITORING_STATUS}?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/features?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/user-features?t=${timestamp}`, { withCredentials: true })
       ]);
       
       // Handle results with partial failure support

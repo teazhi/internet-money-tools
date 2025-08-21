@@ -6,6 +6,7 @@ const SubUserManager = () => {
   const { user } = useAuth();
   const [subUsers, setSubUsers] = useState([]);
   const [invitations, setInvitations] = useState([]);
+  const [availablePermissions, setAvailablePermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -22,13 +23,15 @@ const SubUserManager = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const [subUsersResponse, invitationsResponse] = await Promise.all([
+      const [subUsersResponse, invitationsResponse, permissionsResponse] = await Promise.all([
         axios.get('/api/my-subusers', { withCredentials: true }),
-        axios.get('/api/my-invitations', { withCredentials: true })
+        axios.get('/api/my-invitations', { withCredentials: true }),
+        axios.get('/api/available-permissions', { withCredentials: true })
       ]);
 
       setSubUsers(subUsersResponse.data.subusers || []);
       setInvitations(invitationsResponse.data.invitations || []);
+      setAvailablePermissions(permissionsResponse.data.available_permissions || []);
     } catch (error) {
       // Error fetching sub-user data - continue with empty state
     } finally {
@@ -269,6 +272,20 @@ const SubUserManager = () => {
                       />
                       <span className="text-sm">Analyze Reimbursements</span>
                     </label>
+                    {availablePermissions.map((permission) => (
+                      <label key={permission.key} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={inviteForm.permissions.includes(permission.key)}
+                          onChange={() => handlePermissionChange(permission.key)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">
+                          {permission.name}
+                          {permission.is_beta && <span className="ml-1 text-xs bg-blue-100 text-blue-800 px-1 rounded">BETA</span>}
+                        </span>
+                      </label>
+                    ))}
                     <label className="flex items-center">
                       <input
                         type="checkbox"
@@ -358,6 +375,20 @@ const SubUserManager = () => {
                       />
                       <span className="text-sm">Analyze Reimbursements</span>
                     </label>
+                    {availablePermissions.map((permission) => (
+                      <label key={permission.key} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={editForm.permissions.includes(permission.key)}
+                          onChange={() => handleEditPermissionChange(permission.key)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">
+                          {permission.name}
+                          {permission.is_beta && <span className="ml-1 text-xs bg-blue-100 text-blue-800 px-1 rounded">BETA</span>}
+                        </span>
+                      </label>
+                    ))}
                     <label className="flex items-center">
                       <input
                         type="checkbox"

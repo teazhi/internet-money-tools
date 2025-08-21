@@ -68,6 +68,8 @@ if os.environ.get('RAILWAY_STATIC_URL'):
 # Database setup
 DATABASE_FILE = 'app_data.db'
 conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+conn.execute('PRAGMA journal_mode=WAL')
+conn.execute('PRAGMA synchronous=NORMAL')
 cursor = conn.cursor()
 
 try:
@@ -4283,6 +4285,54 @@ def admin_create_invitation():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/available-permissions', methods=['GET'])
+@login_required
+def get_available_permissions():
+    """Get all available features that can be granted as permissions to subusers"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Get all features the main user has access to
+        user_features = get_user_features(discord_id)
+        
+        # Convert features to permission format
+        available_permissions = []
+        for feature_key, feature_info in user_features.items():
+            if feature_info.get('has_access'):
+                available_permissions.append({
+                    'key': feature_key,
+                    'name': feature_info.get('name', feature_key),
+                    'description': feature_info.get('description', ''),
+                    'is_beta': feature_info.get('is_beta', False)
+                })
+        
+        # Always include basic permissions
+        basic_permissions = [
+            {
+                'key': 'sellerboard_upload',
+                'name': 'Sellerboard Upload',
+                'description': 'Upload Sellerboard reports',
+                'is_beta': False
+            },
+            {
+                'key': 'reimbursements_analysis',
+                'name': 'Reimbursements Analysis',
+                'description': 'View and analyze reimbursements',
+                'is_beta': False
+            }
+        ]
+        
+        # Merge basic permissions with feature permissions
+        permission_keys = {p['key'] for p in available_permissions}
+        for perm in basic_permissions:
+            if perm['key'] not in permission_keys:
+                available_permissions.append(perm)
+        
+        return jsonify({'permissions': available_permissions})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error fetching available permissions: {str(e)}'}), 500
+
 @app.route('/api/invite-subuser', methods=['POST'])
 @login_required
 def invite_subuser():
@@ -4468,8 +4518,15 @@ def edit_subuser(subuser_id):
             users[subuser_index]['va_name'] = data['va_name']
         
         if 'permissions' in data:
-            # Validate permissions
-            valid_permissions = ['sellerboard_upload', 'reimbursements_analysis', 'all']
+            # Validate permissions - include all feature keys the main user has access to
+            main_user_features = get_user_features(discord_id)
+            valid_feature_keys = [key for key, info in main_user_features.items() if info.get('has_access')]
+            
+            # Include basic permissions
+            basic_permissions = ['sellerboard_upload', 'reimbursements_analysis', 'all']
+            valid_permissions = basic_permissions + valid_feature_keys
+            
+            # Filter to only valid permissions
             permissions = [p for p in data['permissions'] if p in valid_permissions]
             users[subuser_index]['permissions'] = permissions
         
@@ -6765,7 +6822,11 @@ def get_all_features():
                 'launch_notes': launch_notes
             })
         
-        return jsonify({'features': features})
+        response = jsonify({'features': features})
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
         
     except Exception as e:
         return jsonify({'error': f'Error fetching features: {str(e)}'}), 500
@@ -6841,7 +6902,11 @@ def get_user_accessible_features():
     try:
         discord_id = session['discord_id']
         features = get_user_features(discord_id)
-        return jsonify({'features': features})
+        response = jsonify({'features': features})
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
         
     except Exception as e:
         return jsonify({'error': f'Error fetching user features: {str(e)}'}), 500
@@ -10675,7 +10740,11 @@ def get_all_user_features():
                 user_features[discord_id] = {}
             user_features[discord_id][feature_key] = bool(has_access)
         
-        return jsonify({'user_features': user_features})
+        response = jsonify({'user_features': user_features})
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
         return jsonify({'error': f'Error fetching user features: {str(e)}'}), 500
 

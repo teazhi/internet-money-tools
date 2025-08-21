@@ -1173,6 +1173,92 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def get_feature_config():
+    """Get feature launches configuration from S3"""
+    s3_client = get_s3_client()
+    try:
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='feature_config.json')
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        return config_data.get('feature_launches', {}), config_data.get('user_permissions', {})
+    except Exception as e:
+        return {}, {}
+
+def save_feature_config(feature_launches, user_permissions):
+    """Save feature configuration to S3"""
+    s3_client = get_s3_client()
+    config_data = {
+        'feature_launches': feature_launches,
+        'user_permissions': user_permissions
+    }
+    
+    try:
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key='feature_config.json',
+            Body=json.dumps(config_data, indent=2),
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving feature config to S3: {e}")
+        return False
+
+def save_feature_launch_to_s3(feature_key, is_public, launched_by, launch_notes=''):
+    """Save feature launch status to S3"""
+    feature_launches, user_permissions = get_feature_config()
+    
+    feature_launches[feature_key] = {
+        'is_public': is_public,
+        'launched_by': launched_by,
+        'launched_at': datetime.utcnow().isoformat(),
+        'launch_notes': launch_notes
+    }
+    
+    save_feature_config(feature_launches, user_permissions)
+
+def sync_s3_to_database():
+    """Sync feature configuration from S3 to database on startup"""
+    try:
+        feature_launches, user_permissions = get_feature_config()
+        
+        # Sync feature launches
+        for feature_key, launch_data in feature_launches.items():
+            cursor.execute('''
+                INSERT OR REPLACE INTO feature_launches 
+                (feature_key, is_public, launched_by, launched_at, launch_notes)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                feature_key,
+                launch_data.get('is_public', False),
+                launch_data.get('launched_by', ''),
+                launch_data.get('launched_at', datetime.utcnow().isoformat()),
+                launch_data.get('launch_notes', '')
+            ))
+        
+        # Sync user permissions from S3 users.json
+        users = get_users_config()
+        for user in users:
+            discord_id = user.get('discord_id')
+            user_feature_perms = user.get('feature_permissions', {})
+            
+            for feature_key, perm_data in user_feature_perms.items():
+                if perm_data.get('has_access', False):
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO user_feature_access (discord_id, feature_key, has_access, granted_by)
+                        VALUES (?, ?, ?, ?)
+                    ''', (
+                        discord_id,
+                        feature_key,
+                        True,
+                        perm_data.get('granted_by', '')
+                    ))
+        
+        conn.commit()
+        print("Successfully synced S3 feature config to database")
+        
+    except Exception as e:
+        print(f"Error syncing S3 to database: {e}")
+
 def get_user_record(discord_id):
     users = get_users_config()
     # Handle both string and integer discord_ids for compatibility
@@ -6712,6 +6798,10 @@ def init_feature_flags():
         
         init_conn.commit()
         init_conn.close()
+        
+        # Sync S3 data to database to restore any lost data
+        sync_s3_to_database()
+        
         print("[DEBUG] Feature flags system initialized with user groups")
         
     except Exception as e:
@@ -6731,23 +6821,40 @@ def has_feature_access(discord_id, feature_key):
             if parent_user_id:
                 return has_feature_access(parent_user_id, feature_key)
             
-        # Check if feature is publicly launched
+        # Check if feature is publicly launched (database first, S3 fallback)
         cursor.execute('''
             SELECT is_public FROM feature_launches WHERE feature_key = ?
         ''', (feature_key,))
         launch_result = cursor.fetchone()
         
-        if launch_result and launch_result[0]:  # is_public = True
+        is_launched_db = launch_result and launch_result[0]
+        
+        # Fallback to S3 if database doesn't have launch data
+        if not is_launched_db:
+            feature_launches, _ = get_feature_config()
+            if feature_key in feature_launches:
+                is_launched_db = feature_launches[feature_key].get('is_public', False)
+        
+        if is_launched_db:
             return True
         
-        # Check user-specific access
+        # Check user-specific access (database first, S3 fallback)
         cursor.execute('''
             SELECT has_access FROM user_feature_access 
             WHERE discord_id = ? AND feature_key = ?
         ''', (discord_id, feature_key))
         
         access_result = cursor.fetchone()
-        if access_result and access_result[0]:
+        has_user_access = access_result and access_result[0]
+        
+        # Fallback to S3 user permissions
+        if not has_user_access:
+            user = get_user_record(discord_id)
+            if user and 'feature_permissions' in user:
+                user_perm = user['feature_permissions'].get(feature_key, {})
+                has_user_access = user_perm.get('has_access', False)
+        
+        if has_user_access:
             return True
         
         # Check group-based access
@@ -6856,6 +6963,9 @@ def launch_feature():
         
         conn.commit()
         
+        # Also store in S3 for persistence
+        save_feature_launch_to_s3(feature_key, True, discord_id, launch_notes)
+        
         return jsonify({'message': f'Feature {feature_key} launched successfully'})
         
     except Exception as e:
@@ -6889,6 +6999,9 @@ def unlaunch_feature():
             ''', (feature_key, discord_id))
         
         conn.commit()
+        
+        # Also store in S3 for persistence
+        save_feature_launch_to_s3(feature_key, False, discord_id)
         
         return jsonify({'message': f'Feature {feature_key} removed from public access'})
         
@@ -10767,6 +10880,21 @@ def grant_user_feature_access():
         ''', (user_id, feature_key, True, discord_id))
         
         conn.commit()
+        
+        # Also store in S3 users.json for persistence
+        users = get_users_config()
+        for user in users:
+            if user.get('discord_id') == user_id:
+                if 'feature_permissions' not in user:
+                    user['feature_permissions'] = {}
+                user['feature_permissions'][feature_key] = {
+                    'has_access': True,
+                    'granted_by': discord_id,
+                    'granted_at': datetime.utcnow().isoformat()
+                }
+                update_users_config(users)
+                break
+        
         return jsonify({'message': 'Feature access granted successfully'})
     except Exception as e:
         return jsonify({'error': f'Error granting feature access: {str(e)}'}), 500
@@ -10782,6 +10910,16 @@ def revoke_user_feature_access(user_id, feature_key):
         ''', (user_id, feature_key))
         
         conn.commit()
+        
+        # Also remove from S3 users.json for persistence
+        users = get_users_config()
+        for user in users:
+            if user.get('discord_id') == user_id:
+                if 'feature_permissions' in user and feature_key in user['feature_permissions']:
+                    del user['feature_permissions'][feature_key]
+                    update_users_config(users)
+                break
+        
         return jsonify({'message': 'Feature access revoked successfully'})
     except Exception as e:
         return jsonify({'error': f'Error revoking feature access: {str(e)}'}), 500

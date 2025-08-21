@@ -34,9 +34,9 @@ except Exception as e:
 # Demo mode flag - set to True to use dummy data for demos
 DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
 
-# Simple in-memory cache for analytics data (expires after 5 minutes)
+# Simple in-memory cache for analytics data (expires after 24 hours for daily use)
 analytics_cache = {}
-CACHE_EXPIRY_MINUTES = 5
+CACHE_EXPIRY_HOURS = 24
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -900,9 +900,9 @@ def is_cache_valid(cache_entry):
     if not cached_time:
         return False
     
-    # Check if cache is older than CACHE_EXPIRY_MINUTES
+    # Check if cache is older than CACHE_EXPIRY_HOURS
     cache_age = datetime.utcnow() - cached_time
-    return cache_age.total_seconds() < (CACHE_EXPIRY_MINUTES * 60)
+    return cache_age.total_seconds() < (CACHE_EXPIRY_HOURS * 3600)
 
 def get_cached_data(cache_key):
     """Get cached data if valid, otherwise return None"""
@@ -6164,7 +6164,7 @@ def analyze_discount_opportunities():
         # Get user's current analytics data
         discord_id = session['discord_id']
         
-        # Check database cache first (30 minute expiry for better performance)
+        # Check database cache first (24 hour expiry for daily use)
         cached_opportunities = get_cached_discount_opportunities(discord_id, retailer_filter)
         if cached_opportunities:
             print(f"[DEBUG] Returning cached discount opportunities from database for user {discord_id}")
@@ -6204,10 +6204,10 @@ def analyze_discount_opportunities():
         enhanced_analytics = None
         analytics_cache_key = f"enhanced_analytics_{discord_id}_{today}"
         
-        # Check for cached enhanced analytics (10 minute cache for discount opportunities)
+        # Check for cached enhanced analytics (24 hour cache for discount opportunities)
         if analytics_cache_key in analytics_cache:
             cache_entry = analytics_cache[analytics_cache_key]
-            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=10):
+            if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
                 print(f"[DEBUG] Using cached enhanced analytics")
                 enhanced_analytics = cache_entry['data']
         
@@ -6273,8 +6273,8 @@ def analyze_discount_opportunities():
         
         if csv_cache_key in analytics_cache:
             cache_entry = analytics_cache[csv_cache_key]
-            # Cache CSV for 30 minutes (longer than analytics since it changes less frequently)
-            if datetime.now() - cache_entry['timestamp'] < timedelta(minutes=30):
+            # Cache CSV for 24 hours for daily use
+            if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
                 print(f"[DEBUG] Using cached CSV data")
                 source_df = cache_entry['data']
         
@@ -6849,35 +6849,22 @@ def fetch_sellerboard_cogs_data(cogs_url):
     from io import StringIO
     
     try:
-        # Use exact same approach as working Sellerboard orders/stock processing
-        print(f"DEBUG - COGS Data: Fetching from URL: {cogs_url[:100]}...")
-        
-        # Check if URL has required parameters (same as orders_analysis.py)
+        # Check if URL has required parameters
         if 'sellerboard.com' in cogs_url and 'format=csv' not in cogs_url:
             # Add CSV format if missing
             separator = '&' if '?' in cogs_url else '?'
             cogs_url = f"{cogs_url}{separator}format=csv"
-            print(f"DEBUG - COGS Data: Added format=csv to URL")
-        
-        # Debug: Check if the URL structure looks correct
-        print(f"DEBUG - COGS Data: Final URL contains: id={('id=' in cogs_url)}, format=csv={('format=csv' in cogs_url)}, t={('&t=' in cogs_url)}")
         
         # Try both approaches: first the simple orders_report.py approach, then the complex one
-        print(f"DEBUG - COGS Data: Trying simple approach first (like orders_report.py)")
-        
         try:
             # Simple approach first - exactly like orders_report.py
             simple_response = requests.get(cogs_url, timeout=30)
             if simple_response.status_code == 200:
-                print(f"DEBUG - COGS Data: Simple approach worked! Status: {simple_response.status_code}")
                 response = simple_response
             else:
-                print(f"DEBUG - COGS Data: Simple approach failed with status: {simple_response.status_code}")
                 # Fall back to complex approach
                 raise requests.exceptions.HTTPError(response=simple_response)
         except:
-            print(f"DEBUG - COGS Data: Falling back to complex session-based approach")
-            
             # Create a session to handle cookies properly (same as orders_analysis.py)
             session = requests.Session()
             
@@ -6891,12 +6878,7 @@ def fetch_sellerboard_cogs_data(cogs_url):
             }
             
             # Try the complex approach with allow_redirects=True
-            print(f"DEBUG - COGS Data: Using session with allow_redirects=True")
             response = session.get(cogs_url, timeout=30, allow_redirects=True, headers=headers)
-        
-        print(f"DEBUG - COGS Data: Response status: {response.status_code}")
-        if response.status_code != 200:
-            print(f"DEBUG - COGS Data: Response content preview: {response.text[:500]}")
         
         response.raise_for_status()
         
@@ -6907,9 +6889,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
         # Clean the data according to requirements:
         # 1. Remove products without SKUs
         # 2. Remove products where Hide column is "Yes"
-        
-        print(f"DEBUG - COGS Data: Original rows: {len(df)}")
-        print(f"DEBUG - COGS Data: Columns: {list(df.columns)}")
         
         # Check for SKU column (might be named differently)
         sku_column = None
@@ -6930,12 +6909,10 @@ def fetch_sellerboard_cogs_data(cogs_url):
         
         # Filter out products without SKUs
         df_filtered = df[df[sku_column].notna() & (df[sku_column] != '')]
-        print(f"DEBUG - COGS Data: After SKU filter: {len(df_filtered)}")
         
         # Filter out hidden products if Hide column exists
         if hide_column is not None:
             df_filtered = df_filtered[df_filtered[hide_column] != 'Yes']
-            print(f"DEBUG - COGS Data: After Hide filter: {len(df_filtered)}")
         
         # Look for ASIN column
         asin_column = None
@@ -6946,8 +6923,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
                 
         if asin_column is None:
             raise ValueError("No ASIN column found in Sellerboard COGS data")
-        
-        print(f"DEBUG - COGS Data: Final cleaned rows: {len(df_filtered)}")
         
         # Convert to list of dictionaries for easier processing
         inventory_data = df_filtered.to_dict('records')
@@ -6961,7 +6936,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
         }
         
     except requests.exceptions.RequestException as e:
-        print(f"ERROR - COGS Data fetch failed: {str(e)}")
         if hasattr(e, 'response') and e.response is not None:
             if e.response.status_code == 401:
                 raise ValueError(
@@ -6982,7 +6956,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
         else:
             raise ValueError(f"Network error when fetching Sellerboard COGS data: {str(e)}")
     except Exception as e:
-        print(f"ERROR - COGS Data processing failed: {str(e)}")
         raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
 @app.route('/api/expected-arrivals', methods=['GET'])
@@ -6998,6 +6971,15 @@ def get_expected_arrivals():
             return jsonify(get_dummy_expected_arrivals_data())
         
         discord_id = session['discord_id']
+        
+        # Check for cached missing listings data (24 hour cache)
+        from datetime import datetime, timedelta
+        missing_listings_cache_key = f"missing_listings_{discord_id}_{scope}"
+        
+        if missing_listings_cache_key in analytics_cache:
+            cache_entry = analytics_cache[missing_listings_cache_key]
+            if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
+                return jsonify(cache_entry['data'])
         user_record = get_user_record(discord_id)
         
         if not user_record:
@@ -7024,14 +7006,12 @@ def get_expected_arrivals():
             # Try to use Sellerboard COGS data as the inventory source
             try:
                 inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
-                print(f"DEBUG - Expected Arrivals: Successfully fetched COGS data with {inventory_data.get('total_products', 0)} products")
                 
                 # Still need Google Sheets for purchase data
                 if not sheet_id or not google_tokens.get('access_token'):
                     return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings for purchase data."}), 400
                     
             except Exception as e:
-                print(f"DEBUG - Expected Arrivals: COGS data fetch failed, falling back to Google Sheets: {str(e)}")
                 # Fall back to Google Sheets approach instead of failing
                 inventory_data = None
                 if not sheet_id or not google_tokens.get('access_token'):
@@ -7050,14 +7030,9 @@ def get_expected_arrivals():
         analysis = OrdersAnalysis()
         
         # Get purchase data from Google Sheets based on scope
-        print(f"DEBUG - Missing Listings: Sheet ID: {sheet_id}")
-        print(f"DEBUG - Missing Listings: Column mapping: {column_mapping}")
-        print(f"DEBUG - Missing Listings: Analysis scope: {scope}")
-        print(f"DEBUG - Missing Listings: Has access token: {bool(google_tokens.get('access_token'))}")
         
         try:
             if scope == 'current_month':
-                print("DEBUG - Missing Listings: Using current month worksheet only")
                 
                 # Get current month worksheet name
                 current_month = datetime.now().strftime('%B').upper()
@@ -7088,7 +7063,6 @@ def get_expected_arrivals():
                 if not current_month_worksheet:
                     return jsonify({"error": "No worksheets found in the spreadsheet"}), 400
                 
-                print(f"DEBUG - Missing Listings: Using worksheet '{current_month_worksheet}' for current month analysis")
                 
                 # Fetch data from current month worksheet only
                 def api_call(access_token):
@@ -7108,7 +7082,6 @@ def get_expected_arrivals():
                 cogs_data, combined_purchase_df = result
                 
             else:
-                print("DEBUG - Missing Listings: About to call fetch_google_sheet_cogs_data_all_worksheets")
                 
                 # Use safe_google_api_call to handle token refresh
                 def api_call(access_token):
@@ -7120,17 +7093,7 @@ def get_expected_arrivals():
                 
                 cogs_data, combined_purchase_df = safe_google_api_call(config_user_record, api_call)
             
-            print("DEBUG - Missing Listings: Successfully returned from data fetch")
-            print(f"DEBUG - Missing Listings: Combined purchase DataFrame shape: {combined_purchase_df.shape}")
-            if not combined_purchase_df.empty:
-                print(f"DEBUG - Missing Listings: DataFrame columns: {list(combined_purchase_df.columns)}")
-                print(f"DEBUG - Missing Listings: Sample ASINs from purchase data: {list(combined_purchase_df['ASIN'].unique()[:5])}")
-            else:
-                print("DEBUG - Missing Listings: DataFrame is empty - no data loaded from Google Sheets")
         except Exception as e:
-            print(f"DEBUG - Missing Listings: Exception during data fetch: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return jsonify({"error": f"Failed to fetch purchase data: {str(e)}"}), 500
 
         if combined_purchase_df.empty:
@@ -7205,9 +7168,6 @@ def get_expected_arrivals():
             recent_purchases_data = purchase_insights.get('recent_2_months_purchases', {})
             analysis_period_msg = "last 2 months"
         
-        print(f"DEBUG - Missing Listings: Found {len(recent_purchases_data)} recent purchases")
-        if recent_purchases_data:
-            print(f"DEBUG - Missing Listings: Sample recent purchase ASINs: {list(recent_purchases_data.keys())[:5]}")
         
         if not recent_purchases_data:
             return jsonify({
@@ -7226,7 +7186,6 @@ def get_expected_arrivals():
         
         if sellerboard_cogs_url and inventory_data:
             # Use Sellerboard COGS data (complete inventory)
-            print("DEBUG - Missing Listings: Using Sellerboard COGS data for inventory")
             asin_column = inventory_data['asin_column']
             
             for product in inventory_data['data']:
@@ -7234,15 +7193,8 @@ def get_expected_arrivals():
                 if asin and str(asin).strip():
                     all_known_asins.add(str(asin).upper())
             
-            print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs in Sellerboard COGS data")
-            print(f"DEBUG - Missing Listings: Sample COGS ASINs: {list(all_known_asins)[:5]}")
-            
         else:
             # Fallback to original Sellerboard Analytics approach
-            if sellerboard_cogs_url and not inventory_data:
-                print("DEBUG - Missing Listings: COGS data failed, falling back to Sellerboard Analytics approach")
-            else:
-                print("DEBUG - Missing Listings: No COGS URL configured, using Sellerboard Analytics approach")
             try:
                 # Get complete Sellerboard analysis (includes all ASINs with any history)
                 # Create a new analysis instance with the sellerboard URL
@@ -7262,8 +7214,6 @@ def get_expected_arrivals():
                 for asin_key in basic_analytics.keys():
                     all_known_asins.add(asin_key.upper())
                 
-                print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs with Amazon listings")
-                print(f"DEBUG - Missing Listings: Sample Sellerboard ASINs: {list(all_known_asins)[:5]}")
                 
             except Exception as e:
                 return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
@@ -7278,7 +7228,6 @@ def get_expected_arrivals():
             asin_upper = asin.upper()
             has_listing = asin_upper in all_known_asins
             
-            print(f"DEBUG - Missing Listings: ASIN {asin} (normalized: {asin_upper}) - Has listing: {has_listing}")
             
             if not has_listing:
                 # This item was purchased recently but has no Amazon listing created yet
@@ -7310,9 +7259,8 @@ def get_expected_arrivals():
         # Sort by most recent purchase date
         missing_listings.sort(key=lambda x: x.get('last_purchase_date', ''), reverse=True)
 
-        print(f"DEBUG - Missing Listings: Final result - {len(missing_listings)} missing listings found")
-
-        return jsonify({
+        # Prepare response data
+        response_data = {
             "missing_listings": missing_listings,
             "summary": {
                 "total_items": len(missing_listings),
@@ -7324,7 +7272,15 @@ def get_expected_arrivals():
             "message": f"Found {len(missing_listings)} purchased items without Amazon listings ({analysis_period_msg})",
             "inventory_source": "sellerboard_cogs" if sellerboard_cogs_url else "sellerboard_analytics",
             "total_inventory_asins": len(all_known_asins)
-        })
+        }
+        
+        # Cache the response data
+        analytics_cache[missing_listings_cache_key] = {
+            'data': response_data,
+            'timestamp': datetime.now()
+        }
+
+        return jsonify(response_data)
 
     except Exception as e:
         app.logger.error(f"Expected arrivals error: {str(e)}")

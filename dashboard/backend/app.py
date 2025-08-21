@@ -10731,6 +10731,226 @@ def generate_ebay_listing():
             'message': 'Failed to generate eBay listing. Please try again.'
         }), 500
 
+# Purchase Management Endpoints
+@app.route('/api/purchases', methods=['GET'])
+@login_required
+def get_purchases():
+    """Get all purchases with live Sellerboard data"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({
+                'success': False,
+                'message': 'User configuration not found'
+            }), 400
+
+        # Get purchases from database
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT * FROM purchases 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC
+        """, (discord_id,))
+        
+        purchases = cursor.fetchall()
+        
+        # Enrich with live Sellerboard data
+        orders_url = user_record.get('sellerboard_orders_url')
+        stock_url = user_record.get('sellerboard_stock_url')
+        
+        if orders_url and stock_url:
+            from orders_analysis import EnhancedOrdersAnalysis
+            from datetime import date, timedelta
+            
+            try:
+                analyzer = EnhancedOrdersAnalysis(orders_url, stock_url)
+                
+                # Get stock and sales data
+                stock_df = analyzer.download_csv(stock_url)
+                stock_info = analyzer.get_stock_info(stock_df)
+                
+                orders_df = analyzer.download_csv(orders_url)
+                target_date = date.today()
+                orders_for_month = analyzer.get_orders_for_date_range(
+                    orders_df, 
+                    target_date - timedelta(days=30), 
+                    target_date, 
+                    user_record.get('timezone', 'UTC')
+                )
+                monthly_sales = analyzer.asin_sales_count(orders_for_month)
+                
+                # Update purchases with live data
+                for purchase in purchases:
+                    asin = extract_asin_from_url(purchase.get('sell_link', ''))
+                    if asin and asin in stock_info:
+                        stock_data = stock_info[asin]
+                        purchase['current_stock'] = stock_data.get('FBA/FBM Stock', 0)
+                        purchase['spm'] = monthly_sales.get(asin, 0)
+                        purchase['asin'] = asin
+                    
+            except Exception as e:
+                print(f"Error enriching purchase data: {e}")
+                # Continue without enrichment
+        
+        return jsonify({
+            'success': True,
+            'purchases': purchases
+        })
+        
+    except Exception as e:
+        print(f"Error fetching purchases: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch purchases'
+        }), 500
+
+@app.route('/api/purchases', methods=['POST'])
+@login_required
+def add_purchase():
+    """Add a new purchase"""
+    try:
+        data = request.get_json()
+        discord_id = session['discord_id']
+        
+        # Extract ASIN from Amazon URL
+        asin = extract_asin_from_url(data.get('sellLink', ''))
+        
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO purchases (
+                user_id, buy_link, sell_link, name, price, 
+                target_quantity, notes, asin, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            discord_id,
+            data.get('buyLink'),
+            data.get('sellLink'), 
+            data.get('name'),
+            float(data.get('price', 0)),
+            int(data.get('targetQuantity', 0)),
+            data.get('notes', ''),
+            asin
+        ))
+        
+        purchase_id = cursor.lastrowid
+        db.commit()
+        
+        # Get the created purchase
+        cursor.execute("SELECT * FROM purchases WHERE id = %s", (purchase_id,))
+        purchase = cursor.fetchone()
+        
+        return jsonify({
+            'success': True,
+            'purchase': dict(zip([col[0] for col in cursor.description], purchase))
+        })
+        
+    except Exception as e:
+        print(f"Error adding purchase: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to add purchase'
+        }), 500
+
+@app.route('/api/purchases/<int:purchase_id>', methods=['PUT'])
+@login_required
+def update_purchase(purchase_id):
+    """Update a purchase"""
+    try:
+        data = request.get_json()
+        discord_id = session['discord_id']
+        
+        cursor = db.cursor()
+        
+        # Build update query dynamically
+        update_fields = []
+        update_values = []
+        
+        allowed_fields = ['purchased', 'notes', 'target_quantity', 'va_notes']
+        for field in allowed_fields:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                update_values.append(data[field])
+        
+        if not update_fields:
+            return jsonify({
+                'success': False,
+                'message': 'No valid fields to update'
+            }), 400
+        
+        update_values.extend([purchase_id, discord_id])
+        
+        cursor.execute(f"""
+            UPDATE purchases 
+            SET {', '.join(update_fields)}, updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+        """, update_values)
+        
+        if cursor.rowcount == 0:
+            return jsonify({
+                'success': False,
+                'message': 'Purchase not found'
+            }), 404
+        
+        db.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Purchase updated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error updating purchase: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update purchase'
+        }), 500
+
+def extract_asin_from_url(url):
+    """Extract ASIN from Amazon URL"""
+    if not url:
+        return None
+    
+    import re
+    match = re.search(r'/dp/([A-Z0-9]{10})', url)
+    return match.group(1) if match else None
+
+# Database initialization for purchases table
+def init_purchases_table():
+    """Initialize the purchases table if it doesn't exist"""
+    try:
+        cursor = db.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS purchases (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                buy_link TEXT,
+                sell_link TEXT,
+                name TEXT,
+                price DECIMAL(10,2) DEFAULT 0,
+                target_quantity INT DEFAULT 0,
+                purchased INT DEFAULT 0,
+                notes TEXT,
+                va_notes TEXT,
+                asin VARCHAR(10),
+                current_stock INT DEFAULT 0,
+                spm INT DEFAULT 0,
+                status ENUM('pending', 'in_progress', 'completed', 'cancelled') DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_user_id (user_id),
+                INDEX idx_asin (asin)
+            )
+        """)
+        db.commit()
+        print("Purchases table initialized successfully")
+    except Exception as e:
+        print(f"Error initializing purchases table: {e}")
+
+# Initialize purchases table on startup
+init_purchases_table()
+
 # Demo control endpoints
 @app.route('/api/demo/status', methods=['GET'])
 def demo_status():

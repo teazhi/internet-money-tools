@@ -10,7 +10,7 @@ import {
   Plus
 } from 'lucide-react';
 
-const ExpectedArrivals = () => {
+const MissingListings = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [missingListings, setMissingListings] = useState([]);
@@ -317,4 +317,4 @@ const ExpectedArrivals = () => {
   );
 };
 
-export default ExpectedArrivals;
+export default MissingListings;

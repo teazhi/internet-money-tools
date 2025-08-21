@@ -39,9 +39,10 @@ import SheetConfig from './dashboard/SheetConfig';
 import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
-import ExpectedArrivals from './dashboard/ExpectedArrivals';
+import MissingListings from './dashboard/MissingListings';
 import LambdaDeployment from './dashboard/LambdaDeployment';
 import EbayLister from './dashboard/EbayLister';
+import PurchaseManager from './dashboard/PurchaseManager';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
 
@@ -151,6 +152,14 @@ const Dashboard = () => {
       icon: ShoppingBag, 
       current: location.pathname === '/dashboard/ebay-lister',
       beta: isFeatureBeta('ebay_lister')
+    }] : []),
+    
+    ...(hasFeatureAccess('purchase_manager') ? [{
+      name: 'Purchase Manager', 
+      href: '/dashboard/purchases', 
+      icon: ShoppingCart, 
+      current: location.pathname === '/dashboard/purchases',
+      beta: isFeatureBeta('purchase_manager')
     }] : []),
     
     // File Manager removed - using URL-based approach
@@ -529,7 +538,7 @@ const Dashboard = () => {
               )}
               
               {hasFeatureAccess('missing_listings') && (
-                <Route path="/missing-listings" element={<ExpectedArrivals />} />
+                <Route path="/missing-listings" element={<MissingListings />} />
               )}
               
               {hasFeatureAccess('reimbursements') && (
@@ -538,6 +547,10 @@ const Dashboard = () => {
               
               {hasFeatureAccess('ebay_lister') && (
                 <Route path="/ebay-lister" element={<EbayLister />} />
+              )}
+              
+              {hasFeatureAccess('purchase_manager') && (
+                <Route path="/purchases" element={<PurchaseManager />} />
               )}
               
               {/* File Manager route removed - using URL-based approach */}

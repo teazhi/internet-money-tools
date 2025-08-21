@@ -1822,6 +1822,8 @@ def update_profile():
         user_record['sellerboard_orders_url'] = data['sellerboard_orders_url']
     if 'sellerboard_stock_url' in data:
         user_record['sellerboard_stock_url'] = data['sellerboard_stock_url']
+    if 'sellerboard_cogs_url' in data:
+        user_record['sellerboard_cogs_url'] = data['sellerboard_cogs_url']
     if 'timezone' in data:
         user_record['timezone'] = data['timezone']
     if 'enable_source_links' in data:
@@ -6837,6 +6839,84 @@ def get_user_accessible_features():
     except Exception as e:
         return jsonify({'error': f'Error fetching user features: {str(e)}'}), 500
 
+def fetch_sellerboard_cogs_data(cogs_url):
+    """
+    Fetch and process Sellerboard Cost of Goods Sold CSV data
+    Returns cleaned inventory data with products that have SKUs and are not hidden
+    """
+    import pandas as pd
+    import requests
+    from io import StringIO
+    
+    try:
+        # Fetch the CSV data from the URL
+        response = requests.get(cogs_url, timeout=30)
+        response.raise_for_status()
+        
+        # Parse CSV data
+        csv_data = StringIO(response.text)
+        df = pd.read_csv(csv_data)
+        
+        # Clean the data according to requirements:
+        # 1. Remove products without SKUs
+        # 2. Remove products where Hide column is "Yes"
+        
+        print(f"DEBUG - COGS Data: Original rows: {len(df)}")
+        print(f"DEBUG - COGS Data: Columns: {list(df.columns)}")
+        
+        # Check for SKU column (might be named differently)
+        sku_column = None
+        for col in df.columns:
+            if 'sku' in col.lower():
+                sku_column = col
+                break
+        
+        if sku_column is None:
+            raise ValueError("No SKU column found in Sellerboard COGS data")
+            
+        # Check for Hide column
+        hide_column = None
+        for col in df.columns:
+            if 'hide' in col.lower():
+                hide_column = col
+                break
+        
+        # Filter out products without SKUs
+        df_filtered = df[df[sku_column].notna() & (df[sku_column] != '')]
+        print(f"DEBUG - COGS Data: After SKU filter: {len(df_filtered)}")
+        
+        # Filter out hidden products if Hide column exists
+        if hide_column is not None:
+            df_filtered = df_filtered[df_filtered[hide_column] != 'Yes']
+            print(f"DEBUG - COGS Data: After Hide filter: {len(df_filtered)}")
+        
+        # Look for ASIN column
+        asin_column = None
+        for col in df_filtered.columns:
+            if 'asin' in col.lower():
+                asin_column = col
+                break
+                
+        if asin_column is None:
+            raise ValueError("No ASIN column found in Sellerboard COGS data")
+        
+        print(f"DEBUG - COGS Data: Final cleaned rows: {len(df_filtered)}")
+        
+        # Convert to list of dictionaries for easier processing
+        inventory_data = df_filtered.to_dict('records')
+        
+        return {
+            'data': inventory_data,
+            'sku_column': sku_column,
+            'asin_column': asin_column,
+            'hide_column': hide_column,
+            'total_products': len(inventory_data)
+        }
+        
+    except Exception as e:
+        print(f"ERROR - COGS Data fetch failed: {str(e)}")
+        raise e
+
 @app.route('/api/expected-arrivals', methods=['GET'])
 @login_required
 def get_expected_arrivals():
@@ -6869,8 +6949,24 @@ def get_expected_arrivals():
         google_tokens = config_user_record.get('google_tokens', {})
         column_mapping = config_user_record.get('column_mapping', {})
         
-        if not sheet_id or not google_tokens.get('access_token'):
-            return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings first."}), 400
+        # Check for Sellerboard COGS URL - prioritize this over Google Sheets for inventory data
+        sellerboard_cogs_url = config_user_record.get('sellerboard_cogs_url')
+        
+        if sellerboard_cogs_url:
+            # Use Sellerboard COGS data as the inventory source
+            try:
+                inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
+                
+                # Still need Google Sheets for purchase data
+                if not sheet_id or not google_tokens.get('access_token'):
+                    return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings for purchase data."}), 400
+                    
+            except Exception as e:
+                return jsonify({"error": f"Failed to fetch Sellerboard COGS data: {str(e)}"}), 500
+        else:
+            # Fallback to original logic
+            if not sheet_id or not google_tokens.get('access_token'):
+                return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings first."}), 400
 
         # Initialize OrdersAnalysis to get purchase data
         from orders_analysis import OrdersAnalysis
@@ -7049,31 +7145,48 @@ def get_expected_arrivals():
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 
-        try:
-            # Get complete Sellerboard analysis (includes all ASINs with any history)
-            # Create a new analysis instance with the sellerboard URL
-            sellerboard_analysis = OrdersAnalysis(orders_url=sellerboard_url, stock_url=sellerboard_url)
-            from datetime import date
-            inventory_analysis = sellerboard_analysis.analyze(for_date=date.today())
+        # Get inventory data (ASINs that have Amazon listings)
+        all_known_asins = set()
+        
+        if sellerboard_cogs_url:
+            # Use Sellerboard COGS data (complete inventory)
+            print("DEBUG - Missing Listings: Using Sellerboard COGS data for inventory")
+            asin_column = inventory_data['asin_column']
             
-            # Check both current inventory AND historical data for listings
-            current_inventory = inventory_analysis.get('enhanced_analytics', {})
-            all_known_asins = set()
+            for product in inventory_data['data']:
+                asin = product.get(asin_column)
+                if asin and str(asin).strip():
+                    all_known_asins.add(str(asin).upper())
             
-            # Add ASINs from enhanced analytics (normalize case)
-            for asin_key in current_inventory.keys():
-                all_known_asins.add(asin_key.upper())
+            print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs in Sellerboard COGS data")
+            print(f"DEBUG - Missing Listings: Sample COGS ASINs: {list(all_known_asins)[:5]}")
             
-            # Also check basic analytics for any ASIN that has ever appeared
-            basic_analytics = inventory_analysis.get('analytics', {})
-            for asin_key in basic_analytics.keys():
-                all_known_asins.add(asin_key.upper())
-            
-            print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs with Amazon listings")
-            print(f"DEBUG - Missing Listings: Sample Sellerboard ASINs: {list(all_known_asins)[:5]}")
-            
-        except Exception as e:
-            return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
+        else:
+            # Fallback to original Sellerboard Analytics approach
+            try:
+                # Get complete Sellerboard analysis (includes all ASINs with any history)
+                # Create a new analysis instance with the sellerboard URL
+                sellerboard_analysis = OrdersAnalysis(orders_url=sellerboard_url, stock_url=sellerboard_url)
+                from datetime import date
+                inventory_analysis = sellerboard_analysis.analyze(for_date=date.today())
+                
+                # Check both current inventory AND historical data for listings
+                current_inventory = inventory_analysis.get('enhanced_analytics', {})
+                
+                # Add ASINs from enhanced analytics (normalize case)
+                for asin_key in current_inventory.keys():
+                    all_known_asins.add(asin_key.upper())
+                
+                # Also check basic analytics for any ASIN that has ever appeared
+                basic_analytics = inventory_analysis.get('analytics', {})
+                for asin_key in basic_analytics.keys():
+                    all_known_asins.add(asin_key.upper())
+                
+                print(f"DEBUG - Missing Listings: Found {len(all_known_asins)} ASINs with Amazon listings")
+                print(f"DEBUG - Missing Listings: Sample Sellerboard ASINs: {list(all_known_asins)[:5]}")
+                
+            except Exception as e:
+                return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
 
         # Find items purchased recently but have NO Amazon listing created (not in Sellerboard at all)
         missing_listings = []
@@ -7128,7 +7241,9 @@ def get_expected_arrivals():
             },
             "analyzed_at": datetime.now().isoformat(),
             "analysis_period": "Current month only" if scope == 'current_month' else "Last 2 months",
-            "message": f"Found {len(missing_listings)} purchased items without Amazon listings ({analysis_period_msg})"
+            "message": f"Found {len(missing_listings)} purchased items without Amazon listings ({analysis_period_msg})",
+            "inventory_source": "sellerboard_cogs" if sellerboard_cogs_url else "sellerboard_analytics",
+            "total_inventory_asins": len(all_known_asins)
         })
 
     except Exception as e:

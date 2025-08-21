@@ -352,7 +352,8 @@ const AdminCompact = () => {
       listing_loader_key: user.listing_loader_key || '',
       sb_file_key: user.sb_file_key || '',
       sellerboard_orders_url: user.sellerboard_orders_url || '',
-      sellerboard_stock_url: user.sellerboard_stock_url || ''
+      sellerboard_stock_url: user.sellerboard_stock_url || '',
+      sellerboard_cogs_url: user.sellerboard_cogs_url || ''
     });
 
     return (
@@ -400,6 +401,18 @@ const AdminCompact = () => {
                   onChange={(e) => setEditData({...editData, sellerboard_stock_url: e.target.value})}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sellerboard COGS URL (Cost of Goods Sold)</label>
+                <input
+                  type="url"
+                  value={editData.sellerboard_cogs_url}
+                  onChange={(e) => setEditData({...editData, sellerboard_cogs_url: e.target.value})}
+                  placeholder="https://app.sellerboard.com/en/automation/reports?id=..."
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">Complete inventory data for Missing Listings feature</p>
               </div>
 
               <div className="flex items-center">

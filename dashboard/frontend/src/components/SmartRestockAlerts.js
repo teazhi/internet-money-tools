@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import axios from 'axios';
 import { 
   TrendingUp, 
@@ -217,7 +217,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
 
   // Render cell content for recommendations table
   const renderRecommendationCell = (columnKey, alert) => {
-    console.log('Rendering cell:', columnKey, alert.asin);
     switch (columnKey) {
       case 'product':
         return (
@@ -630,11 +629,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   try {
     return (
       <div className="space-y-6">
-        {/* DEBUG BANNER - Remove after confirming deployment */}
-        <div className="bg-yellow-500 text-white p-2 text-center font-bold">
-          🚀 VERSION 2.1 - DRAG/IMAGE FIX DEPLOYED - {new Date().toLocaleTimeString()}
-        </div>
-        
         <div className="bg-white rounded-lg shadow relative">
           <div className="px-6 py-4">
             {loading && (
@@ -648,7 +642,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
             <div className={loading ? 'opacity-50' : ''}>
             <p className="text-xs text-gray-600 mb-3">
               Products requiring immediate restocking attention based on current stock levels and sales velocity.
-              <span className="ml-2 text-xs text-gray-400">[v2.1 - Fixed drag/images]</span>
             </p>
 
             {/* Filter Controls */}

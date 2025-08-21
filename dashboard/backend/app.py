@@ -3088,10 +3088,11 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/api/upload/sellerboard', methods=['POST'])
-@permission_required('sellerboard_upload')
-def upload_sellerboard_file():
-    try:
+# File upload endpoint removed - using URL-based approach
+# @app.route('/api/upload/sellerboard', methods=['POST'])
+# @permission_required('sellerboard_upload')
+# def upload_sellerboard_file():
+#     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
         
@@ -3181,7 +3182,8 @@ def upload_sellerboard_file():
             
     except Exception as e:
         pass  # Debug print removed
-        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+#         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+    pass  # Function commented out - using URL-based approach
 
 def determine_file_type_category(filename):
     """
@@ -3335,10 +3337,11 @@ def cleanup_old_files_on_upload(discord_id, new_file_type, new_s3_key):
             'deleted_files': []
         }
 
-@app.route('/api/files/sellerboard', methods=['GET'])
-@login_required
-def list_sellerboard_files():
-    """List user's uploaded files - now with proper discord_id filtering"""
+# File listing endpoint removed - using URL-based approach
+# @app.route('/api/files/sellerboard', methods=['GET'])
+# @login_required
+# def list_sellerboard_files():
+#     """List user's uploaded files - now with proper discord_id filtering"""
     try:
         discord_id = session['discord_id']
         

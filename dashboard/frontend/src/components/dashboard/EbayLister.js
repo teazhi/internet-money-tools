@@ -3,13 +3,8 @@ import {
   Search, 
   Package, 
   ExternalLink, 
-  Copy, 
-  CheckCircle, 
   AlertTriangle,
-  RefreshCw,
-  Image as ImageIcon,
-  DollarSign,
-  Tag
+  RefreshCw
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -18,8 +13,6 @@ const EbayLister = () => {
   const [loading, setLoading] = useState(false);
   const [productData, setProductData] = useState(null);
   const [error, setError] = useState('');
-  const [listingData, setListingData] = useState(null);
-  const [generatingListing, setGeneratingListing] = useState(false);
 
   const validateASIN = (asin) => {
     const asinPattern = /^[A-Z0-9]{10}$/;
@@ -78,35 +71,7 @@ const EbayLister = () => {
     }
   };
 
-  const generateEbayListing = async () => {
-    if (!productData) return;
 
-    setGeneratingListing(true);
-    setError('');
-
-    try {
-      const response = await axios.post('/api/ebay/generate-listing', {
-        asin: asin.trim().toUpperCase(),
-        productData: productData
-      }, {
-        withCredentials: true
-      });
-
-      if (response.data.success) {
-        setListingData(response.data.listing);
-      } else {
-        setError(response.data.message || 'Failed to generate eBay listing');
-      }
-    } catch (err) {
-      setError('Failed to generate eBay listing. Please try again.');
-    } finally {
-      setGeneratingListing(false);
-    }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-  };
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
@@ -123,8 +88,8 @@ const EbayLister = () => {
             <Package className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">eBay Lister</h1>
-            <p className="text-purple-100">Create eBay listings from Amazon ASINs</p>
+            <h1 className="text-2xl font-bold">eBay Research Tool</h1>
+            <p className="text-purple-100">Research products and create eBay listings</p>
           </div>
         </div>
       </div>
@@ -264,26 +229,15 @@ const EbayLister = () => {
             </div>
           )}
 
+          {/* Research Actions */}
           <div className="mt-6 pt-4 border-t border-gray-200">
-            <div className="flex space-x-3">
-              <button
-                onClick={generateEbayListing}
-                disabled={generatingListing}
-                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                {generatingListing ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                )}
-                Generate eBay Listing
-              </button>
-              
+            <h4 className="heading-sm mb-3 text-gray-800">Research & Create Listing</h4>
+            <div className="grid md:grid-cols-2 gap-3">
               <a
                 href={`https://www.amazon.com/dp/${productData.asin}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-secondary flex items-center"
+                className="btn-secondary flex items-center justify-center"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View on Amazon
@@ -293,7 +247,7 @@ const EbayLister = () => {
                 href={`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productData.title)}&_sacat=0&_sop=15`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-secondary flex items-center bg-blue-600 hover:bg-blue-700 text-white"
+                className="btn-secondary flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Research on eBay
@@ -303,135 +257,26 @@ const EbayLister = () => {
                 href={`https://www.ebay.com/sch/i.html?_nkw=${productData.asin}&_sacat=0&_sop=15`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-secondary flex items-center bg-purple-600 hover:bg-purple-700 text-white"
+                className="btn-secondary flex items-center justify-center bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Search by ASIN
+              </a>
+              
+              <a
+                href="https://www.ebay.com/sell/create"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary flex items-center justify-center bg-green-600 hover:bg-green-700"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Create eBay Listing
               </a>
             </div>
           </div>
         </div>
       )}
 
-      {/* Generated eBay Listing */}
-      {listingData && (
-        <div className="card">
-          <h3 className="heading-sm mb-4 flex items-center">
-            <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-            Generated eBay Listing
-          </h3>
-          
-          <div className="space-y-6">
-            {/* Title */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label-text">Title</label>
-                <button
-                  onClick={() => copyToClipboard(listingData.title)}
-                  className="text-xs text-gray-500 hover:text-gray-700 flex items-center"
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  Copy
-                </button>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="body-text">{listingData.title}</p>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="label-text">Description</label>
-                <button
-                  onClick={() => copyToClipboard(listingData.description)}
-                  className="text-xs text-gray-500 hover:text-gray-700 flex items-center"
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  Copy
-                </button>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-lg max-h-64 overflow-y-auto">
-                <div className="whitespace-pre-wrap body-text">{listingData.description}</div>
-              </div>
-            </div>
-
-            {/* Suggested Pricing */}
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label className="label-text">Suggested Starting Price</label>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="heading-sm text-green-700">${listingData.suggestedPrice}</p>
-                </div>
-              </div>
-              
-              <div>
-                <label className="label-text">Buy It Now Price</label>
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <p className="heading-sm text-blue-700">${listingData.buyItNowPrice}</p>
-                </div>
-              </div>
-              
-              <div>
-                <label className="label-text">Shipping</label>
-                <div className="p-3 bg-amber-50 rounded-lg">
-                  <p className="heading-sm text-amber-700">{listingData.shipping}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Category and Item Specifics */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="label-text">eBay Category</label>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="body-text">{listingData.category}</p>
-                </div>
-              </div>
-              
-              <div>
-                <label className="label-text">Condition</label>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="body-text">{listingData.condition}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Item Specifics */}
-            {listingData.itemSpecifics && (
-              <div>
-                <label className="label-text">Item Specifics</label>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(listingData.itemSpecifics).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <span className="body-text font-medium">{key}:</span>
-                        <span className="body-text text-gray-600">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex space-x-3 pt-4 border-t border-gray-200">
-              <button className="btn-primary flex items-center">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Create eBay Listing
-              </button>
-              
-              <button
-                onClick={() => copyToClipboard(JSON.stringify(listingData, null, 2))}
-                className="btn-secondary flex items-center"
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy All Data
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Instructions */}
       <div className="card bg-blue-50 border border-blue-200">
@@ -440,11 +285,10 @@ const EbayLister = () => {
           <p>1. Enter a valid Amazon ASIN from your inventory (10 characters)</p>
           <p>2. Click "Lookup Product" to fetch live data from your Sellerboard account</p>
           <p>3. Review the product details including current stock and sales velocity</p>
-          <p>4. Use "Research on eBay" to view competitor listings by product title</p>
-          <p>5. Use "Search by ASIN" to find exact matches on eBay</p>
-          <p>6. Click "Generate eBay Listing" to create optimized listing content</p>
-          <p>7. Copy and paste the generated content into your eBay listing</p>
-          <p><strong>Note:</strong> This tool uses your real Sellerboard data, so only ASINs in your inventory will be found.</p>
+          <p>4. Use "Research on eBay" to analyze competitor listings and pricing</p>
+          <p>5. Use "Search by ASIN" to find exact product matches on eBay</p>
+          <p>6. Click "Create eBay Listing" to start creating your listing on eBay</p>
+          <p><strong>Note:</strong> This tool uses your real Sellerboard data for accurate inventory and sales information.</p>
         </div>
       </div>
     </div>

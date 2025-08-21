@@ -10748,14 +10748,17 @@ def get_purchases():
             }), 400
 
         # Get purchases from database
-        cursor = db.cursor(dictionary=True)
         cursor.execute("""
             SELECT * FROM purchases 
-            WHERE user_id = %s 
+            WHERE user_id = ? 
             ORDER BY created_at DESC
         """, (discord_id,))
         
-        purchases = cursor.fetchall()
+        # Convert to dictionary format
+        purchases = []
+        for row in cursor.fetchall():
+            purchase = dict(zip([col[0] for col in cursor.description], row))
+            purchases.append(purchase)
         
         # Enrich with live Sellerboard data
         orders_url = user_record.get('sellerboard_orders_url')
@@ -10818,12 +10821,11 @@ def add_purchase():
         # Extract ASIN from Amazon URL
         asin = extract_asin_from_url(data.get('sellLink', ''))
         
-        cursor = db.cursor()
         cursor.execute("""
             INSERT INTO purchases (
                 user_id, buy_link, sell_link, name, price, 
                 target_quantity, notes, asin, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """, (
             discord_id,
             data.get('buyLink'),
@@ -10836,10 +10838,10 @@ def add_purchase():
         ))
         
         purchase_id = cursor.lastrowid
-        db.commit()
+        conn.commit()
         
         # Get the created purchase
-        cursor.execute("SELECT * FROM purchases WHERE id = %s", (purchase_id,))
+        cursor.execute("SELECT * FROM purchases WHERE id = ?", (purchase_id,))
         purchase = cursor.fetchone()
         
         return jsonify({
@@ -10862,8 +10864,6 @@ def update_purchase(purchase_id):
         data = request.get_json()
         discord_id = session['discord_id']
         
-        cursor = db.cursor()
-        
         # Build update query dynamically
         update_fields = []
         update_values = []
@@ -10871,7 +10871,7 @@ def update_purchase(purchase_id):
         allowed_fields = ['purchased', 'notes', 'target_quantity', 'va_notes']
         for field in allowed_fields:
             if field in data:
-                update_fields.append(f"{field} = %s")
+                update_fields.append(f"{field} = ?")
                 update_values.append(data[field])
         
         if not update_fields:
@@ -10884,8 +10884,8 @@ def update_purchase(purchase_id):
         
         cursor.execute(f"""
             UPDATE purchases 
-            SET {', '.join(update_fields)}, updated_at = NOW()
-            WHERE id = %s AND user_id = %s
+            SET {', '.join(update_fields)}, updated_at = datetime('now')
+            WHERE id = ? AND user_id = ?
         """, update_values)
         
         if cursor.rowcount == 0:
@@ -10894,7 +10894,7 @@ def update_purchase(purchase_id):
                 'message': 'Purchase not found'
             }), 404
         
-        db.commit()
+        conn.commit()
         
         return jsonify({
             'success': True,
@@ -10921,30 +10921,32 @@ def extract_asin_from_url(url):
 def init_purchases_table():
     """Initialize the purchases table if it doesn't exist"""
     try:
-        cursor = db.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS purchases (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id VARCHAR(255) NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
                 buy_link TEXT,
                 sell_link TEXT,
                 name TEXT,
-                price DECIMAL(10,2) DEFAULT 0,
-                target_quantity INT DEFAULT 0,
-                purchased INT DEFAULT 0,
+                price REAL DEFAULT 0,
+                target_quantity INTEGER DEFAULT 0,
+                purchased INTEGER DEFAULT 0,
                 notes TEXT,
                 va_notes TEXT,
-                asin VARCHAR(10),
-                current_stock INT DEFAULT 0,
-                spm INT DEFAULT 0,
-                status ENUM('pending', 'in_progress', 'completed', 'cancelled') DEFAULT 'pending',
+                asin TEXT,
+                current_stock INTEGER DEFAULT 0,
+                spm INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id),
-                INDEX idx_asin (asin)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        db.commit()
+        
+        # Create indexes separately for SQLite
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases (user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchases_asin ON purchases (asin)")
+        
+        conn.commit()
         print("Purchases table initialized successfully")
     except Exception as e:
         print(f"Error initializing purchases table: {e}")

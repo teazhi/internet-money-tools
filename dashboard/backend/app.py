@@ -6849,27 +6849,48 @@ def fetch_sellerboard_cogs_data(cogs_url):
     from io import StringIO
     
     try:
-        # Check if this is a direct download URL vs automation report URL
-        if 'download-report' in cogs_url:
-            # This is a direct download URL that requires authentication
-            # These URLs are temporary and require session cookies
-            raise ValueError(
-                "Direct download URLs require authentication and are not supported. "
-                "Please use the automation report URL instead.\n\n"
-                "To get the correct URL:\n"
-                "1. Go to Sellerboard → Reports → Cost of Goods Sold\n"
-                "2. Click 'Share/Export' button\n"
-                "3. Select 'Automated Report URL'\n"
-                "4. Copy the URL (should look like: https://app.sellerboard.com/en/automation/reports?id=...&format=csv&t=...)\n\n"
-                "Note: The URL you provided appears to be a direct download link which requires login."
-            )
-        
-        # Use same simple approach as other Sellerboard reports
+        # Use exact same approach as working Sellerboard orders/stock processing
         print(f"DEBUG - COGS Data: Fetching from URL: {cogs_url[:100]}...")
-        response = requests.get(cogs_url, timeout=30)
+        
+        # Check if URL has required parameters (same as orders_analysis.py)
+        if 'sellerboard.com' in cogs_url and 'format=csv' not in cogs_url:
+            # Add CSV format if missing
+            separator = '&' if '?' in cogs_url else '?'
+            cogs_url = f"{cogs_url}{separator}format=csv"
+            print(f"DEBUG - COGS Data: Added format=csv to URL")
+        
+        # Create a session to handle cookies properly (same as orders_analysis.py)
+        session = requests.Session()
+        
+        # Add headers that might be expected by Sellerboard (same as orders_analysis.py)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/csv,application/csv,text/plain,*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+        }
+        
+        # First, try to get the initial response without following redirects (same as orders_analysis.py)
+        initial_response = session.get(cogs_url, timeout=30, allow_redirects=False, headers=headers)
+        
+        if initial_response.status_code == 302:
+            # Handle redirect manually to see what's happening (same as orders_analysis.py)
+            redirect_url = initial_response.headers.get('Location')
+            print(f"DEBUG - COGS Data: Got 302 redirect to: {redirect_url[:100] if redirect_url else 'None'}...")
+            
+            # Check if the redirect URL is a download URL
+            if redirect_url and 'download-report' in redirect_url:
+                print(f"DEBUG - COGS Data: Following redirect to download URL with session cookies")
+                # Try to follow the redirect with the session cookies (same as orders_analysis.py)
+                response = session.get(redirect_url, timeout=30, headers=headers)
+            else:
+                # Follow redirects normally
+                response = session.get(cogs_url, timeout=30, allow_redirects=True, headers=headers)
+        else:
+            response = initial_response
         
         print(f"DEBUG - COGS Data: Response status: {response.status_code}")
-        print(f"DEBUG - COGS Data: Response headers: {dict(response.headers)}")
         if response.status_code != 200:
             print(f"DEBUG - COGS Data: Response content preview: {response.text[:500]}")
         
@@ -6935,19 +6956,10 @@ def fetch_sellerboard_cogs_data(cogs_url):
             'total_products': len(inventory_data)
         }
         
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 401:
-            if 'download-report' in cogs_url:
-                raise ValueError(
-                    "Direct download URLs require authentication and are not supported. "
-                    "Please use the automation report URL instead.\n\n"
-                    "To get the correct URL:\n"
-                    "1. Go to Sellerboard → Reports → Cost of Goods Sold\n"
-                    "2. Click 'Share/Export' button\n"
-                    "3. Select 'Automated Report URL'\n"
-                    "4. Copy the URL (should look like: https://app.sellerboard.com/en/automation/reports?id=...&format=csv&t=...)"
-                )
-            else:
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR - COGS Data fetch failed: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            if e.response.status_code == 401:
                 raise ValueError(
                     "Authentication failed (401 Unauthorized). This usually means the token in your automation report URL has expired.\n\n"
                     "To fix this:\n"
@@ -6957,19 +6969,16 @@ def fetch_sellerboard_cogs_data(cogs_url):
                     "4. Update the URL in your settings\n\n"
                     "Note: Automation report URLs contain time-limited tokens that need to be refreshed periodically."
                 )
-        elif e.response.status_code == 403:
-            raise ValueError(
-                "Access forbidden (403). Please check that the report URL is correct and accessible."
-            )
+            elif e.response.status_code == 403:
+                raise ValueError(
+                    "Access forbidden (403). Please check that the report URL is correct and accessible."
+                )
+            else:
+                raise ValueError(f"HTTP error {e.response.status_code}: {str(e)}")
         else:
-            raise ValueError(f"HTTP error {e.response.status_code}: {str(e)}")
-    except requests.exceptions.RequestException as e:
-        raise ValueError(f"Network error when fetching Sellerboard COGS data: {str(e)}")
-    except ValueError:
-        # Re-raise ValueError (includes our custom error messages)
-        raise
+            raise ValueError(f"Network error when fetching Sellerboard COGS data: {str(e)}")
     except Exception as e:
-        print(f"ERROR - COGS Data fetch failed: {str(e)}")
+        print(f"ERROR - COGS Data processing failed: {str(e)}")
         raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
 @app.route('/api/expected-arrivals', methods=['GET'])

@@ -838,7 +838,7 @@ const AdminCompact = () => {
                       <button
                         onClick={async () => {
                           try {
-                            const allFeatures = ['smart_restock', 'missing_listings', 'reimbursements', 'file_manager', 'va_management'];
+                            const allFeatures = ['smart_restock', 'missing_listings', 'reimbursements', 'va_management'];
                             for (const userId of users.filter(u => u.user_type !== 'subuser').map(u => u.discord_id)) {
                               for (const featureKey of allFeatures) {
                                 await axios.post('/api/admin/user-features', {

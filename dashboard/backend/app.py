@@ -257,7 +257,7 @@ def get_dummy_users():
             "user_type": "subuser",
             "parent_user_id": "123456789012345678",
             "profile_configured": True,
-            "permissions": ["sellerboard_upload", "reimbursements_analysis"],
+            "permissions": ["reimbursements_analysis"],
             "last_activity": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
             "created_at": "2024-01-05T00:00:00Z",
             "updated_at": (datetime.utcnow() - timedelta(hours=6)).isoformat()
@@ -1484,7 +1484,7 @@ def discord_callback():
                 if valid_invitation.get('user_type') == 'subuser':
                     user_record['user_type'] = 'subuser'
                     user_record['parent_user_id'] = valid_invitation.get('parent_user_id')
-                    user_record['permissions'] = valid_invitation.get('permissions', ['sellerboard_upload'])
+                    user_record['permissions'] = valid_invitation.get('permissions', ['reimbursements_analysis'])
                     user_record['va_name'] = valid_invitation.get('va_name', '')
                     user_record['email'] = valid_invitation.get('email')
                 else:
@@ -4343,12 +4343,7 @@ def get_available_permissions():
         
         # Always include basic permissions
         basic_permissions = [
-            {
-                'key': 'sellerboard_upload',
-                'name': 'Sellerboard Upload',
-                'description': 'Upload Sellerboard reports',
-                'is_beta': False
-            },
+            # sellerboard_upload permission removed - using URL-based approach
             {
                 'key': 'reimbursements_analysis',
                 'name': 'Reimbursements Analysis',
@@ -4375,7 +4370,7 @@ def invite_subuser():
     try:
         data = request.json
         email = data.get('email')
-        permissions = data.get('permissions', ['sellerboard_upload'])  # Default to sellerboard upload permission
+        permissions = data.get('permissions', ['reimbursements_analysis'])  # Default to reimbursements analysis permission
         va_name = data.get('va_name', '')
         
         if not email:
@@ -4558,7 +4553,7 @@ def edit_subuser(subuser_id):
             valid_feature_keys = [key for key, info in main_user_features.items() if info.get('has_access')]
             
             # Include basic permissions
-            basic_permissions = ['sellerboard_upload', 'reimbursements_analysis', 'all']
+            basic_permissions = ['reimbursements_analysis', 'all']
             valid_permissions = basic_permissions + valid_feature_keys
             
             # Filter to only valid permissions
@@ -6721,7 +6716,6 @@ def init_feature_flags():
             ('ebay_lister', 'eBay Lister', 'Automated eBay listing management', True),
             ('missing_listings', 'Missing Listings', 'Track expected arrivals and missing listings', False),
             ('va_management', 'VA Management', 'Virtual assistant user management', False),
-            ('file_manager', 'File Manager', 'File upload and management system', False),
             ('lambda_deployment', 'Lambda Deployment', 'AWS Lambda function deployment', True)
         ]
         

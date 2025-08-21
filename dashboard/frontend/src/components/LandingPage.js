@@ -44,11 +44,7 @@ const LandingPage = () => {
       title: "Reimbursements",
       description: "Automated reimbursement analysis"
     },
-    {
-      icon: <FileText className="h-4 w-4 text-builders-500" />,
-      title: "File Manager",
-      description: "Centralized document management"
-    },
+    // File Manager removed - using URL-based approach
     {
       icon: <Database className="h-4 w-4 text-builders-500" />,
       title: "Sheet Setup",

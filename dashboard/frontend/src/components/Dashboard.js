@@ -35,7 +35,7 @@ import DiscountOpportunities from './dashboard/DiscountOpportunities';
 import AllProductAnalytics from './dashboard/AllProductAnalytics';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
-import FileManager from './dashboard/FileManager';
+// FileManager import removed - using URL-based approach
 import AdminCompact from './dashboard/AdminCompact';
 import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
@@ -153,13 +153,7 @@ const Dashboard = () => {
       beta: isFeatureBeta('ebay_lister')
     }] : []),
     
-    ...(hasFeatureAccess('file_manager') ? [{
-      name: 'File Manager', 
-      href: '/dashboard/files', 
-      icon: FileText, 
-      current: location.pathname === '/dashboard/files',
-      beta: isFeatureBeta('file_manager')
-    }] : []),
+    // File Manager removed - using URL-based approach
     
     // Sheet Setup is always visible
     { name: 'Sheet Setup', href: '/dashboard/sheet-config', icon: Database, current: location.pathname === '/dashboard/sheet-config' },
@@ -546,9 +540,7 @@ const Dashboard = () => {
                 <Route path="/ebay-lister" element={<EbayLister />} />
               )}
               
-              {hasFeatureAccess('file_manager') && (
-                <Route path="/files" element={<FileManager />} />
-              )}
+              {/* File Manager route removed - using URL-based approach */}
               
               {/* Admin-only routes */}
               {isAdmin && <Route path="/admin" element={<AdminCompact />} />}

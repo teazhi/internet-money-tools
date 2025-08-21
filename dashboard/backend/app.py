@@ -6864,18 +6864,15 @@ def fetch_sellerboard_cogs_data(cogs_url):
                 "Note: The URL you provided appears to be a direct download link which requires login."
             )
         
-        # Add headers to mimic browser request
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/csv,application/csv,text/plain,*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
+        # Use same simple approach as other Sellerboard reports
+        print(f"DEBUG - COGS Data: Fetching from URL: {cogs_url[:100]}...")
+        response = requests.get(cogs_url, timeout=30)
         
-        # Fetch the CSV data from the URL with proper headers
-        response = requests.get(cogs_url, headers=headers, timeout=30)
+        print(f"DEBUG - COGS Data: Response status: {response.status_code}")
+        print(f"DEBUG - COGS Data: Response headers: {dict(response.headers)}")
+        if response.status_code != 200:
+            print(f"DEBUG - COGS Data: Response content preview: {response.text[:500]}")
+        
         response.raise_for_status()
         
         # Parse CSV data
@@ -6952,7 +6949,13 @@ def fetch_sellerboard_cogs_data(cogs_url):
                 )
             else:
                 raise ValueError(
-                    "Authentication failed (401 Unauthorized). Please check that the automation report URL is correct and accessible."
+                    "Authentication failed (401 Unauthorized). This usually means the token in your automation report URL has expired.\n\n"
+                    "To fix this:\n"
+                    "1. Go to Sellerboard → Reports → Cost of Goods Sold\n"
+                    "2. Click 'Share/Export' button\n"
+                    "3. Generate a new 'Automated Report URL'\n"
+                    "4. Update the URL in your settings\n\n"
+                    "Note: Automation report URLs contain time-limited tokens that need to be refreshed periodically."
                 )
         elif e.response.status_code == 403:
             raise ValueError(

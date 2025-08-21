@@ -280,6 +280,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                     </>
                   )}
                 </div>
+              </div>
             </div>
           </td>
         );

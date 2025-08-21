@@ -113,6 +113,11 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
 
   // Drag and drop handlers
   const handleDragStart = (e, columnKey, tableType) => {
+    const column = columnDefinitions[tableType]?.[columnKey];
+    if (!column || !column.draggable) {
+      e.preventDefault();
+      return;
+    }
     setDraggedColumn({ key: columnKey, tableType });
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -126,6 +131,14 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     e.preventDefault();
     
     if (!draggedColumn || draggedColumn.tableType !== tableType) {
+      setDraggedColumn(null);
+      return;
+    }
+
+    // Prevent dropping on non-draggable columns
+    const targetColumn = columnDefinitions[tableType]?.[targetColumnKey];
+    const draggedCol = columnDefinitions[tableType]?.[draggedColumn.key];
+    if (!targetColumn || !draggedCol || !targetColumn.draggable || !draggedCol.draggable) {
       setDraggedColumn(null);
       return;
     }

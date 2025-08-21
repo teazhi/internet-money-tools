@@ -17,6 +17,39 @@ import {
   GripVertical,
   RotateCcw
 } from 'lucide-react';
+import { useProductImage } from '../hooks/useProductImages';
+
+// Product image component that uses optimized backend API
+const ProductImage = ({ asin, productName }) => {
+  const { imageUrl, loading, error } = useProductImage(asin);
+
+  if (loading) {
+    return (
+      <div className="h-8 w-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <div className="h-3 w-3 bg-gray-300 rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error || !imageUrl) {
+    return (
+      <div className="h-8 w-8 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
+        <Package className="h-4 w-4 text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-8 w-8 rounded-md overflow-hidden border border-gray-200 bg-white">
+      <img
+        src={imageUrl}
+        alt={productName || `Product ${asin}`}
+        className="h-full w-full object-cover"
+        loading="lazy"
+      />
+    </div>
+  );
+};
 
 const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Removed tab state - SmartRestockAlerts now only shows recommendations
@@ -36,7 +69,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [columnOrders, setColumnOrders] = useState({
     recommendations: JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null') || [
-      'product', 'actions', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order'
+      'product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'
     ]
   });
   
@@ -65,7 +98,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Column definitions
   const columnDefinitions = {
     recommendations: {
-      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false },
       priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true },
       current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
       days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
@@ -127,7 +160,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Reset column order to default
   const resetColumnOrder = (tableType) => {
     const defaultOrders = {
-      recommendations: ['product', 'actions', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order']
+      recommendations: ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions']
     };
     
     setColumnOrders(prev => ({
@@ -144,15 +177,34 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       case 'product':
         return (
           <td key={columnKey} className="px-3 py-2">
-            <div>
-              <div className="text-xs font-medium text-gray-900">
-                {alert.product_name.length > 50 
-                  ? alert.product_name.substring(0, 50) + '...'
-                  : alert.product_name
-                }
+            <div className="flex items-center space-x-2">
+              <div className="flex-shrink-0">
+                <a 
+                  href={`https://www.amazon.com/dp/${alert.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  <ProductImage asin={alert.asin} productName={alert.product_name} />
+                </a>
               </div>
-              <div className="text-xs text-gray-500">
-                {alert.asin}
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium text-gray-900">
+                  <a 
+                    href={`https://www.amazon.com/dp/${alert.asin}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-blue-600 transition-colors"
+                    title={alert.product_name}
+                  >
+                    {alert.product_name.length > 45 
+                      ? alert.product_name.substring(0, 45) + '...'
+                      : alert.product_name
+                    }
+                  </a>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {alert.asin}
                 {(enhanced_analytics?.[alert.asin]?.stock_info?.Source || 
                   enhanced_analytics?.[alert.asin]?.stock_info?.source ||
                   enhanced_analytics?.[alert.asin]?.stock_info?.['Source Link'] ||

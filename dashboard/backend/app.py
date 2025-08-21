@@ -6859,36 +6859,40 @@ def fetch_sellerboard_cogs_data(cogs_url):
             cogs_url = f"{cogs_url}{separator}format=csv"
             print(f"DEBUG - COGS Data: Added format=csv to URL")
         
-        # Create a session to handle cookies properly (same as orders_analysis.py)
-        session = requests.Session()
+        # Debug: Check if the URL structure looks correct
+        print(f"DEBUG - COGS Data: Final URL contains: id={('id=' in cogs_url)}, format=csv={('format=csv' in cogs_url)}, t={('&t=' in cogs_url)}")
         
-        # Add headers that might be expected by Sellerboard (same as orders_analysis.py)
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/csv,application/csv,text/plain,*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        }
+        # Try both approaches: first the simple orders_report.py approach, then the complex one
+        print(f"DEBUG - COGS Data: Trying simple approach first (like orders_report.py)")
         
-        # First, try to get the initial response without following redirects (same as orders_analysis.py)
-        initial_response = session.get(cogs_url, timeout=30, allow_redirects=False, headers=headers)
-        
-        if initial_response.status_code == 302:
-            # Handle redirect manually to see what's happening (same as orders_analysis.py)
-            redirect_url = initial_response.headers.get('Location')
-            print(f"DEBUG - COGS Data: Got 302 redirect to: {redirect_url[:100] if redirect_url else 'None'}...")
-            
-            # Check if the redirect URL is a download URL
-            if redirect_url and 'download-report' in redirect_url:
-                print(f"DEBUG - COGS Data: Following redirect to download URL with session cookies")
-                # Try to follow the redirect with the session cookies (same as orders_analysis.py)
-                response = session.get(redirect_url, timeout=30, headers=headers)
+        try:
+            # Simple approach first - exactly like orders_report.py
+            simple_response = requests.get(cogs_url, timeout=30)
+            if simple_response.status_code == 200:
+                print(f"DEBUG - COGS Data: Simple approach worked! Status: {simple_response.status_code}")
+                response = simple_response
             else:
-                # Follow redirects normally
-                response = session.get(cogs_url, timeout=30, allow_redirects=True, headers=headers)
-        else:
-            response = initial_response
+                print(f"DEBUG - COGS Data: Simple approach failed with status: {simple_response.status_code}")
+                # Fall back to complex approach
+                raise requests.exceptions.HTTPError(response=simple_response)
+        except:
+            print(f"DEBUG - COGS Data: Falling back to complex session-based approach")
+            
+            # Create a session to handle cookies properly (same as orders_analysis.py)
+            session = requests.Session()
+            
+            # Add headers that might be expected by Sellerboard (same as orders_analysis.py)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/csv,application/csv,text/plain,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+            }
+            
+            # Try the complex approach with allow_redirects=True
+            print(f"DEBUG - COGS Data: Using session with allow_redirects=True")
+            response = session.get(cogs_url, timeout=30, allow_redirects=True, headers=headers)
         
         print(f"DEBUG - COGS Data: Response status: {response.status_code}")
         if response.status_code != 200:

@@ -7163,7 +7163,7 @@ def fetch_sellerboard_cogs_data(cogs_url):
     except Exception as e:
         raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
-@app.route('/api/expected-arrivals', methods=['GET'])
+@app.route('/api/missing-listings', methods=['GET'])
 @login_required
 def get_expected_arrivals():
     """Get items purchased that don't have Amazon listings created yet"""

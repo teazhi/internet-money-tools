@@ -131,9 +131,9 @@ const Dashboard = () => {
     
     ...(hasFeatureAccess('missing_listings') ? [{
       name: 'Missing Listings', 
-      href: '/dashboard/expected-arrivals', 
+      href: '/dashboard/missing-listings', 
       icon: Package, 
-      current: location.pathname === '/dashboard/expected-arrivals',
+      current: location.pathname === '/dashboard/missing-listings',
       beta: isFeatureBeta('missing_listings')
     }] : []),
     
@@ -535,7 +535,7 @@ const Dashboard = () => {
               )}
               
               {hasFeatureAccess('missing_listings') && (
-                <Route path="/expected-arrivals" element={<ExpectedArrivals />} />
+                <Route path="/missing-listings" element={<ExpectedArrivals />} />
               )}
               
               {hasFeatureAccess('reimbursements') && (

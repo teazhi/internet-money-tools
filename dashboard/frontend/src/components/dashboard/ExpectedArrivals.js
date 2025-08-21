@@ -31,7 +31,7 @@ const ExpectedArrivals = () => {
         params.append('scope', scope);
       }
       
-      const response = await axios.get(`/api/expected-arrivals?${params.toString()}`, { withCredentials: true });
+      const response = await axios.get(`/api/missing-listings?${params.toString()}`, { withCredentials: true });
       
       if (response.data.missing_listings) {
         setMissingListings(response.data.missing_listings);

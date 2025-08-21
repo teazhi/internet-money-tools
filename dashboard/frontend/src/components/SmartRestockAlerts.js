@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   TrendingUp, 
@@ -21,31 +21,43 @@ import { useProductImage } from '../hooks/useProductImages';
 
 // Product image component that uses optimized backend API
 const ProductImage = ({ asin, productName }) => {
+  // Always show a visible element to debug
+  const [imgError, setImgError] = useState(false);
   const { imageUrl, loading, error } = useProductImage(asin);
+  
+  // For debugging - always show something visible
+  if (!asin) {
+    return (
+      <div className="h-8 w-8 rounded-md bg-red-100 border border-red-300 flex items-center justify-center" title="No ASIN provided">
+        <span className="text-xs text-red-600">!</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="h-8 w-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center">
+      <div className="h-8 w-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center" title="Loading image...">
         <div className="h-3 w-3 bg-gray-300 rounded animate-pulse" />
       </div>
     );
   }
 
-  if (error || !imageUrl) {
+  if (error || !imageUrl || imgError) {
     return (
-      <div className="h-8 w-8 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
+      <div className="h-8 w-8 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${error ? 'Error' : imgError ? 'Image failed to load' : 'No URL'}`}>
         <Package className="h-4 w-4 text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="h-8 w-8 rounded-md overflow-hidden border border-gray-200 bg-white">
+    <div className="h-8 w-8 rounded-md overflow-hidden border border-gray-200 bg-white" title={`Product ${asin}`}>
       <img
         src={imageUrl}
         alt={productName || `Product ${asin}`}
         className="h-full w-full object-cover"
         loading="lazy"
+        onError={() => setImgError(true)}
       />
     </div>
   );
@@ -67,10 +79,21 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   
   // State for column ordering
   const [draggedColumn, setDraggedColumn] = useState(null);
+  
+  // Force product to be first and ensure it's included
+  const getColumnOrder = () => {
+    const saved = JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null');
+    if (saved) {
+      // Remove product from saved order if it exists
+      const filtered = saved.filter(col => col !== 'product');
+      // Always put product first
+      return ['product', ...filtered];
+    }
+    return ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'];
+  };
+  
   const [columnOrders, setColumnOrders] = useState({
-    recommendations: JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null') || [
-      'product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'
-    ]
+    recommendations: getColumnOrder()
   });
   
   // Extract data first (before any conditional returns to avoid hook order issues)
@@ -152,6 +175,13 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       const [draggedItem] = newOrder.splice(draggedIndex, 1);
       // Insert at new position
       newOrder.splice(targetIndex, 0, draggedItem);
+      
+      // Ensure product always stays first
+      const productIndex = newOrder.indexOf('product');
+      if (productIndex > 0) {
+        newOrder.splice(productIndex, 1);
+        newOrder.unshift('product');
+      }
 
       // Update state
       setColumnOrders(prev => ({
@@ -159,8 +189,9 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
         [tableType]: newOrder
       }));
 
-      // Save to localStorage
-      localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(newOrder));
+      // Save to localStorage (without product since we always add it first)
+      const toSave = newOrder.filter(col => col !== 'product');
+      localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(toSave));
     }
     
     setDraggedColumn(null);
@@ -186,6 +217,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
 
   // Render cell content for recommendations table
   const renderRecommendationCell = (columnKey, alert) => {
+    console.log('Rendering cell:', columnKey, alert.asin);
     switch (columnKey) {
       case 'product':
         return (
@@ -660,14 +692,20 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                         <th 
                           key={columnKey}
                           className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide ${
-                            column.draggable ? 'cursor-move' : ''
+                            column.draggable ? 'cursor-move' : 'cursor-default'
                           } ${
                             draggedColumn?.key === columnKey ? 'opacity-50' : ''
                           }`}
-                          draggable={column.draggable}
-                          onDragStart={(e) => column.draggable && handleDragStart(e, columnKey, 'recommendations')}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, columnKey, 'recommendations')}
+                          draggable={column.draggable === true}
+                          onDragStart={(e) => {
+                            if (!column.draggable) {
+                              e.preventDefault();
+                              return;
+                            }
+                            handleDragStart(e, columnKey, 'recommendations');
+                          }}
+                          onDragOver={column.draggable ? handleDragOver : undefined}
+                          onDrop={(e) => column.draggable ? handleDrop(e, columnKey, 'recommendations') : e.preventDefault()}
                           onDragEnd={handleDragEnd}
                         >
                           <div className="flex items-center space-x-1">

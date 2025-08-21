@@ -6715,6 +6715,7 @@ def init_feature_flags():
             ('reimbursements', 'Reimbursement Analyzer', 'FBA reimbursement tracking and analysis', False),
             ('ebay_lister', 'eBay Lister', 'Automated eBay listing management', True),
             ('missing_listings', 'Missing Listings', 'Track expected arrivals and missing listings', False),
+            ('purchase_manager', 'Purchase Manager', 'VA purchase tracking with live inventory integration', True),
             ('va_management', 'VA Management', 'Virtual assistant user management', False),
             ('lambda_deployment', 'Lambda Deployment', 'AWS Lambda function deployment', True)
         ]

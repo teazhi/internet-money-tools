@@ -7021,16 +7021,24 @@ def get_expected_arrivals():
         sellerboard_cogs_url = config_user_record.get('sellerboard_cogs_url')
         
         if sellerboard_cogs_url:
-            # Use Sellerboard COGS data as the inventory source
+            # Try to use Sellerboard COGS data as the inventory source
             try:
                 inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
+                print(f"DEBUG - Expected Arrivals: Successfully fetched COGS data with {inventory_data.get('total_products', 0)} products")
                 
                 # Still need Google Sheets for purchase data
                 if not sheet_id or not google_tokens.get('access_token'):
                     return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings for purchase data."}), 400
                     
             except Exception as e:
-                return jsonify({"error": f"Failed to fetch Sellerboard COGS data: {str(e)}"}), 500
+                print(f"DEBUG - Expected Arrivals: COGS data fetch failed, falling back to Google Sheets: {str(e)}")
+                # Fall back to Google Sheets approach instead of failing
+                inventory_data = None
+                if not sheet_id or not google_tokens.get('access_token'):
+                    return jsonify({
+                        "error": f"COGS data unavailable ({str(e)[:100]}...) and Google Sheet not configured. Please either fix the COGS URL or set up Google Sheets in Settings.",
+                        "cogs_error": str(e)
+                    }), 400
         else:
             # Fallback to original logic
             if not sheet_id or not google_tokens.get('access_token'):
@@ -7216,7 +7224,7 @@ def get_expected_arrivals():
         # Get inventory data (ASINs that have Amazon listings)
         all_known_asins = set()
         
-        if sellerboard_cogs_url:
+        if sellerboard_cogs_url and inventory_data:
             # Use Sellerboard COGS data (complete inventory)
             print("DEBUG - Missing Listings: Using Sellerboard COGS data for inventory")
             asin_column = inventory_data['asin_column']
@@ -7231,6 +7239,10 @@ def get_expected_arrivals():
             
         else:
             # Fallback to original Sellerboard Analytics approach
+            if sellerboard_cogs_url and not inventory_data:
+                print("DEBUG - Missing Listings: COGS data failed, falling back to Sellerboard Analytics approach")
+            else:
+                print("DEBUG - Missing Listings: No COGS URL configured, using Sellerboard Analytics approach")
             try:
                 # Get complete Sellerboard analysis (includes all ASINs with any history)
                 # Create a new analysis instance with the sellerboard URL

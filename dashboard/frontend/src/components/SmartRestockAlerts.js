@@ -350,13 +350,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       case 'already_ordered':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs">
-            {/* Debug: Check what data is available for this field */}
-            {enhanced_analytics?.[alert.asin] && (
-              <div className="text-xs text-gray-400 mb-1">
-                Restock: {enhanced_analytics[alert.asin].restock ? 'Yes' : 'No'} | 
-                MPA: {enhanced_analytics[alert.asin].restock?.monthly_purchase_adjustment || 'None'}
-              </div>
-            )}
             
             {enhanced_analytics?.[alert.asin]?.restock?.monthly_purchase_adjustment > 0 ? (
               <div className="flex items-center space-x-1">

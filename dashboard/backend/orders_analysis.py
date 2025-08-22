@@ -714,27 +714,34 @@ class EnhancedOrdersAnalysis:
     def get_recent_2_months_purchases(self, asin: str, purchase_analytics: Dict) -> int:
         """Get the quantity purchased for this ASIN in the last 2 months (from last 2 worksheets)"""
         if not purchase_analytics:
+            print(f"DEBUG - get_recent_2_months_purchases: No purchase_analytics provided for {asin}")
             return 0
         
         # First check the dedicated recent 2 months purchases data
         recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
+        print(f"DEBUG - get_recent_2_months_purchases: Checking ASIN {asin}")
+        print(f"DEBUG - Available ASINs in recent_2_months_purchases: {list(recent_2_months_data.keys())[:10]}...")  # First 10 ASINs
+        
         if asin in recent_2_months_data:
             qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
-            pass  # Debug print removed
+            print(f"DEBUG - Found {asin} in recent_2_months_purchases: {qty_purchased} units")
             return qty_purchased
         
         # Fallback to velocity analysis approach
-        velocity_analysis = purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
+        velocity_analysis_data = purchase_analytics.get('purchase_velocity_analysis', {})
+        print(f"DEBUG - Available ASINs in purchase_velocity_analysis: {list(velocity_analysis_data.keys())[:10]}...")  # First 10 ASINs
+        
+        velocity_analysis = velocity_analysis_data.get(asin, {})
         if velocity_analysis:
             days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
             
             # If purchased within the last 2 months (last 60 days), return the last purchase quantity
             if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
-                pass  # Debug print removed
+                print(f"DEBUG - Found {asin} in velocity_analysis (within 60 days): {qty} units")
                 return qty
         
-        pass  # Debug print removed
+        print(f"DEBUG - ASIN {asin} not found in any purchase analytics data")
         return 0
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:

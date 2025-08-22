@@ -10747,12 +10747,28 @@ def get_purchases():
                 'message': 'User configuration not found'
             }), 400
 
+        # Determine which user's purchases to fetch
+        # For VAs/sub-users: show their parent user's purchases
+        # For main users: show their own purchases
+        target_user_id = discord_id
+        
+        if user_record.get('user_type') == 'subuser':
+            # This is a VA/sub-user - get their parent's purchases
+            parent_user = get_parent_user_record(discord_id)
+            if parent_user:
+                target_user_id = parent_user.get('discord_id', discord_id)
+                print(f"VA user {discord_id} fetching purchases for parent user {target_user_id}")
+            else:
+                print(f"Warning: VA user {discord_id} has no parent user found")
+        
+        print(f"Fetching purchases for user_id: {target_user_id} (original requester: {discord_id})")
+        
         # Get purchases from database
         cursor.execute("""
             SELECT * FROM purchases 
             WHERE user_id = ? 
             ORDER BY created_at DESC
-        """, (discord_id,))
+        """, (target_user_id,))
         
         # Convert to dictionary format
         purchases = []
@@ -10761,8 +10777,16 @@ def get_purchases():
             purchases.append(purchase)
         
         # Enrich with live Sellerboard data
-        orders_url = user_record.get('sellerboard_orders_url')
-        stock_url = user_record.get('sellerboard_stock_url')
+        # For VAs, use parent user's Sellerboard configuration
+        config_user = user_record
+        if user_record.get('user_type') == 'subuser':
+            parent_user = get_parent_user_record(discord_id)
+            if parent_user:
+                config_user = parent_user
+                print(f"Using parent user's Sellerboard config for VA {discord_id}")
+        
+        orders_url = config_user.get('sellerboard_orders_url')
+        stock_url = config_user.get('sellerboard_stock_url')
         
         if orders_url and stock_url:
             from orders_analysis import EnhancedOrdersAnalysis
@@ -10781,7 +10805,7 @@ def get_purchases():
                     orders_df, 
                     target_date - timedelta(days=30), 
                     target_date, 
-                    user_record.get('timezone', 'UTC')
+                    config_user.get('timezone', 'UTC')
                 )
                 monthly_sales = analyzer.asin_sales_count(orders_for_month)
                 

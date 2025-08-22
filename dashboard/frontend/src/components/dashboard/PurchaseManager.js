@@ -201,36 +201,62 @@ const PurchaseManager = () => {
       setLoading(true);
       setError(''); // Clear any previous errors
       
-      console.log('Fetching purchases...');
+      console.log('🔍 FETCHING PURCHASES - User Info:');
+      console.log('  User Type:', user?.user_type);
+      console.log('  Discord ID:', user?.discord_id);
+      console.log('  Username:', user?.discord_username);
+      console.log('  Is VA:', displayIsVA);
+      console.log('  Is Main User:', displayIsMainUser);
+      console.log('  Admin Impersonating:', user?.admin_impersonating);
       
       const response = await axios.get('/api/purchases', {
         withCredentials: true
       });
       
-      console.log('Purchase response:', response.data);
+      console.log('📦 RAW API RESPONSE:');
+      console.log('  Status:', response.status);
+      console.log('  Success:', response.data.success);
+      console.log('  Raw Data:', response.data);
       
       if (response.data.success) {
         // Validate the purchases array
         const purchases = response.data.purchases || [];
-        console.log('Received purchases:', purchases.length);
+        console.log('📊 PURCHASE ANALYSIS:');
+        console.log('  Total received:', purchases.length);
+        console.log('  Raw purchases:', purchases);
+        
+        // Log details about each purchase
+        purchases.forEach((purchase, index) => {
+          console.log(`  Purchase ${index + 1}:`, {
+            id: purchase?.id,
+            name: purchase?.name,
+            user_id: purchase?.user_id,
+            created_by: purchase?.created_by,
+            assigned_to: purchase?.assigned_to,
+            status: purchase?.status
+          });
+        });
         
         // Filter out any invalid purchases
         const validPurchases = purchases.filter(purchase => {
           if (!purchase || typeof purchase !== 'object') {
-            console.warn('Invalid purchase object filtered out:', purchase);
+            console.warn('❌ Invalid purchase object filtered out:', purchase);
             return false;
           }
           return true;
         });
         
-        console.log('Valid purchases after filtering:', validPurchases.length);
+        console.log('✅ Valid purchases after filtering:', validPurchases.length);
+        console.log('✅ Setting purchases state with:', validPurchases);
         setPurchases(validPurchases);
       } else {
-        console.warn('Purchase API returned success: false');
-        setError('Failed to load purchases');
+        console.warn('❌ Purchase API returned success: false');
+        console.warn('Error message:', response.data.message);
+        setError(response.data.message || 'Failed to load purchases');
       }
     } catch (err) {
-      console.error('Error fetching purchases:', err);
+      console.error('❌ Error fetching purchases:', err);
+      console.error('❌ Error response:', err.response?.data);
       
       if (err.response?.status === 403) {
         setError('Access denied. Please check your permissions or log in again.');
@@ -507,18 +533,31 @@ const PurchaseManager = () => {
             Override: {roleOverride || 'None'}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4 mb-3 text-xs">
+        <div className="grid grid-cols-3 gap-4 mb-3 text-xs">
           <div>
             <strong>User Info:</strong><br/>
             Type: {user?.user_type || 'undefined'}<br/>
             Impersonating: {user?.admin_impersonating ? 'Yes' : 'No'}<br/>
-            Username: {user?.discord_username || 'undefined'}
+            Username: {user?.discord_username || 'undefined'}<br/>
+            Discord ID: {user?.discord_id || 'undefined'}
           </div>
           <div>
             <strong>Role Detection:</strong><br/>
             Original isVA: {isVA ? 'Yes' : 'No'}<br/>
             Final isVA: {finalIsVA ? 'Yes' : 'No'}<br/>
-            Display isVA: {displayIsVA ? 'Yes' : 'No'}
+            Display isVA: {displayIsVA ? 'Yes' : 'No'}<br/>
+            Loading: {loading ? 'Yes' : 'No'}
+          </div>
+          <div>
+            <strong>Purchases:</strong><br/>
+            Count: {purchases.length}<br/>
+            Error: {error || 'None'}<br/>
+            <button 
+              onClick={fetchPurchases}
+              className="mt-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs"
+            >
+              🔄 Refresh
+            </button>
           </div>
         </div>
         <div className="flex items-center space-x-3">

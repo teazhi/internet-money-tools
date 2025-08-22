@@ -65,6 +65,14 @@ class FormErrorBoundary extends Component {
 const PurchaseManager = () => {
   const { user } = useAuth();
   const [purchases, setPurchases] = useState([]);
+  
+  // Safety check to ensure purchases is always an array
+  useEffect(() => {
+    if (!Array.isArray(purchases)) {
+      console.warn('Purchases state corrupted, resetting to empty array:', purchases);
+      setPurchases([]);
+    }
+  }, [purchases]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingRow, setEditingRow] = useState(null);
@@ -83,15 +91,69 @@ const PurchaseManager = () => {
   });
 
   // Determine if user is VA (sub-user) or main user
+  // During impersonation, we need to check the actual user type being impersonated
   const isVA = user?.user_type === 'sub' || user?.user_type === 'va';
-  const isMainUser = !user?.user_type || user?.user_type === 'main';
+  const isMainUser = user?.user_type === 'main' || (!user?.user_type && !user?.admin_impersonating);
+  
+  // Special handling for admin impersonation
+  // If admin is impersonating, we need to determine the role of the impersonated user
+  const effectiveRole = React.useMemo(() => {
+    if (user?.admin_impersonating) {
+      console.log('Admin impersonating user, checking role...', user);
+      
+      // During impersonation, check various ways the user type might be indicated
+      let impersonatedIsVA = false;
+      let impersonatedIsMainUser = false;
+      
+      // Check if user_type is explicitly set
+      if (user?.user_type === 'sub' || user?.user_type === 'va') {
+        impersonatedIsVA = true;
+      } else if (user?.user_type === 'main') {
+        impersonatedIsMainUser = true;
+      } else {
+        // Fallback: check if there are any indicators in the user object
+        // If no explicit user_type during impersonation, we might need to check other fields
+        // For now, let's check if the Discord username contains 'va' or similar indicators
+        const username = (user?.discord_username || '').toLowerCase();
+        if (username.includes('va') || username.includes('assistant')) {
+          console.log('Detected VA user based on username pattern');
+          impersonatedIsVA = true;
+        } else {
+          // Default to main user if no clear indication
+          impersonatedIsMainUser = true;
+        }
+      }
+      
+      console.log('Impersonation role determined:', { impersonatedIsVA, impersonatedIsMainUser });
+      
+      return {
+        isVA: impersonatedIsVA,
+        isMainUser: impersonatedIsMainUser
+      };
+    }
+    return { isVA, isMainUser };
+  }, [user, isVA, isMainUser]);
+  
+  const displayIsVA = effectiveRole.isVA;
+  const displayIsMainUser = effectiveRole.isMainUser;
+  
+  // Temporary role override for debugging during impersonation
+  const [roleOverride, setRoleOverride] = useState(null);
+  
+  const displayIsVA = roleOverride === 'va' ? true : roleOverride === 'manager' ? false : displayIsVA;
+  const displayIsMainUser = roleOverride === 'manager' ? true : roleOverride === 'va' ? false : displayIsMainUser;
   
   // Debug logging
   console.log('Purchase Manager - User Info:', {
     user_type: user?.user_type,
     discord_id: user?.discord_id,
-    isVA,
-    isMainUser
+    admin_impersonating: user?.admin_impersonating,
+    discord_username: user?.discord_username,
+    original_isVA: isVA,
+    original_isMainUser: isMainUser,
+    final_isVA: displayIsVA,
+    final_isMainUser: displayIsMainUser,
+    full_user_object: user
   });
 
   // Error boundary for debugging
@@ -103,35 +165,94 @@ const PurchaseManager = () => {
   }, []);
 
   useEffect(() => {
-    fetchPurchases();
-  }, []);
+    // Only fetch purchases if user is properly loaded
+    if (user && user.discord_id) {
+      console.log('User loaded, fetching purchases for:', user.discord_id);
+      fetchPurchases();
+    } else {
+      console.log('User not loaded yet, skipping purchase fetch');
+      setLoading(false);
+    }
+  }, [user]);
 
   const fetchPurchases = async () => {
     try {
       setLoading(true);
+      setError(''); // Clear any previous errors
+      
+      console.log('Fetching purchases...');
+      
       const response = await axios.get('/api/purchases', {
         withCredentials: true
       });
       
+      console.log('Purchase response:', response.data);
+      
       if (response.data.success) {
-        setPurchases(response.data.purchases);
+        // Validate the purchases array
+        const purchases = response.data.purchases || [];
+        console.log('Received purchases:', purchases.length);
+        
+        // Filter out any invalid purchases
+        const validPurchases = purchases.filter(purchase => {
+          if (!purchase || typeof purchase !== 'object') {
+            console.warn('Invalid purchase object filtered out:', purchase);
+            return false;
+          }
+          return true;
+        });
+        
+        console.log('Valid purchases after filtering:', validPurchases.length);
+        setPurchases(validPurchases);
       } else {
+        console.warn('Purchase API returned success: false');
         setError('Failed to load purchases');
       }
     } catch (err) {
       console.error('Error fetching purchases:', err);
-      setError('Failed to load purchases. Please try again.');
+      
+      if (err.response?.status === 403) {
+        setError('Access denied. Please check your permissions or log in again.');
+      } else if (err.response?.status === 401) {
+        setError('Authentication required. Please log in again.');
+      } else {
+        setError('Failed to load purchases. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const extractASIN = (amazonUrl) => {
-    if (!amazonUrl || typeof amazonUrl !== 'string') {
+    try {
+      // Multiple safety checks
+      if (amazonUrl === null || amazonUrl === undefined) {
+        console.warn('extractASIN: amazonUrl is null or undefined');
+        return '';
+      }
+      
+      if (typeof amazonUrl !== 'string') {
+        console.warn('extractASIN: amazonUrl is not a string:', typeof amazonUrl, amazonUrl);
+        return '';
+      }
+      
+      if (amazonUrl.trim() === '') {
+        console.warn('extractASIN: amazonUrl is empty string');
+        return '';
+      }
+      
+      const match = amazonUrl.match(/\/dp\/([A-Z0-9]{10})/i);
+      const result = match ? match[1] : '';
+      
+      if (!result) {
+        console.warn('extractASIN: No ASIN found in URL:', amazonUrl);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('extractASIN: Error processing URL:', amazonUrl, error);
       return '';
     }
-    const match = amazonUrl.match(/\/dp\/([A-Z0-9]{10})/i);
-    return match ? match[1] : '';
   };
 
   const parseBulkInput = (input) => {
@@ -355,23 +476,56 @@ const PurchaseManager = () => {
 
   return (
     <div className="space-y-6">
+      {/* Debug Panel - Only show during impersonation */}
+      {user?.admin_impersonating && (
+        <div className="card bg-yellow-50 border-yellow-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-yellow-800">🔧 Debug Panel (Impersonation Mode)</h4>
+            <div className="text-xs text-yellow-600">
+              Detected: {finalIsVA ? 'VA' : 'Manager'} | Override: {roleOverride || 'None'}
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-xs text-yellow-700">Role Override:</span>
+            <button
+              onClick={() => setRoleOverride('va')}
+              className={`px-2 py-1 text-xs rounded ${roleOverride === 'va' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              Force VA Mode
+            </button>
+            <button
+              onClick={() => setRoleOverride('manager')}
+              className={`px-2 py-1 text-xs rounded ${roleOverride === 'manager' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              Force Manager Mode
+            </button>
+            <button
+              onClick={() => setRoleOverride(null)}
+              className="px-2 py-1 text-xs rounded bg-gray-300 text-gray-700"
+            >
+              Auto Detect
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className={`rounded-lg p-6 text-white ${
-        isVA 
+        displayIsVA 
           ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
           : 'bg-gradient-to-r from-green-500 to-green-600'
       }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-white/20 rounded-lg">
-              {isVA ? <ClipboardList className="h-6 w-6" /> : <ShoppingCart className="h-6 w-6" />}
+              {displayIsVA ? <ClipboardList className="h-6 w-6" /> : <ShoppingCart className="h-6 w-6" />}
             </div>
             <div>
               <h1 className="text-2xl font-bold">
-                {isVA ? 'Purchase Tasks' : 'Purchase Manager'}
+                {displayIsVA ? 'Purchase Tasks' : 'Purchase Manager'}
               </h1>
-              <p className={isVA ? 'text-blue-100' : 'text-green-100'}>
-                {isVA 
+              <p className={displayIsVA ? 'text-blue-100' : 'text-green-100'}>
+                {displayIsVA 
                   ? 'Review and complete purchase requests' 
                   : 'Create purchase requests for your VA team'
                 }
@@ -382,13 +536,13 @@ const PurchaseManager = () => {
           {/* Role indicator */}
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2 bg-white/20 px-3 py-1 rounded-lg">
-              {isVA ? <User className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+              {displayIsVA ? <User className="h-4 w-4" /> : <Users className="h-4 w-4" />}
               <span className="text-sm font-medium">
-                {isVA ? 'VA Mode' : 'Manager Mode'}
+                {displayIsVA ? 'VA Mode' : 'Manager Mode'}
               </span>
             </div>
             
-            {isMainUser && (
+            {displayIsMainUser && (
               <div className="flex space-x-2">
                 <button
                   onClick={() => setShowBulkForm(true)}
@@ -446,7 +600,7 @@ const PurchaseManager = () => {
       )}
 
       {/* Bulk Import Form - Main User Only */}
-      {showBulkForm && isMainUser && (
+      {showBulkForm && displayIsMainUser && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="heading-sm">Bulk Import Purchase Requests</h3>
@@ -602,7 +756,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
       )}
 
       {/* Add New Purchase Form - Main User Only */}
-      {showAddForm && isMainUser && (
+      {showAddForm && displayIsMainUser && (
         <FormErrorBoundary onReset={() => {
           setShowAddForm(false);
           setNewPurchase({
@@ -729,38 +883,43 @@ https://target.com/item456    https://amazon.com/dp/B002345678
       {/* Purchase List */}
       <div className="card">
         <h3 className="heading-sm mb-4">
-          {isVA ? 'Purchase Tasks Queue' : 'Purchase Requests'}
+          {displayIsVA ? 'Purchase Tasks Queue' : 'Purchase Requests'}
         </h3>
         
-        {purchases.length === 0 ? (
+        {!Array.isArray(purchases) || purchases.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p>{isVA ? 'No purchase tasks assigned' : 'No purchase requests created'}</p>
+            <p>{displayIsVA ? 'No purchase tasks assigned' : 'No purchase requests created'}</p>
             <p className="text-sm">
-              {isVA 
+              {displayIsVA 
                 ? 'Check back later for new tasks from your manager' 
                 : 'Create your first purchase request to get started'
               }
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Product</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Stock Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Current Inventory</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Target Qty</th>
-                  {isVA && <th className="text-left py-3 px-4 font-medium text-gray-600">Progress</th>}
-                  {isMainUser && <th className="text-left py-3 px-4 font-medium text-gray-600">VA Progress</th>}
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">
-                    {isVA ? 'Purchase Actions' : 'Status'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {purchases.filter(purchase => purchase && typeof purchase === 'object').map((purchase) => {
+          <FormErrorBoundary onReset={() => {
+            console.log('Table error boundary reset');
+            setPurchases([]);
+            fetchPurchases();
+          }}>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Product</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Stock Status</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Current Inventory</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">Target Qty</th>
+                    {displayIsVA && <th className="text-left py-3 px-4 font-medium text-gray-600">Progress</th>}
+                    {displayIsMainUser && <th className="text-left py-3 px-4 font-medium text-gray-600">VA Progress</th>}
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      {displayIsVA ? 'Purchase Actions' : 'Status'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.filter(purchase => purchase && typeof purchase === 'object').map((purchase) => {
                   
                   const asin = extractASIN(purchase.sellLink);
                   const stockStatus = getStockStatus(
@@ -834,7 +993,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                       </td>
                       
                       {/* Progress Column */}
-                      {isVA && (
+                      {displayIsVA && (
                         <td className="py-3 px-4">
                           <div className="space-y-2">
                             <div className="text-sm">
@@ -878,7 +1037,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                       )}
                       
                       {/* VA Progress Column for Main User */}
-                      {isMainUser && (
+                      {displayIsMainUser && (
                         <td className="py-3 px-4">
                           <div className="space-y-2">
                             <div className="text-sm">
@@ -902,7 +1061,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                       
                       {/* Actions Column */}
                       <td className="py-3 px-4">
-                        {isVA ? (
+                        {displayIsVA ? (
                           <div className="flex space-x-2">
                             <button
                               onClick={() => setEditingRow(editingRow === purchase.id ? null : purchase.id)}
@@ -950,17 +1109,18 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </FormErrorBoundary>
         )}
       </div>
 
       {/* Instructions */}
-      <div className={`card border ${isVA ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
-        <h3 className={`heading-sm mb-3 ${isVA ? 'text-blue-800' : 'text-green-800'}`}>
-          {isVA ? 'VA Instructions' : 'Manager Instructions'}
+      <div className={`card border ${displayIsVA ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+        <h3 className={`heading-sm mb-3 ${displayIsVA ? 'text-blue-800' : 'text-green-800'}`}>
+          {displayIsVA ? 'VA Instructions' : 'Manager Instructions'}
         </h3>
-        <div className={`space-y-2 text-sm ${isVA ? 'text-blue-700' : 'text-green-700'}`}>
-          {isVA ? (
+        <div className={`space-y-2 text-sm ${displayIsVA ? 'text-blue-700' : 'text-green-700'}`}>
+          {displayIsVA ? (
             <>
               <p>1. Review purchase tasks assigned by your manager</p>
               <p>2. Check current inventory levels and stock status automatically provided</p>

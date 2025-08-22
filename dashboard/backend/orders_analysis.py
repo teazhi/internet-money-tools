@@ -1434,7 +1434,16 @@ class EnhancedOrdersAnalysis:
                 if parent_dir not in sys.path:
                     sys.path.append(parent_dir)
                 
-                from app import refresh_google_token
+                # Check if we're running in production (/app directory)
+                current_file = os.path.abspath(__file__)
+                if current_file.startswith('/app/'):
+                    # Production environment - import from the main app.py in /app
+                    sys.path.insert(0, '/app')
+                    import app as main_app
+                    refresh_google_token = main_app.refresh_google_token
+                else:
+                    # Development environment - import normally
+                    from app import refresh_google_token
                 
                 # Get user's Google Sheet settings
                 sheet_id = user_settings.get('sheet_id')

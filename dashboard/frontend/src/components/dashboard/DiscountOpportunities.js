@@ -49,6 +49,8 @@ const ProductImage = ({ asin, productName }) => {
 const DiscountOpportunities = () => {
   const [activeTab, setActiveTab] = useState('opportunities');
   const [opportunities, setOpportunities] = useState([]);
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -61,6 +63,16 @@ const DiscountOpportunities = () => {
     { id: 'pricing', name: 'Pricing Analysis', icon: Percent },
     { id: 'trends', name: 'Market Trends', icon: TrendingDown }
   ];
+
+  const fetchDebugInfo = async () => {
+    try {
+      const response = await axios.get('/api/debug/discount-opportunities', { withCredentials: true });
+      setDebugInfo(response.data);
+    } catch (error) {
+      console.error('Error fetching debug info:', error);
+      setDebugInfo({ error: error.message });
+    }
+  };
 
   const fetchOpportunities = async (forceRefresh = false) => {
     try {
@@ -529,6 +541,18 @@ const DiscountOpportunities = () => {
                     <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
                     <span>{stats?.cache_age_hours > 12 ? 'Update' : 'Force'}</span>
                   </button>
+                  
+                  <button
+                    onClick={() => {
+                      fetchDebugInfo();
+                      setShowDebug(!showDebug);
+                    }}
+                    className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+                    title="Debug source links"
+                  >
+                    <Package className="h-3 w-3" />
+                    <span>Debug</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -536,6 +560,87 @@ const DiscountOpportunities = () => {
             {lastUpdated && (
               <div className="mt-4 text-xs text-gray-500">
                 Last updated: {lastUpdated.toLocaleString()}
+              </div>
+            )}
+            
+            {/* Debug Panel */}
+            {showDebug && debugInfo && (
+              <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-purple-900 mb-3">Source Links Debug Info</h3>
+                
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <strong className="text-purple-800">Source Links Enabled:</strong>{' '}
+                      <span className={debugInfo.debug_info?.enable_source_links ? 'text-green-600' : 'text-red-600'}>
+                        {debugInfo.debug_info?.enable_source_links ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong className="text-purple-800">Sheet Configured:</strong>{' '}
+                      <span className={debugInfo.debug_info?.sheet_configured ? 'text-green-600' : 'text-red-600'}>
+                        {debugInfo.debug_info?.sheet_configured ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong className="text-purple-800">CSV Rows Found:</strong>{' '}
+                      <span className="text-gray-700">{debugInfo.debug_info?.csv_rows_found || 0}</span>
+                    </div>
+                    <div>
+                      <strong className="text-purple-800">ASIN Mappings:</strong>{' '}
+                      <span className="text-gray-700">{debugInfo.debug_info?.asin_to_source_mappings || 0}</span>
+                    </div>
+                  </div>
+                  
+                  {debugInfo.debug_info?.csv_error && (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                      <strong className="text-red-800">CSV Error:</strong>
+                      <p className="text-red-700 text-sm mt-1">{debugInfo.debug_info.csv_error}</p>
+                    </div>
+                  )}
+                  
+                  {debugInfo.sample_opportunities && debugInfo.sample_opportunities.length > 0 && (
+                    <div>
+                      <strong className="text-purple-800">Sample Opportunities:</strong>
+                      <div className="mt-2 space-y-2">
+                        {debugInfo.sample_opportunities.map((opp, idx) => (
+                          <div key={idx} className="bg-white border rounded p-2 text-sm">
+                            <div><strong>ASIN:</strong> {opp.asin}</div>
+                            <div><strong>Retailer:</strong> {opp.retailer}</div>
+                            <div><strong>Has Source Link:</strong> 
+                              <span className={opp.has_source_link ? 'text-green-600' : 'text-red-600 ml-1'}>
+                                {opp.has_source_link ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                            {opp.source_link && (
+                              <div><strong>Source:</strong> 
+                                <a href={opp.source_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                                  {opp.source_link.substring(0, 50)}...
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!debugInfo.debug_info?.enable_source_links && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                      <p className="text-yellow-800">
+                        <strong>Fix:</strong> Enable source links in Settings to see purchase sources for discount opportunities.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {debugInfo.debug_info?.enable_source_links && !debugInfo.debug_info?.sheet_configured && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                      <p className="text-yellow-800">
+                        <strong>Fix:</strong> Configure your Google Sheet in Settings to fetch source links.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

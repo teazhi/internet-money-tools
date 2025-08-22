@@ -11085,6 +11085,84 @@ def migrate_purchases():
             'message': f'Migration failed: {str(e)}'
         }), 500
 
+@app.route('/api/debug/discount-opportunities', methods=['GET'])
+@login_required
+def debug_discount_opportunities():
+    """Debug endpoint to check discount opportunities source link processing"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+        
+        # Check source links settings
+        enable_source_links = user_record.get('enable_source_links', False)
+        sheet_configured = bool(user_record.get('sheet_id') and user_record.get('worksheet_title'))
+        
+        # Fetch email alerts
+        email_alerts = fetch_discount_email_alerts()
+        
+        # Fetch source CSV if enabled
+        source_df = None
+        asin_to_source_link = {}
+        csv_error = None
+        
+        if enable_source_links and sheet_configured:
+            try:
+                from cogs_analysis import fetch_source_links_csv
+                source_df = fetch_source_links_csv(user_record)
+                
+                # Process source links like the main function does
+                if source_df is not None and not source_df.empty:
+                    for _, row in source_df.iterrows():
+                        for col in source_df.columns:
+                            cell_value = str(row[col]) if pd.notna(row[col]) else ""
+                            if len(cell_value) == 10 and cell_value.isalnum():  # ASIN pattern
+                                for link_col in source_df.columns:
+                                    if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
+                                        potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
+                                        if potential_link.startswith('http'):
+                                            asin_to_source_link[cell_value.upper()] = potential_link
+                                            break
+            except Exception as e:
+                csv_error = str(e)
+        
+        # Sample a few opportunities to show their source link status
+        sample_opportunities = []
+        for i, alert in enumerate(email_alerts[:5]):  # First 5 alerts
+            asin = alert.get('asin', 'N/A')
+            source_link = asin_to_source_link.get(asin.upper()) if asin != 'N/A' else None
+            
+            sample_opportunities.append({
+                'asin': asin,
+                'retailer': alert.get('retailer', 'N/A'),
+                'has_source_link': bool(source_link),
+                'source_link': source_link,
+                'alert_note': alert.get('note', 'N/A')
+            })
+        
+        return jsonify({
+            'debug_info': {
+                'enable_source_links': enable_source_links,
+                'sheet_configured': sheet_configured,
+                'sheet_id': user_record.get('sheet_id'),
+                'worksheet_title': user_record.get('worksheet_title'),
+                'google_tokens_present': bool(user_record.get('google_tokens', {}).get('refresh_token')),
+                'csv_error': csv_error,
+                'csv_rows_found': len(source_df) if source_df is not None else 0,
+                'asin_to_source_mappings': len(asin_to_source_link),
+                'total_email_alerts': len(email_alerts)
+            },
+            'sample_opportunities': sample_opportunities,
+            'first_few_source_mappings': dict(list(asin_to_source_link.items())[:5]) if asin_to_source_link else {}
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/purchases', methods=['GET'])
 @login_required  
 def debug_purchases():

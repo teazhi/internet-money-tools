@@ -96,6 +96,7 @@ CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
 USERS_CONFIG_KEY = "users.json"
 INVITATIONS_CONFIG_KEY = "invitations.json"
 DISCOUNT_MONITORING_CONFIG_KEY = "discount_monitoring.json"
+PURCHASES_CONFIG_KEY = "purchases.json"
 
 # Email Configuration (for invitations)
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -1050,6 +1051,41 @@ def get_discount_email_days_back():
     
     # Prefer config over environment variable, but fallback to env if not set
     return config.get('days_back', env_days)
+
+def get_purchases_config():
+    """Get purchases configuration from S3"""
+    if DEMO_MODE:
+        return []
+    
+    s3_client = get_s3_client()
+    try:
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=PURCHASES_CONFIG_KEY)
+        data = json.loads(response['Body'].read().decode('utf-8'))
+        return data.get('purchases', [])
+    except s3_client.exceptions.NoSuchKey:
+        return []
+    except Exception as e:
+        print(f"Error fetching purchases config: {e}")
+        return []
+
+def update_purchases_config(purchases):
+    """Update purchases configuration in S3"""
+    if DEMO_MODE:
+        return True
+    
+    try:
+        s3_client = get_s3_client()
+        config_data = json.dumps({"purchases": purchases}, indent=2)
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=PURCHASES_CONFIG_KEY,
+            Body=config_data,
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error updating purchases config: {e}")
+        return False
 
 def send_invitation_email(email, invitation_token, invited_by):
     """Send invitation email to user"""
@@ -10763,18 +10799,16 @@ def get_purchases():
         
         print(f"Fetching purchases for user_id: {target_user_id} (original requester: {discord_id})")
         
-        # Get purchases from database
-        cursor.execute("""
-            SELECT * FROM purchases 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC
-        """, (target_user_id,))
+        # Get purchases from S3
+        all_purchases = get_purchases_config()
+        print(f"Found {len(all_purchases)} total purchases in S3")
         
-        # Convert to dictionary format
-        purchases = []
-        for row in cursor.fetchall():
-            purchase = dict(zip([col[0] for col in cursor.description], row))
-            purchases.append(purchase)
+        # Filter purchases for the target user
+        purchases = [p for p in all_purchases if p.get('user_id') == target_user_id]
+        print(f"Found {len(purchases)} purchases for target user {target_user_id}")
+        
+        # Sort by created_at descending
+        purchases.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
         # Enrich with live Sellerboard data
         # For VAs, use parent user's Sellerboard configuration
@@ -10842,42 +10876,65 @@ def add_purchase():
         data = request.get_json()
         discord_id = session['discord_id']
         
+        print(f"🔄 CREATING PURCHASE - User: {discord_id}")
+        print(f"📝 Request data: {data}")
+        
         # Extract ASIN from Amazon URL
         asin = extract_asin_from_url(data.get('sellLink', ''))
+        print(f"🔍 Extracted ASIN: {asin}")
         
-        cursor.execute("""
-            INSERT INTO purchases (
-                user_id, buy_link, sell_link, name, price, 
-                target_quantity, notes, asin, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """, (
-            discord_id,
-            data.get('buyLink'),
-            data.get('sellLink'), 
-            data.get('name'),
-            float(data.get('price', 0)),
-            int(data.get('targetQuantity', 0)),
-            data.get('notes', ''),
-            asin
-        ))
+        # Get current purchases from S3
+        all_purchases = get_purchases_config()
+        print(f"📊 Current purchases count in S3: {len(all_purchases)}")
         
-        purchase_id = cursor.lastrowid
-        conn.commit()
+        # Generate new purchase ID
+        purchase_id = max([p.get('id', 0) for p in all_purchases], default=0) + 1
+        print(f"🆔 Generated purchase ID: {purchase_id}")
         
-        # Get the created purchase
-        cursor.execute("SELECT * FROM purchases WHERE id = ?", (purchase_id,))
-        purchase = cursor.fetchone()
+        # Create new purchase object
+        from datetime import datetime
+        new_purchase = {
+            'id': purchase_id,
+            'user_id': discord_id,
+            'buy_link': data.get('buyLink'),
+            'sell_link': data.get('sellLink'),
+            'name': data.get('name'),
+            'price': float(data.get('price', 0)),
+            'target_quantity': int(data.get('targetQuantity', 0)),
+            'notes': data.get('notes', ''),
+            'asin': asin,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat(),
+            'purchased': False,
+            'va_notes': ''
+        }
         
-        return jsonify({
-            'success': True,
-            'purchase': dict(zip([col[0] for col in cursor.description], purchase))
-        })
+        # Add to purchases list
+        all_purchases.append(new_purchase)
+        
+        # Save to S3
+        if update_purchases_config(all_purchases):
+            print(f"✅ Purchase saved to S3 successfully")
+            print(f"📊 New purchases count in S3: {len(all_purchases)}")
+            
+            return jsonify({
+                'success': True,
+                'purchase': new_purchase
+            })
+        else:
+            print(f"❌ ERROR: Failed to save purchase to S3!")
+            return jsonify({
+                'success': False,
+                'message': 'Failed to save purchase'
+            }), 500
         
     except Exception as e:
-        print(f"Error adding purchase: {e}")
+        print(f"❌ Error adding purchase: {e}")
+        import traceback
+        print(f"❌ Full traceback: {traceback.format_exc()}")
         return jsonify({
             'success': False,
-            'message': 'Failed to add purchase'
+            'message': f'Failed to add purchase: {str(e)}'
         }), 500
 
 @app.route('/api/purchases/<int:purchase_id>', methods=['PUT'])
@@ -10887,43 +10944,54 @@ def update_purchase(purchase_id):
     try:
         data = request.get_json()
         discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
         
-        # Build update query dynamically
-        update_fields = []
-        update_values = []
+        # Determine which user owns the purchase we're updating
+        # For VAs: they can update their parent user's purchases
+        target_user_id = discord_id
+        if user_record.get('user_type') == 'subuser':
+            parent_user = get_parent_user_record(discord_id)
+            if parent_user:
+                target_user_id = parent_user.get('discord_id', discord_id)
         
+        # Get all purchases from S3
+        all_purchases = get_purchases_config()
+        
+        # Find the purchase to update
+        purchase_found = False
         allowed_fields = ['purchased', 'notes', 'target_quantity', 'va_notes']
-        for field in allowed_fields:
-            if field in data:
-                update_fields.append(f"{field} = ?")
-                update_values.append(data[field])
         
-        if not update_fields:
-            return jsonify({
-                'success': False,
-                'message': 'No valid fields to update'
-            }), 400
+        for purchase in all_purchases:
+            if purchase.get('id') == purchase_id and purchase.get('user_id') == target_user_id:
+                purchase_found = True
+                
+                # Update allowed fields
+                for field in allowed_fields:
+                    if field in data:
+                        purchase[field] = data[field]
+                
+                # Update timestamp
+                from datetime import datetime
+                purchase['updated_at'] = datetime.utcnow().isoformat()
+                break
         
-        update_values.extend([purchase_id, discord_id])
-        
-        cursor.execute(f"""
-            UPDATE purchases 
-            SET {', '.join(update_fields)}, updated_at = datetime('now')
-            WHERE id = ? AND user_id = ?
-        """, update_values)
-        
-        if cursor.rowcount == 0:
+        if not purchase_found:
             return jsonify({
                 'success': False,
                 'message': 'Purchase not found'
             }), 404
         
-        conn.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Purchase updated successfully'
-        })
+        # Save updated purchases to S3
+        if update_purchases_config(all_purchases):
+            return jsonify({
+                'success': True,
+                'message': 'Purchase updated successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to save purchase updates'
+            }), 500
         
     except Exception as e:
         print(f"Error updating purchase: {e}")
@@ -10940,6 +11008,135 @@ def extract_asin_from_url(url):
     import re
     match = re.search(r'/dp/([A-Z0-9]{10})', url)
     return match.group(1) if match else None
+
+def migrate_purchases_to_s3():
+    """Migrate existing purchases from SQLite to S3"""
+    try:
+        # Get existing purchases from S3
+        existing_purchases = get_purchases_config()
+        print(f"Found {len(existing_purchases)} existing purchases in S3")
+        
+        # Get all purchases from SQLite
+        cursor.execute("SELECT * FROM purchases ORDER BY created_at DESC")
+        sqlite_purchases = cursor.fetchall()
+        print(f"Found {len(sqlite_purchases)} purchases in SQLite")
+        
+        # Convert SQLite purchases to S3 format
+        migrated_count = 0
+        for row in sqlite_purchases:
+            purchase_dict = dict(zip([col[0] for col in cursor.description], row))
+            
+            # Check if this purchase already exists in S3 (by ID and user_id)
+            purchase_exists = any(
+                p.get('id') == purchase_dict.get('id') and 
+                p.get('user_id') == purchase_dict.get('user_id')
+                for p in existing_purchases
+            )
+            
+            if not purchase_exists:
+                # Ensure all required fields are present
+                purchase_dict.setdefault('purchased', False)
+                purchase_dict.setdefault('va_notes', '')
+                purchase_dict.setdefault('updated_at', purchase_dict.get('created_at'))
+                
+                existing_purchases.append(purchase_dict)
+                migrated_count += 1
+        
+        if migrated_count > 0:
+            # Save all purchases to S3
+            if update_purchases_config(existing_purchases):
+                print(f"✅ Successfully migrated {migrated_count} purchases to S3")
+                return True, f"Migrated {migrated_count} purchases"
+            else:
+                print(f"❌ Failed to save migrated purchases to S3")
+                return False, "Failed to save to S3"
+        else:
+            print(f"ℹ️ No new purchases to migrate")
+            return True, "No new purchases to migrate"
+            
+    except Exception as e:
+        print(f"❌ Error during migration: {e}")
+        return False, f"Migration error: {str(e)}"
+
+@app.route('/api/purchases/migrate', methods=['POST'])
+@login_required
+def migrate_purchases():
+    """Endpoint to trigger purchase migration from SQLite to S3"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Only allow admin to trigger migration
+        if discord_id != '712147636463075389':
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized'
+            }), 403
+        
+        success, message = migrate_purchases_to_s3()
+        
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Migration failed: {str(e)}'
+        }), 500
+
+@app.route('/api/debug/purchases', methods=['GET'])
+@login_required  
+def debug_purchases():
+    """Debug endpoint to inspect purchases database directly"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        # Only allow admin users to access this debug endpoint
+        if not user_record or discord_id != '712147636463075389':  # Admin Discord ID
+            return jsonify({
+                'success': False,
+                'message': 'Access denied - admin only'
+            }), 403
+        
+        debug_info = {}
+        
+        # Get total purchase count
+        cursor.execute("SELECT COUNT(*) FROM purchases")
+        debug_info['total_purchases'] = cursor.fetchone()[0]
+        
+        # Get purchases by user
+        cursor.execute("SELECT user_id, COUNT(*) as count FROM purchases GROUP BY user_id")
+        debug_info['purchases_by_user'] = dict(cursor.fetchall())
+        
+        # Get all purchases with basic info
+        cursor.execute("SELECT id, user_id, name, created_at FROM purchases ORDER BY created_at DESC LIMIT 10")
+        recent_purchases = []
+        for row in cursor.fetchall():
+            recent_purchases.append(dict(zip([col[0] for col in cursor.description], row)))
+        debug_info['recent_purchases'] = recent_purchases
+        
+        # Get database file info
+        import os
+        db_path = os.path.abspath(DATABASE_FILE)
+        debug_info['database_file'] = {
+            'path': db_path,
+            'exists': os.path.exists(db_path),
+            'size': os.path.getsize(db_path) if os.path.exists(db_path) else 0
+        }
+        
+        return jsonify({
+            'success': True,
+            'debug_info': debug_info
+        })
+        
+    except Exception as e:
+        print(f"Debug endpoint error: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Debug error: {str(e)}'
+        }), 500
 
 # Database initialization for purchases table
 def init_purchases_table():

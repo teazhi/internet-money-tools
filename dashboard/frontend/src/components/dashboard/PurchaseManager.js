@@ -554,9 +554,24 @@ const PurchaseManager = () => {
             Error: {error || 'None'}<br/>
             <button 
               onClick={fetchPurchases}
-              className="mt-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs"
+              className="mt-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs mr-1"
             >
               🔄 Refresh
+            </button>
+            <button 
+              onClick={async () => {
+                try {
+                  const response = await axios.get('/api/debug/purchases', { withCredentials: true });
+                  console.log('🔍 DATABASE DEBUG INFO:', response.data);
+                  alert(`Debug Info:\nTotal purchases: ${response.data.debug_info?.total_purchases}\nCheck console for full details`);
+                } catch (err) {
+                  console.error('Debug error:', err);
+                  alert('Debug error - check console');
+                }
+              }}
+              className="mt-1 px-2 py-1 bg-red-100 text-red-800 rounded text-xs"
+            >
+              🔍 Debug DB
             </button>
           </div>
         </div>

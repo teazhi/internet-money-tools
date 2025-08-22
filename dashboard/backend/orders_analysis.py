@@ -1530,6 +1530,9 @@ class EnhancedOrdersAnalysis:
                     pass  # Debug print removed
             except Exception as e:
                 # COGS data fetching failed, continue without it
+                print(f"ERROR - Failed to fetch Google Sheets COGS/purchase data: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 cogs_data = {}
                 purchase_insights = {}
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BarChart3, Shield, Zap, Users, CheckCircle, Star, ShoppingCart, Menu, X, TrendingUp, FileText, Database, Package, TrendingDown } from 'lucide-react';
+import { ArrowRight, BarChart3, Shield, Zap, Users, CheckCircle, Star, ShoppingCart, Menu, X, TrendingUp, FileText, Database, Package, TrendingDown, Plus, Target, ClipboardList } from 'lucide-react';
 
 const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -32,28 +32,32 @@ const LandingPage = () => {
     {
       icon: <TrendingUp className="h-4 w-4 text-builders-500" />,
       title: "Smart Restock",
-      description: "AI-powered inventory recommendations"
+      description: "AI-powered inventory recommendations with priority filtering and advanced analytics"
+    },
+    {
+      icon: <Plus className="h-4 w-4 text-builders-500" />,
+      title: "Purchase Manager",
+      description: "Track and manage purchase orders with automated storage handling"
     },
     {
       icon: <Package className="h-4 w-4 text-builders-500" />,
       title: "Missing Listings",
-      description: "Track and manage your expected arrivals"
+      description: "Track and manage your expected arrivals and inventory gaps"
     },
     {
       icon: <TrendingDown className="h-4 w-4 text-builders-500" />,
       title: "Reimbursements",
-      description: "Automated reimbursement analysis"
+      description: "Automated reimbursement analysis and claim tracking"
     },
-    // File Manager removed - using URL-based approach
     {
       icon: <Database className="h-4 w-4 text-builders-500" />,
       title: "Sheet Setup",
-      description: "Seamless Google Sheets integration"
+      description: "Seamless Google Sheets integration with automated data sync"
     },
     {
       icon: <Users className="h-4 w-4 text-builders-500" />,
       title: "VA Management",
-      description: "Team collaboration and permissions"
+      description: "Advanced team collaboration and permission controls"
     }
   ];
 
@@ -180,8 +184,8 @@ const LandingPage = () => {
               <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
                 {/* Mock Sidebar */}
                 <div className="flex">
-                  <div className="w-16 md:w-64 bg-gradient-to-b from-slate-900 to-slate-800 flex-shrink-0">
-                    <div className="p-4">
+                  <div className="w-20 md:w-64 bg-gradient-to-b from-slate-900 to-slate-800 flex-shrink-0">
+                    <div className="p-3 md:p-4">
                       <div className="flex items-center">
                         <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg shadow-lg">
                           <ShoppingCart className="h-4 w-4 text-white" />
@@ -193,18 +197,30 @@ const LandingPage = () => {
                       </div>
                     </div>
                     
-                    <nav className="px-3 space-y-1">
-                      <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-3 py-2 rounded-lg flex items-center">
+                    <nav className="px-2 md:px-3 space-y-1">
+                      <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-2 md:px-3 py-2 rounded-lg flex items-center">
                         <TrendingUp className="h-4 w-4" />
                         <span className="ml-3 hidden md:block text-sm">Overview</span>
                       </div>
-                      <div className="text-slate-300 px-3 py-2 rounded-lg flex items-center">
-                        <Package className="h-4 w-4" />
+                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
+                        <TrendingUp className="h-4 w-4" />
                         <span className="ml-3 hidden md:block text-sm">Smart Restock</span>
                       </div>
-                      <div className="text-slate-300 px-3 py-2 rounded-lg flex items-center">
+                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
+                        <Plus className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">Purchase Manager</span>
+                      </div>
+                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
+                        <Package className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">Missing Listings</span>
+                      </div>
+                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
                         <TrendingDown className="h-4 w-4" />
                         <span className="ml-3 hidden md:block text-sm">Reimbursements</span>
+                      </div>
+                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
+                        <Users className="h-4 w-4" />
+                        <span className="ml-3 hidden md:block text-sm">VA Management</span>
                       </div>
                     </nav>
                   </div>
@@ -212,29 +228,29 @@ const LandingPage = () => {
                   {/* Main Content */}
                   <div className="flex-1 min-h-96">
                     {/* Header */}
-                    <div className="bg-white border-b border-gray-200 px-6 py-4">
+                    <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-4">
                       <h2 className="text-lg font-semibold text-gray-900">Overview</h2>
                     </div>
                     
                     {/* Welcome Header */}
-                    <div className="p-6">
-                      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-6 text-white mb-6">
-                        <h3 className="text-xl font-bold mb-2">Welcome back, John!</h3>
-                        <p className="text-builders-100">Here's your business overview for today</p>
-                        <p className="text-builders-200 text-sm mt-1">Last updated: 2:35 PM</p>
+                    <div className="p-4 md:p-6">
+                      <div className="bg-gradient-to-r from-builders-500 to-builders-600 rounded-lg p-4 md:p-6 text-white mb-6">
+                        <h3 className="text-lg md:text-xl font-bold mb-2">Welcome back, John!</h3>
+                        <p className="text-builders-100 text-sm md:text-base">Here's your business overview for today</p>
+                        <p className="text-builders-200 text-xs md:text-sm mt-1">Last updated: 2:35 PM</p>
                       </div>
                       
                       {/* Stats Cards */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
                         <div className="card">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="caption-text">Today's Orders</p>
-                              <p className="heading-lg text-green-600">47</p>
+                              <p className="text-lg md:text-xl font-bold text-green-600">47</p>
                               <p className="text-xs text-green-600">↗ +12% from yesterday</p>
                             </div>
                             <div className="p-2 bg-green-50 rounded-lg">
-                              <ShoppingCart className="h-5 w-5 text-green-600" />
+                              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
                             </div>
                           </div>
                         </div>
@@ -242,50 +258,65 @@ const LandingPage = () => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="caption-text">Revenue</p>
-                              <p className="heading-lg">$24,582</p>
+                              <p className="text-lg md:text-xl font-bold">$24,582</p>
                               <p className="text-xs text-blue-600">↗ +8% this week</p>
                             </div>
                             <div className="p-2 bg-blue-50 rounded-lg">
-                              <TrendingUp className="h-5 w-5 text-blue-600" />
+                              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                             </div>
                           </div>
                         </div>
                         <div className="card">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="caption-text">Reimbursements</p>
-                              <p className="heading-lg text-amber-600">$1,247</p>
-                              <p className="text-xs text-amber-600">3 pending claims</p>
+                              <p className="caption-text">Active Orders</p>
+                              <p className="text-lg md:text-xl font-bold text-purple-600">8</p>
+                              <p className="text-xs text-purple-600">Purchase Manager</p>
                             </div>
-                            <div className="p-2 bg-amber-50 rounded-lg">
-                              <TrendingDown className="h-5 w-5 text-amber-600" />
+                            <div className="p-2 bg-purple-50 rounded-lg">
+                              <Plus className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
                             </div>
                           </div>
                         </div>
                       </div>
                       
-                      {/* Stock Alerts */}
+                      {/* Smart Restock Alerts */}
                       <div className="card">
-                        <h4 className="heading-sm mb-4">Stock Alerts</h4>
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-sm md:text-base font-semibold">Smart Restock Alerts</h4>
+                          <span className="inline-flex items-center px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+                            🚨 CRITICAL
+                          </span>
+                        </div>
                         <div className="space-y-3">
                           <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                            <div>
-                              <p className="emphasis-text">B08XYZ123</p>
-                              <p className="caption-text">Wireless Headphones - Black</p>
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-indigo-100 rounded border flex items-center justify-center">
+                                <Package className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">B08XYZ123</p>
+                                <p className="text-xs text-gray-500">Wireless Headphones</p>
+                              </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-red-600 font-medium">3 days left</p>
-                              <p className="caption-text">Stock: 12 • Reorder: 50</p>
+                              <p className="text-xs text-gray-500">Stock: 12 • Order: 50</p>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                            <div>
-                              <p className="emphasis-text">B07ABC456</p>
-                              <p className="caption-text">Phone Case - Clear</p>
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-blue-50 to-indigo-100 rounded border flex items-center justify-center">
+                                <Package className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">B07ABC456</p>
+                                <p className="text-xs text-gray-500">Phone Case - Clear</p>
+                              </div>
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-amber-600 font-medium">7 days left</p>
-                              <p className="caption-text">Stock: 25 • Reorder: 100</p>
+                              <p className="text-xs text-gray-500">Stock: 25 • Order: 100</p>
                             </div>
                           </div>
                         </div>

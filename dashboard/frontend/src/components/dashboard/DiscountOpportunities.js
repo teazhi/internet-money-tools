@@ -20,22 +20,22 @@ const ProductImage = ({ asin, productName }) => {
 
   if (loading) {
     return (
-      <div className="h-10 w-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
-        <div className="h-4 w-4 bg-gray-300 rounded animate-pulse" />
+      <div className="h-16 w-16 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <div className="h-6 w-6 bg-gray-300 rounded animate-pulse" />
       </div>
     );
   }
 
   if (error || !imageUrl) {
     return (
-      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
-        <Package className="h-5 w-5 text-blue-600" />
+      <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin}`}>
+        <Package className="h-8 w-8 text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="h-10 w-10 rounded-lg overflow-hidden border border-gray-200 bg-white">
+    <div className="h-16 w-16 rounded-lg overflow-hidden border border-gray-200 bg-white">
       <img
         src={imageUrl}
         alt={productName || `Product ${asin}`}

@@ -28,30 +28,30 @@ const ProductImage = ({ asin, productName }) => {
   // For debugging - always show something visible
   if (!asin) {
     return (
-      <div className="h-8 w-8 rounded-md bg-red-100 border border-red-300 flex items-center justify-center" title="No ASIN provided">
-        <span className="text-xs text-red-600">!</span>
+      <div className="h-16 w-16 rounded-lg bg-red-100 border border-red-300 flex items-center justify-center" title="No ASIN provided">
+        <span className="text-sm text-red-600">!</span>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="h-8 w-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center" title="Loading image...">
-        <div className="h-3 w-3 bg-gray-300 rounded animate-pulse" />
+      <div className="h-16 w-16 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center" title="Loading image...">
+        <div className="h-6 w-6 bg-gray-300 rounded animate-pulse" />
       </div>
     );
   }
 
   if (error || !imageUrl || imgError) {
     return (
-      <div className="h-8 w-8 rounded-md bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${error ? 'Error' : imgError ? 'Image failed to load' : 'No URL'}`}>
-        <Package className="h-4 w-4 text-blue-600" />
+      <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${error ? 'Error' : imgError ? 'Image failed to load' : 'No URL'}`}>
+        <Package className="h-8 w-8 text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="h-8 w-8 rounded-md overflow-hidden border border-gray-200 bg-white" title={`Product ${asin}`}>
+    <div className="h-16 w-16 rounded-lg overflow-hidden border border-gray-200 bg-white" title={`Product ${asin}`}>
       <img
         src={imageUrl}
         alt={productName || `Product ${asin}`}

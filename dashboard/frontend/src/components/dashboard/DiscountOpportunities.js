@@ -609,14 +609,6 @@ const DiscountOpportunities = () => {
                     </div>
                   )}
                   
-                  {debugInfo.csv_data_preview && debugInfo.csv_data_preview.length > 0 && (
-                    <div className="bg-gray-50 border border-gray-200 rounded p-3">
-                      <strong className="text-gray-800">CSV Data Preview (First 3 rows):</strong>
-                      <div className="mt-2 text-xs overflow-x-auto">
-                        <pre className="text-gray-700">{JSON.stringify(debugInfo.csv_data_preview, null, 2)}</pre>
-                      </div>
-                    </div>
-                  )}
                   
                   {debugInfo.sample_opportunities && debugInfo.sample_opportunities.length > 0 && (
                     <div>

@@ -5666,9 +5666,10 @@ def get_asin_purchase_sources(asin):
         
         # Fetch COGS data (which includes all sources)
         if user_record.get('search_all_worksheets'):
-            cogs_data = analyzer.fetch_all_worksheets_cogs_data(
+            cogs_data, _ = analyzer.fetch_google_sheet_cogs_data_all_worksheets(
                 google_tokens.get('access_token'),
-                sheet_id
+                sheet_id,
+                column_mapping
             )
         else:
             cogs_data = analyzer.fetch_google_sheet_cogs_data(
@@ -6390,55 +6391,70 @@ def analyze_discount_opportunities():
         # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
         
-        # Fetch source links CSV for ASIN matching with caching
-        csv_cache_key = "source_links_csv"
-        source_df = None
-        
-        if csv_cache_key in analytics_cache:
-            cache_entry = analytics_cache[csv_cache_key]
-            # Cache CSV for 24 hours for daily use
-            if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
-                print(f"[DEBUG] Using cached CSV data")
-                source_df = cache_entry['data']
-        
-        if source_df is None:
-            print(f"[DEBUG] Fetching fresh CSV data")
-            try:
-                csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
-                response = requests.get(csv_url, timeout=10)  # Further reduced timeout
-                response.raise_for_status()
-                
-                csv_data = StringIO(response.text)
-                source_df = pd.read_csv(csv_data)
-                
-                # Cache the DataFrame
-                analytics_cache[csv_cache_key] = {
-                    'data': source_df,
-                    'timestamp': datetime.now()
-                }
-            except Exception as e:
-                print(f"[WARNING] Failed to fetch CSV data: {str(e)}, continuing without source links")
-                source_df = pd.DataFrame()  # Empty DataFrame
-        
-        # Pre-process CSV data for faster ASIN lookups
-        print(f"[DEBUG] Pre-processing CSV data for faster lookups")
+        # Fetch source links from user's Google Sheet (same approach as Smart Restock)
+        print(f"[DEBUG] Fetching source links from user's configured Google Sheet")
         asin_to_source_link = {}
-        if source_df is not None and not source_df.empty:
-            for _, row in source_df.iterrows():
-                # Look for ASINs in any column
-                for col in source_df.columns:
-                    cell_value = str(row[col]) if pd.notna(row[col]) else ""
-                    # Simple ASIN detection (10 characters starting with B)
-                    if len(cell_value) == 10 and cell_value.startswith('B'):
-                        # Look for URL/link columns in this row
-                        for link_col in source_df.columns:
-                            if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
-                                potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
-                                if potential_link.startswith('http'):
-                                    asin_to_source_link[cell_value.upper()] = potential_link
-                                    break
         
-        print(f"[DEBUG] Pre-processed {len(asin_to_source_link)} ASIN-to-source mappings")
+        # Check if user has source links enabled and Google Sheet configured
+        enable_source_links = config_user_record.get('enable_source_links', False)
+        sheet_id = config_user_record.get('sheet_id')
+        google_tokens = config_user_record.get('google_tokens', {})
+        search_all_worksheets = config_user_record.get('search_all_worksheets', True)
+        column_mapping = config_user_record.get('column_mapping', {})
+        
+        if enable_source_links and sheet_id and google_tokens.get('access_token'):
+            try:
+                # Use EXACT same approach as Smart Restock
+                from orders_analysis import OrdersAnalysis
+                analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+                
+                if search_all_worksheets:
+                    # Search ALL worksheets
+                    def api_call(access_token):
+                        return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
+                            access_token,
+                            sheet_id,
+                            column_mapping
+                        )
+                    
+                    # Use safe API call with token refresh
+                    result = safe_google_api_call(config_user_record, api_call)
+                    cogs_data = result[0] if result and isinstance(result, tuple) else result
+                    
+                    if cogs_data:
+                        # Process COGS data - it's a dictionary keyed by ASIN
+                        for asin, data in cogs_data.items():
+                            if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
+                                # Look for source in the data
+                                source_link = data.get('Source') or data.get('source') or data.get('source_url')
+                                if source_link and str(source_link).startswith('http'):
+                                    asin_to_source_link[str(asin).upper()] = str(source_link)
+                else:
+                    # Single worksheet mode
+                    worksheet_title = config_user_record.get('worksheet_title')
+                    if worksheet_title:
+                        cogs_data = analyzer.fetch_google_sheet_cogs_data(
+                            google_tokens.get('access_token'),
+                            sheet_id,
+                            worksheet_title,
+                            column_mapping
+                        )
+                        
+                        if cogs_data:
+                            for asin, data in cogs_data.items():
+                                if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
+                                    source_link = data.get('Source') or data.get('source') or data.get('source_url')
+                                    if source_link and str(source_link).startswith('http'):
+                                        asin_to_source_link[str(asin).upper()] = str(source_link)
+                
+                print(f"[DEBUG] Found {len(asin_to_source_link)} source links from Google Sheets")
+                
+            except Exception as e:
+                print(f"[WARNING] Failed to fetch source links from Google Sheets: {str(e)}")
+        elif enable_source_links:
+            print(f"[DEBUG] Source links enabled but Google Sheet not properly configured")
+        else:
+            print(f"[DEBUG] Source links disabled")
         opportunities = []
         
         print(f"[DEBUG] Processing {len(email_alerts)} email alerts against inventory")
@@ -11128,13 +11144,15 @@ def debug_source_links():
                         analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
                         
                         def api_call(access_token):
-                            return analyzer.fetch_all_worksheets_cogs_data(
+                            return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
                                 access_token,
-                                sheet_id
+                                sheet_id,
+                                user_record.get('column_mapping', {})
                             )
                         
                         # Use safe API call with token refresh
-                        cogs_data = safe_google_api_call(user_record, api_call)
+                        result = safe_google_api_call(user_record, api_call)
+                        cogs_data = result[0] if result and isinstance(result, tuple) else result
                         
                         if cogs_data:
                             # Process COGS data - it's a dictionary keyed by ASIN

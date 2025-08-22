@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { 
   Plus, 
   ShoppingCart, 
@@ -19,6 +19,48 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Error Boundary Component
+class FormErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Form Error Boundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="card">
+          <div className="text-center py-8">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Form Error</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              The form encountered an error and couldn't render properly.
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                if (this.props.onReset) this.props.onReset();
+              }}
+              className="btn-primary"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const PurchaseManager = () => {
   const { user } = useAuth();
@@ -51,6 +93,14 @@ const PurchaseManager = () => {
     isVA,
     isMainUser
   });
+
+  // Error boundary for debugging
+  useEffect(() => {
+    window.addEventListener('error', (e) => {
+      console.error('Global error caught:', e);
+    });
+    return () => window.removeEventListener('error', () => {});
+  }, []);
 
   useEffect(() => {
     fetchPurchases();
@@ -200,6 +250,12 @@ const PurchaseManager = () => {
 
   const addNewPurchase = async () => {
     try {
+      // Safety check for newPurchase object
+      if (!newPurchase || typeof newPurchase !== 'object') {
+        setError('Form data is invalid. Please refresh the page and try again.');
+        return;
+      }
+      
       // Validate required fields
       if (!newPurchase.buyLink || !newPurchase.sellLink) {
         setError('Please provide both source and Amazon links');
@@ -211,11 +267,15 @@ const PurchaseManager = () => {
         return;
       }
       
+      console.log('Submitting purchase request:', newPurchase);
+      
       const response = await axios.post('/api/purchases', newPurchase, {
         withCredentials: true
       });
       
       if (response.data.success) {
+        console.log('Purchase request created successfully');
+        
         // Add the new purchase to the list
         const newPurchaseItem = response.data.purchase;
         setPurchases(prevPurchases => [newPurchaseItem, ...prevPurchases]);
@@ -274,6 +334,17 @@ const PurchaseManager = () => {
     );
   }
 
+  // Safety check
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <p className="text-sm text-gray-600">User session not found. Please refresh the page.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -319,7 +390,33 @@ const PurchaseManager = () => {
                   Bulk Import
                 </button>
                 <button
-                  onClick={() => setShowAddForm(true)}
+                  type="button"
+                  onClick={() => {
+                    console.log('Opening single request form');
+                    try {
+                      // Reset any previous errors first
+                      setError('');
+                      
+                      // Ensure newPurchase is properly initialized
+                      setNewPurchase({
+                        buyLink: '',
+                        sellLink: '',
+                        name: '',
+                        price: '',
+                        targetQuantity: '',
+                        notes: ''
+                      });
+                      
+                      // Close bulk form if open and show single form
+                      setShowBulkForm(false);
+                      setShowAddForm(true);
+                      
+                      console.log('Single request form opened successfully');
+                    } catch (err) {
+                      console.error('Error opening form:', err);
+                      setError('Failed to open form. Please refresh the page and try again.');
+                    }
+                  }}
                   className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -498,105 +595,127 @@ https://target.com/item456    https://amazon.com/dp/B002345678
 
       {/* Add New Purchase Form - Main User Only */}
       {showAddForm && isMainUser && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="heading-sm">Create Purchase Request</h3>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-5 w-5" />
-            </button>
+        <FormErrorBoundary onReset={() => {
+          setShowAddForm(false);
+          setNewPurchase({
+            buyLink: '',
+            sellLink: '',
+            name: '',
+            price: '',
+            targetQuantity: '',
+            notes: ''
+          });
+          setError('');
+        }}>
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="heading-sm">Create Purchase Request</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddForm(false);
+                  setError('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              addNewPurchase();
+            }}>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="label-text">Buy Link (Source)</label>
+                  <input
+                    type="url"
+                    value={newPurchase?.buyLink || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, buyLink: e.target.value}))}
+                    placeholder="https://www.walmart.com/..."
+                    className="input-field"
+                  />
+                </div>
+                
+                <div>
+                  <label className="label-text">Amazon Sell Link</label>
+                  <input
+                    type="url"
+                    value={newPurchase?.sellLink || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, sellLink: e.target.value}))}
+                    placeholder="https://www.amazon.com/dp/..."
+                    className="input-field"
+                  />
+                </div>
+                
+                <div className="md:col-span-2">
+                  <label className="label-text">Product Name</label>
+                  <input
+                    type="text"
+                    value={newPurchase?.name || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, name: e.target.value}))}
+                    placeholder="Product name"
+                    className="input-field"
+                  />
+                </div>
+                
+                <div>
+                  <label className="label-text">Source Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newPurchase?.price || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, price: e.target.value}))}
+                    placeholder="0.00"
+                    className="input-field"
+                  />
+                </div>
+                
+                <div>
+                  <label className="label-text">Target Quantity</label>
+                  <input
+                    type="number"
+                    value={newPurchase?.targetQuantity || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, targetQuantity: e.target.value}))}
+                    placeholder="50"
+                    className="input-field"
+                  />
+                </div>
+                
+                <div className="md:col-span-2">
+                  <label className="label-text">Instructions for VA</label>
+                  <textarea
+                    value={newPurchase?.notes || ''}
+                    onChange={(e) => setNewPurchase(prev => ({...prev, notes: e.target.value}))}
+                    placeholder="Special instructions, preferences, or notes for your VA..."
+                    rows="3"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 mt-4">
+                <button
+                  type="submit"
+                  className="btn-primary"
+                >
+                  Create Request
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setError('');
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-          
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="label-text">Buy Link (Source)</label>
-              <input
-                type="url"
-                value={newPurchase.buyLink}
-                onChange={(e) => setNewPurchase({...newPurchase, buyLink: e.target.value})}
-                placeholder="https://www.walmart.com/..."
-                className="input-field"
-              />
-            </div>
-            
-            <div>
-              <label className="label-text">Amazon Sell Link</label>
-              <input
-                type="url"
-                value={newPurchase.sellLink}
-                onChange={(e) => setNewPurchase({...newPurchase, sellLink: e.target.value})}
-                placeholder="https://www.amazon.com/dp/..."
-                className="input-field"
-              />
-            </div>
-            
-            <div className="md:col-span-2">
-              <label className="label-text">Product Name</label>
-              <input
-                type="text"
-                value={newPurchase.name}
-                onChange={(e) => setNewPurchase({...newPurchase, name: e.target.value})}
-                placeholder="Product name"
-                className="input-field"
-              />
-            </div>
-            
-            <div>
-              <label className="label-text">Source Price</label>
-              <input
-                type="number"
-                step="0.01"
-                value={newPurchase.price}
-                onChange={(e) => setNewPurchase({...newPurchase, price: e.target.value})}
-                placeholder="0.00"
-                className="input-field"
-              />
-            </div>
-            
-            <div>
-              <label className="label-text">Target Quantity</label>
-              <input
-                type="number"
-                value={newPurchase.targetQuantity}
-                onChange={(e) => setNewPurchase({...newPurchase, targetQuantity: e.target.value})}
-                placeholder="50"
-                className="input-field"
-              />
-            </div>
-            
-            <div className="md:col-span-2">
-              <label className="label-text">Instructions for VA</label>
-              <textarea
-                value={newPurchase.notes}
-                onChange={(e) => setNewPurchase({...newPurchase, notes: e.target.value})}
-                placeholder="Special instructions, preferences, or notes for your VA..."
-                rows="3"
-                className="input-field"
-              />
-            </div>
-          </div>
-          
-          <div className="flex space-x-3 mt-4">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                addNewPurchase();
-              }}
-              className="btn-primary"
-            >
-              Create Request
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="btn-secondary"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        </FormErrorBoundary>
       )}
 
       {/* Purchase List */}

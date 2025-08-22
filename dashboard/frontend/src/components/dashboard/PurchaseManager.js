@@ -11,11 +11,16 @@ import {
   CheckCircle,
   Clock,
   TrendingUp,
-  Target
+  Target,
+  User,
+  Users,
+  ClipboardList
 } from 'lucide-react';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
 
 const PurchaseManager = () => {
+  const { user } = useAuth();
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,6 +34,10 @@ const PurchaseManager = () => {
     targetQuantity: '',
     notes: ''
   });
+
+  // Determine if user is VA (sub-user) or main user
+  const isVA = user?.user_type === 'sub' || user?.user_type === 'va';
+  const isMainUser = !user?.user_type || user?.user_type === 'main';
 
   useEffect(() => {
     fetchPurchases();
@@ -135,24 +144,48 @@ const PurchaseManager = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white">
+      <div className={`rounded-lg p-6 text-white ${
+        isVA 
+          ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+          : 'bg-gradient-to-r from-green-500 to-green-600'
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-white/20 rounded-lg">
-              <ShoppingCart className="h-6 w-6" />
+              {isVA ? <ClipboardList className="h-6 w-6" /> : <ShoppingCart className="h-6 w-6" />}
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Purchase Manager</h1>
-              <p className="text-green-100">Track purchases with live inventory data</p>
+              <h1 className="text-2xl font-bold">
+                {isVA ? 'Purchase Tasks' : 'Purchase Manager'}
+              </h1>
+              <p className={isVA ? 'text-blue-100' : 'text-green-100'}>
+                {isVA 
+                  ? 'Review and complete purchase requests' 
+                  : 'Create purchase requests for your VA team'
+                }
+              </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Purchase
-          </button>
+          
+          {/* Role indicator */}
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 bg-white/20 px-3 py-1 rounded-lg">
+              {isVA ? <User className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+              <span className="text-sm font-medium">
+                {isVA ? 'VA Mode' : 'Manager Mode'}
+              </span>
+            </div>
+            
+            {isMainUser && (
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Purchase Request
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -165,11 +198,11 @@ const PurchaseManager = () => {
         </div>
       )}
 
-      {/* Add New Purchase Form */}
-      {showAddForm && (
+      {/* Add New Purchase Form - Main User Only */}
+      {showAddForm && isMainUser && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="heading-sm">Add New Purchase</h3>
+            <h3 className="heading-sm">Create Purchase Request</h3>
             <button
               onClick={() => setShowAddForm(false)}
               className="text-gray-400 hover:text-gray-600"
@@ -236,12 +269,12 @@ const PurchaseManager = () => {
             </div>
             
             <div className="md:col-span-2">
-              <label className="label-text">Notes</label>
+              <label className="label-text">Instructions for VA</label>
               <textarea
                 value={newPurchase.notes}
                 onChange={(e) => setNewPurchase({...newPurchase, notes: e.target.value})}
-                placeholder="Purchase notes..."
-                rows="2"
+                placeholder="Special instructions, preferences, or notes for your VA..."
+                rows="3"
                 className="input-field"
               />
             </div>
@@ -252,7 +285,7 @@ const PurchaseManager = () => {
               onClick={addNewPurchase}
               className="btn-primary"
             >
-              Add Purchase
+              Create Request
             </button>
             <button
               onClick={() => setShowAddForm(false)}
@@ -266,13 +299,20 @@ const PurchaseManager = () => {
 
       {/* Purchase List */}
       <div className="card">
-        <h3 className="heading-sm mb-4">Purchase Tracking</h3>
+        <h3 className="heading-sm mb-4">
+          {isVA ? 'Purchase Tasks Queue' : 'Purchase Requests'}
+        </h3>
         
         {purchases.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p>No purchases tracked yet</p>
-            <p className="text-sm">Add your first purchase to get started</p>
+            <p>{isVA ? 'No purchase tasks assigned' : 'No purchase requests created'}</p>
+            <p className="text-sm">
+              {isVA 
+                ? 'Check back later for new tasks from your manager' 
+                : 'Create your first purchase request to get started'
+              }
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -281,10 +321,13 @@ const PurchaseManager = () => {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Product</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Stock Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Inventory</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Target</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Purchased</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Current Inventory</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Target Qty</th>
+                  {isVA && <th className="text-left py-3 px-4 font-medium text-gray-600">Progress</th>}
+                  {isMainUser && <th className="text-left py-3 px-4 font-medium text-gray-600">VA Progress</th>}
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">
+                    {isVA ? 'Purchase Actions' : 'Status'}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -356,22 +399,117 @@ const PurchaseManager = () => {
                         </div>
                       </td>
                       
-                      <td className="py-3 px-4">
-                        <div className="text-sm">
-                          <span className="font-medium">{purchase.purchased || 0}</span>
-                          <span className="text-gray-500 ml-1">purchased</span>
-                        </div>
-                      </td>
+                      {/* Progress Column */}
+                      {isVA && (
+                        <td className="py-3 px-4">
+                          <div className="space-y-2">
+                            <div className="text-sm">
+                              <span className="font-medium">{purchase.purchased || 0}</span>
+                              <span className="text-gray-500">/{purchase.targetQuantity} purchased</span>
+                            </div>
+                            {editingRow === purchase.id ? (
+                              <div className="flex space-x-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={purchase.targetQuantity}
+                                  defaultValue={purchase.purchased || 0}
+                                  className="w-20 px-2 py-1 border rounded text-sm"
+                                  onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newAmount = parseInt(e.target.value);
+                                      updatePurchase(purchase.id, { purchased: newAmount });
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => setEditingRow(null)}
+                                  className="text-green-600 hover:text-green-800 p-1"
+                                >
+                                  <Save className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-blue-600 h-2 rounded-full" 
+                                  style={{
+                                    width: `${Math.min(100, (purchase.purchased || 0) / purchase.targetQuantity * 100)}%`
+                                  }}
+                                ></div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       
+                      {/* VA Progress Column for Main User */}
+                      {isMainUser && (
+                        <td className="py-3 px-4">
+                          <div className="space-y-2">
+                            <div className="text-sm">
+                              <span className="font-medium">{purchase.purchased || 0}</span>
+                              <span className="text-gray-500">/{purchase.targetQuantity}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full" 
+                                style={{
+                                  width: `${Math.min(100, (purchase.purchased || 0) / purchase.targetQuantity * 100)}%`
+                                }}
+                              ></div>
+                            </div>
+                            {purchase.va_notes && (
+                              <p className="text-xs text-gray-600 italic">"{purchase.va_notes}"</p>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      
+                      {/* Actions Column */}
                       <td className="py-3 px-4">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => setEditingRow(purchase.id)}
-                            className="text-blue-600 hover:text-blue-800 p-1"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </button>
-                        </div>
+                        {isVA ? (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setEditingRow(editingRow === purchase.id ? null : purchase.id)}
+                              className="text-blue-600 hover:text-blue-800 p-1 text-sm"
+                            >
+                              {editingRow === purchase.id ? (
+                                <>
+                                  <X className="h-4 w-4" />
+                                </>
+                              ) : (
+                                <>
+                                  <Edit3 className="h-4 w-4" />
+                                </>
+                              )}
+                            </button>
+                            {(purchase.purchased || 0) >= purchase.targetQuantity && (
+                              <span className="text-green-600 p-1">
+                                <CheckCircle className="h-4 w-4" />
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm">
+                            {(purchase.purchased || 0) >= purchase.targetQuantity ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Complete
+                              </span>
+                            ) : (purchase.purchased || 0) > 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <Clock className="h-3 w-3 mr-1" />
+                                In Progress
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Pending
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -383,14 +521,30 @@ const PurchaseManager = () => {
       </div>
 
       {/* Instructions */}
-      <div className="card bg-blue-50 border border-blue-200">
-        <h3 className="heading-sm mb-3 text-blue-800">How It Works</h3>
-        <div className="space-y-2 text-sm text-blue-700">
-          <p>1. Add purchase requests with source links and Amazon ASINs</p>
-          <p>2. System automatically pulls current stock and sales data from Sellerboard</p>
-          <p>3. VAs can see inventory levels without manually checking Amazon</p>
-          <p>4. Track purchase status and quantities in one centralized location</p>
-          <p>5. Stock status updates automatically based on sales velocity</p>
+      <div className={`card border ${isVA ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+        <h3 className={`heading-sm mb-3 ${isVA ? 'text-blue-800' : 'text-green-800'}`}>
+          {isVA ? 'VA Instructions' : 'Manager Instructions'}
+        </h3>
+        <div className={`space-y-2 text-sm ${isVA ? 'text-blue-700' : 'text-green-700'}`}>
+          {isVA ? (
+            <>
+              <p>1. Review purchase tasks assigned by your manager</p>
+              <p>2. Check current inventory levels and stock status automatically provided</p>
+              <p>3. Click the edit button to update quantities as you purchase items</p>
+              <p>4. Progress bars show completion status for each task</p>
+              <p>5. Tasks turn green when target quantity is reached</p>
+              <p><strong>Note:</strong> All inventory data is live from Sellerboard - no manual checking needed!</p>
+            </>
+          ) : (
+            <>
+              <p>1. Create purchase requests with source links and Amazon ASINs</p>
+              <p>2. System automatically pulls current stock and sales data from Sellerboard</p>
+              <p>3. Your VAs see all requests with live inventory data</p>
+              <p>4. Track VA progress and completion status in real-time</p>
+              <p>5. Stock alerts help prioritize urgent purchases</p>
+              <p><strong>Note:</strong> VAs can update purchase quantities without accessing your Amazon account.</p>
+            </>
+          )}
         </div>
       </div>
     </div>

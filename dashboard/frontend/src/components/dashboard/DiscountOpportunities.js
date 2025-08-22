@@ -583,6 +583,16 @@ const DiscountOpportunities = () => {
                       </span>
                     </div>
                     <div>
+                      <strong className="text-purple-800">Search All Worksheets:</strong>{' '}
+                      <span className={debugInfo.debug_info?.search_all_worksheets ? 'text-green-600' : 'text-red-600'}>
+                        {debugInfo.debug_info?.search_all_worksheets ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    <div>
+                      <strong className="text-purple-800">CSV Source:</strong>{' '}
+                      <span className="text-gray-700 text-sm">{debugInfo.debug_info?.csv_source || 'Unknown'}</span>
+                    </div>
+                    <div>
                       <strong className="text-purple-800">CSV Rows Found:</strong>{' '}
                       <span className="text-gray-700">{debugInfo.debug_info?.csv_rows_found || 0}</span>
                     </div>

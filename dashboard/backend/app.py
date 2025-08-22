@@ -11108,28 +11108,74 @@ def debug_source_links():
         asin_to_source_link = {}
         csv_error = None
         
-        # Simple CSV test
-        csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+        # Use proper Google Sheet access like other features
+        csv_url = 'User configured Google Sheet'
         
-        if enable_source_links:
+        if enable_source_links and sheet_configured:
             try:
-                response = requests.get(csv_url, timeout=10)
-                response.raise_for_status()
-                source_df = pd.read_csv(StringIO(response.text))
+                # Use the same Google Sheets access as other features
+                google_tokens = user_record.get('google_tokens', {})
+                sheet_id = user_record.get('sheet_id')
+                search_all_worksheets = user_record.get('search_all_worksheets', True)
                 
-                # Simple ASIN processing
-                for _, row in source_df.iterrows():
-                    for col in source_df.columns:
-                        cell_value = str(row[col]) if pd.notna(row[col]) else ""
-                        if len(cell_value) == 10 and cell_value.isalnum():
-                            for link_col in source_df.columns:
-                                if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
-                                    potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
-                                    if potential_link.startswith('http'):
-                                        asin_to_source_link[cell_value.upper()] = potential_link
-                                        break
+                if not google_tokens.get('access_token') or not sheet_id:
+                    csv_error = "Google Sheet not properly configured"
+                else:
+                    # Get all worksheets if search_all_worksheets is enabled
+                    if search_all_worksheets:
+                        # Fetch from all worksheets like Smart Restock does
+                        from orders_analysis import OrdersAnalysis
+                        analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+                        
+                        def api_call(access_token):
+                            return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
+                                access_token=access_token,
+                                sheet_id=sheet_id,
+                                column_mapping=user_record.get('column_mapping', {})
+                            )
+                        
+                        # Use safe API call with token refresh
+                        cogs_data = safe_google_api_call(api_call, google_tokens, user_record)
+                        
+                        if cogs_data:
+                            # Process all rows from all worksheets
+                            for row_data in cogs_data:
+                                # Look for ASIN in any column
+                                for key, value in row_data.items():
+                                    if value and len(str(value)) == 10 and str(value).isalnum():
+                                        asin = str(value).upper()
+                                        # Look for source link in same row
+                                        for link_key, link_value in row_data.items():
+                                            if any(keyword in link_key.lower() for keyword in ['source', 'link', 'url']):
+                                                if link_value and str(link_value).startswith('http'):
+                                                    asin_to_source_link[asin] = str(link_value)
+                                                    break
+                        
+                        source_df = pd.DataFrame(cogs_data) if cogs_data else pd.DataFrame()
+                    else:
+                        # Single worksheet mode
+                        worksheet_title = user_record.get('worksheet_title')
+                        if worksheet_title:
+                            source_df = fetch_google_sheet_as_df(user_record, worksheet_title)
+                            
+                            # Process single worksheet
+                            for _, row in source_df.iterrows():
+                                for col in source_df.columns:
+                                    cell_value = str(row[col]) if pd.notna(row[col]) else ""
+                                    if len(cell_value) == 10 and cell_value.isalnum():
+                                        for link_col in source_df.columns:
+                                            if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
+                                                potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
+                                                if potential_link.startswith('http'):
+                                                    asin_to_source_link[cell_value.upper()] = potential_link
+                                                    break
+                        else:
+                            csv_error = "No worksheet title configured"
+                            
             except Exception as e:
                 csv_error = str(e)
+        elif enable_source_links and not sheet_configured:
+            csv_error = "Google Sheet not configured in Settings"
         
         # Sample a few opportunities to show their source link status
         sample_opportunities = []
@@ -11149,12 +11195,15 @@ def debug_source_links():
             'debug_info': {
                 'enable_source_links': enable_source_links,
                 'sheet_configured': sheet_configured,
+                'search_all_worksheets': user_record.get('search_all_worksheets', False),
                 'csv_error': csv_error,
-                'csv_url': csv_url,
+                'csv_source': csv_url,
                 'csv_rows_found': len(source_df) if source_df is not None else 0,
                 'csv_columns': list(source_df.columns) if source_df is not None and not source_df.empty else [],
                 'asin_to_source_mappings': len(asin_to_source_link),
-                'total_email_alerts': len(email_alerts)
+                'total_email_alerts': len(email_alerts),
+                'sheet_id': user_record.get('sheet_id', 'Not configured'),
+                'worksheet_title': user_record.get('worksheet_title', 'Not configured')
             },
             'sample_opportunities': sample_opportunities,
             'first_few_source_mappings': dict(list(asin_to_source_link.items())[:5]) if asin_to_source_link else {}

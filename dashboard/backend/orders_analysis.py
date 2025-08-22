@@ -1408,7 +1408,9 @@ class EnhancedOrdersAnalysis:
         purchase_insights = {}
         
         
-        if user_settings and user_settings.get('enable_source_links'):
+        # Always fetch COGS data if Google Sheets are configured (for Restock buttons)
+        # enable_source_links only controls display of source links in discount opportunities
+        if user_settings and user_settings.get('sheet_id') and user_settings.get('google_tokens', {}).get('access_token'):
             try:
                 # Import here to avoid circular imports
                 import sys

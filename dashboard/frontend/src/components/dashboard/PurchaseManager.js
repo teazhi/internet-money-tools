@@ -127,6 +127,9 @@ const PurchaseManager = () => {
   };
 
   const extractASIN = (amazonUrl) => {
+    if (!amazonUrl || typeof amazonUrl !== 'string') {
+      return '';
+    }
     const match = amazonUrl.match(/\/dp\/([A-Z0-9]{10})/i);
     return match ? match[1] : '';
   };
@@ -231,17 +234,22 @@ const PurchaseManager = () => {
   };
 
   const getStockStatus = (currentStock, spm, targetQuantity) => {
-    if (!currentStock || currentStock === 0) {
+    // Convert to numbers and provide defaults
+    const stock = Number(currentStock) || 0;
+    const salesPerMonth = Number(spm) || 0;
+    const target = Number(targetQuantity) || 0;
+    
+    if (stock === 0) {
       return { status: 'out-of-stock', color: 'bg-red-100 text-red-800', text: 'Out of Stock' };
     }
     
-    const daysOfStock = spm > 0 ? Math.floor(currentStock / (spm / 30)) : 999;
+    const daysOfStock = salesPerMonth > 0 ? Math.floor(stock / (salesPerMonth / 30)) : 999;
     
     if (daysOfStock <= 15) {
       return { status: 'low-stock', color: 'bg-yellow-100 text-yellow-800', text: `Low Stock (${daysOfStock}d)` };
     }
     
-    if (currentStock >= targetQuantity) {
+    if (stock >= target) {
       return { status: 'well-stocked', color: 'bg-green-100 text-green-800', text: 'Well Stocked' };
     }
     
@@ -752,7 +760,8 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                 </tr>
               </thead>
               <tbody>
-                {purchases.map((purchase) => {
+                {purchases.filter(purchase => purchase && typeof purchase === 'object').map((purchase) => {
+                  
                   const asin = extractASIN(purchase.sellLink);
                   const stockStatus = getStockStatus(
                     purchase.currentStock, 
@@ -761,33 +770,37 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                   );
                   
                   return (
-                    <tr key={purchase.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={purchase.id || `purchase-${Date.now()}-${Math.random()}`} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4">
                         <div className="space-y-1">
-                          <p className="font-medium text-gray-900 text-sm">{purchase.name}</p>
+                          <p className="font-medium text-gray-900 text-sm">{purchase.name || 'Unknown Product'}</p>
                           <div className="flex space-x-2 text-xs">
-                            <span className="text-gray-500">ASIN: {asin}</span>
-                            <span className="text-green-600">${purchase.price}</span>
+                            <span className="text-gray-500">ASIN: {asin || 'N/A'}</span>
+                            <span className="text-green-600">${purchase.price || '0.00'}</span>
                           </div>
                           <div className="flex space-x-2">
-                            <a
-                              href={purchase.buyLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
-                            >
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              Source
-                            </a>
-                            <a
-                              href={purchase.sellLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-orange-600 hover:text-orange-800 text-xs flex items-center"
-                            >
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              Amazon
-                            </a>
+                            {purchase.buyLink && (
+                              <a
+                                href={purchase.buyLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-xs flex items-center"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Source
+                              </a>
+                            )}
+                            {purchase.sellLink && (
+                              <a
+                                href={purchase.sellLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-orange-600 hover:text-orange-800 text-xs flex items-center"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Amazon
+                              </a>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -804,7 +817,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                             <Package className="h-4 w-4 text-gray-400" />
                             <span>{purchase.currentStock || 0} units</span>
                           </div>
-                          {purchase.spm > 0 && (
+                          {(purchase.spm && purchase.spm > 0) && (
                             <div className="flex items-center space-x-2 text-xs text-gray-500">
                               <TrendingUp className="h-3 w-3" />
                               <span>{purchase.spm}/month</span>
@@ -816,7 +829,7 @@ https://target.com/item456    https://amazon.com/dp/B002345678
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2 text-sm">
                           <Target className="h-4 w-4 text-gray-400" />
-                          <span>{purchase.targetQuantity} units</span>
+                          <span>{purchase.targetQuantity || 0} units</span>
                         </div>
                       </td>
                       

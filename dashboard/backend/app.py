@@ -9572,7 +9572,7 @@ image_queue = []
 queue_lock = threading.Lock()
 queue_worker_running = False
 last_amazon_request_time = 0
-MIN_REQUEST_INTERVAL = 5.0  # Much longer interval - 5 seconds between requests
+MIN_REQUEST_INTERVAL = 1.5  # Balanced interval - 1.5 seconds between requests
 
 import time
 import random
@@ -9583,7 +9583,7 @@ from requests.packages.urllib3.util.retry import Retry
 # Create a persistent session for Amazon requests with better anti-detection
 amazon_session = None
 session_last_used = 0
-SESSION_TIMEOUT = 300  # 5 minutes
+SESSION_TIMEOUT = 900  # 15 minutes
 
 def get_amazon_session():
     """Get or create a persistent Amazon session with anti-detection measures"""

@@ -16,10 +16,18 @@ export const useProductImages = (asins) => {
       
       try {
         // Filter out ASINs we already have cached
-        const cachedImages = JSON.parse(localStorage.getItem('productImages') || '{}');
+        let cachedImages = {};
+        try {
+          cachedImages = JSON.parse(localStorage.getItem('productImages') || '{}');
+        } catch (e) {
+          console.warn('Corrupted image cache, clearing:', e);
+          localStorage.removeItem('productImages');
+          cachedImages = {};
+        }
+        
         const uncachedAsins = asins.filter(asin => {
           const cached = cachedImages[asin];
-          if (cached && cached.timestamp && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
+          if (cached && cached.timestamp && cached.url && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
             return false; // Still valid in cache
           }
           return true;
@@ -141,13 +149,19 @@ export const useProductImage = (asin) => {
       // Check localStorage cache first
       try {
         const cached = JSON.parse(localStorage.getItem('productImages') || '{}')[asin];
-        if (cached && cached.timestamp && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000) {
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp) < 24 * 60 * 60 * 1000 && cached.url) {
           setImageUrl(cached.url);
           setLoading(false);
           return;
         }
       } catch (e) {
-        // Ignore cache errors
+        // Clear corrupted cache
+        console.warn('Corrupted image cache, clearing:', e);
+        try {
+          localStorage.removeItem('productImages');
+        } catch (clearError) {
+          // Ignore clear errors
+        }
       }
 
       try {
@@ -164,7 +178,8 @@ export const useProductImage = (asin) => {
             setImageUrl(response.data.image_url); // Placeholder
             setQueuePosition(response.data.queue_position);
             
-            // Start periodic checking for the real image
+            // Start periodic checking for the real image with exponential backoff
+            let checkCount = 0;
             checkInterval = setInterval(async () => {
               try {
                 const checkResponse = await axios.post('/api/check-images', {
@@ -195,10 +210,25 @@ export const useProductImage = (asin) => {
                 } else if (result && result.queue_position) {
                   setQueuePosition(result.queue_position);
                 }
+                
+                checkCount++;
+                // Stop checking after 10 attempts (50 seconds) to prevent infinite loops
+                if (checkCount >= 10) {
+                  clearInterval(checkInterval);
+                  setError(true);
+                  setLoading(false);
+                  setQueuePosition(null);
+                }
               } catch (checkErr) {
                 console.warn(`Failed to check image status for ${asin}:`, checkErr);
+                checkCount++;
+                if (checkCount >= 5) {
+                  clearInterval(checkInterval);
+                  setError(true);
+                  setLoading(false);
+                }
               }
-            }, 5000); // Check every 5 seconds
+            }, 3000); // Check every 3 seconds instead of 5
             
             setLoading(false);
           } else if (response.data.image_url) {

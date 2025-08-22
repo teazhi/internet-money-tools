@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   TrendingUp, 
@@ -17,14 +17,14 @@ import {
   GripVertical,
   RotateCcw
 } from 'lucide-react';
-import { useProductImage } from '../hooks/useProductImages';
+import { useProductImage, useProductImages } from '../hooks/useProductImages';
 import StandardTable from './common/StandardTable';
 
-// Product image component that uses optimized backend API
-const ProductImage = ({ asin, productName }) => {
-  // Always show a visible element to debug
+// Product image component that uses batch loaded images with fallback
+const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
   const [imgError, setImgError] = useState(false);
-  const { imageUrl, loading, error } = useProductImage(asin);
+  const [retryCount, setRetryCount] = useState(0);
+  const { imageUrl: fallbackUrl, loading: fallbackLoading } = useProductImage(imgError && retryCount < 2 ? asin : null);
   
   // For debugging - always show something visible
   if (!asin) {
@@ -35,7 +35,10 @@ const ProductImage = ({ asin, productName }) => {
     );
   }
 
-  if (loading) {
+  const imageUrl = imgError && fallbackUrl ? fallbackUrl : batchImages?.[asin];
+  const isLoading = (imagesLoading && !batchImages?.[asin]) || (imgError && fallbackLoading);
+  
+  if (isLoading) {
     return (
       <div className="h-16 w-16 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center" title="Loading image...">
         <div className="h-6 w-6 bg-gray-300 rounded animate-pulse" />
@@ -43,9 +46,9 @@ const ProductImage = ({ asin, productName }) => {
     );
   }
 
-  if (error || !imageUrl || imgError) {
+  if (!imageUrl || (imgError && !fallbackUrl)) {
     return (
-      <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${error ? 'Error' : imgError ? 'Image failed to load' : 'No URL'}`}>
+      <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${imgError ? 'Image failed to load' : 'No image available'}`}>
         <Package className="h-8 w-8 text-blue-600" />
       </div>
     );
@@ -58,7 +61,14 @@ const ProductImage = ({ asin, productName }) => {
         alt={productName || `Product ${asin}`}
         className="h-full w-full object-cover"
         loading="lazy"
-        onError={() => setImgError(true)}
+        onError={() => {
+          if (retryCount < 2) {
+            setRetryCount(prev => prev + 1);
+            setImgError(true);
+          } else {
+            setImgError(true);
+          }
+        }}
       />
     </div>
   );
@@ -72,6 +82,26 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   const [modalAsin] = useState('');
   const [purchaseSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
+  
+  // Extract data first (before any conditional returns to avoid hook order issues)
+  const { enhanced_analytics, restock_alerts } = analytics || {};
+  
+  // Extract all ASINs for batch image loading
+  const allAsins = useMemo(() => {
+    if (!restock_alerts) return [];
+    
+    return Object.values(restock_alerts)
+      .filter(alert => 
+        alert.suggested_quantity && 
+        alert.suggested_quantity > 0 && 
+        !isNaN(alert.suggested_quantity) &&
+        alert.asin
+      )
+      .map(alert => alert.asin);
+  }, [restock_alerts]);
+  
+  // Use batch image loading for better performance
+  const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
   
   // Default column order
   const defaultColumnOrder = ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'];
@@ -99,10 +129,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     }
   ];
   
-  // Extract data first (before any conditional returns to avoid hook order issues)
-  const { enhanced_analytics, restock_alerts } = analytics || {};
-
-
   // Column definitions for StandardTable
   const tableColumns = {
     product: { 
@@ -187,7 +213,12 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                   rel="noopener noreferrer"
                   className="block hover:opacity-80 transition-opacity"
                 >
-                  <ProductImage asin={alert.asin} productName={alert.product_name} />
+                  <ProductImage 
+                    asin={alert.asin} 
+                    productName={alert.product_name}
+                    batchImages={batchImages}
+                    imagesLoading={imagesLoading}
+                  />
                 </a>
               </div>
               <div className="min-w-0 flex-1">

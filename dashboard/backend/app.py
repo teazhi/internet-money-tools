@@ -11135,7 +11135,7 @@ def debug_source_links():
                             )
                         
                         # Use safe API call with token refresh
-                        cogs_data = safe_google_api_call(api_call, google_tokens, user_record)
+                        cogs_data = safe_google_api_call(user_record, api_call)
                         
                         if cogs_data:
                             # Process all rows from all worksheets

@@ -638,6 +638,8 @@ class EnhancedOrdersAnalysis:
         else:
             print(f"DEBUG - No purchase analytics available for {asin}")
         
+        print(f"DEBUG - Final MPA for {asin}: {monthly_purchase_adjustment}")
+        
         # Apply minimum order thresholds and rounding
         if suggested_quantity <= 0:
             suggested_quantity = 0
@@ -1411,7 +1413,11 @@ class EnhancedOrdersAnalysis:
         purchase_insights = {}
         
         
-        if user_settings and user_settings.get('enable_source_links'):
+        # Fetch COGS data and purchase analytics if Google Sheets are configured
+        # Note: enable_source_links controls source link display, but we should always try to get purchase analytics
+        print(f"DEBUG - User settings check: enable_source_links={user_settings.get('enable_source_links') if user_settings else 'None'}, sheet_id={bool(user_settings.get('sheet_id')) if user_settings else 'None'}")
+        
+        if user_settings and (user_settings.get('enable_source_links') or user_settings.get('sheet_id')):
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -1505,8 +1511,10 @@ class EnhancedOrdersAnalysis:
                             sheet_data, column_mapping_for_purchase
                         )
                         print(f"DEBUG - Purchase insights generated: {len(purchase_insights)} categories")
+                        print(f"DEBUG - Purchase insights keys: {list(purchase_insights.keys())}")
                         if 'recent_2_months_purchases' in purchase_insights:
                             print(f"DEBUG - Recent 2 months purchases found: {len(purchase_insights['recent_2_months_purchases'])} ASINs")
+                            print(f"DEBUG - Sample recent purchases: {list(purchase_insights['recent_2_months_purchases'].keys())[:3]}")
                     else:
                         print("DEBUG - No sheet data available for purchase analytics")
                         purchase_insights = {}

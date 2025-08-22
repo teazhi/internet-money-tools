@@ -1408,9 +1408,11 @@ class EnhancedOrdersAnalysis:
         purchase_insights = {}
         
         
-        # Always fetch COGS data if Google Sheets are configured (for Restock buttons)
-        # enable_source_links only controls display of source links in discount opportunities
-        if user_settings and user_settings.get('sheet_id') and user_settings.get('google_tokens', {}).get('access_token'):
+        print(f"DEBUG: user_settings = {user_settings is not None}")
+        print(f"DEBUG: enable_source_links = {user_settings.get('enable_source_links') if user_settings else None}")
+        
+        if user_settings and user_settings.get('enable_source_links'):
+            print("DEBUG: Entering COGS data fetching block")
             try:
                 # Import here to avoid circular imports
                 import sys
@@ -1496,6 +1498,13 @@ class EnhancedOrdersAnalysis:
                         column_mapping_for_purchase = {}
                     
                     
+                    # Debug: Check COGS data
+                    print(f"DEBUG: COGS data fetched successfully. Number of ASINs with COGS: {len(cogs_data)}")
+                    if cogs_data:
+                        sample_asin = next(iter(cogs_data.keys()))
+                        sample_data = cogs_data[sample_asin]
+                        print(f"DEBUG: Sample COGS data for {sample_asin}: has 'cogs' field = {'cogs' in sample_data}")
+                    
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
@@ -1506,7 +1515,9 @@ class EnhancedOrdersAnalysis:
                 else:
                     pass  # Debug print removed
             except Exception as e:
-                pass  # Debug print removed
+                print(f"ERROR: COGS data fetching failed: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 cogs_data = {}
                 purchase_insights = {}
 

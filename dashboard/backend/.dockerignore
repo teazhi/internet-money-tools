@@ -1,0 +1,42 @@
+# Ignore development files
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Ignore test files
+*test*.py
+debug_*.py
+
+# Ignore logs
+*.log
+server.log
+frontend.log
+
+# Ignore database files (should use external DB)
+*.db
+*.db-shm
+*.db-wal
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore documentation
+*.md
+SP_API_SETUP.md
+
+# Ignore development configs
+simple_app.py

@@ -11121,37 +11121,32 @@ def debug_source_links():
                 if not google_tokens.get('access_token') or not sheet_id:
                     csv_error = "Google Sheet not properly configured"
                 else:
-                    # Get all worksheets if search_all_worksheets is enabled
+                    # Get all worksheets if search_all_worksheets is enabled  
                     if search_all_worksheets:
-                        # Fetch from all worksheets like Smart Restock does
+                        # Use EXACT same approach as Smart Restock
                         from orders_analysis import OrdersAnalysis
                         analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
                         
                         def api_call(access_token):
-                            return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
-                                access_token=access_token,
-                                sheet_id=sheet_id,
-                                column_mapping=user_record.get('column_mapping', {})
+                            return analyzer.fetch_all_worksheets_cogs_data(
+                                access_token,
+                                sheet_id
                             )
                         
                         # Use safe API call with token refresh
                         cogs_data = safe_google_api_call(user_record, api_call)
                         
                         if cogs_data:
-                            # Process all rows from all worksheets
-                            for row_data in cogs_data:
-                                # Look for ASIN in any column
-                                for key, value in row_data.items():
-                                    if value and len(str(value)) == 10 and str(value).isalnum():
-                                        asin = str(value).upper()
-                                        # Look for source link in same row
-                                        for link_key, link_value in row_data.items():
-                                            if any(keyword in link_key.lower() for keyword in ['source', 'link', 'url']):
-                                                if link_value and str(link_value).startswith('http'):
-                                                    asin_to_source_link[asin] = str(link_value)
-                                                    break
+                            # Process COGS data - it's a dictionary keyed by ASIN
+                            for asin, data in cogs_data.items():
+                                if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
+                                    # Look for source in the data
+                                    source_link = data.get('Source') or data.get('source') or data.get('source_url')
+                                    if source_link and str(source_link).startswith('http'):
+                                        asin_to_source_link[str(asin).upper()] = str(source_link)
                         
-                        source_df = pd.DataFrame(cogs_data) if cogs_data else pd.DataFrame()
+                        # Create a simple DataFrame for row count display
+                        source_df = pd.DataFrame([{'asin': k, 'source': v} for k, v in asin_to_source_link.items()])
                     else:
                         # Single worksheet mode
                         worksheet_title = user_record.get('worksheet_title')

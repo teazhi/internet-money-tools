@@ -14,7 +14,8 @@ import {
   Target,
   User,
   Users,
-  ClipboardList
+  ClipboardList,
+  RefreshCw
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,6 +27,10 @@ const PurchaseManager = () => {
   const [error, setError] = useState('');
   const [editingRow, setEditingRow] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showBulkForm, setShowBulkForm] = useState(false);
+  const [bulkInput, setBulkInput] = useState('');
+  const [bulkParsedItems, setBulkParsedItems] = useState([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
   const [newPurchase, setNewPurchase] = useState({
     buyLink: '',
     sellLink: '',
@@ -38,6 +43,14 @@ const PurchaseManager = () => {
   // Determine if user is VA (sub-user) or main user
   const isVA = user?.user_type === 'sub' || user?.user_type === 'va';
   const isMainUser = !user?.user_type || user?.user_type === 'main';
+  
+  // Debug logging
+  console.log('Purchase Manager - User Info:', {
+    user_type: user?.user_type,
+    discord_id: user?.discord_id,
+    isVA,
+    isMainUser
+  });
 
   useEffect(() => {
     fetchPurchases();
@@ -68,6 +81,105 @@ const PurchaseManager = () => {
     return match ? match[1] : '';
   };
 
+  const parseBulkInput = (input) => {
+    const lines = input.trim().split('\n');
+    const parsedItems = [];
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+      
+      // Find all URLs in the line
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urls = trimmedLine.match(urlRegex) || [];
+      
+      if (urls.length >= 2) {
+        // Identify source and Amazon URLs
+        let sourceUrl = '';
+        let amazonUrl = '';
+        
+        for (const url of urls) {
+          if (url.includes('amazon.com/dp/')) {
+            amazonUrl = url;
+          } else {
+            sourceUrl = url; // First non-Amazon URL is the source
+          }
+        }
+        
+        if (sourceUrl && amazonUrl) {
+          const asin = extractASIN(amazonUrl);
+          parsedItems.push({
+            buyLink: sourceUrl,
+            sellLink: amazonUrl,
+            asin: asin,
+            name: `Product ${asin}`, // Will be auto-fetched
+            price: '',
+            targetQuantity: '',
+            notes: ''
+          });
+        }
+      }
+    }
+    
+    return parsedItems;
+  };
+
+  const handleBulkParse = () => {
+    const items = parseBulkInput(bulkInput);
+    setBulkParsedItems(items);
+    
+    if (items.length === 0) {
+      setError('No valid source/Amazon link pairs found. Make sure each line has both a source URL and an Amazon URL.');
+    } else {
+      setError('');
+    }
+  };
+
+  const submitBulkItems = async () => {
+    setBulkProcessing(true);
+    setError('');
+    let successCount = 0;
+    
+    try {
+      for (const item of bulkParsedItems) {
+        // Get default values from form inputs
+        const defaultPrice = document.getElementById('bulk-default-price')?.value || '0';
+        const defaultQuantity = document.getElementById('bulk-default-quantity')?.value || '50';
+        const defaultNotes = document.getElementById('bulk-default-notes')?.value || '';
+        
+        const purchaseData = {
+          ...item,
+          price: item.price || defaultPrice,
+          targetQuantity: item.targetQuantity || defaultQuantity,
+          notes: item.notes || defaultNotes
+        };
+        
+        const response = await axios.post('/api/purchases', purchaseData, {
+          withCredentials: true
+        });
+        
+        if (response.data.success) {
+          successCount++;
+        }
+      }
+      
+      if (successCount === bulkParsedItems.length) {
+        // All successful - refresh and close
+        await fetchPurchases();
+        setBulkInput('');
+        setBulkParsedItems([]);
+        setShowBulkForm(false);
+        setError('');
+      } else {
+        setError(`Added ${successCount} of ${bulkParsedItems.length} items. Some may have failed.`);
+      }
+    } catch (err) {
+      setError('Failed to add some items. Please try again.');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   const getStockStatus = (currentStock, spm, targetQuantity) => {
     if (!currentStock || currentStock === 0) {
       return { status: 'out-of-stock', color: 'bg-red-100 text-red-800', text: 'Out of Stock' };
@@ -88,12 +200,27 @@ const PurchaseManager = () => {
 
   const addNewPurchase = async () => {
     try {
+      // Validate required fields
+      if (!newPurchase.buyLink || !newPurchase.sellLink) {
+        setError('Please provide both source and Amazon links');
+        return;
+      }
+      
+      if (!newPurchase.name) {
+        setError('Please provide a product name');
+        return;
+      }
+      
       const response = await axios.post('/api/purchases', newPurchase, {
         withCredentials: true
       });
       
       if (response.data.success) {
-        setPurchases([response.data.purchase, ...purchases]);
+        // Add the new purchase to the list
+        const newPurchaseItem = response.data.purchase;
+        setPurchases(prevPurchases => [newPurchaseItem, ...prevPurchases]);
+        
+        // Reset form
         setNewPurchase({
           buyLink: '',
           sellLink: '',
@@ -103,11 +230,17 @@ const PurchaseManager = () => {
           notes: ''
         });
         setShowAddForm(false);
+        setError('');
       } else {
-        setError('Failed to add purchase');
+        setError(response.data.message || 'Failed to add purchase');
       }
     } catch (err) {
-      setError('Failed to add purchase. Please try again.');
+      console.error('Error adding purchase:', err);
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Failed to add purchase. Please try again.');
+      }
     }
   };
 
@@ -177,13 +310,22 @@ const PurchaseManager = () => {
             </div>
             
             {isMainUser && (
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Purchase Request
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setShowBulkForm(true)}
+                  className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
+                >
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Bulk Import
+                </button>
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg flex items-center transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Single Request
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -194,6 +336,162 @@ const PurchaseManager = () => {
           <div className="flex items-center">
             <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
             <span className="text-red-800">{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Form - Main User Only */}
+      {showBulkForm && isMainUser && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="heading-sm">Bulk Import Purchase Requests</h3>
+            <button
+              onClick={() => {
+                setShowBulkForm(false);
+                setBulkInput('');
+                setBulkParsedItems([]);
+                setError('');
+              }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="label-text">Paste Source and Amazon Links</label>
+              <p className="text-xs text-gray-500 mb-2">
+                Each line should contain a source URL and an Amazon URL separated by spaces or tabs
+              </p>
+              <textarea
+                value={bulkInput}
+                onChange={(e) => setBulkInput(e.target.value)}
+                placeholder={`https://walmart.com/item123    https://amazon.com/dp/B001234567
+https://target.com/item456    https://amazon.com/dp/B002345678
+...`}
+                rows="10"
+                className="input-field font-mono text-sm"
+              />
+            </div>
+            
+            {bulkInput && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleBulkParse}
+                  className="btn-secondary"
+                >
+                  Parse Links ({bulkInput.split('\n').filter(line => line.trim()).length} lines)
+                </button>
+              </div>
+            )}
+            
+            {/* Parsed Items Preview */}
+            {bulkParsedItems.length > 0 && (
+              <>
+                <div className="border-t pt-4">
+                  <h4 className="heading-sm mb-3">Found {bulkParsedItems.length} Items</h4>
+                  
+                  {/* Default Settings */}
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                    <h5 className="text-sm font-medium text-gray-700 mb-3">Default Settings for All Items</h5>
+                    <div className="grid md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="label-text">Default Price</label>
+                        <input
+                          id="bulk-default-price"
+                          type="number"
+                          step="0.01"
+                          defaultValue="0"
+                          placeholder="0.00"
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="label-text">Default Target Quantity</label>
+                        <input
+                          id="bulk-default-quantity"
+                          type="number"
+                          defaultValue="50"
+                          placeholder="50"
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="label-text">Default Notes</label>
+                        <input
+                          id="bulk-default-notes"
+                          type="text"
+                          placeholder="Instructions for VA..."
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Items List */}
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {bulkParsedItems.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm">
+                        <div className="flex-1">
+                          <div className="font-medium">ASIN: {item.asin}</div>
+                          <div className="text-xs text-gray-500 truncate">
+                            Source: {new URL(item.buyLink).hostname}
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <a
+                            href={item.buyLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                          <a
+                            href={item.sellLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-orange-600 hover:text-orange-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    onClick={submitBulkItems}
+                    disabled={bulkProcessing}
+                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {bulkProcessing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Create {bulkParsedItems.length} Requests
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBulkParsedItems([]);
+                      setBulkInput('');
+                    }}
+                    className="btn-secondary"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -282,7 +580,11 @@ const PurchaseManager = () => {
           
           <div className="flex space-x-3 mt-4">
             <button
-              onClick={addNewPurchase}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                addNewPurchase();
+              }}
               className="btn-primary"
             >
               Create Request

@@ -630,13 +630,14 @@ class EnhancedOrdersAnalysis:
         # Adjust for recent purchases - reduce recommended quantity by what was already purchased in last 2 months
         monthly_purchase_adjustment = 0
         if purchase_analytics:
+            print(f"DEBUG - purchase_analytics provided for {asin}, keys: {list(purchase_analytics.keys())}")
             recent_purchases = self.get_recent_2_months_purchases(asin, purchase_analytics)
             if recent_purchases > 0:
                 monthly_purchase_adjustment = recent_purchases
                 suggested_quantity = max(0, suggested_quantity - recent_purchases)
                 print(f"DEBUG - Purchase adjustment for {asin}: {recent_purchases} units")
         else:
-            print(f"DEBUG - No purchase analytics available for {asin}")
+            print(f"DEBUG - No purchase analytics available for {asin} (purchase_analytics is None or empty)")
         
         print(f"DEBUG - Final MPA for {asin}: {monthly_purchase_adjustment}")
         
@@ -1542,6 +1543,14 @@ class EnhancedOrdersAnalysis:
         restock_alerts = {}
         critical_alerts = []
         
+        # Debug: Check if purchase_insights is populated
+        print(f"DEBUG - purchase_insights status: {'populated' if purchase_insights else 'empty'}")
+        if purchase_insights:
+            print(f"DEBUG - purchase_insights keys: {list(purchase_insights.keys())}")
+            if 'recent_2_months_purchases' in purchase_insights:
+                recent_purchases_asins = list(purchase_insights['recent_2_months_purchases'].keys())
+                print(f"DEBUG - ASINs in recent_2_months_purchases: {len(recent_purchases_asins)} total")
+                print(f"DEBUG - Sample ASINs: {recent_purchases_asins[:5]}...")
         
         # Include ALL products from stock info for comprehensive analysis
         # This is important for lead analysis to check ALL inventory, not just products with recent sales

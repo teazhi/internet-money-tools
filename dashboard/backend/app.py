@@ -11085,9 +11085,9 @@ def migrate_purchases():
             'message': f'Migration failed: {str(e)}'
         }), 500
 
-@app.route('/api/debug/discount-opportunities', methods=['GET'])
+@app.route('/api/debug/source-links', methods=['GET'])
 @login_required
-def debug_discount_opportunities():
+def debug_source_links():
     """Debug endpoint to check discount opportunities source link processing"""
     try:
         discord_id = session['discord_id']

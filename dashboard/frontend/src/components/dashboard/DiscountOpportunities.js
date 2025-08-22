@@ -66,7 +66,7 @@ const DiscountOpportunities = () => {
 
   const fetchDebugInfo = async () => {
     try {
-      const response = await axios.get('/api/debug/discount-opportunities', { withCredentials: true });
+      const response = await axios.get('/api/debug/source-links', { withCredentials: true });
       setDebugInfo(response.data);
     } catch (error) {
       console.error('Error fetching debug info:', error);

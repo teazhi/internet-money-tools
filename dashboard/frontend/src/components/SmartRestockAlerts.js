@@ -358,14 +358,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                   {enhanced_analytics[alert.asin].restock.monthly_purchase_adjustment}
                 </span>
               </div>
-            ) : enhanced_analytics?.[alert.asin]?.purchase_analytics?.velocity_analysis?.days_since_last_purchase <= 60 ? (
-              // Fallback: Show recent purchase info if available
-              <div className="flex items-center space-x-1">
-                <ShoppingCart className="h-3 w-3 text-orange-600" />
-                <span className="text-orange-700 font-medium text-xs">
-                  ~{Math.floor(enhanced_analytics[alert.asin].purchase_analytics.velocity_analysis.avg_quantity_per_purchase || 0)}
-                </span>
-              </div>
             ) : (
               <span className="text-gray-400 text-xs">-</span>
             )}

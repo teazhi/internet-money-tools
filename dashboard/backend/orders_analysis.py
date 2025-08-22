@@ -630,16 +630,12 @@ class EnhancedOrdersAnalysis:
         # Adjust for recent purchases - reduce recommended quantity by what was already purchased in last 2 months
         monthly_purchase_adjustment = 0
         if purchase_analytics:
-            print(f"DEBUG - purchase_analytics provided for {asin}, keys: {list(purchase_analytics.keys())}")
             recent_purchases = self.get_recent_2_months_purchases(asin, purchase_analytics)
             if recent_purchases > 0:
                 monthly_purchase_adjustment = recent_purchases
                 suggested_quantity = max(0, suggested_quantity - recent_purchases)
-                print(f"DEBUG - Purchase adjustment for {asin}: {recent_purchases} units")
         else:
-            print(f"DEBUG - No purchase analytics available for {asin} (purchase_analytics is None or empty)")
-        
-        print(f"DEBUG - Final MPA for {asin}: {monthly_purchase_adjustment}")
+            pass  # No purchase analytics available for this ASIN
         
         # Apply minimum order thresholds and rounding
         if suggested_quantity <= 0:
@@ -715,34 +711,24 @@ class EnhancedOrdersAnalysis:
     def get_recent_2_months_purchases(self, asin: str, purchase_analytics: Dict) -> int:
         """Get the quantity purchased for this ASIN in the last 2 months (from last 2 worksheets)"""
         if not purchase_analytics:
-            print(f"DEBUG - get_recent_2_months_purchases: No purchase_analytics provided for {asin}")
             return 0
         
         # First check the dedicated recent 2 months purchases data
         recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
-        print(f"DEBUG - get_recent_2_months_purchases: Checking ASIN {asin}")
-        print(f"DEBUG - Available ASINs in recent_2_months_purchases: {list(recent_2_months_data.keys())[:10]}...")  # First 10 ASINs
-        
         if asin in recent_2_months_data:
             qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
-            print(f"DEBUG - Found {asin} in recent_2_months_purchases: {qty_purchased} units")
             return qty_purchased
         
         # Fallback to velocity analysis approach
-        velocity_analysis_data = purchase_analytics.get('purchase_velocity_analysis', {})
-        print(f"DEBUG - Available ASINs in purchase_velocity_analysis: {list(velocity_analysis_data.keys())[:10]}...")  # First 10 ASINs
-        
-        velocity_analysis = velocity_analysis_data.get(asin, {})
+        velocity_analysis = purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
         if velocity_analysis:
             days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
             
             # If purchased within the last 2 months (last 60 days), return the last purchase quantity
             if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
-                print(f"DEBUG - Found {asin} in velocity_analysis (within 60 days): {qty} units")
                 return qty
         
-        print(f"DEBUG - ASIN {asin} not found in any purchase analytics data")
         return 0
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
@@ -1545,9 +1531,6 @@ class EnhancedOrdersAnalysis:
                     pass  # Debug print removed
             except Exception as e:
                 # COGS data fetching failed, continue without it
-                print(f"ERROR - Failed to fetch Google Sheets COGS/purchase data: {str(e)}")
-                import traceback
-                traceback.print_exc()
                 cogs_data = {}
                 purchase_insights = {}
 
@@ -1561,14 +1544,6 @@ class EnhancedOrdersAnalysis:
         restock_alerts = {}
         critical_alerts = []
         
-        # Debug: Check if purchase_insights is populated
-        print(f"DEBUG - purchase_insights status: {'populated' if purchase_insights else 'empty'}")
-        if purchase_insights:
-            print(f"DEBUG - purchase_insights keys: {list(purchase_insights.keys())}")
-            if 'recent_2_months_purchases' in purchase_insights:
-                recent_purchases_asins = list(purchase_insights['recent_2_months_purchases'].keys())
-                print(f"DEBUG - ASINs in recent_2_months_purchases: {len(recent_purchases_asins)} total")
-                print(f"DEBUG - Sample ASINs: {recent_purchases_asins[:5]}...")
         
         # Include ALL products from stock info for comprehensive analysis
         # This is important for lead analysis to check ALL inventory, not just products with recent sales

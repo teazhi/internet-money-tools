@@ -38,6 +38,42 @@ DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
 analytics_cache = {}
 CACHE_EXPIRY_HOURS = 24
 
+# In-memory cache for S3 config data to reduce repeated reads
+config_cache = {}
+CONFIG_CACHE_EXPIRY_MINUTES = 30  # Cache configs for 30 minutes
+
+# Cache for file listings to reduce S3 list operations
+file_listing_cache = {}
+FILE_LISTING_CACHE_EXPIRY_MINUTES = 15  # Cache file listings for 15 minutes
+
+def get_cached_s3_list(bucket, prefix=""):
+    """Get S3 object list with caching to reduce list_objects calls"""
+    cache_key = f"s3_list_{bucket}_{prefix}"
+    
+    if cache_key in file_listing_cache:
+        cached_data, cached_time = file_listing_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < FILE_LISTING_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
+    try:
+        s3_client = get_s3_client()
+        if prefix:
+            response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+        else:
+            response = s3_client.list_objects_v2(Bucket=bucket)
+        
+        objects = response.get('Contents', [])
+        file_listing_cache[cache_key] = (objects, datetime.now())
+        return objects
+    except Exception as e:
+        return []
+
+def invalidate_file_listing_cache(bucket, prefix=""):
+    """Invalidate file listing cache when files are added/removed"""
+    cache_key = f"s3_list_{bucket}_{prefix}"
+    if cache_key in file_listing_cache:
+        del file_listing_cache[cache_key]
+
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
@@ -935,6 +971,13 @@ def get_users_config():
     if DEMO_MODE:
         return get_dummy_users()
     
+    # Check cache first to reduce S3 reads
+    cache_key = f"config_{USERS_CONFIG_KEY}"
+    if cache_key in config_cache:
+        cached_data, cached_time = config_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
     s3_client = get_s3_client()
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
@@ -946,6 +989,8 @@ def get_users_config():
             if user.get("google_tokens"):
                 user["google_tokens"] = validate_and_fix_token_data(user["google_tokens"])
         
+        # Cache the result to reduce future S3 reads
+        config_cache[cache_key] = (users, datetime.now())
         return users
     except Exception as e:
         pass  # Error fetching users config
@@ -966,13 +1011,14 @@ def update_users_config(users):
         )
         # Users configuration updated successfully
         
-        # Verify the save by reading it back immediately
-        try:
-            verify_response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
-            verify_data = json.loads(verify_response['Body'].read().decode('utf-8'))
-            pass  # Verification successful
-        except Exception as verify_error:
-            pass  # Verification failed
+        # Invalidate cache after successful update to ensure consistency
+        cache_key = f"config_{USERS_CONFIG_KEY}"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+        
+        # Skip verification read to reduce S3 costs - put_object is reliable
+        # Previous verification step removed to reduce S3 GET requests
+        pass  # Update completed successfully
         
         return True
     except Exception as e:
@@ -982,12 +1028,25 @@ def update_users_config(users):
         return False
 
 def get_invitations_config():
-    """Get invitations configuration from S3"""
+    """Get invitations configuration from S3 with caching"""
+    # Check cache first to reduce S3 reads
+    cache_key = f"config_{INVITATIONS_CONFIG_KEY}"
+    if cache_key in config_cache:
+        cached_data, cached_time = config_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
     try:
         s3_client = get_s3_client()
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=INVITATIONS_CONFIG_KEY)
-        return json.loads(response['Body'].read().decode('utf-8'))
+        data = json.loads(response['Body'].read().decode('utf-8'))
+        
+        # Cache the result
+        config_cache[cache_key] = (data, datetime.now())
+        return data
     except s3_client.exceptions.NoSuchKey:
+        # Cache empty result too
+        config_cache[cache_key] = ([], datetime.now())
         return []
     except Exception as e:
         pass  # Error reading invitations config
@@ -1003,6 +1062,12 @@ def update_invitations_config(invitations):
             Body=json.dumps(invitations, indent=2),
             ContentType='application/json'
         )
+        
+        # Invalidate cache after successful update
+        cache_key = f"config_{INVITATIONS_CONFIG_KEY}"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+        
         return True
     except Exception as e:
         pass  # Error updating invitations config

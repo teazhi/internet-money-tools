@@ -66,12 +66,19 @@ const StandardTable = ({
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Column ordering
+  // Column ordering - ensure 'product' is always first and excluded from reordering
   const [columnOrder, setColumnOrder] = useState(() => {
     if (!enableColumnReordering || !tableKey) return defaultColumnOrder;
     
     const saved = localStorage.getItem(`table-column-order-${tableKey}`);
-    return saved ? JSON.parse(saved) : defaultColumnOrder;
+    let order = saved ? JSON.parse(saved) : defaultColumnOrder;
+    
+    // Ensure 'product' column is always first if it exists
+    if (order.includes('product')) {
+      order = ['product', ...order.filter(col => col !== 'product')];
+    }
+    
+    return order;
   });
   
   // Initialize filters
@@ -130,6 +137,8 @@ const StandardTable = ({
   // Drag and drop handlers
   const handleDragStart = (e, columnKey) => {
     if (!enableColumnReordering) return;
+    // Prevent dragging the product column
+    if (columnKey === 'product') return;
     setDraggedColumn({ key: columnKey });
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -141,6 +150,8 @@ const StandardTable = ({
   
   const handleDragEnter = (e, columnKey) => {
     if (!enableColumnReordering || !draggedColumn || draggedColumn.key === columnKey) return;
+    // Prevent dropping on the product column
+    if (columnKey === 'product') return;
     e.preventDefault();
     
     const rect = e.currentTarget.getBoundingClientRect();
@@ -173,6 +184,14 @@ const StandardTable = ({
       return;
     }
     
+    // Prevent dropping on or around the product column
+    if (targetColumnKey === 'product' || draggedColumn.key === 'product') {
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+      setDropIndicatorPosition(null);
+      return;
+    }
+    
     const newOrder = [...columnOrder];
     const draggedIndex = newOrder.indexOf(draggedColumn.key);
     const targetIndex = newOrder.indexOf(targetColumnKey);
@@ -194,11 +213,14 @@ const StandardTable = ({
       // Insert at new position
       newOrder.splice(insertIndex, 0, draggedItem);
       
-      setColumnOrder(newOrder);
+      // Ensure product column stays first after reordering
+      const finalOrder = ['product', ...newOrder.filter(col => col !== 'product')];
+      
+      setColumnOrder(finalOrder);
       
       // Save to localStorage
       if (tableKey) {
-        localStorage.setItem(`table-column-order-${tableKey}`, JSON.stringify(newOrder));
+        localStorage.setItem(`table-column-order-${tableKey}`, JSON.stringify(finalOrder));
       }
     }
     
@@ -217,9 +239,15 @@ const StandardTable = ({
   const resetColumnOrder = () => {
     if (!enableColumnResetting) return;
     
-    setColumnOrder(defaultColumnOrder);
+    // Ensure product column is first when resetting
+    let resetOrder = [...defaultColumnOrder];
+    if (resetOrder.includes('product')) {
+      resetOrder = ['product', ...resetOrder.filter(col => col !== 'product')];
+    }
+    
+    setColumnOrder(resetOrder);
     if (tableKey) {
-      localStorage.setItem(`table-column-order-${tableKey}`, JSON.stringify(defaultColumnOrder));
+      localStorage.setItem(`table-column-order-${tableKey}`, JSON.stringify(resetOrder));
     }
   };
   
@@ -398,7 +426,7 @@ const StandardTable = ({
                   <th 
                     key={columnKey}
                     className={`relative px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 ${
-                      enableColumnReordering && column.draggable !== false ? 'cursor-move hover:bg-gray-100' : ''
+                      enableColumnReordering && column.draggable !== false && columnKey !== 'product' ? 'cursor-move hover:bg-gray-100' : ''
                     } ${
                       draggedColumn?.key === columnKey ? 'opacity-30 bg-gray-100' : ''
                     } ${
@@ -406,7 +434,7 @@ const StandardTable = ({
                         ? 'bg-blue-50' 
                         : ''
                     }`}
-                    draggable={enableColumnReordering && column.draggable !== false}
+                    draggable={enableColumnReordering && column.draggable !== false && columnKey !== 'product'}
                     onDragStart={(e) => handleDragStart(e, columnKey)}
                     onDragOver={handleDragOver}
                     onDragEnter={(e) => handleDragEnter(e, columnKey)}
@@ -426,7 +454,7 @@ const StandardTable = ({
                       )}
                       
                       <div className="flex items-center space-x-1 relative z-0">
-                        {enableColumnReordering && column.draggable !== false && (
+                        {enableColumnReordering && column.draggable !== false && columnKey !== 'product' && (
                           <GripVertical className={`h-3 w-3 transition-colors ${
                             draggedColumn?.key === columnKey ? 'text-gray-600' : 'text-gray-400'
                           }`} />

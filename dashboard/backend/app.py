@@ -6425,10 +6425,13 @@ def analyze_discount_opportunities():
                         # Process COGS data - it's a dictionary keyed by ASIN
                         for asin, data in cogs_data.items():
                             if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
-                                # Look for source in the data
-                                source_link = data.get('Source') or data.get('source') or data.get('source_url')
-                                if source_link and str(source_link).startswith('http'):
-                                    asin_to_source_link[str(asin).upper()] = str(source_link)
+                                # Look for sources in the all_sources array (same as Smart Restock)
+                                all_sources = data.get('all_sources', [])
+                                if all_sources:
+                                    # Use the most recent (last) source
+                                    source_link = all_sources[-1]
+                                    if source_link and str(source_link).startswith('http'):
+                                        asin_to_source_link[str(asin).upper()] = str(source_link)
                 else:
                     # Single worksheet mode
                     worksheet_title = config_user_record.get('worksheet_title')
@@ -6443,9 +6446,13 @@ def analyze_discount_opportunities():
                         if cogs_data:
                             for asin, data in cogs_data.items():
                                 if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
-                                    source_link = data.get('Source') or data.get('source') or data.get('source_url')
-                                    if source_link and str(source_link).startswith('http'):
-                                        asin_to_source_link[str(asin).upper()] = str(source_link)
+                                    # Look for sources in the all_sources array (same as Smart Restock)
+                                    all_sources = data.get('all_sources', [])
+                                    if all_sources:
+                                        # Use the most recent (last) source
+                                        source_link = all_sources[-1]
+                                        if source_link and str(source_link).startswith('http'):
+                                            asin_to_source_link[str(asin).upper()] = str(source_link)
                 
                 print(f"[DEBUG] Found {len(asin_to_source_link)} source links from Google Sheets")
                 
@@ -11158,10 +11165,13 @@ def debug_source_links():
                             # Process COGS data - it's a dictionary keyed by ASIN
                             for asin, data in cogs_data.items():
                                 if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
-                                    # Look for source in the data
-                                    source_link = data.get('Source') or data.get('source') or data.get('source_url')
-                                    if source_link and str(source_link).startswith('http'):
-                                        asin_to_source_link[str(asin).upper()] = str(source_link)
+                                    # Look for sources in the all_sources array (same as Smart Restock)
+                                    all_sources = data.get('all_sources', [])
+                                    if all_sources:
+                                        # Use the most recent (last) source
+                                        source_link = all_sources[-1]
+                                        if source_link and str(source_link).startswith('http'):
+                                            asin_to_source_link[str(asin).upper()] = str(source_link)
                         
                         # Create a simple DataFrame for row count display
                         source_df = pd.DataFrame([{'asin': k, 'source': v} for k, v in asin_to_source_link.items()])

@@ -1897,12 +1897,12 @@ def debug_auth():
     })
 
 @app.route('/api/user')
-@login_required
 def get_user():
-    discord_id = session['discord_id']
-    
-    # In demo mode, return the demo user
+    # In demo mode, return the demo user without requiring authentication
     if DEMO_MODE:
+        # Set demo session for consistency
+        session['discord_id'] = '123456789012345678'
+        session['discord_username'] = 'DemoUser#1234'
         demo_users = get_dummy_users()
         demo_user = demo_users[0]  # Use first demo user
         return jsonify({
@@ -1920,6 +1920,11 @@ def get_user():
             'timezone': 'America/New_York'
         })
     
+    # For non-demo mode, require authentication
+    if 'discord_id' not in session:
+        return jsonify({'error': 'Authentication required'}), 401
+        
+    discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
     # Check if we're in admin impersonation mode

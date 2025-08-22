@@ -35,13 +35,26 @@ const ProductImage = ({ asin, productName }) => {
   }
 
   return (
-    <div className="h-16 w-16 rounded-lg overflow-hidden border border-gray-200 bg-white">
+    <div className="h-16 w-16 rounded-lg overflow-hidden border border-gray-200 bg-white relative">
       <img
         src={imageUrl}
-        alt={productName || `Product ${asin}`}
+        alt=""
         className="h-full w-full object-cover"
         loading="lazy"
+        onError={(e) => {
+          // Hide the broken image
+          e.target.style.display = 'none';
+          // Show the fallback icon
+          const fallback = e.target.nextElementSibling;
+          if (fallback) fallback.style.display = 'flex';
+        }}
       />
+      <div 
+        className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center"
+        style={{ display: 'none' }}
+      >
+        <Package className="h-8 w-8 text-blue-600" />
+      </div>
     </div>
   );
 };

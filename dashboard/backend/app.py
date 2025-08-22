@@ -9837,6 +9837,53 @@ def stop_queue_worker():
 # Start the queue worker when the module loads
 start_queue_worker()
 
+@app.route('/api/product-image/<asin>/proxy', methods=['GET'])
+@login_required
+def proxy_product_image(asin):
+    """Proxy product image to avoid CORS and hotlinking issues"""
+    try:
+        # First get the image URL using existing logic
+        cache_key = f"image_{asin}"
+        image_url = None
+        
+        if cache_key in product_image_cache:
+            cached_data = product_image_cache[cache_key]
+            image_url = cached_data.get('image_url')
+        
+        if not image_url:
+            # Fetch fresh if not cached
+            response = get_product_image(asin)
+            data = response.get_json()
+            if data and 'image_url' in data:
+                image_url = data['image_url']
+        
+        if not image_url:
+            return '', 404
+        
+        # Fetch the image through our server
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Referer': 'https://www.amazon.com/'
+        }
+        
+        img_response = requests.get(image_url, headers=headers, timeout=10, stream=True)
+        img_response.raise_for_status()
+        
+        # Return the image with appropriate headers
+        return Response(
+            img_response.content,
+            mimetype=img_response.headers.get('Content-Type', 'image/jpeg'),
+            headers={
+                'Cache-Control': 'public, max-age=86400',  # Cache for 24 hours
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+        
+    except Exception as e:
+        print(f"Error proxying image for {asin}: {str(e)}")
+        return '', 404
+
 @app.route('/api/product-image/<asin>', methods=['GET'])
 @login_required
 def get_product_image(asin):

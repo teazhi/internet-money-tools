@@ -56,12 +56,13 @@ export const useProductImages = (asins) => {
                 Object.keys(batchResults).forEach(asin => {
                   const result = batchResults[asin];
                   if (result.image_url) {
-                    updated[asin] = result.image_url;
+                    // Use proxy endpoint
+                    updated[asin] = `/api/product-image/${asin}/proxy`;
                     
                     // Cache the result
                     const newCache = { ...cachedImages };
                     newCache[asin] = {
-                      url: result.image_url,
+                      url: `/api/product-image/${asin}/proxy`,
                       timestamp: Date.now()
                     };
                     localStorage.setItem('productImages', JSON.stringify(newCache));
@@ -84,13 +85,13 @@ export const useProductImages = (asins) => {
                   if (response.data.image_url) {
                     setImages(prev => ({
                       ...prev,
-                      [asin]: response.data.image_url
+                      [asin]: `/api/product-image/${asin}/proxy`
                     }));
                     
                     // Cache individual result
                     const newCache = { ...JSON.parse(localStorage.getItem('productImages') || '{}') };
                     newCache[asin] = {
-                      url: response.data.image_url,
+                      url: `/api/product-image/${asin}/proxy`,
                       timestamp: Date.now()
                     };
                     localStorage.setItem('productImages', JSON.stringify(newCache));
@@ -155,8 +156,8 @@ export const useProductImage = (asin) => {
         
         if (response.data) {
           if (response.data.cached && response.data.image_url) {
-            // Already cached - use it
-            setImageUrl(response.data.image_url);
+            // Use proxy endpoint to avoid CORS issues
+            setImageUrl(`/api/product-image/${asin}/proxy`);
             setLoading(false);
           } else if (response.data.method === 'queued_for_processing') {
             // Queued for processing - show placeholder and start checking
@@ -172,7 +173,8 @@ export const useProductImage = (asin) => {
                 
                 const result = checkResponse.data.results[asin];
                 if (result && result.ready) {
-                  setImageUrl(result.image_url);
+                  // Use proxy endpoint for the fetched image
+                  setImageUrl(`/api/product-image/${asin}/proxy`);
                   setLoading(false);
                   setQueuePosition(null);
                   
@@ -180,7 +182,7 @@ export const useProductImage = (asin) => {
                   try {
                     const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
                     cache[asin] = {
-                      url: result.image_url,
+                      url: `/api/product-image/${asin}/proxy`,
                       timestamp: Date.now(),
                       method: 'queue_processed'
                     };
@@ -199,17 +201,23 @@ export const useProductImage = (asin) => {
             }, 5000); // Check every 5 seconds
             
             setLoading(false);
+          } else if (response.data.image_url) {
+            // Use proxy endpoint for any returned image URL
+            setImageUrl(`/api/product-image/${asin}/proxy`);
+            setLoading(false);
           } else {
-            // Fallback
-            setImageUrl(response.data.image_url || `https://via.placeholder.com/300x300.png?text=${asin}`);
+            // No image found
+            setError(true);
+            setImageUrl(null);
             setLoading(false);
           }
         }
       } catch (err) {
         console.error(`Failed to fetch image for ASIN ${asin}:`, err.response?.data || err.message);
         
-        // Fallback placeholder
-        setImageUrl(`https://via.placeholder.com/300x300.png?text=${asin}`);
+        // Set error state instead of placeholder
+        setError(true);
+        setImageUrl(null);
         setLoading(false);
       }
     };

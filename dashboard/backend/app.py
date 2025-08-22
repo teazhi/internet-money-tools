@@ -11103,15 +11103,21 @@ def debug_source_links():
         # Fetch email alerts
         email_alerts = fetch_discount_email_alerts()
         
-        # Fetch source CSV if enabled
+        # Fetch source CSV if enabled - use same logic as main function
         source_df = None
         asin_to_source_link = {}
         csv_error = None
         
-        if enable_source_links and sheet_configured:
+        if enable_source_links:
             try:
-                from cogs_analysis import fetch_source_links_csv
-                source_df = fetch_source_links_csv(user_record)
+                # Use the same hardcoded CSV URL as the main function
+                csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
+                response = requests.get(csv_url, timeout=10)
+                response.raise_for_status()
+                
+                from io import StringIO
+                import pandas as pd
+                source_df = pd.read_csv(StringIO(response.text))
                 
                 # Process source links like the main function does
                 if source_df is not None and not source_df.empty:

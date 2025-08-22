@@ -98,6 +98,15 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts } = analytics || {};
+  
+  // Debug: Log data structure
+  console.log('SmartRestockAlerts Debug:', {
+    analytics: !!analytics,
+    enhanced_analytics: !!enhanced_analytics,
+    enhanced_analytics_keys: enhanced_analytics ? Object.keys(enhanced_analytics).slice(0, 3) : 'none',
+    restock_alerts: !!restock_alerts,
+    restock_alerts_keys: restock_alerts ? Object.keys(restock_alerts).slice(0, 3) : 'none'
+  });
 
   // Sorting function
   const handleSort = (key) => {
@@ -217,6 +226,18 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
 
   // Render cell content for recommendations table
   const renderRecommendationCell = (columnKey, alert) => {
+    // Debug logging for actions column
+    if (columnKey === 'actions') {
+      console.log('renderRecommendationCell actions debug:', {
+        columnKey,
+        alert_asin: alert.asin,
+        enhanced_analytics_exists: !!enhanced_analytics,
+        alert_data_exists: !!enhanced_analytics?.[alert.asin],
+        cogs_data_exists: !!enhanced_analytics?.[alert.asin]?.cogs_data,
+        cogs_value: enhanced_analytics?.[alert.asin]?.cogs_data?.cogs
+      });
+    }
+    
     switch (columnKey) {
       case 'product':
         return (
@@ -376,17 +397,24 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       case 'actions':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs && (
-              <button
-                onClick={() => handleRestockClick(alert.asin, enhanced_analytics[alert.asin].cogs_data.source_link)}
-                className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                disabled={sourcesLoading}
-                title="Open restock source"
-              >
-                <ShoppingCart className="h-3 w-3 mr-1" />
-                Restock
-              </button>
-            )}
+            {/* Debug: Show comprehensive data availability */}
+            <div className="text-xs text-gray-400 mb-1">
+              EA: {enhanced_analytics ? 'Yes' : 'No'} | 
+              ASIN: {alert.asin} | 
+              HasData: {enhanced_analytics?.[alert.asin] ? 'Yes' : 'No'} |
+              COGS: {enhanced_analytics?.[alert.asin]?.cogs_data?.cogs ? 'Yes' : 'No'}
+            </div>
+            
+            {/* Always show button for debugging */}
+            <button
+              onClick={() => handleRestockClick(alert.asin, enhanced_analytics?.[alert.asin]?.cogs_data?.source_link || null)}
+              className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled={sourcesLoading}
+              title="Debug: Always show restock button"
+            >
+              <ShoppingCart className="h-3 w-3 mr-1" />
+              Restock (Debug)
+            </button>
           </td>
         );
       default:
@@ -396,16 +424,28 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
 
   // Filter and sort alerts
   const sortedAlerts = useMemo(() => {
-    if (!restock_alerts) return [];
+    if (!restock_alerts) {
+      console.log('sortedAlerts: No restock_alerts data');
+      return [];
+    }
     
-    let filtered = Object.values(restock_alerts);
+    let all_alerts = Object.values(restock_alerts);
+    console.log('sortedAlerts: All alerts before filtering:', all_alerts.length, 
+      all_alerts.slice(0, 2).map(a => ({
+        asin: a.asin, 
+        suggested_quantity: a.suggested_quantity,
+        product_name: a.product_name?.substring(0, 30)
+      }))
+    );
     
     // Filter out items with 0 or null suggested quantity
-    filtered = filtered.filter(alert => 
+    let filtered = all_alerts.filter(alert => 
       alert.suggested_quantity && 
       alert.suggested_quantity > 0 && 
       !isNaN(alert.suggested_quantity)
     );
+    
+    console.log('sortedAlerts: After quantity filter:', filtered.length);
     
     // Apply search filter
     if (searchQuery) {
@@ -446,6 +486,15 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       // Default sort by priority score
       filtered.sort((a, b) => b.priority_score - a.priority_score);
     }
+    
+    console.log('sortedAlerts Debug:', {
+      filtered_length: filtered.length,
+      sample_alert: filtered[0] ? {
+        asin: filtered[0].asin,
+        product_name: filtered[0].product_name,
+        keys: Object.keys(filtered[0])
+      } : 'none'
+    });
     
     return filtered;
   }, [restock_alerts, searchQuery, priorityFilter, sortConfig, enhanced_analytics]);
@@ -731,13 +780,22 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {sortedAlerts.length > 0 ? (
-                    sortedAlerts.map((alert) => (
-                      <tr key={alert.asin} className="hover:bg-gray-50">
-                        {columnOrders.recommendations.map((columnKey) => 
-                          renderRecommendationCell(columnKey, alert)
-                        )}
-                      </tr>
-                    ))
+                    sortedAlerts.map((alert, index) => {
+                      if (index === 0) {
+                        console.log('Rendering columns for first alert:', columnOrders.recommendations);
+                      }
+                      return (
+                        <tr key={alert.asin} className="hover:bg-gray-50">
+                          {columnOrders.recommendations.map((columnKey) => {
+                            const cell = renderRecommendationCell(columnKey, alert);
+                            if (columnKey === 'actions' && index === 0) {
+                              console.log('Actions cell for first alert:', cell);
+                            }
+                            return cell;
+                          })}
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan={columnOrders.recommendations.length} className="px-3 py-8 text-center">

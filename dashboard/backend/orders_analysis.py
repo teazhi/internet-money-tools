@@ -634,6 +634,9 @@ class EnhancedOrdersAnalysis:
             if recent_purchases > 0:
                 monthly_purchase_adjustment = recent_purchases
                 suggested_quantity = max(0, suggested_quantity - recent_purchases)
+                print(f"DEBUG - Purchase adjustment for {asin}: {recent_purchases} units")
+        else:
+            print(f"DEBUG - No purchase analytics available for {asin}")
         
         # Apply minimum order thresholds and rounding
         if suggested_quantity <= 0:
@@ -1497,10 +1500,15 @@ class EnhancedOrdersAnalysis:
                     
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
+                        print(f"DEBUG - Generating purchase analytics from sheet data with {len(sheet_data)} rows")
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
                             sheet_data, column_mapping_for_purchase
                         )
+                        print(f"DEBUG - Purchase insights generated: {len(purchase_insights)} categories")
+                        if 'recent_2_months_purchases' in purchase_insights:
+                            print(f"DEBUG - Recent 2 months purchases found: {len(purchase_insights['recent_2_months_purchases'])} ASINs")
                     else:
+                        print("DEBUG - No sheet data available for purchase analytics")
                         purchase_insights = {}
                 else:
                     pass  # Debug print removed

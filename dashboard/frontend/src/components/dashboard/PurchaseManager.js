@@ -150,14 +150,14 @@ const PurchaseManager = () => {
     return { isVA, isMainUser };
   }, [user, isVA, isMainUser]);
   
-  const displayIsVA = effectiveRole.isVA;
-  const displayIsMainUser = effectiveRole.isMainUser;
+  const finalIsVA = effectiveRole.isVA;
+  const finalIsMainUser = effectiveRole.isMainUser;
   
   // Temporary role override for debugging during impersonation
   const [roleOverride, setRoleOverride] = useState(null);
   
-  const displayIsVA = roleOverride === 'va' ? true : roleOverride === 'manager' ? false : displayIsVA;
-  const displayIsMainUser = roleOverride === 'manager' ? true : roleOverride === 'va' ? false : displayIsMainUser;
+  const displayIsVA = roleOverride === 'va' ? true : roleOverride === 'manager' ? false : finalIsVA;
+  const displayIsMainUser = roleOverride === 'manager' ? true : roleOverride === 'va' ? false : finalIsMainUser;
   
   // Debug logging
   console.log('=== Purchase Manager - DETAILED User Info ===');

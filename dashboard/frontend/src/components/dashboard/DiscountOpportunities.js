@@ -596,6 +596,25 @@ const DiscountOpportunities = () => {
                     <div className="bg-red-50 border border-red-200 rounded p-3">
                       <strong className="text-red-800">CSV Error:</strong>
                       <p className="text-red-700 text-sm mt-1">{debugInfo.debug_info.csv_error}</p>
+                      {debugInfo.debug_info?.csv_url && (
+                        <p className="text-red-600 text-xs mt-1">URL: {debugInfo.debug_info.csv_url}</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {debugInfo.debug_info?.csv_columns && debugInfo.debug_info.csv_columns.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                      <strong className="text-blue-800">CSV Columns Found:</strong>
+                      <p className="text-blue-700 text-sm mt-1">{debugInfo.debug_info.csv_columns.join(', ')}</p>
+                    </div>
+                  )}
+                  
+                  {debugInfo.csv_data_preview && debugInfo.csv_data_preview.length > 0 && (
+                    <div className="bg-gray-50 border border-gray-200 rounded p-3">
+                      <strong className="text-gray-800">CSV Data Preview (First 3 rows):</strong>
+                      <div className="mt-2 text-xs overflow-x-auto">
+                        <pre className="text-gray-700">{JSON.stringify(debugInfo.csv_data_preview, null, 2)}</pre>
+                      </div>
                     </div>
                   )}
                   

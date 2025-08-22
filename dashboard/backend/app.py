@@ -11108,8 +11108,13 @@ def debug_source_links():
         asin_to_source_link = {}
         csv_error = None
         
+        # Try to fetch CSV data
+        csv_url = None
+        csv_data_preview = None
+        
         if enable_source_links:
             try:
+                print(f"[DEBUG] Attempting to fetch CSV data for debug...")
                 # Use the same hardcoded CSV URL as the main function
                 csv_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRz7iEc-6eA4pfImWfSs_qVyUWHmqDw8ET1PTWugLpqDHU6txhwyG9lCMA65Z9AHf-6lcvCcvbE4MPT/pub?output=csv'
                 response = requests.get(csv_url, timeout=10)
@@ -11118,6 +11123,12 @@ def debug_source_links():
                 from io import StringIO
                 import pandas as pd
                 source_df = pd.read_csv(StringIO(response.text))
+                
+                print(f"[DEBUG] CSV fetched successfully, rows: {len(source_df)}, columns: {list(source_df.columns)}")
+                
+                # Get preview of first few rows for debugging
+                if not source_df.empty:
+                    csv_data_preview = source_df.head(3).to_dict('records')
                 
                 # Process source links like the main function does
                 if source_df is not None and not source_df.empty:
@@ -11130,9 +11141,16 @@ def debug_source_links():
                                         potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
                                         if potential_link.startswith('http'):
                                             asin_to_source_link[cell_value.upper()] = potential_link
+                                            print(f"[DEBUG] Found mapping: {cell_value.upper()} -> {potential_link}")
                                             break
+                
+                print(f"[DEBUG] Total ASIN mappings created: {len(asin_to_source_link)}")
+                
             except Exception as e:
                 csv_error = str(e)
+                print(f"[DEBUG] CSV fetch error: {csv_error}")
+        else:
+            csv_error = "Source links are disabled in user settings"
         
         # Sample a few opportunities to show their source link status
         sample_opportunities = []
@@ -11156,12 +11174,15 @@ def debug_source_links():
                 'worksheet_title': user_record.get('worksheet_title'),
                 'google_tokens_present': bool(user_record.get('google_tokens', {}).get('refresh_token')),
                 'csv_error': csv_error,
+                'csv_url': csv_url,
                 'csv_rows_found': len(source_df) if source_df is not None else 0,
+                'csv_columns': list(source_df.columns) if source_df is not None and not source_df.empty else [],
                 'asin_to_source_mappings': len(asin_to_source_link),
                 'total_email_alerts': len(email_alerts)
             },
             'sample_opportunities': sample_opportunities,
-            'first_few_source_mappings': dict(list(asin_to_source_link.items())[:5]) if asin_to_source_link else {}
+            'first_few_source_mappings': dict(list(asin_to_source_link.items())[:5]) if asin_to_source_link else {},
+            'csv_data_preview': csv_data_preview[:3] if csv_data_preview else []
         })
         
     except Exception as e:

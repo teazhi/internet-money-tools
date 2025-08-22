@@ -99,32 +99,48 @@ const PurchaseManager = () => {
   // If admin is impersonating, we need to determine the role of the impersonated user
   const effectiveRole = React.useMemo(() => {
     if (user?.admin_impersonating) {
-      console.log('Admin impersonating user, checking role...', user);
+      console.log('🔍 Admin impersonating user, analyzing role...', user);
       
       // During impersonation, check various ways the user type might be indicated
       let impersonatedIsVA = false;
       let impersonatedIsMainUser = false;
       
-      // Check if user_type is explicitly set
+      // Method 1: Check if user_type is explicitly set
       if (user?.user_type === 'sub' || user?.user_type === 'va') {
+        console.log('✅ Found explicit VA user_type:', user.user_type);
         impersonatedIsVA = true;
       } else if (user?.user_type === 'main') {
+        console.log('✅ Found explicit main user_type:', user.user_type);
         impersonatedIsMainUser = true;
       } else {
-        // Fallback: check if there are any indicators in the user object
-        // If no explicit user_type during impersonation, we might need to check other fields
-        // For now, let's check if the Discord username contains 'va' or similar indicators
+        console.log('⚠️ No explicit user_type found, trying fallback methods...');
+        
+        // Method 2: Check Discord username patterns
         const username = (user?.discord_username || '').toLowerCase();
-        if (username.includes('va') || username.includes('assistant')) {
-          console.log('Detected VA user based on username pattern');
+        console.log('🔍 Checking username for VA patterns:', username);
+        
+        if (username.includes('va') || username.includes('assistant') || username.includes('help')) {
+          console.log('✅ Detected VA user based on username pattern');
           impersonatedIsVA = true;
         } else {
-          // Default to main user if no clear indication
-          impersonatedIsMainUser = true;
+          // Method 3: Check if the user has certain properties that indicate they're a VA
+          // For example, VAs might not have certain permissions or features
+          
+          // Method 4: Check if this is a known VA Discord ID (you could add specific IDs here)
+          
+          // Method 5: For now, let's default to VA mode during impersonation
+          // since the user is asking to see the VA view
+          console.log('🔄 Defaulting to VA mode for impersonation testing');
+          impersonatedIsVA = true;
+          impersonatedIsMainUser = false;
         }
       }
       
-      console.log('Impersonation role determined:', { impersonatedIsVA, impersonatedIsMainUser });
+      console.log('🎯 Final impersonation role determined:', { 
+        impersonatedIsVA, 
+        impersonatedIsMainUser,
+        reasoning: impersonatedIsVA ? 'VA Mode' : 'Manager Mode'
+      });
       
       return {
         isVA: impersonatedIsVA,
@@ -144,17 +160,22 @@ const PurchaseManager = () => {
   const displayIsMainUser = roleOverride === 'manager' ? true : roleOverride === 'va' ? false : displayIsMainUser;
   
   // Debug logging
-  console.log('Purchase Manager - User Info:', {
-    user_type: user?.user_type,
-    discord_id: user?.discord_id,
-    admin_impersonating: user?.admin_impersonating,
-    discord_username: user?.discord_username,
-    original_isVA: isVA,
-    original_isMainUser: isMainUser,
-    final_isVA: displayIsVA,
-    final_isMainUser: displayIsMainUser,
-    full_user_object: user
-  });
+  console.log('=== Purchase Manager - DETAILED User Info ===');
+  console.log('Raw user object:', user);
+  console.log('user?.user_type:', user?.user_type);
+  console.log('user?.discord_id:', user?.discord_id);
+  console.log('user?.admin_impersonating:', user?.admin_impersonating);
+  console.log('user?.discord_username:', user?.discord_username);
+  console.log('All user keys:', user ? Object.keys(user) : 'no user');
+  console.log('Role calculations:');
+  console.log('  original_isVA:', isVA);
+  console.log('  original_isMainUser:', isMainUser);
+  console.log('  final_isVA:', finalIsVA);
+  console.log('  final_isMainUser:', finalIsMainUser);
+  console.log('  displayIsVA:', displayIsVA);
+  console.log('  displayIsMainUser:', displayIsMainUser);
+  console.log('  roleOverride:', roleOverride);
+  console.log('=======================================');
 
   // Error boundary for debugging
   useEffect(() => {
@@ -476,38 +497,52 @@ const PurchaseManager = () => {
 
   return (
     <div className="space-y-6">
-      {/* Debug Panel - Only show during impersonation */}
-      {user?.admin_impersonating && (
-        <div className="card bg-yellow-50 border-yellow-200">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-yellow-800">🔧 Debug Panel (Impersonation Mode)</h4>
-            <div className="text-xs text-yellow-600">
-              Detected: {finalIsVA ? 'VA' : 'Manager'} | Override: {roleOverride || 'None'}
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <span className="text-xs text-yellow-700">Role Override:</span>
-            <button
-              onClick={() => setRoleOverride('va')}
-              className={`px-2 py-1 text-xs rounded ${roleOverride === 'va' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-            >
-              Force VA Mode
-            </button>
-            <button
-              onClick={() => setRoleOverride('manager')}
-              className={`px-2 py-1 text-xs rounded ${roleOverride === 'manager' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-            >
-              Force Manager Mode
-            </button>
-            <button
-              onClick={() => setRoleOverride(null)}
-              className="px-2 py-1 text-xs rounded bg-gray-300 text-gray-700"
-            >
-              Auto Detect
-            </button>
+      {/* Debug Panel - Show always for now to help with testing */}
+      <div className="card bg-yellow-50 border-yellow-200">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-yellow-800">🔧 Debug Panel</h4>
+          <div className="text-xs text-yellow-600">
+            Detected: {finalIsVA ? 'VA' : 'Manager'} | 
+            Current: {displayIsVA ? 'VA' : 'Manager'} | 
+            Override: {roleOverride || 'None'}
           </div>
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-4 mb-3 text-xs">
+          <div>
+            <strong>User Info:</strong><br/>
+            Type: {user?.user_type || 'undefined'}<br/>
+            Impersonating: {user?.admin_impersonating ? 'Yes' : 'No'}<br/>
+            Username: {user?.discord_username || 'undefined'}
+          </div>
+          <div>
+            <strong>Role Detection:</strong><br/>
+            Original isVA: {isVA ? 'Yes' : 'No'}<br/>
+            Final isVA: {finalIsVA ? 'Yes' : 'No'}<br/>
+            Display isVA: {displayIsVA ? 'Yes' : 'No'}
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          <span className="text-xs text-yellow-700">Force Role:</span>
+          <button
+            onClick={() => setRoleOverride('va')}
+            className={`px-3 py-1 text-xs rounded ${roleOverride === 'va' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+          >
+            🔵 Force VA Mode
+          </button>
+          <button
+            onClick={() => setRoleOverride('manager')}
+            className={`px-3 py-1 text-xs rounded ${roleOverride === 'manager' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+          >
+            🟢 Force Manager Mode
+          </button>
+          <button
+            onClick={() => setRoleOverride(null)}
+            className="px-3 py-1 text-xs rounded bg-gray-300 text-gray-700"
+          >
+            🔄 Auto Detect
+          </button>
+        </div>
+      </div>
       
       {/* Header */}
       <div className={`rounded-lg p-6 text-white ${

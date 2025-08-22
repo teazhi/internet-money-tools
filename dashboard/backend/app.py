@@ -1204,6 +1204,28 @@ def send_invitation_email(email, invitation_token, invited_by):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        print(f"Login check for path: {request.path}, DEMO_MODE: {DEMO_MODE}")
+        
+        # Bypass authentication for image endpoints in demo mode
+        if DEMO_MODE:
+            try:
+                if ('product-image' in request.path or 'check-images' in request.path or 
+                    'product-images' in request.path):
+                    print(f"Demo mode: bypassing auth for {request.path}")
+                    # Set a demo session that persists for this request
+                    session.permanent = True
+                    session['discord_id'] = '123456789012345678'  # Demo user ID
+                    session['discord_username'] = 'DemoUser#1234'
+                    print(f"Session set: {session.get('discord_id')}")
+                    return f(*args, **kwargs)
+            except Exception as e:
+                print(f"Error in demo mode bypass: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        current_session_id = session.get('discord_id')
+        print(f"Current session discord_id: {current_session_id}")
+        
         if 'discord_id' not in session:
             return jsonify({'error': 'Authentication required'}), 401
         return f(*args, **kwargs)
@@ -9902,10 +9924,76 @@ def stop_queue_worker():
 # Start the queue worker when the module loads
 start_queue_worker()
 
+@app.route('/api/demo/product-image/<asin>/proxy', methods=['GET'])
+def demo_proxy_product_image(asin):
+    """Demo proxy for product images - no auth required"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    # For demo mode, return placeholder images to avoid scraping issues
+    try:
+        placeholder_url = f"https://via.placeholder.com/200x200/4f46e5/ffffff?text={asin[:6]}"
+        
+        # Fetch and proxy the placeholder image
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+        
+        img_response = requests.get(placeholder_url, headers=headers, timeout=5, stream=True)
+        img_response.raise_for_status()
+        
+        response = make_response(img_response.content)
+        response.headers['Content-Type'] = img_response.headers.get('Content-Type', 'image/png')
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching demo image for {asin}: {str(e)}")
+        return '', 404
+
+@app.route('/api/demo/product-images/batch', methods=['POST'])
+def demo_get_product_images_batch():
+    """Demo batch endpoint - no auth required"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    try:
+        data = request.get_json()
+        asins = data.get('asins', [])
+        
+        results = {}
+        for asin in asins:
+            results[asin] = {
+                'image_url': f"https://via.placeholder.com/200x200/4f46e5/ffffff?text={asin[:6]}",
+                'cached': False,
+                'method': 'demo_placeholder'
+            }
+        
+        return jsonify({'results': results})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/demo/product-image/<asin>', methods=['GET'])
+def demo_get_product_image(asin):
+    """Demo individual image endpoint - no auth required"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    return jsonify({
+        'asin': asin,
+        'image_url': f"https://via.placeholder.com/200x200/4f46e5/ffffff?text={asin[:6]}",
+        'cached': False,
+        'method': 'demo_placeholder'
+    })
+
 @app.route('/api/product-image/<asin>/proxy', methods=['GET'])
 @login_required
 def proxy_product_image(asin):
     """Proxy product image to avoid CORS and hotlinking issues"""
+    return proxy_product_image_logic(asin)
+
+def proxy_product_image_logic(asin):
+    """Shared logic for product image proxying"""
     try:
         # First get the image URL using existing logic
         cache_key = f"image_{asin}"
@@ -9916,9 +10004,13 @@ def proxy_product_image(asin):
             image_url = cached_data.get('image_url')
         
         if not image_url:
-            # Fetch fresh if not cached
-            response = get_product_image(asin)
-            data = response.get_json()
+            # Fetch fresh if not cached - use demo endpoint if in demo mode
+            if DEMO_MODE:
+                data = get_product_image_logic(asin)
+            else:
+                response = get_product_image(asin)
+                data = response.get_json()
+            
             if data and 'image_url' in data:
                 image_url = data['image_url']
         

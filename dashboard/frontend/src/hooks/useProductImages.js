@@ -64,7 +64,7 @@ export const useProductImages = (asins) => {
                 Object.keys(batchResults).forEach(asin => {
                   const result = batchResults[asin];
                   if (result.image_url) {
-                    // Use proxy endpoint
+                    // Use demo proxy endpoint if needed, otherwise regular proxy
                     updated[asin] = `/api/product-image/${asin}/proxy`;
                     
                     // Cache the result

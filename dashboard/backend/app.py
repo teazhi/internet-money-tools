@@ -2453,7 +2453,6 @@ def get_discount_gmail_token(user_record):
     """Get Gmail access token for discount monitoring (uses separate tokens if available)"""
     # Priority 1: Use discount-specific tokens if available
     if user_record.get('discount_gmail_tokens'):
-        print("[DEBUG] Using discount-specific Gmail tokens")
         return refresh_discount_gmail_token(user_record)
     
     # Priority 2: Fall back to regular Google tokens
@@ -6291,13 +6290,8 @@ def analyze_discount_opportunities():
         # Check database cache first (24 hour expiry for daily use)
         cached_opportunities = get_cached_discount_opportunities(discord_id, retailer_filter)
         if cached_opportunities:
-            print(f"[DEBUG] Returning cached discount opportunities from database for user {discord_id}")
             return jsonify(cached_opportunities)
         
-        # Log environment configuration
-        print(f"[DEBUG] DISCOUNT_MONITOR_EMAIL: {DISCOUNT_MONITOR_EMAIL}")
-        print(f"[DEBUG] DISCOUNT_SENDER_EMAIL: {DISCOUNT_SENDER_EMAIL}")
-        print(f"[DEBUG] Days back: {get_discount_email_days_back()}")
         user = get_user_record(discord_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -6332,11 +6326,9 @@ def analyze_discount_opportunities():
         if analytics_cache_key in analytics_cache:
             cache_entry = analytics_cache[analytics_cache_key]
             if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
-                print(f"[DEBUG] Using cached enhanced analytics")
                 enhanced_analytics = cache_entry['data']
         
         if enhanced_analytics is None:
-            print(f"[DEBUG] Generating fresh enhanced analytics (this may take a moment)")
             try:
                 from orders_analysis import EnhancedOrdersAnalysis
                 
@@ -6379,7 +6371,6 @@ def analyze_discount_opportunities():
                     'data': enhanced_analytics,
                     'timestamp': datetime.now()
                 }
-                print(f"[DEBUG] Cached enhanced analytics for 10 minutes")
                 
             except Exception as e:
                 print(f"[ERROR] Failed to generate analytics: {str(e)}")
@@ -6392,7 +6383,6 @@ def analyze_discount_opportunities():
         email_alerts = fetch_discount_email_alerts()
         
         # Fetch source links from user's Google Sheet (same approach as Smart Restock)
-        print(f"[DEBUG] Fetching source links from user's configured Google Sheet")
         asin_to_source_link = {}
         
         # Check if user has source links enabled and Google Sheet configured
@@ -6454,20 +6444,10 @@ def analyze_discount_opportunities():
                                         if source_link and str(source_link).startswith('http'):
                                             asin_to_source_link[str(asin).upper()] = str(source_link)
                 
-                print(f"[DEBUG] Found {len(asin_to_source_link)} source links from Google Sheets")
                 
             except Exception as e:
                 print(f"[WARNING] Failed to fetch source links from Google Sheets: {str(e)}")
-        elif enable_source_links:
-            print(f"[DEBUG] Source links enabled but Google Sheet not properly configured")
-        else:
-            print(f"[DEBUG] Source links disabled")
         opportunities = []
-        
-        print(f"[DEBUG] Processing {len(email_alerts)} email alerts against inventory")
-        print(f"[DEBUG] User has {len(enhanced_analytics)} ASINs in inventory")
-        if enhanced_analytics:
-            print(f"[DEBUG] Sample inventory ASINs: {list(enhanced_analytics.keys())[:5]}")
         
         # Process email alerts using multithreading
         def process_email_alert(email_alert):
@@ -6550,7 +6530,6 @@ def analyze_discount_opportunities():
         
         # Use ThreadPoolExecutor to process alerts in parallel
         max_workers = min(20, len(email_alerts))  # Increased to 20 threads since operations are now much faster
-        print(f"[DEBUG] Using {max_workers} threads to process {len(email_alerts)} alerts")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all email alerts for processing
@@ -6603,7 +6582,6 @@ def analyze_discount_opportunities():
         
         # Cache the result in database for 24 hours
         cache_discount_opportunities(discord_id, retailer_filter, result)
-        print(f"[DEBUG] Cached discount opportunities in database for user {discord_id}")
         
         # Add cache metadata for fresh data
         result['cached'] = False  # This is fresh data
@@ -8763,20 +8741,16 @@ def fetch_discount_email_alerts():
             ]
         
         # Get system-wide discount monitoring Gmail access
-        print(f"[DEBUG] Checking system-wide discount monitoring Gmail access...")
         
         # Try to get admin Gmail tokens from system config
         admin_gmail_config = get_admin_gmail_config()
         
         if not admin_gmail_config or not admin_gmail_config.get('tokens'):
-            print(f"[DEBUG] No system-wide discount monitoring Gmail configured")
-            print(f"[DEBUG] Admin needs to connect Gmail for discount monitoring")
             # Return mock data if admin Gmail not configured
             return fetch_mock_discount_alerts()
         
         print(f"[DEBUG] ✅ FOUND SYSTEM-WIDE DISCOUNT GMAIL CONFIG")
         print(f"[DEBUG] Connected Gmail: {admin_gmail_config.get('gmail_email', 'Unknown')}")
-        print(f"[DEBUG] All users will use this Gmail source for discount opportunities")
         
         # Build Gmail search query
         # Search for emails from alert service in the last N days
@@ -8807,7 +8781,6 @@ def fetch_discount_email_alerts():
         
         # First, test basic Gmail API access with a simple query
         print("[DEBUG] Testing basic Gmail API access...")
-        print(f"[DEBUG] About to search system-wide Gmail for discount monitoring")
         
         # Try to get the Gmail profile to verify which account we're accessing
         try:
@@ -11108,134 +11081,6 @@ def migrate_purchases():
             'message': f'Migration failed: {str(e)}'
         }), 500
 
-@app.route('/api/debug/source-links', methods=['GET'])
-@login_required
-def debug_source_links():
-    """Debug endpoint to check discount opportunities source link processing"""
-    try:
-        discord_id = session['discord_id']
-        user_record = get_user_record(discord_id)
-        
-        if not user_record:
-            return jsonify({'error': 'User record not found'}), 404
-        
-        # Check source links settings
-        enable_source_links = user_record.get('enable_source_links', False)
-        sheet_configured = bool(user_record.get('sheet_id') and user_record.get('worksheet_title'))
-        
-        # Fetch email alerts
-        email_alerts = fetch_discount_email_alerts()
-        
-        # Fetch source CSV if enabled - use same logic as main function
-        source_df = None
-        asin_to_source_link = {}
-        csv_error = None
-        
-        # Use proper Google Sheet access like other features
-        csv_url = 'User configured Google Sheet'
-        
-        if enable_source_links and sheet_configured:
-            try:
-                # Use the same Google Sheets access as other features
-                google_tokens = user_record.get('google_tokens', {})
-                sheet_id = user_record.get('sheet_id')
-                search_all_worksheets = user_record.get('search_all_worksheets', True)
-                
-                if not google_tokens.get('access_token') or not sheet_id:
-                    csv_error = "Google Sheet not properly configured"
-                else:
-                    # Get all worksheets if search_all_worksheets is enabled  
-                    if search_all_worksheets:
-                        # Use EXACT same approach as Smart Restock
-                        from orders_analysis import OrdersAnalysis
-                        analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
-                        
-                        def api_call(access_token):
-                            return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
-                                access_token,
-                                sheet_id,
-                                user_record.get('column_mapping', {})
-                            )
-                        
-                        # Use safe API call with token refresh
-                        result = safe_google_api_call(user_record, api_call)
-                        cogs_data = result[0] if result and isinstance(result, tuple) else result
-                        
-                        if cogs_data:
-                            # Process COGS data - it's a dictionary keyed by ASIN
-                            for asin, data in cogs_data.items():
-                                if asin and len(str(asin)) == 10 and str(asin).replace('-', '').isalnum():
-                                    # Look for sources in the all_sources array (same as Smart Restock)
-                                    all_sources = data.get('all_sources', [])
-                                    if all_sources:
-                                        # Use the most recent (last) source
-                                        source_link = all_sources[-1]
-                                        if source_link and str(source_link).startswith('http'):
-                                            asin_to_source_link[str(asin).upper()] = str(source_link)
-                        
-                        # Create a simple DataFrame for row count display
-                        source_df = pd.DataFrame([{'asin': k, 'source': v} for k, v in asin_to_source_link.items()])
-                    else:
-                        # Single worksheet mode
-                        worksheet_title = user_record.get('worksheet_title')
-                        if worksheet_title:
-                            source_df = fetch_google_sheet_as_df(user_record, worksheet_title)
-                            
-                            # Process single worksheet
-                            for _, row in source_df.iterrows():
-                                for col in source_df.columns:
-                                    cell_value = str(row[col]) if pd.notna(row[col]) else ""
-                                    if len(cell_value) == 10 and cell_value.isalnum():
-                                        for link_col in source_df.columns:
-                                            if any(keyword in link_col.lower() for keyword in ['url', 'link', 'source']):
-                                                potential_link = str(row[link_col]) if pd.notna(row[link_col]) else ""
-                                                if potential_link.startswith('http'):
-                                                    asin_to_source_link[cell_value.upper()] = potential_link
-                                                    break
-                        else:
-                            csv_error = "No worksheet title configured"
-                            
-            except Exception as e:
-                csv_error = str(e)
-        elif enable_source_links and not sheet_configured:
-            csv_error = "Google Sheet not configured in Settings"
-        
-        # Sample a few opportunities to show their source link status
-        sample_opportunities = []
-        for i, alert in enumerate(email_alerts[:5]):  # First 5 alerts
-            asin = alert.get('asin', 'N/A')
-            source_link = asin_to_source_link.get(asin.upper()) if asin != 'N/A' else None
-            
-            sample_opportunities.append({
-                'asin': asin,
-                'retailer': alert.get('retailer', 'N/A'),
-                'has_source_link': bool(source_link),
-                'source_link': source_link,
-                'alert_note': alert.get('note', 'N/A')
-            })
-        
-        return jsonify({
-            'debug_info': {
-                'enable_source_links': enable_source_links,
-                'sheet_configured': sheet_configured,
-                'search_all_worksheets': user_record.get('search_all_worksheets', False),
-                'csv_error': csv_error,
-                'csv_source': csv_url,
-                'csv_rows_found': len(source_df) if source_df is not None else 0,
-                'csv_columns': list(source_df.columns) if source_df is not None and not source_df.empty else [],
-                'asin_to_source_mappings': len(asin_to_source_link),
-                'total_email_alerts': len(email_alerts),
-                'sheet_id': user_record.get('sheet_id', 'Not configured'),
-                'worksheet_title': user_record.get('worksheet_title', 'Not configured')
-            },
-            'sample_opportunities': sample_opportunities,
-            'first_few_source_mappings': dict(list(asin_to_source_link.items())[:5]) if asin_to_source_link else {}
-        })
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug/purchases', methods=['GET'])
 @login_required  

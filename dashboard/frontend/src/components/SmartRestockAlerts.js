@@ -18,6 +18,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { useProductImage } from '../hooks/useProductImages';
+import StandardTable from './common/StandardTable';
 
 // Product image component that uses optimized backend API
 const ProductImage = ({ asin, productName }) => {
@@ -72,151 +73,108 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   const [purchaseSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   
-  // State for filtering and sorting
-  const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  // Default column order
+  const defaultColumnOrder = ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'];
   
-  // State for column ordering
-  const [draggedColumn, setDraggedColumn] = useState(null);
+  // Search fields for StandardTable
+  const searchFields = ['product_name', 'asin'];
   
-  // Force product to be first and ensure it's included
-  const getColumnOrder = () => {
-    const saved = JSON.parse(localStorage.getItem('smart-restock-column-order-recommendations') || 'null');
-    if (saved) {
-      // Remove product from saved order if it exists
-      const filtered = saved.filter(col => col !== 'product');
-      // Always put product first
-      return ['product', ...filtered];
+  // Filters for StandardTable
+  const tableFilters = [
+    {
+      key: 'priority',
+      label: 'Priority',
+      allLabel: 'All Priorities',
+      options: [
+        { value: 'critical', label: 'Critical Only' },
+        { value: 'warning', label: 'High Priority Only' },
+        { value: 'opportunity', label: 'Opportunities Only' }
+      ],
+      filterFn: (item, value) => {
+        if (value === 'critical') return item.category.includes('critical');
+        if (value === 'warning') return item.category.includes('warning');
+        if (value === 'opportunity') return item.category.includes('opportunity');
+        return true;
+      }
     }
-    return ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions'];
-  };
-  
-  const [columnOrders, setColumnOrders] = useState({
-    recommendations: getColumnOrder()
-  });
+  ];
   
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts } = analytics || {};
 
-  // Sorting function
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+
+  // Column definitions for StandardTable
+  const tableColumns = {
+    product: { 
+      key: 'product', 
+      label: 'Product', 
+      sortKey: 'product_name', 
+      draggable: false 
+    },
+    priority: { 
+      key: 'priority', 
+      label: 'Priority', 
+      sortKey: 'priority_score', 
+      draggable: true 
+    },
+    current_stock: { 
+      key: 'current_stock', 
+      label: 'Current Stock', 
+      sortKey: 'current_stock', 
+      draggable: true 
+    },
+    days_left: { 
+      key: 'days_left', 
+      label: 'Days Left', 
+      sortKey: 'days_left', 
+      draggable: true 
+    },
+    velocity: { 
+      key: 'velocity', 
+      label: 'Velocity', 
+      sortKey: 'velocity', 
+      draggable: true 
+    },
+    trend: { 
+      key: 'trend', 
+      label: 'Trend', 
+      sortKey: null, 
+      draggable: true 
+    },
+    last_cogs: { 
+      key: 'last_cogs', 
+      label: 'Last COGS', 
+      sortKey: 'cogs',
+      sortFn: (a, b, direction) => {
+        const aValue = enhanced_analytics?.[a.asin]?.cogs_data?.cogs || 0;
+        const bValue = enhanced_analytics?.[b.asin]?.cogs_data?.cogs || 0;
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      },
+      draggable: true 
+    },
+    already_ordered: { 
+      key: 'already_ordered', 
+      label: 'Already Ordered', 
+      sortKey: null, 
+      draggable: true 
+    },
+    suggested_order: { 
+      key: 'suggested_order', 
+      label: 'Suggested Order', 
+      sortKey: 'suggested_quantity', 
+      draggable: true 
+    },
+    actions: { 
+      key: 'actions', 
+      label: 'Actions', 
+      sortKey: null, 
+      draggable: false 
     }
-    setSortConfig({ key, direction });
   };
 
-  // Get sort icon
-  const getSortIcon = (columnKey) => {
-    if (sortConfig.key !== columnKey) {
-      return <ArrowUpDown className="h-3 w-3 text-gray-400" />;
-    }
-    return sortConfig.direction === 'asc' 
-      ? <ArrowUp className="h-3 w-3 text-gray-600" />
-      : <ArrowDown className="h-3 w-3 text-gray-600" />;
-  };
 
-  // Column definitions
-  const columnDefinitions = {
-    recommendations: {
-      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false },
-      priority: { key: 'priority', label: 'Priority', sortKey: 'priority_score', draggable: true },
-      current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
-      days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
-      velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
-      trend: { key: 'trend', label: 'Trend', sortKey: null, draggable: true },
-      last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'cogs', draggable: true },
-      already_ordered: { key: 'already_ordered', label: 'Already Ordered', sortKey: null, draggable: true },
-      suggested_order: { key: 'suggested_order', label: 'Suggested Order', sortKey: 'suggested_quantity', draggable: true },
-      actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false }
-    }
-  };
-
-  // Drag and drop handlers
-  const handleDragStart = (e, columnKey, tableType) => {
-    const column = columnDefinitions[tableType]?.[columnKey];
-    if (!column || !column.draggable) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedColumn({ key: columnKey, tableType });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e, targetColumnKey, tableType) => {
-    e.preventDefault();
-    
-    if (!draggedColumn || draggedColumn.tableType !== tableType) {
-      setDraggedColumn(null);
-      return;
-    }
-
-    // Prevent dropping on non-draggable columns
-    const targetColumn = columnDefinitions[tableType]?.[targetColumnKey];
-    const draggedCol = columnDefinitions[tableType]?.[draggedColumn.key];
-    if (!targetColumn || !draggedCol || !targetColumn.draggable || !draggedCol.draggable) {
-      setDraggedColumn(null);
-      return;
-    }
-
-    const newOrder = [...columnOrders[tableType]];
-    const draggedIndex = newOrder.indexOf(draggedColumn.key);
-    const targetIndex = newOrder.indexOf(targetColumnKey);
-
-    if (draggedIndex !== -1 && targetIndex !== -1 && draggedIndex !== targetIndex) {
-      // Remove dragged item
-      const [draggedItem] = newOrder.splice(draggedIndex, 1);
-      // Insert at new position
-      newOrder.splice(targetIndex, 0, draggedItem);
-      
-      // Ensure product always stays first
-      const productIndex = newOrder.indexOf('product');
-      if (productIndex > 0) {
-        newOrder.splice(productIndex, 1);
-        newOrder.unshift('product');
-      }
-
-      // Update state
-      setColumnOrders(prev => ({
-        ...prev,
-        [tableType]: newOrder
-      }));
-
-      // Save to localStorage (without product since we always add it first)
-      const toSave = newOrder.filter(col => col !== 'product');
-      localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(toSave));
-    }
-    
-    setDraggedColumn(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedColumn(null);
-  };
-
-  // Reset column order to default
-  const resetColumnOrder = (tableType) => {
-    const defaultOrders = {
-      recommendations: ['product', 'priority', 'current_stock', 'days_left', 'velocity', 'trend', 'last_cogs', 'already_ordered', 'suggested_order', 'actions']
-    };
-    
-    setColumnOrders(prev => ({
-      ...prev,
-      [tableType]: defaultOrders[tableType]
-    }));
-    
-    localStorage.setItem(`smart-restock-column-order-${tableType}`, JSON.stringify(defaultOrders[tableType]));
-  };
-
-  // Render cell content for recommendations table
-  const renderRecommendationCell = (columnKey, alert) => {
+  // Render cell function for StandardTable
+  const renderCell = (columnKey, alert) => {
     switch (columnKey) {
       case 'product':
         return (
@@ -394,61 +352,30 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     }
   };
 
-  // Filter and sort alerts
-  const sortedAlerts = useMemo(() => {
+  // Prepare table data
+  const tableData = useMemo(() => {
     if (!restock_alerts) return [];
     
-    let filtered = Object.values(restock_alerts);
+    let data = Object.values(restock_alerts);
     
     // Filter out items with 0 or null suggested quantity
-    filtered = filtered.filter(alert => 
+    data = data.filter(alert => 
       alert.suggested_quantity && 
       alert.suggested_quantity > 0 && 
       !isNaN(alert.suggested_quantity)
     );
     
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(alert => 
-        alert.product_name.toLowerCase().includes(query) ||
-        alert.asin.toLowerCase().includes(query)
-      );
-    }
+    // Add id field for StandardTable
+    data = data.map(alert => ({
+      ...alert,
+      id: alert.asin
+    }));
     
-    // Apply priority filter
-    if (priorityFilter !== 'all') {
-      filtered = filtered.filter(alert => {
-        if (priorityFilter === 'critical') return alert.category.includes('critical');
-        if (priorityFilter === 'warning') return alert.category.includes('warning');
-        if (priorityFilter === 'opportunity') return alert.category.includes('opportunity');
-        return true;
-      });
-    }
+    // Default sort by priority score
+    data.sort((a, b) => b.priority_score - a.priority_score);
     
-    // Apply sorting
-    if (sortConfig.key) {
-      filtered.sort((a, b) => {
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
-        
-        // Handle nested properties
-        if (sortConfig.key === 'cogs') {
-          aValue = enhanced_analytics?.[a.asin]?.cogs_data?.cogs || 0;
-          bValue = enhanced_analytics?.[b.asin]?.cogs_data?.cogs || 0;
-        }
-        
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    } else {
-      // Default sort by priority score
-      filtered.sort((a, b) => b.priority_score - a.priority_score);
-    }
-    
-    return filtered;
-  }, [restock_alerts, searchQuery, priorityFilter, sortConfig, enhanced_analytics]);
+    return data;
+  }, [restock_alerts]);
 
   // Function to extract URLs from a text string (handles multiple URLs in one cell)
   const extractUrlsFromText = (text) => {
@@ -635,129 +562,31 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
               </div>
             )}
             <div className={loading ? 'opacity-50' : ''}>
-            <p className="text-xs text-gray-600 mb-3">
-              Products requiring immediate restocking attention based on current stock levels and sales velocity.
-            </p>
+              <p className="text-xs text-gray-600 mb-6">
+                Products requiring immediate restocking attention based on current stock levels and sales velocity.
+              </p>
 
-            {/* Filter Controls */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="flex-1 relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search products, ASINs, or descriptions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <Filter className="h-3 w-3 text-gray-400" />
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 focus:border-transparent"
-                >
-                  <option value="all">All Priorities</option>
-                  <option value="critical">Critical Only</option>
-                  <option value="warning">High Priority Only</option>
-                  <option value="opportunity">Opportunities Only</option>
-                </select>
-                <button
-                  onClick={() => resetColumnOrder('recommendations')}
-                  className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-builders-500"
-                  title="Reset column order"
-                >
-                  <RotateCcw className="h-3 w-3 mr-1" />
-                  Reset Columns
-                </button>
-              </div>
-            </div>
-
-            {/* Smart Restock Recommendations Table */}
-            <div className="overflow-x-auto border border-gray-200 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {columnOrders.recommendations.map((columnKey) => {
-                      const column = columnDefinitions.recommendations[columnKey];
-                      if (!column) return null;
-                      
-                      return (
-                        <th 
-                          key={columnKey}
-                          className={`px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide ${
-                            column.draggable ? 'cursor-move' : 'cursor-default'
-                          } ${
-                            draggedColumn?.key === columnKey ? 'opacity-50' : ''
-                          }`}
-                          draggable={column.draggable === true}
-                          onDragStart={(e) => {
-                            if (!column.draggable) {
-                              e.preventDefault();
-                              return;
-                            }
-                            handleDragStart(e, columnKey, 'recommendations');
-                          }}
-                          onDragOver={column.draggable ? handleDragOver : undefined}
-                          onDrop={(e) => column.draggable ? handleDrop(e, columnKey, 'recommendations') : e.preventDefault()}
-                          onDragEnd={handleDragEnd}
-                        >
-                          <div className="flex items-center space-x-1">
-                            {column.draggable && (
-                              <GripVertical className="h-3 w-3 text-gray-400" />
-                            )}
-                            {column.sortKey ? (
-                              <button
-                                onClick={() => handleSort(column.sortKey)}
-                                className="flex items-center space-x-1 hover:text-gray-700 text-xs"
-                              >
-                                <span>{column.label}</span>
-                                {getSortIcon(column.sortKey)}
-                              </button>
-                            ) : (
-                              <span className="text-xs">{column.label}</span>
-                            )}
-                          </div>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {sortedAlerts.length > 0 ? (
-                    sortedAlerts.map((alert) => (
-                      <tr key={alert.asin} className="hover:bg-gray-50">
-                        {columnOrders.recommendations.map((columnKey) => 
-                          renderRecommendationCell(columnKey, alert)
-                        )}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={columnOrders.recommendations.length} className="px-3 py-8 text-center">
-                        <div className="flex flex-col items-center">
-                          <Package className="h-8 w-8 text-gray-400 mb-2" />
-                          <h3 className="text-xs font-medium text-gray-900 mb-1">No Priority Alerts</h3>
-                          <p className="text-xs text-gray-500">
-                            All products have adequate stock levels or sufficient lead time
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Show message when no restock recommendations */}
-            {sortedAlerts.length === 0 && (
-              <div className="text-center py-12">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-sm font-medium text-gray-900 mb-2">No Restock Recommendations</h3>
-                <p className="text-gray-500">All products have adequate stock levels or sufficient lead time</p>
-              </div>
-            )}
+              <StandardTable
+                data={tableData}
+                tableKey="smart-restock-alerts"
+                columns={tableColumns}
+                defaultColumnOrder={defaultColumnOrder}
+                renderCell={renderCell}
+                enableSearch={true}
+                enableFilters={true}
+                enableSorting={true}
+                enableColumnReordering={true}
+                enableColumnResetting={true}
+                enableFullscreen={true}
+                searchPlaceholder="Search products, ASINs, or descriptions..."
+                searchFields={searchFields}
+                filters={tableFilters}
+                emptyIcon={Package}
+                emptyTitle="No Priority Alerts"
+                emptyDescription="All products have adequate stock levels or sufficient lead time"
+                title="Smart Restock Alerts"
+                className="mt-4"
+              />
             </div>
           </div>
         </div>

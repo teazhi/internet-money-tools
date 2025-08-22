@@ -7,7 +7,10 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCcw,
-  Package
+  Package,
+  Maximize2,
+  Minimize2,
+  X
 } from 'lucide-react';
 
 /**
@@ -32,6 +35,7 @@ const StandardTable = ({
   enableSorting = true,
   enableColumnReordering = true,
   enableColumnResetting = true,
+  enableFullscreen = true,
   
   // Search
   searchPlaceholder = "Search...",
@@ -47,6 +51,7 @@ const StandardTable = ({
   
   // Additional props
   className = "",
+  title = "", // Table title for fullscreen mode
   
   // Callbacks
   onRowClick = null, // Optional row click handler
@@ -59,6 +64,7 @@ const StandardTable = ({
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Column ordering
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -76,6 +82,27 @@ const StandardTable = ({
     });
     setActiveFilters(initialFilters);
   }, [filters]);
+  
+  // Handle escape key for fullscreen
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'auto';
+    };
+  }, [isFullscreen]);
   
   // Sorting function
   const handleSort = (key) => {
@@ -247,9 +274,64 @@ const StandardTable = ({
     return filtered;
   }, [data, searchQuery, activeFilters, sortConfig, searchFields, columns, enableSearch, enableFilters, enableSorting, filters]);
   
+  // Fullscreen wrapper
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col">
+        {/* Fullscreen Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">{title || 'Table View'}</h2>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Exit fullscreen"
+            >
+              <Minimize2 className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Fullscreen Content */}
+        <div className="flex-1 overflow-auto bg-gray-50 p-6">
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <TableContent />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal view
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Filter Controls */}
+    <div className={`space-y-4 ${className} relative`}>
+      {/* Fullscreen Toggle Button */}
+      {enableFullscreen && (
+        <button
+          onClick={() => setIsFullscreen(true)}
+          className="absolute -top-10 right-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Enter fullscreen"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+      )}
+      
+      <TableContent />
+    </div>
+  );
+  
+  // Extract table content to avoid duplication
+  function TableContent() {
+    return (
+      <>
+        {/* Filter Controls */}
       {(enableSearch || enableFilters || enableColumnResetting) && (
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Search */}
@@ -395,8 +477,9 @@ const StandardTable = ({
           </tbody>
         </table>
       </div>
-    </div>
-  );
+      </>
+    );
+  }
 };
 
 export default StandardTable;

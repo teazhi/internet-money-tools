@@ -6940,11 +6940,15 @@ def has_feature_access(discord_id, feature_key):
 def get_user_features(discord_id):
     """Get all features accessible to a user"""
     try:
+        # Create local database connection
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
         user_features = {}
         
         # Get all features
-        cursor.execute('SELECT feature_key, feature_name, description, is_beta FROM features')
-        all_features = cursor.fetchall()
+        local_cursor.execute('SELECT feature_key, feature_name, description, is_beta FROM features')
+        all_features = local_cursor.fetchall()
         
         for feature_key, name, description, is_beta in all_features:
             # has_feature_access already handles subuser logic
@@ -6956,6 +6960,7 @@ def get_user_features(discord_id):
                 'has_access': has_access
             }
         
+        local_conn.close()
         return user_features
         
     except Exception as e:
@@ -6974,7 +6979,11 @@ def get_all_features():
         if discord_id != '712147636463075389':  # Only admin can access
             return jsonify({'error': 'Unauthorized'}), 403
         
-        cursor.execute('''
+        # Create local database connection
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
             SELECT f.feature_key, f.feature_name, f.description, f.is_beta,
                    fl.is_public, fl.launched_at, fl.launch_notes
             FROM features f
@@ -6983,7 +6992,7 @@ def get_all_features():
         ''')
         
         features = []
-        for row in cursor.fetchall():
+        for row in local_cursor.fetchall():
             feature_key, name, description, is_beta, is_public, launched_at, launch_notes = row
             features.append({
                 'feature_key': feature_key,
@@ -6995,6 +7004,7 @@ def get_all_features():
                 'launch_notes': launch_notes
             })
         
+        local_conn.close()
         response = jsonify({'features': features})
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'

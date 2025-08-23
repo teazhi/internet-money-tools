@@ -24,6 +24,7 @@ import StandardTable from './common/StandardTable';
 const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
   const [imgError, setImgError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [currentImageUrl, setCurrentImageUrl] = useState(null);
   const { imageUrl: fallbackUrl, loading: fallbackLoading } = useProductImage(imgError && retryCount < 2 ? asin : null);
   
   // For debugging - always show something visible
@@ -35,8 +36,18 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
     );
   }
 
-  const imageUrl = imgError && fallbackUrl ? fallbackUrl : batchImages?.[asin];
+  // Enhanced fallback logic - try multiple endpoints
+  const imageUrl = currentImageUrl || (imgError && fallbackUrl ? fallbackUrl : batchImages?.[asin]);
   const isLoading = (imagesLoading && !batchImages?.[asin]) || (imgError && fallbackLoading);
+
+  // Effect to handle image URL fallbacks
+  React.useEffect(() => {
+    if (imgError && !currentImageUrl && asin) {
+      // Try Amazon's direct image URL as fallback
+      const directAmazonUrl = `https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1`;
+      setCurrentImageUrl(directAmazonUrl);
+    }
+  }, [imgError, currentImageUrl, asin]);
   
   if (isLoading) {
     return (
@@ -62,12 +73,17 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
         className="h-full w-full object-cover"
         loading="lazy"
         onError={() => {
-          if (retryCount < 2) {
+          if (retryCount < 3) { // Increased retry count for more fallback attempts
             setRetryCount(prev => prev + 1);
             setImgError(true);
           } else {
             setImgError(true);
           }
+        }}
+        onLoad={() => {
+          // Reset error state when image loads successfully
+          setImgError(false);
+          setRetryCount(0);
         }}
       />
     </div>

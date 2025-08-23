@@ -64,13 +64,13 @@ export const useProductImages = (asins) => {
                 Object.keys(batchResults).forEach(asin => {
                   const result = batchResults[asin];
                   if (result.image_url) {
-                    // Use demo proxy endpoint if needed, otherwise regular proxy
-                    updated[asin] = `/api/product-image/${asin}/proxy`;
+                    // Use public proxy endpoint for better reliability
+                    updated[asin] = `/api/product-image/${asin}/proxy/public`;
                     
                     // Cache the result
                     const newCache = { ...cachedImages };
                     newCache[asin] = {
-                      url: `/api/product-image/${asin}/proxy`,
+                      url: `/api/product-image/${asin}/proxy/public`,
                       timestamp: Date.now()
                     };
                     localStorage.setItem('productImages', JSON.stringify(newCache));
@@ -93,13 +93,13 @@ export const useProductImages = (asins) => {
                   if (response.data.image_url) {
                     setImages(prev => ({
                       ...prev,
-                      [asin]: `/api/product-image/${asin}/proxy`
+                      [asin]: `/api/product-image/${asin}/proxy/public`
                     }));
                     
                     // Cache individual result
                     const newCache = { ...JSON.parse(localStorage.getItem('productImages') || '{}') };
                     newCache[asin] = {
-                      url: `/api/product-image/${asin}/proxy`,
+                      url: `/api/product-image/${asin}/proxy/public`,
                       timestamp: Date.now()
                     };
                     localStorage.setItem('productImages', JSON.stringify(newCache));
@@ -171,7 +171,7 @@ export const useProductImage = (asin) => {
         if (response.data) {
           if (response.data.cached && response.data.image_url) {
             // Use proxy endpoint to avoid CORS issues
-            setImageUrl(`/api/product-image/${asin}/proxy`);
+            setImageUrl(`/api/product-image/${asin}/proxy/public`);
             setLoading(false);
           } else if (response.data.method === 'queued_for_processing') {
             // Queued for processing - show placeholder and start checking
@@ -189,7 +189,7 @@ export const useProductImage = (asin) => {
                 const result = checkResponse.data.results[asin];
                 if (result && result.ready) {
                   // Use proxy endpoint for the fetched image
-                  setImageUrl(`/api/product-image/${asin}/proxy`);
+                  setImageUrl(`/api/product-image/${asin}/proxy/public`);
                   setLoading(false);
                   setQueuePosition(null);
                   
@@ -197,7 +197,7 @@ export const useProductImage = (asin) => {
                   try {
                     const cache = JSON.parse(localStorage.getItem('productImages') || '{}');
                     cache[asin] = {
-                      url: `/api/product-image/${asin}/proxy`,
+                      url: `/api/product-image/${asin}/proxy/public`,
                       timestamp: Date.now(),
                       method: 'queue_processed'
                     };
@@ -233,7 +233,7 @@ export const useProductImage = (asin) => {
             setLoading(false);
           } else if (response.data.image_url) {
             // Use proxy endpoint for any returned image URL
-            setImageUrl(`/api/product-image/${asin}/proxy`);
+            setImageUrl(`/api/product-image/${asin}/proxy/public`);
             setLoading(false);
           } else {
             // No image found

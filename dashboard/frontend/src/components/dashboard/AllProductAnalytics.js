@@ -85,6 +85,11 @@ const AllProductAnalytics = () => {
           withCredentials: true 
         });
         console.log('✓ Successfully loaded real inventory age data');
+        console.log('Backend response data:', response.data);
+        console.log('Age analysis keys:', Object.keys(response.data || {}));
+        if (response.data?.age_analysis) {
+          console.log('Number of products in age_analysis:', Object.keys(response.data.age_analysis).length);
+        }
       } catch (mainError) {
         console.log('Main endpoint failed:', mainError.response?.data);
         console.log('Trying demo mode...');

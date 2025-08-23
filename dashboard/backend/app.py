@@ -11499,19 +11499,25 @@ def get_inventory_age_analysis():
         from datetime import date
         target_date = date.today() - timedelta(days=1)  # Use yesterday's date for most recent complete data
         
+        # Debug: Check what settings we're passing
+        user_settings = {
+            'access_token': user_record.get('google_tokens', {}).get('access_token'),
+            'google_tokens': user_record.get('google_tokens', {}),  # Add the full google_tokens dict
+            'sheet_id': user_record.get('sheet_id'),
+            'worksheet_title': user_record.get('worksheet_title'),
+            'column_mapping': user_record.get('column_mapping', {}),
+            'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
+            'discord_id': discord_id
+        }
+        
+        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(user_settings.get('google_tokens'))}")
+        
         analysis = EnhancedOrdersAnalysis(
             orders_url=orders_url,
             stock_url=stock_url
         ).analyze(
             for_date=target_date,
-            user_settings={
-                'access_token': user_record.get('google_tokens', {}).get('access_token'),
-                'sheet_id': user_record.get('sheet_id'),
-                'worksheet_title': user_record.get('worksheet_title'),
-                'column_mapping': user_record.get('column_mapping', {}),
-                'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
-                'discord_id': discord_id
-            }
+            user_settings=user_settings
         )
         
         if not analysis or not analysis.get('enhanced_analytics'):

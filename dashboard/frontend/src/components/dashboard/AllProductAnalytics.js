@@ -85,10 +85,14 @@ const AllProductAnalytics = () => {
           withCredentials: true 
         });
         console.log('✓ Successfully loaded real inventory age data');
-        console.log('Backend response data:', response.data);
-        console.log('Age analysis keys:', Object.keys(response.data || {}));
+        console.log('Backend response data keys:', Object.keys(response.data || {}));
+        console.log('Age analysis exists?', !!response.data?.age_analysis);
+        console.log('Age analysis type:', typeof response.data?.age_analysis);
         if (response.data?.age_analysis) {
-          console.log('Number of products in age_analysis:', Object.keys(response.data.age_analysis).length);
+          const keys = Object.keys(response.data.age_analysis);
+          console.log('Number of products in age_analysis:', keys.length);
+          console.log('First 10 age_analysis keys:', keys.slice(0, 10));
+          console.log('Sample age_analysis entry:', response.data.age_analysis[keys[0]]);
         }
       } catch (mainError) {
         console.log('Main endpoint failed:', mainError.response?.data);

@@ -33,9 +33,19 @@ const InventoryAgeAnalysis = () => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.get('/api/analytics/inventory-age', { 
-        withCredentials: true 
-      });
+      // Try main endpoint first
+      let response;
+      try {
+        response = await axios.get('/api/analytics/inventory-age', { 
+          withCredentials: true 
+        });
+      } catch (mainError) {
+        // If main endpoint fails, try demo endpoint
+        console.log('Main endpoint failed, trying demo mode...');
+        response = await axios.get('/api/demo/analytics/inventory-age', { 
+          withCredentials: true 
+        });
+      }
       
       setAgeData(response.data);
     } catch (err) {

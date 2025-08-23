@@ -11589,6 +11589,123 @@ def get_demo_analytics():
     target_date = date.today() - timedelta(days=1)
     return jsonify(get_dummy_analytics_data(target_date))
 
+@app.route('/api/demo/analytics/inventory-age', methods=['GET'])
+def get_demo_inventory_age_analysis():
+    """Get demo inventory age analysis without authentication"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    # Generate demo inventory age data
+    demo_asins = ['B08N5WRWNW', 'B07XJ8C8F7', 'B09KMXJQ9R', 'B08ABC123', 'B09DEF456', 'B07GHI789']
+    
+    age_categories = {
+        'fresh': {'min': 0, 'max': 30, 'label': 'Fresh (0-30 days)', 'color': '#10b981'},
+        'moderate': {'min': 31, 'max': 90, 'label': 'Moderate (31-90 days)', 'color': '#f59e0b'}, 
+        'aged': {'min': 91, 'max': 180, 'label': 'Aged (91-180 days)', 'color': '#f97316'},
+        'old': {'min': 181, 'max': 365, 'label': 'Old (181-365 days)', 'color': '#dc2626'},
+        'ancient': {'min': 366, 'max': float('inf'), 'label': 'Ancient (365+ days)', 'color': '#7c2d12'}
+    }
+    
+    import random
+    age_analysis = {}
+    categories_count = {cat: 0 for cat in age_categories.keys()}
+    action_items = []
+    
+    for i, asin in enumerate(demo_asins):
+        # Generate varied age data for demo
+        if i == 0:  # Fresh
+            age_days = random.randint(5, 25)
+            category = 'fresh'
+        elif i == 1:  # Moderate
+            age_days = random.randint(40, 80)
+            category = 'moderate'
+        elif i == 2:  # Aged
+            age_days = random.randint(120, 160)
+            category = 'aged'
+        elif i == 3:  # Old
+            age_days = random.randint(220, 300)
+            category = 'old'
+        elif i == 4:  # Ancient
+            age_days = random.randint(400, 500)
+            category = 'ancient'
+        else:
+            age_days = random.randint(15, 200)
+            category = 'moderate' if age_days < 90 else 'aged'
+        
+        categories_count[category] += 1
+        
+        recommendations = []
+        if category == 'fresh':
+            recommendations = ["✅ Fresh inventory - good restocking timing"]
+        elif category == 'moderate':
+            recommendations = ["⚠️ Monitor closely - consider sales acceleration tactics"]
+        elif category == 'aged':
+            recommendations = ["🟡 Consider discount promotions to move aged inventory", "📦 High aged stock - prioritize liquidation"]
+        elif category == 'old':
+            recommendations = ["🔴 Urgent: Implement aggressive pricing strategies", "💰 Consider bundling or promotional campaigns"]
+        elif category == 'ancient':
+            recommendations = ["🚨 Critical: Ancient inventory requires immediate action", "🏷️ Deep discount or clearance sale recommended"]
+        
+        age_analysis[asin] = {
+            'estimated_age_days': age_days,
+            'age_category': category,
+            'confidence_score': random.uniform(0.6, 0.9),
+            'data_sources': ['demo_purchase_data', 'demo_velocity_inference'],
+            'age_range': {'min': age_days - 5, 'max': age_days + 5, 'variance': 10},
+            'details': {
+                'purchase_based_age': age_days + random.randint(-10, 10),
+                'velocity_based_age': age_days + random.randint(-15, 15),
+            },
+            'recommendations': recommendations
+        }
+        
+        # Create action items for aged/old/ancient inventory
+        if category in ['aged', 'old', 'ancient']:
+            urgency_scores = {'aged': 0.6, 'old': 0.8, 'ancient': 1.0}
+            current_stock = random.randint(20, 200)
+            velocity = random.uniform(0.5, 5.0)
+            
+            action_items.append({
+                'asin': asin,
+                'product_name': f'Demo Product {asin}',
+                'age_days': age_days,
+                'age_category': category,
+                'current_stock': current_stock,
+                'velocity': velocity,
+                'urgency_score': urgency_scores[category] + random.uniform(-0.1, 0.1),
+                'estimated_value': current_stock * random.uniform(10, 50),
+                'recommendations': recommendations,
+                'days_to_sell': current_stock / velocity if velocity > 0 else float('inf')
+            })
+    
+    # Sort action items by urgency
+    action_items.sort(key=lambda x: x['urgency_score'], reverse=True)
+    
+    return jsonify({
+        'age_analysis': age_analysis,
+        'summary': {
+            'total_products': len(demo_asins),
+            'products_with_age_data': len(demo_asins),
+            'coverage_percentage': 100.0,
+            'average_age_days': sum(data['estimated_age_days'] for data in age_analysis.values()) // len(age_analysis),
+            'median_age_days': 120,
+            'average_confidence': 0.75,
+            'categories_breakdown': categories_count,
+            'insights': [
+                "⚠️ High percentage of aged inventory - consider liquidation strategies",
+                "🚨 1 product with ancient inventory needs immediate attention",
+                "📊 Good confidence in age estimates based on purchase tracking"
+            ],
+            'oldest_inventory_days': max(data['estimated_age_days'] for data in age_analysis.values()),
+            'newest_inventory_days': min(data['estimated_age_days'] for data in age_analysis.values())
+        },
+        'age_categories': age_categories,
+        'action_items': action_items[:20],
+        'total_action_items': len(action_items),
+        'generated_at': datetime.now().isoformat(),
+        'demo_mode': True
+    })
+
 @app.route('/api/demo/product-image/<asin>/simple', methods=['GET'])
 def get_demo_product_image_simple(asin):
     """Simple demo product image endpoint without authentication"""

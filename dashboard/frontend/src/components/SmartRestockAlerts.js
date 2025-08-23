@@ -94,8 +94,10 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
 };
 
 const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
-  // Tab state for switching between restock alerts and age analysis
+  // Tab state for switching between restock alerts, all products analysis, and age analysis  
   const [activeTab, setActiveTab] = useState('alerts');
+  const [allProductsData, setAllProductsData] = useState(null);
+  const [allProductsLoading, setAllProductsLoading] = useState(false);
   
   // State for restock sources modal
   const [showSourcesModal, setShowSourcesModal] = useState(false);
@@ -106,19 +108,101 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts } = analytics || {};
   
+  // Fetch all products analysis when tab changes
+  const fetchAllProductsAnalysis = async () => {
+    try {
+      setAllProductsLoading(true);
+      
+      // Try main endpoint first, fallback to demo
+      let response;
+      try {
+        response = await axios.get('/api/analytics/inventory-age', { 
+          withCredentials: true 
+        });
+      } catch (mainError) {
+        console.log('Main endpoint failed, trying demo mode...');
+        response = await axios.get('/api/demo/analytics/inventory-age', { 
+          withCredentials: true 
+        });
+      }
+      
+      // Combine age data with existing analytics
+      const ageData = response.data;
+      const combinedData = {};
+      
+      // Start with all products from enhanced analytics
+      if (enhanced_analytics) {
+        Object.keys(enhanced_analytics).forEach(asin => {
+          const productData = enhanced_analytics[asin];
+          const ageInfo = ageData.age_analysis?.[asin] || {};
+          
+          combinedData[asin] = {
+            ...productData,
+            age_info: ageInfo,
+            id: asin
+          };
+        });
+      }
+      
+      // Add any products that only exist in age analysis
+      if (ageData.age_analysis) {
+        Object.keys(ageData.age_analysis).forEach(asin => {
+          if (!combinedData[asin]) {
+            combinedData[asin] = {
+              asin,
+              product_name: `Product ${asin}`,
+              age_info: ageData.age_analysis[asin],
+              id: asin,
+              // Add placeholder data for missing analytics
+              current_sales: 0,
+              velocity: { weighted_velocity: 0 },
+              priority: { score: 0, category: 'no_data' },
+              restock: { current_stock: 0, suggested_quantity: 0 },
+              stock_info: {}
+            };
+          }
+        });
+      }
+      
+      setAllProductsData({
+        products: combinedData,
+        age_categories: ageData.age_categories,
+        summary: ageData.summary
+      });
+      
+    } catch (err) {
+      console.error('Failed to fetch all products analysis:', err);
+    } finally {
+      setAllProductsLoading(false);
+    }
+  };
+
+  // Fetch all products data when switching to that tab
+  React.useEffect(() => {
+    if (activeTab === 'all-products' && !allProductsData) {
+      fetchAllProductsAnalysis();
+    }
+  }, [activeTab]);
+  
   // Extract all ASINs for batch image loading
   const allAsins = useMemo(() => {
-    if (!restock_alerts) return [];
+    if (activeTab === 'alerts' && restock_alerts) {
+      return Object.values(restock_alerts)
+        .filter(alert => 
+          alert.suggested_quantity && 
+          alert.suggested_quantity > 0 && 
+          !isNaN(alert.suggested_quantity) &&
+          alert.asin
+        )
+        .map(alert => alert.asin);
+    }
     
-    return Object.values(restock_alerts)
-      .filter(alert => 
-        alert.suggested_quantity && 
-        alert.suggested_quantity > 0 && 
-        !isNaN(alert.suggested_quantity) &&
-        alert.asin
-      )
-      .map(alert => alert.asin);
-  }, [restock_alerts]);
+    if (activeTab === 'all-products' && allProductsData) {
+      return Object.keys(allProductsData.products);
+    }
+    
+    return [];
+  }, [activeTab, restock_alerts, allProductsData]);
   
   // Use batch image loading for better performance
   const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
@@ -148,6 +232,71 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
       }
     }
   ];
+  
+  // Column definitions for All Products Analysis table
+  const allProductsColumns = {
+    product: { 
+      key: 'product', 
+      label: 'Product', 
+      sortKey: 'product_name', 
+      draggable: false 
+    },
+    current_stock: { 
+      key: 'current_stock', 
+      label: 'Stock', 
+      sortKey: 'current_stock', 
+      draggable: true 
+    },
+    velocity: { 
+      key: 'velocity', 
+      label: 'Velocity', 
+      sortKey: 'velocity', 
+      draggable: true 
+    },
+    days_left: { 
+      key: 'days_left', 
+      label: 'Days Left', 
+      sortKey: 'days_left', 
+      draggable: true 
+    },
+    inventory_age: { 
+      key: 'inventory_age', 
+      label: 'Inventory Age', 
+      sortKey: 'estimated_age_days', 
+      draggable: true 
+    },
+    last_cogs: { 
+      key: 'last_cogs', 
+      label: 'Last COGS', 
+      sortKey: 'cogs',
+      sortFn: (a, b, direction) => {
+        const aValue = enhanced_analytics?.[a.asin]?.cogs_data?.cogs || 0;
+        const bValue = enhanced_analytics?.[b.asin]?.cogs_data?.cogs || 0;
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      },
+      draggable: true 
+    },
+    restock_priority: { 
+      key: 'restock_priority', 
+      label: 'Restock Priority', 
+      sortKey: 'priority_score', 
+      draggable: true 
+    },
+    suggested_order: { 
+      key: 'suggested_order', 
+      label: 'Suggested Order', 
+      sortKey: 'suggested_quantity', 
+      draggable: true 
+    },
+    actions: { 
+      key: 'actions', 
+      label: 'Actions', 
+      sortKey: null, 
+      draggable: false 
+    }
+  };
+
+  const allProductsColumnOrder = ['product', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'last_cogs', 'restock_priority', 'suggested_order', 'actions'];
   
   // Column definitions for StandardTable
   const tableColumns = {
@@ -219,7 +368,197 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   };
 
 
-  // Render cell function for StandardTable
+  // Prepare all products table data
+  const allProductsTableData = useMemo(() => {
+    if (!allProductsData?.products) return [];
+    
+    return Object.values(allProductsData.products).map(product => ({
+      ...product,
+      // Calculate derived fields for sorting
+      estimated_age_days: product.age_info?.estimated_age_days || 0,
+      current_stock: product.restock?.current_stock || 0,
+      velocity: product.velocity?.weighted_velocity || 0,
+      days_left: product.restock?.days_left || 0,
+      priority_score: product.priority?.score || 0,
+      suggested_quantity: product.restock?.suggested_quantity || 0
+    }));
+  }, [allProductsData]);
+
+  // Get age category styles
+  const getAgeCategoryStyles = (category) => {
+    const styles = {
+      'fresh': 'bg-green-100 text-green-800',
+      'moderate': 'bg-yellow-100 text-yellow-800',
+      'aged': 'bg-orange-100 text-orange-800',
+      'old': 'bg-red-100 text-red-800',
+      'ancient': 'bg-red-200 text-red-900',
+      'unknown': 'bg-gray-100 text-gray-800'
+    };
+    return styles[category] || styles.unknown;
+  };
+
+  // Render cell function for All Products table
+  const renderAllProductsCell = (columnKey, product) => {
+    switch (columnKey) {
+      case 'product':
+        return (
+          <td key={columnKey} className="px-3 py-2">
+            <div className="flex items-center space-x-2">
+              <div className="flex-shrink-0">
+                <a 
+                  href={`https://www.amazon.com/dp/${product.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  <ProductImage 
+                    asin={product.asin} 
+                    productName={product.product_name}
+                    batchImages={batchImages}
+                    imagesLoading={imagesLoading}
+                  />
+                </a>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium text-gray-900">
+                  <a 
+                    href={`https://www.amazon.com/dp/${product.asin}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-blue-600 transition-colors"
+                    title={product.product_name}
+                  >
+                    {product.product_name && product.product_name.length > 45 
+                      ? product.product_name.substring(0, 45) + '...'
+                      : product.product_name || product.asin
+                    }
+                  </a>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {product.asin}
+                </div>
+              </div>
+            </div>
+          </td>
+        );
+
+      case 'current_stock':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+            {Math.round(product.current_stock || 0)}
+          </td>
+        );
+
+      case 'velocity':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+            {(product.velocity || 0).toFixed(1)}/day
+          </td>
+        );
+
+      case 'days_left':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+            {formatDaysLeft(product.days_left)}
+          </td>
+        );
+
+      case 'inventory_age':
+        const ageInfo = product.age_info || {};
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            <div className="flex flex-col space-y-1">
+              {ageInfo.estimated_age_days ? (
+                <>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getAgeCategoryStyles(ageInfo.age_category)}`}>
+                    {ageInfo.estimated_age_days} days
+                  </span>
+                  <div className="text-xs text-gray-500">
+                    {Math.round((ageInfo.confidence_score || 0) * 100)}% confidence
+                  </div>
+                </>
+              ) : (
+                <span className="text-xs text-gray-400">Unknown</span>
+              )}
+            </div>
+          </td>
+        );
+
+      case 'last_cogs':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs">
+            {product.cogs_data?.cogs ? (
+              <div>
+                <div className="text-green-700 font-medium text-xs">
+                  {formatCurrency(product.cogs_data.cogs)}
+                </div>
+                {product.cogs_data.last_purchase_date && (
+                  <div className="text-xs text-gray-500">
+                    {formatDate(product.cogs_data.last_purchase_date)}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-400 text-xs">N/A</span>
+            )}
+          </td>
+        );
+
+      case 'restock_priority':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            {product.priority?.category !== 'no_data' ? (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                product.priority?.category?.includes('critical') 
+                  ? 'bg-red-100 text-red-800'
+                  : product.priority?.category?.includes('warning')
+                  ? 'bg-builders-100 text-builders-800'
+                  : product.priority?.category?.includes('opportunity')
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {getCategoryLabel(product.priority?.category)}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-400">No alerts</span>
+            )}
+          </td>
+        );
+
+      case 'suggested_order':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            {product.suggested_quantity > 0 ? (
+              <div className="text-sm font-bold text-builders-600">
+                {product.suggested_quantity}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">-</span>
+            )}
+          </td>
+        );
+
+      case 'actions':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+            <button
+              onClick={() => handleRestockClick(product.asin, product.cogs_data?.source_link || null)}
+              className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled={sourcesLoading}
+              title={product.cogs_data?.source_link ? "Open supplier link" : "Find purchase sources"}
+            >
+              <ShoppingCart className="h-3 w-3 mr-1" />
+              Restock
+            </button>
+          </td>
+        );
+
+      default:
+        return <td key={columnKey}></td>;
+    }
+  };
+
+  // Render cell function for StandardTable (existing)
   const renderCell = (columnKey, alert) => {
     switch (columnKey) {
       case 'product':
@@ -620,6 +959,19 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                 </div>
               </button>
               <button
+                onClick={() => setActiveTab('all-products')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  activeTab === 'all-products'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center">
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  All Products Analysis
+                </div>
+              </button>
+              <button
                 onClick={() => setActiveTab('age-analysis')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                   activeTab === 'age-analysis'
@@ -629,7 +981,7 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
               >
                 <div className="flex items-center">
                   <Calendar className="h-5 w-5 mr-2" />
-                  Inventory Age Analysis
+                  Age Analysis (Detailed)
                 </div>
               </button>
             </nav>
@@ -673,6 +1025,112 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                   title="Smart Restock Alerts"
                   className="mt-4"
                 />
+              </div>
+            )}
+            
+            {activeTab === 'all-products' && (
+              <div className={allProductsLoading ? 'opacity-50' : ''}>
+                {allProductsLoading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <span className="ml-3 text-gray-600">Loading all products analysis...</span>
+                  </div>
+                )}
+                
+                {!allProductsLoading && (
+                  <>
+                    <p className="text-xs text-gray-600 mb-6">
+                      Complete analysis of all products in your inventory with stock levels, velocity, age, and restocking recommendations.
+                    </p>
+
+                    {/* Summary Stats */}
+                    {allProductsData?.summary && (
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <div className="text-lg font-semibold text-blue-900">
+                            {allProductsData.summary.total_products}
+                          </div>
+                          <div className="text-sm text-blue-700">Total Products</div>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-4">
+                          <div className="text-lg font-semibold text-green-900">
+                            {allProductsData.summary.average_age_days} days
+                          </div>
+                          <div className="text-sm text-green-700">Avg. Inventory Age</div>
+                        </div>
+                        <div className="bg-yellow-50 rounded-lg p-4">
+                          <div className="text-lg font-semibold text-yellow-900">
+                            {Math.round(allProductsData.summary.coverage_percentage)}%
+                          </div>
+                          <div className="text-sm text-yellow-700">Age Data Coverage</div>
+                        </div>
+                        <div className="bg-red-50 rounded-lg p-4">
+                          <div className="text-lg font-semibold text-red-900">
+                            {(allProductsData.summary.categories_breakdown?.aged || 0) + 
+                             (allProductsData.summary.categories_breakdown?.old || 0) + 
+                             (allProductsData.summary.categories_breakdown?.ancient || 0)}
+                          </div>
+                          <div className="text-sm text-red-700">Aged Products</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <StandardTable
+                      data={allProductsTableData}
+                      tableKey="all-products-analysis"
+                      columns={allProductsColumns}
+                      defaultColumnOrder={allProductsColumnOrder}
+                      renderCell={renderAllProductsCell}
+                      enableSearch={true}
+                      enableFilters={true}
+                      enableSorting={true}
+                      enableColumnReordering={true}
+                      enableColumnResetting={true}
+                      enableFullscreen={true}
+                      searchPlaceholder="Search products, ASINs, or descriptions..."
+                      searchFields={['asin', 'product_name']}
+                      filters={[
+                        {
+                          key: 'age_category',
+                          label: 'Inventory Age',
+                          allLabel: 'All Ages',
+                          options: [
+                            { value: 'fresh', label: 'Fresh (0-30 days)' },
+                            { value: 'moderate', label: 'Moderate (31-90 days)' },
+                            { value: 'aged', label: 'Aged (91-180 days)' },
+                            { value: 'old', label: 'Old (181-365 days)' },
+                            { value: 'ancient', label: 'Ancient (365+ days)' },
+                            { value: 'unknown', label: 'Unknown Age' }
+                          ],
+                          filterFn: (item, value) => item.age_info?.age_category === value
+                        },
+                        {
+                          key: 'restock_priority',
+                          label: 'Restock Priority',
+                          allLabel: 'All Priorities',
+                          options: [
+                            { value: 'critical', label: 'Critical' },
+                            { value: 'warning', label: 'High Priority' },
+                            { value: 'opportunity', label: 'Opportunities' },
+                            { value: 'no_data', label: 'No Alerts' }
+                          ],
+                          filterFn: (item, value) => {
+                            if (value === 'critical') return item.priority?.category?.includes('critical');
+                            if (value === 'warning') return item.priority?.category?.includes('warning');
+                            if (value === 'opportunity') return item.priority?.category?.includes('opportunity');
+                            if (value === 'no_data') return item.priority?.category === 'no_data';
+                            return true;
+                          }
+                        }
+                      ]}
+                      emptyIcon={Package}
+                      emptyTitle="No Products Found"
+                      emptyDescription="No products match the selected filters"
+                      title="All Products Analysis"
+                      className="mt-4"
+                    />
+                  </>
+                )}
               </div>
             )}
             

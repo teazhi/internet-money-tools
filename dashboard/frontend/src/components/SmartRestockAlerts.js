@@ -30,6 +30,19 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
   const [currentImageUrl, setCurrentImageUrl] = useState(null);
   const { imageUrl: fallbackUrl, loading: fallbackLoading } = useProductImage(imgError && retryCount < 2 ? asin : null);
   
+  // Effect to handle image URL fallbacks - must be called before any returns
+  React.useEffect(() => {
+    if (imgError && !currentImageUrl && asin) {
+      // Try Amazon's direct image URL as fallback
+      const directAmazonUrl = `https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1`;
+      setCurrentImageUrl(directAmazonUrl);
+    }
+  }, [imgError, currentImageUrl, asin]);
+
+  // Enhanced fallback logic - try multiple endpoints
+  const imageUrl = currentImageUrl || (imgError && fallbackUrl ? fallbackUrl : batchImages?.[asin]);
+  const isLoading = (imagesLoading && !batchImages?.[asin]) || (imgError && fallbackLoading);
+  
   // For debugging - always show something visible
   if (!asin) {
     return (
@@ -38,19 +51,6 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
       </div>
     );
   }
-
-  // Enhanced fallback logic - try multiple endpoints
-  const imageUrl = currentImageUrl || (imgError && fallbackUrl ? fallbackUrl : batchImages?.[asin]);
-  const isLoading = (imagesLoading && !batchImages?.[asin]) || (imgError && fallbackLoading);
-
-  // Effect to handle image URL fallbacks
-  React.useEffect(() => {
-    if (imgError && !currentImageUrl && asin) {
-      // Try Amazon's direct image URL as fallback
-      const directAmazonUrl = `https://ws-na.amazon-adsystem.com/widgets/q?_encoding=UTF8&ASIN=${asin}&Format=_SL250_&ID=AsinImage&MarketPlace=US&ServiceVersion=20070822&WS=1`;
-      setCurrentImageUrl(directAmazonUrl);
-    }
-  }, [imgError, currentImageUrl, asin]);
   
   if (isLoading) {
     return (
@@ -148,70 +148,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     }
   ];
   
-  // Column definitions for All Products Analysis table
-  const allProductsColumns = {
-    product: { 
-      key: 'product', 
-      label: 'Product', 
-      sortKey: 'product_name', 
-      draggable: false 
-    },
-    current_stock: { 
-      key: 'current_stock', 
-      label: 'Stock', 
-      sortKey: 'current_stock', 
-      draggable: true 
-    },
-    velocity: { 
-      key: 'velocity', 
-      label: 'Velocity', 
-      sortKey: 'velocity', 
-      draggable: true 
-    },
-    days_left: { 
-      key: 'days_left', 
-      label: 'Days Left', 
-      sortKey: 'days_left', 
-      draggable: true 
-    },
-    inventory_age: { 
-      key: 'inventory_age', 
-      label: 'Inventory Age', 
-      sortKey: 'estimated_age_days', 
-      draggable: true 
-    },
-    last_cogs: { 
-      key: 'last_cogs', 
-      label: 'Last COGS', 
-      sortKey: 'cogs',
-      sortFn: (a, b, direction) => {
-        const aValue = enhanced_analytics?.[a.asin]?.cogs_data?.cogs || 0;
-        const bValue = enhanced_analytics?.[b.asin]?.cogs_data?.cogs || 0;
-        return direction === 'asc' ? aValue - bValue : bValue - aValue;
-      },
-      draggable: true 
-    },
-    restock_priority: { 
-      key: 'restock_priority', 
-      label: 'Restock Priority', 
-      sortKey: 'priority_score', 
-      draggable: true 
-    },
-    suggested_order: { 
-      key: 'suggested_order', 
-      label: 'Suggested Order', 
-      sortKey: 'suggested_quantity', 
-      draggable: true 
-    },
-    actions: { 
-      key: 'actions', 
-      label: 'Actions', 
-      sortKey: null, 
-      draggable: false 
-    }
-  };
-
-  const allProductsColumnOrder = ['product', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'last_cogs', 'restock_priority', 'suggested_order', 'actions'];
   
   // Column definitions for StandardTable
   const tableColumns = {
@@ -283,195 +219,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   };
 
 
-  // Prepare all products table data
-  const allProductsTableData = useMemo(() => {
-    if (!allProductsData?.products) return [];
-    
-    return Object.values(allProductsData.products).map(product => ({
-      ...product,
-      // Calculate derived fields for sorting
-      estimated_age_days: product.age_info?.estimated_age_days || 0,
-      current_stock: product.restock?.current_stock || 0,
-      velocity: product.velocity?.weighted_velocity || 0,
-      days_left: product.restock?.days_left || 0,
-      priority_score: product.priority?.score || 0,
-      suggested_quantity: product.restock?.suggested_quantity || 0
-    }));
-  }, [allProductsData]);
-
-  // Get age category styles
-  const getAgeCategoryStyles = (category) => {
-    const styles = {
-      'fresh': 'bg-green-100 text-green-800',
-      'moderate': 'bg-yellow-100 text-yellow-800',
-      'aged': 'bg-orange-100 text-orange-800',
-      'old': 'bg-red-100 text-red-800',
-      'ancient': 'bg-red-200 text-red-900',
-      'unknown': 'bg-gray-100 text-gray-800'
-    };
-    return styles[category] || styles.unknown;
-  };
-
-  // Render cell function for All Products table
-  const renderAllProductsCell = (columnKey, product) => {
-    switch (columnKey) {
-      case 'product':
-        return (
-          <td key={columnKey} className="px-3 py-2">
-            <div className="flex items-center space-x-2">
-              <div className="flex-shrink-0">
-                <a 
-                  href={`https://www.amazon.com/dp/${product.asin}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block hover:opacity-80 transition-opacity"
-                >
-                  <ProductImage 
-                    asin={product.asin} 
-                    productName={product.product_name}
-                    batchImages={batchImages}
-                    imagesLoading={imagesLoading}
-                  />
-                </a>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-medium text-gray-900">
-                  <a 
-                    href={`https://www.amazon.com/dp/${product.asin}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-blue-600 transition-colors"
-                    title={product.product_name}
-                  >
-                    {product.product_name && product.product_name.length > 45 
-                      ? product.product_name.substring(0, 45) + '...'
-                      : product.product_name || product.asin
-                    }
-                  </a>
-                </div>
-                <div className="text-xs text-gray-500">
-                  {product.asin}
-                </div>
-              </div>
-            </div>
-          </td>
-        );
-
-      case 'current_stock':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-            {Math.round(product.current_stock || 0)}
-          </td>
-        );
-
-      case 'velocity':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-            {(product.velocity || 0).toFixed(1)}/day
-          </td>
-        );
-
-      case 'days_left':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-            {formatDaysLeft(product.days_left)}
-          </td>
-        );
-
-      case 'inventory_age':
-        const ageInfo = product.age_info || {};
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <div className="flex flex-col space-y-1">
-              {ageInfo.estimated_age_days ? (
-                <>
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getAgeCategoryStyles(ageInfo.age_category)}`}>
-                    {ageInfo.estimated_age_days} days
-                  </span>
-                  <div className="text-xs text-gray-500">
-                    {Math.round((ageInfo.confidence_score || 0) * 100)}% confidence
-                  </div>
-                </>
-              ) : (
-                <span className="text-xs text-gray-400">Unknown</span>
-              )}
-            </div>
-          </td>
-        );
-
-      case 'last_cogs':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-xs">
-            {product.cogs_data?.cogs ? (
-              <div>
-                <div className="text-green-700 font-medium text-xs">
-                  {formatCurrency(product.cogs_data.cogs)}
-                </div>
-                {product.cogs_data.last_purchase_date && (
-                  <div className="text-xs text-gray-500">
-                    {formatDate(product.cogs_data.last_purchase_date)}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <span className="text-gray-400 text-xs">N/A</span>
-            )}
-          </td>
-        );
-
-      case 'restock_priority':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            {product.priority?.category !== 'no_data' ? (
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                product.priority?.category?.includes('critical') 
-                  ? 'bg-red-100 text-red-800'
-                  : product.priority?.category?.includes('warning')
-                  ? 'bg-builders-100 text-builders-800'
-                  : product.priority?.category?.includes('opportunity')
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-800'
-              }`}>
-                {getCategoryLabel(product.priority?.category)}
-              </span>
-            ) : (
-              <span className="text-xs text-gray-400">No alerts</span>
-            )}
-          </td>
-        );
-
-      case 'suggested_order':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            {product.suggested_quantity > 0 ? (
-              <div className="text-sm font-bold text-builders-600">
-                {product.suggested_quantity}
-              </div>
-            ) : (
-              <span className="text-xs text-gray-400">-</span>
-            )}
-          </td>
-        );
-
-      case 'actions':
-        return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <button
-              onClick={() => handleRestockClick(product.asin, product.cogs_data?.source_link || null)}
-              className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-              disabled={sourcesLoading}
-              title={product.cogs_data?.source_link ? "Open supplier link" : "Find purchase sources"}
-            >
-              <ShoppingCart className="h-3 w-3 mr-1" />
-              Restock
-            </button>
-          </td>
-        );
-
-      default:
-        return <td key={columnKey}></td>;
-    }
-  };
 
   // Render cell function for StandardTable (existing)
   const renderCell = (columnKey, alert) => {

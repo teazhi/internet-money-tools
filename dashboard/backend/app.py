@@ -11496,10 +11496,14 @@ def get_inventory_age_analysis():
             }), 400
         
         # Get enhanced analytics
+        from datetime import date
+        target_date = date.today() - timedelta(days=1)  # Use yesterday's date for most recent complete data
+        
         analysis = EnhancedOrdersAnalysis(
             orders_url=orders_url,
             stock_url=stock_url
         ).analyze(
+            for_date=target_date,
             user_settings={
                 'access_token': user_record.get('google_tokens', {}).get('access_token'),
                 'sheet_id': user_record.get('sheet_id'),
@@ -11608,8 +11612,9 @@ def test_inventory_age_available():
 @app.route('/api/demo/analytics/inventory-age', methods=['GET'])
 def get_demo_inventory_age_analysis():
     """Get demo inventory age analysis without authentication"""
-    if not DEMO_MODE:
-        return jsonify({'error': 'Demo mode not enabled'}), 403
+    # Always allow demo data for inventory age analysis
+    # if not DEMO_MODE:
+    #     return jsonify({'error': 'Demo mode not enabled'}), 403
     
     # Generate demo inventory age data
     demo_asins = ['B08N5WRWNW', 'B07XJ8C8F7', 'B09KMXJQ9R', 'B08ABC123', 'B09DEF456', 'B07GHI789']

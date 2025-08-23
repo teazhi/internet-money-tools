@@ -84,14 +84,18 @@ const AllProductAnalytics = () => {
         response = await axios.get('/api/analytics/inventory-age', { 
           withCredentials: true 
         });
+        console.log('✓ Successfully loaded real inventory age data');
       } catch (mainError) {
-        console.log('Main endpoint failed, trying demo mode...');
+        console.log('Main endpoint failed:', mainError.response?.data);
+        console.log('Trying demo mode...');
         try {
           response = await axios.get('/api/demo/analytics/inventory-age', { 
             withCredentials: true 
           });
+          console.log('✓ Successfully loaded demo inventory age data');
         } catch (demoError) {
-          console.log('Demo endpoint failed, using fallback data...');
+          console.log('Demo endpoint failed:', demoError.response?.data);
+          console.log('Using fallback data...');
           // Use fallback mock data when endpoints are not available
           response = {
             data: generateMockInventoryData()

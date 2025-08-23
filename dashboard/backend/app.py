@@ -23,6 +23,7 @@ import secrets
 from cryptography.fernet import Fernet
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from inventory_age_analysis import InventoryAgeAnalyzer
 
 # Load environment variables
 try:
@@ -11470,6 +11471,113 @@ def get_demo_user():
         'last_activity': demo_user.get('last_activity'),
         'timezone': 'America/New_York'
     })
+
+@app.route('/api/analytics/inventory-age')
+@login_required
+def get_inventory_age_analysis():
+    """Get comprehensive inventory age analysis"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get current analytics data
+        from orders_analysis import EnhancedOrdersAnalysis
+        
+        orders_url = user_record.get('sellerboard_orders_url')
+        stock_url = user_record.get('sellerboard_stock_url')
+        
+        if not orders_url or not stock_url:
+            return jsonify({
+                'error': 'Sellerboard URLs not configured',
+                'message': 'Please configure your Sellerboard URLs in Settings to enable inventory age analysis.'
+            }), 400
+        
+        # Get enhanced analytics
+        analysis = EnhancedOrdersAnalysis(
+            orders_url=orders_url,
+            stock_url=stock_url
+        ).analyze(
+            user_settings={
+                'access_token': user_record.get('google_tokens', {}).get('access_token'),
+                'sheet_id': user_record.get('sheet_id'),
+                'worksheet_title': user_record.get('worksheet_title'),
+                'column_mapping': user_record.get('column_mapping', {}),
+                'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
+                'discord_id': discord_id
+            }
+        )
+        
+        if not analysis or not analysis.get('enhanced_analytics'):
+            return jsonify({
+                'error': 'No inventory data available',
+                'message': 'Unable to retrieve inventory data for age analysis.'
+            }), 500
+        
+        # Initialize age analyzer
+        age_analyzer = InventoryAgeAnalyzer()
+        
+        # Get raw data for age analysis
+        enhanced_analytics = analysis.get('enhanced_analytics', {})
+        purchase_insights = analysis.get('purchase_insights', {})
+        
+        # Download raw orders data for velocity inference
+        orders_analysis = EnhancedOrdersAnalysis(orders_url, stock_url)
+        orders_df = orders_analysis.download_csv(orders_url)
+        
+        # Get raw stock data
+        stock_df = orders_analysis.download_csv(stock_url)
+        stock_data = orders_analysis.get_stock_info(stock_df)
+        
+        # Perform age analysis
+        age_analysis = age_analyzer.analyze_inventory_age(
+            enhanced_analytics=enhanced_analytics,
+            purchase_insights=purchase_insights,
+            stock_data=stock_data,
+            orders_data=orders_df
+        )
+        
+        # Get products needing action
+        action_items = age_analyzer.get_products_needing_action(age_analysis, enhanced_analytics)
+        
+        # Add action items to response
+        age_analysis['action_items'] = action_items[:20]  # Top 20 items needing action
+        age_analysis['total_action_items'] = len(action_items)
+        
+        return jsonify(age_analysis)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'message': 'Failed to perform inventory age analysis',
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/api/analytics/inventory-age/filter')
+@login_required 
+def filter_inventory_by_age():
+    """Filter inventory by age categories"""
+    try:
+        discord_id = session['discord_id']
+        categories = request.args.getlist('categories')  # e.g., ['aged', 'old', 'ancient']
+        
+        if not categories:
+            return jsonify({'error': 'No age categories specified'}), 400
+        
+        # Get full age analysis (could be cached in future)
+        # For now, redirect to main endpoint with filter parameter
+        # This is a placeholder for a more optimized filtering endpoint
+        
+        return jsonify({
+            'message': 'Use the main inventory-age endpoint and filter client-side for now',
+            'requested_categories': categories
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/demo/analytics', methods=['GET'])
 def get_demo_analytics():

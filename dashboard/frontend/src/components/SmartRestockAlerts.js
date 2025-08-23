@@ -15,10 +15,13 @@ import {
   Filter,
   Search,
   GripVertical,
-  RotateCcw
+  RotateCcw,
+  Calendar,
+  BarChart3
 } from 'lucide-react';
 import { useProductImage, useProductImages } from '../hooks/useProductImages';
 import StandardTable from './common/StandardTable';
+import InventoryAgeAnalysis from './InventoryAgeAnalysis';
 
 // Product image component that uses batch loaded images with fallback
 const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
@@ -91,7 +94,8 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
 };
 
 const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
-  // Removed tab state - SmartRestockAlerts now only shows recommendations
+  // Tab state for switching between restock alerts and age analysis
+  const [activeTab, setActiveTab] = useState('alerts');
   
   // State for restock sources modal
   const [showSourcesModal, setShowSourcesModal] = useState(false);
@@ -599,6 +603,38 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow relative">
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200">
+            <nav className="flex space-x-8 px-6" aria-label="Tabs">
+              <button
+                onClick={() => setActiveTab('alerts')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  activeTab === 'alerts'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center">
+                  <Package className="h-5 w-5 mr-2" />
+                  Restock Alerts
+                </div>
+              </button>
+              <button
+                onClick={() => setActiveTab('age-analysis')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  activeTab === 'age-analysis'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center">
+                  <Calendar className="h-5 w-5 mr-2" />
+                  Inventory Age Analysis
+                </div>
+              </button>
+            </nav>
+          </div>
+
           <div className="px-6 py-4">
             {loading && (
               <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
@@ -608,33 +644,46 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                 </div>
               </div>
             )}
-            <div className={loading ? 'opacity-50' : ''}>
-              <p className="text-xs text-gray-600 mb-6">
-                Products requiring immediate restocking attention based on current stock levels and sales velocity.
-              </p>
+            
+            {/* Tab Content */}
+            {activeTab === 'alerts' && (
+              <div className={loading ? 'opacity-50' : ''}>
+                <p className="text-xs text-gray-600 mb-6">
+                  Products requiring immediate restocking attention based on current stock levels and sales velocity.
+                </p>
 
-              <StandardTable
-                data={tableData}
-                tableKey="smart-restock-alerts"
-                columns={tableColumns}
-                defaultColumnOrder={defaultColumnOrder}
-                renderCell={renderCell}
-                enableSearch={true}
-                enableFilters={true}
-                enableSorting={true}
-                enableColumnReordering={true}
-                enableColumnResetting={true}
-                enableFullscreen={true}
-                searchPlaceholder="Search products, ASINs, or descriptions..."
-                searchFields={searchFields}
-                filters={tableFilters}
-                emptyIcon={Package}
-                emptyTitle="No Priority Alerts"
-                emptyDescription="All products have adequate stock levels or sufficient lead time"
-                title="Smart Restock Alerts"
-                className="mt-4"
-              />
-            </div>
+                <StandardTable
+                  data={tableData}
+                  tableKey="smart-restock-alerts"
+                  columns={tableColumns}
+                  defaultColumnOrder={defaultColumnOrder}
+                  renderCell={renderCell}
+                  enableSearch={true}
+                  enableFilters={true}
+                  enableSorting={true}
+                  enableColumnReordering={true}
+                  enableColumnResetting={true}
+                  enableFullscreen={true}
+                  searchPlaceholder="Search products, ASINs, or descriptions..."
+                  searchFields={searchFields}
+                  filters={tableFilters}
+                  emptyIcon={Package}
+                  emptyTitle="No Priority Alerts"
+                  emptyDescription="All products have adequate stock levels or sufficient lead time"
+                  title="Smart Restock Alerts"
+                  className="mt-4"
+                />
+              </div>
+            )}
+            
+            {activeTab === 'age-analysis' && (
+              <div>
+                <p className="text-xs text-gray-600 mb-6">
+                  Comprehensive analysis of your inventory age with actionable insights and recommendations.
+                </p>
+                <InventoryAgeAnalysis />
+              </div>
+            )}
           </div>
         </div>
 

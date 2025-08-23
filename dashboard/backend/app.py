@@ -9995,6 +9995,30 @@ def proxy_product_image_public(asin):
     """Public proxy for product images - no auth required for better UX"""
     return proxy_product_image_logic(asin)
 
+@app.route('/api/product-image/<asin>/placeholder', methods=['GET'])
+def get_product_image_placeholder(asin):
+    """Always return a placeholder image for testing - no auth required"""
+    try:
+        placeholder_url = f"https://via.placeholder.com/200x200/4f46e5/ffffff?text={asin[:6]}"
+        
+        # Fetch and proxy the placeholder image
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+        
+        import requests
+        img_response = requests.get(placeholder_url, headers=headers, timeout=5, stream=True)
+        img_response.raise_for_status()
+        
+        response = make_response(img_response.content)
+        response.headers['Content-Type'] = img_response.headers.get('Content-Type', 'image/png')
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+        
+    except Exception as e:
+        print(f"Error fetching placeholder image for {asin}: {str(e)}")
+        return '', 404
+
 def proxy_product_image_logic(asin):
     """Shared logic for product image proxying"""
     try:

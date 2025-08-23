@@ -94,10 +94,7 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
 };
 
 const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
-  // Tab state for switching between restock alerts, all products analysis, and age analysis  
-  const [activeTab, setActiveTab] = useState('alerts');
-  const [allProductsData, setAllProductsData] = useState(null);
-  const [allProductsLoading, setAllProductsLoading] = useState(false);
+  // Removed tab state - SmartRestockAlerts now only shows recommendations
   
   // State for restock sources modal
   const [showSourcesModal, setShowSourcesModal] = useState(false);
@@ -108,101 +105,19 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
   // Extract data first (before any conditional returns to avoid hook order issues)
   const { enhanced_analytics, restock_alerts } = analytics || {};
   
-  // Fetch all products analysis when tab changes
-  const fetchAllProductsAnalysis = async () => {
-    try {
-      setAllProductsLoading(true);
-      
-      // Try main endpoint first, fallback to demo
-      let response;
-      try {
-        response = await axios.get('/api/analytics/inventory-age', { 
-          withCredentials: true 
-        });
-      } catch (mainError) {
-        console.log('Main endpoint failed, trying demo mode...');
-        response = await axios.get('/api/demo/analytics/inventory-age', { 
-          withCredentials: true 
-        });
-      }
-      
-      // Combine age data with existing analytics
-      const ageData = response.data;
-      const combinedData = {};
-      
-      // Start with all products from enhanced analytics
-      if (enhanced_analytics) {
-        Object.keys(enhanced_analytics).forEach(asin => {
-          const productData = enhanced_analytics[asin];
-          const ageInfo = ageData.age_analysis?.[asin] || {};
-          
-          combinedData[asin] = {
-            ...productData,
-            age_info: ageInfo,
-            id: asin
-          };
-        });
-      }
-      
-      // Add any products that only exist in age analysis
-      if (ageData.age_analysis) {
-        Object.keys(ageData.age_analysis).forEach(asin => {
-          if (!combinedData[asin]) {
-            combinedData[asin] = {
-              asin,
-              product_name: `Product ${asin}`,
-              age_info: ageData.age_analysis[asin],
-              id: asin,
-              // Add placeholder data for missing analytics
-              current_sales: 0,
-              velocity: { weighted_velocity: 0 },
-              priority: { score: 0, category: 'no_data' },
-              restock: { current_stock: 0, suggested_quantity: 0 },
-              stock_info: {}
-            };
-          }
-        });
-      }
-      
-      setAllProductsData({
-        products: combinedData,
-        age_categories: ageData.age_categories,
-        summary: ageData.summary
-      });
-      
-    } catch (err) {
-      console.error('Failed to fetch all products analysis:', err);
-    } finally {
-      setAllProductsLoading(false);
-    }
-  };
-
-  // Fetch all products data when switching to that tab
-  React.useEffect(() => {
-    if (activeTab === 'all-products' && !allProductsData) {
-      fetchAllProductsAnalysis();
-    }
-  }, [activeTab]);
-  
   // Extract all ASINs for batch image loading
   const allAsins = useMemo(() => {
-    if (activeTab === 'alerts' && restock_alerts) {
-      return Object.values(restock_alerts)
-        .filter(alert => 
-          alert.suggested_quantity && 
-          alert.suggested_quantity > 0 && 
-          !isNaN(alert.suggested_quantity) &&
-          alert.asin
-        )
-        .map(alert => alert.asin);
-    }
+    if (!restock_alerts) return [];
     
-    if (activeTab === 'all-products' && allProductsData) {
-      return Object.keys(allProductsData.products);
-    }
-    
-    return [];
-  }, [activeTab, restock_alerts, allProductsData]);
+    return Object.values(restock_alerts)
+      .filter(alert => 
+        alert.suggested_quantity && 
+        alert.suggested_quantity > 0 && 
+        !isNaN(alert.suggested_quantity) &&
+        alert.asin
+      )
+      .map(alert => alert.asin);
+  }, [restock_alerts]);
   
   // Use batch image loading for better performance
   const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
@@ -942,51 +857,6 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-lg shadow relative">
-          {/* Tab Navigation */}
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              <button
-                onClick={() => setActiveTab('alerts')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'alerts'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <Package className="h-5 w-5 mr-2" />
-                  Restock Alerts
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('all-products')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'all-products'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <BarChart3 className="h-5 w-5 mr-2" />
-                  All Products Analysis
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('age-analysis')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'age-analysis'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center">
-                  <Calendar className="h-5 w-5 mr-2" />
-                  Age Analysis (Detailed)
-                </div>
-              </button>
-            </nav>
-          </div>
-
           <div className="px-6 py-4">
             {loading && (
               <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
@@ -996,152 +866,33 @@ const SmartRestockAlerts = React.memo(({ analytics, loading = false }) => {
                 </div>
               </div>
             )}
-            
-            {/* Tab Content */}
-            {activeTab === 'alerts' && (
-              <div className={loading ? 'opacity-50' : ''}>
-                <p className="text-xs text-gray-600 mb-6">
-                  Products requiring immediate restocking attention based on current stock levels and sales velocity.
-                </p>
+            <div className={loading ? 'opacity-50' : ''}>
+              <p className="text-xs text-gray-600 mb-6">
+                Products requiring immediate restocking attention based on current stock levels and sales velocity.
+              </p>
 
-                <StandardTable
-                  data={tableData}
-                  tableKey="smart-restock-alerts"
-                  columns={tableColumns}
-                  defaultColumnOrder={defaultColumnOrder}
-                  renderCell={renderCell}
-                  enableSearch={true}
-                  enableFilters={true}
-                  enableSorting={true}
-                  enableColumnReordering={true}
-                  enableColumnResetting={true}
-                  enableFullscreen={true}
-                  searchPlaceholder="Search products, ASINs, or descriptions..."
-                  searchFields={searchFields}
-                  filters={tableFilters}
-                  emptyIcon={Package}
-                  emptyTitle="No Priority Alerts"
-                  emptyDescription="All products have adequate stock levels or sufficient lead time"
-                  title="Smart Restock Alerts"
-                  className="mt-4"
-                />
-              </div>
-            )}
-            
-            {activeTab === 'all-products' && (
-              <div className={allProductsLoading ? 'opacity-50' : ''}>
-                {allProductsLoading && (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                    <span className="ml-3 text-gray-600">Loading all products analysis...</span>
-                  </div>
-                )}
-                
-                {!allProductsLoading && (
-                  <>
-                    <p className="text-xs text-gray-600 mb-6">
-                      Complete analysis of all products in your inventory with stock levels, velocity, age, and restocking recommendations.
-                    </p>
-
-                    {/* Summary Stats */}
-                    {allProductsData?.summary && (
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-blue-50 rounded-lg p-4">
-                          <div className="text-lg font-semibold text-blue-900">
-                            {allProductsData.summary.total_products}
-                          </div>
-                          <div className="text-sm text-blue-700">Total Products</div>
-                        </div>
-                        <div className="bg-green-50 rounded-lg p-4">
-                          <div className="text-lg font-semibold text-green-900">
-                            {allProductsData.summary.average_age_days} days
-                          </div>
-                          <div className="text-sm text-green-700">Avg. Inventory Age</div>
-                        </div>
-                        <div className="bg-yellow-50 rounded-lg p-4">
-                          <div className="text-lg font-semibold text-yellow-900">
-                            {Math.round(allProductsData.summary.coverage_percentage)}%
-                          </div>
-                          <div className="text-sm text-yellow-700">Age Data Coverage</div>
-                        </div>
-                        <div className="bg-red-50 rounded-lg p-4">
-                          <div className="text-lg font-semibold text-red-900">
-                            {(allProductsData.summary.categories_breakdown?.aged || 0) + 
-                             (allProductsData.summary.categories_breakdown?.old || 0) + 
-                             (allProductsData.summary.categories_breakdown?.ancient || 0)}
-                          </div>
-                          <div className="text-sm text-red-700">Aged Products</div>
-                        </div>
-                      </div>
-                    )}
-
-                    <StandardTable
-                      data={allProductsTableData}
-                      tableKey="all-products-analysis"
-                      columns={allProductsColumns}
-                      defaultColumnOrder={allProductsColumnOrder}
-                      renderCell={renderAllProductsCell}
-                      enableSearch={true}
-                      enableFilters={true}
-                      enableSorting={true}
-                      enableColumnReordering={true}
-                      enableColumnResetting={true}
-                      enableFullscreen={true}
-                      searchPlaceholder="Search products, ASINs, or descriptions..."
-                      searchFields={['asin', 'product_name']}
-                      filters={[
-                        {
-                          key: 'age_category',
-                          label: 'Inventory Age',
-                          allLabel: 'All Ages',
-                          options: [
-                            { value: 'fresh', label: 'Fresh (0-30 days)' },
-                            { value: 'moderate', label: 'Moderate (31-90 days)' },
-                            { value: 'aged', label: 'Aged (91-180 days)' },
-                            { value: 'old', label: 'Old (181-365 days)' },
-                            { value: 'ancient', label: 'Ancient (365+ days)' },
-                            { value: 'unknown', label: 'Unknown Age' }
-                          ],
-                          filterFn: (item, value) => item.age_info?.age_category === value
-                        },
-                        {
-                          key: 'restock_priority',
-                          label: 'Restock Priority',
-                          allLabel: 'All Priorities',
-                          options: [
-                            { value: 'critical', label: 'Critical' },
-                            { value: 'warning', label: 'High Priority' },
-                            { value: 'opportunity', label: 'Opportunities' },
-                            { value: 'no_data', label: 'No Alerts' }
-                          ],
-                          filterFn: (item, value) => {
-                            if (value === 'critical') return item.priority?.category?.includes('critical');
-                            if (value === 'warning') return item.priority?.category?.includes('warning');
-                            if (value === 'opportunity') return item.priority?.category?.includes('opportunity');
-                            if (value === 'no_data') return item.priority?.category === 'no_data';
-                            return true;
-                          }
-                        }
-                      ]}
-                      emptyIcon={Package}
-                      emptyTitle="No Products Found"
-                      emptyDescription="No products match the selected filters"
-                      title="All Products Analysis"
-                      className="mt-4"
-                    />
-                  </>
-                )}
-              </div>
-            )}
-            
-            {activeTab === 'age-analysis' && (
-              <div>
-                <p className="text-xs text-gray-600 mb-6">
-                  Comprehensive analysis of your inventory age with actionable insights and recommendations.
-                </p>
-                <InventoryAgeAnalysis />
-              </div>
-            )}
+              <StandardTable
+                data={tableData}
+                tableKey="smart-restock-alerts"
+                columns={tableColumns}
+                defaultColumnOrder={defaultColumnOrder}
+                renderCell={renderCell}
+                enableSearch={true}
+                enableFilters={true}
+                enableSorting={true}
+                enableColumnReordering={true}
+                enableColumnResetting={true}
+                enableFullscreen={true}
+                searchPlaceholder="Search products, ASINs, or descriptions..."
+                searchFields={searchFields}
+                filters={tableFilters}
+                emptyIcon={Package}
+                emptyTitle="No Priority Alerts"
+                emptyDescription="All products have adequate stock levels or sufficient lead time"
+                title="Smart Restock Alerts"
+                className="mt-4"
+              />
+            </div>
           </div>
         </div>
 

@@ -38,6 +38,10 @@ class InventoryAgeAnalyzer:
         try:
             age_analysis = {}
             
+            # Debug: Check what we're receiving
+            print(f"DEBUG - InventoryAgeAnalyzer: enhanced_analytics type: {type(enhanced_analytics)}")
+            print(f"DEBUG - InventoryAgeAnalyzer: enhanced_analytics keys sample: {list(enhanced_analytics.keys())[:5] if hasattr(enhanced_analytics, 'keys') else 'No keys method'}")
+            
             for asin, product_data in enhanced_analytics.items():
                 age_info = self._calculate_product_age(
                     asin, product_data, purchase_insights, stock_data, orders_data
@@ -46,6 +50,10 @@ class InventoryAgeAnalyzer:
             
             # Generate summary statistics and insights
             summary = self._generate_age_summary(age_analysis)
+            
+            # Debug: Check final age_analysis structure
+            print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis keys sample: {list(age_analysis.keys())[:5]}")
+            print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis type: {type(age_analysis)}")
             
             return {
                 'age_analysis': age_analysis,

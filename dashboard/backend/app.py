@@ -9990,6 +9990,11 @@ def proxy_product_image(asin):
     """Proxy product image to avoid CORS and hotlinking issues"""
     return proxy_product_image_logic(asin)
 
+@app.route('/api/product-image/<asin>/proxy/public', methods=['GET'])
+def proxy_product_image_public(asin):
+    """Public proxy for product images - no auth required for better UX"""
+    return proxy_product_image_logic(asin)
+
 def proxy_product_image_logic(asin):
     """Shared logic for product image proxying"""
     try:
@@ -11380,7 +11385,8 @@ def demo_status():
     """Check demo mode status"""
     return jsonify({
         'demo_mode': DEMO_MODE,
-        'environment': os.getenv('DEMO_MODE', 'false')
+        'environment': os.getenv('DEMO_MODE', 'false'),
+        'test_restart': True  # This will confirm if restart picked up changes
     })
 
 @app.route('/api/demo/toggle', methods=['POST'])
@@ -11407,6 +11413,60 @@ def enable_demo_mode():
         'demo_mode': True,
         'message': 'Demo mode enabled - all data is now simulated for demonstration purposes'
     })
+
+@app.route('/api/demo/user', methods=['GET'])
+def get_demo_user():
+    """Get demo user data without authentication"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    demo_users = get_dummy_users()
+    demo_user = demo_users[0]
+    return jsonify({
+        'discord_id': demo_user['discord_id'],
+        'discord_username': demo_user['discord_username'],
+        'email': demo_user['email'],
+        'profile_configured': True,
+        'google_linked': True,
+        'sheet_configured': True,
+        'amazon_connected': True,
+        'demo_mode': True,
+        'user_type': demo_user.get('user_type', 'main'),
+        'permissions': demo_user.get('permissions', ['all']),
+        'last_activity': demo_user.get('last_activity'),
+        'timezone': 'America/New_York'
+    })
+
+@app.route('/api/demo/analytics', methods=['GET'])
+def get_demo_analytics():
+    """Get demo analytics without authentication"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    from datetime import date
+    target_date = date.today() - timedelta(days=1)
+    return jsonify(get_dummy_analytics_data(target_date))
+
+@app.route('/api/demo/product-image/<asin>/simple', methods=['GET'])
+def get_demo_product_image_simple(asin):
+    """Simple demo product image endpoint without authentication"""
+    if not DEMO_MODE:
+        return jsonify({'error': 'Demo mode not enabled'}), 403
+    
+    # Return placeholder image URL
+    placeholder_url = f"https://via.placeholder.com/200x200/4f46e5/ffffff?text={asin[:6]}"
+    
+    try:
+        import requests
+        img_response = requests.get(placeholder_url, timeout=5, stream=True)
+        img_response.raise_for_status()
+        
+        response = make_response(img_response.content)
+        response.headers['Content-Type'] = 'image/png'
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+    except:
+        return '', 404
 
 @app.route('/api/demo/disable', methods=['POST'])
 def disable_demo_mode():

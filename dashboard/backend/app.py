@@ -11550,10 +11550,13 @@ def get_inventory_age_analysis():
         
     except Exception as e:
         import traceback
+        print(f"Error in inventory age analysis: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             'error': str(e),
             'message': 'Failed to perform inventory age analysis',
-            'traceback': traceback.format_exc()
+            'traceback': traceback.format_exc(),
+            'error_type': type(e).__name__
         }), 500
 
 @app.route('/api/analytics/inventory-age/filter')
@@ -11588,6 +11591,19 @@ def get_demo_analytics():
     from datetime import date
     target_date = date.today() - timedelta(days=1)
     return jsonify(get_dummy_analytics_data(target_date))
+
+@app.route('/api/test/inventory-age-available', methods=['GET'])
+def test_inventory_age_available():
+    """Simple test endpoint to verify inventory-age routes are deployed"""
+    return jsonify({
+        'message': 'Inventory age endpoints are available',
+        'routes_available': [
+            '/api/analytics/inventory-age',
+            '/api/demo/analytics/inventory-age',
+            '/api/analytics/inventory-age/filter'
+        ],
+        'timestamp': datetime.now().isoformat()
+    })
 
 @app.route('/api/demo/analytics/inventory-age', methods=['GET'])
 def get_demo_inventory_age_analysis():

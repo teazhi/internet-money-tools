@@ -81,9 +81,13 @@ const AllProductAnalytics = () => {
       // Try main endpoint first, fallback to demo, then fallback to mock data
       let response;
       try {
-        response = await axios.get('/api/analytics/inventory-age', { 
+        const url = '/api/analytics/inventory-age';
+        console.log('Calling endpoint:', url);
+        response = await axios.get(url, { 
           withCredentials: true 
         });
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
         console.log('✓ Successfully loaded real inventory age data');
         console.log('Backend response data keys:', Object.keys(response.data || {}));
         console.log('Age analysis exists?', !!response.data?.age_analysis);

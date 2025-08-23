@@ -11557,11 +11557,18 @@ def get_inventory_age_analysis():
         age_analysis['total_action_items'] = len(action_items)
         
         # Debug: Log what we're returning
-        print(f"DEBUG - Inventory Age Analysis response keys: {list(age_analysis.keys())}")
+        print(f"DEBUG - Final response structure keys: {list(age_analysis.keys())}")
+        print(f"DEBUG - Final response structure type: {type(age_analysis)}")
         if 'age_analysis' in age_analysis:
             print(f"DEBUG - Number of products in age_analysis: {len(age_analysis['age_analysis'])}")
+            print(f"DEBUG - First 3 ASINs in age_analysis: {list(age_analysis['age_analysis'].keys())[:3]}")
         if 'summary' in age_analysis:
             print(f"DEBUG - Summary keys: {list(age_analysis['summary'].keys())}")
+        
+        # Debug: Log the actual JSON structure being returned
+        import json
+        json_str = json.dumps(age_analysis, default=str, indent=2)
+        print(f"DEBUG - JSON response preview (first 500 chars): {json_str[:500]}")
         
         return jsonify(age_analysis)
         

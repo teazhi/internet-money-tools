@@ -14,6 +14,58 @@ import {
 import StandardTable from '../common/StandardTable';
 import { useProductImages } from '../../hooks/useProductImages';
 
+// Mock data generator for when endpoints are unavailable
+const generateMockInventoryData = () => {
+  const mockAsins = ['B08N5WRWNW', 'B07XJ8C8F7', 'B09KMXJQ9R', 'B08ABC123', 'B09DEF456', 'B07GHI789'];
+  
+  const ageCategories = {
+    'fresh': {'min': 0, 'max': 30, 'label': 'Fresh (0-30 days)', 'color': '#10b981'},
+    'moderate': {'min': 31, 'max': 90, 'label': 'Moderate (31-90 days)', 'color': '#f59e0b'}, 
+    'aged': {'min': 91, 'max': 180, 'label': 'Aged (91-180 days)', 'color': '#f97316'},
+    'old': {'min': 181, 'max': 365, 'label': 'Old (181-365 days)', 'color': '#dc2626'},
+    'ancient': {'min': 366, 'max': 1000, 'label': 'Ancient (365+ days)', 'color': '#7c2d12'}
+  };
+
+  const ageAnalysis = {};
+  const categoriesCount = {fresh: 1, moderate: 2, aged: 1, old: 1, ancient: 1};
+  
+  mockAsins.forEach((asin, index) => {
+    const categories = ['fresh', 'moderate', 'aged', 'old', 'ancient'];
+    const category = categories[index % categories.length];
+    const config = ageCategories[category];
+    const ageDays = Math.floor(Math.random() * (config.max - config.min + 1)) + config.min;
+    
+    ageAnalysis[asin] = {
+      estimated_age_days: ageDays,
+      age_category: category,
+      confidence_score: 0.7 + Math.random() * 0.25,
+      data_sources: ['mock_data'],
+      age_range: {min: ageDays - 5, max: ageDays + 5, variance: 10},
+      recommendations: [`Mock recommendation for ${category} inventory`]
+    };
+  });
+
+  return {
+    age_analysis: ageAnalysis,
+    summary: {
+      total_products: mockAsins.length,
+      products_with_age_data: mockAsins.length,
+      coverage_percentage: 100.0,
+      average_age_days: 120,
+      categories_breakdown: categoriesCount,
+      insights: [
+        "⚠️ This is mock data for demonstration purposes",
+        "🔧 Configure backend endpoints for real inventory age analysis"
+      ]
+    },
+    age_categories: ageCategories,
+    action_items: [],
+    total_action_items: 0,
+    demo_mode: true,
+    fallback_mode: true
+  };
+};
+
 const AllProductAnalytics = () => {
   const [activeTab, setActiveTab] = useState('inventory');
   const [allProductsData, setAllProductsData] = useState(null);
@@ -26,7 +78,7 @@ const AllProductAnalytics = () => {
       setLoading(true);
       setError(null);
       
-      // Try main endpoint first, fallback to demo
+      // Try main endpoint first, fallback to demo, then fallback to mock data
       let response;
       try {
         response = await axios.get('/api/analytics/inventory-age', { 
@@ -34,9 +86,17 @@ const AllProductAnalytics = () => {
         });
       } catch (mainError) {
         console.log('Main endpoint failed, trying demo mode...');
-        response = await axios.get('/api/demo/analytics/inventory-age', { 
-          withCredentials: true 
-        });
+        try {
+          response = await axios.get('/api/demo/analytics/inventory-age', { 
+            withCredentials: true 
+          });
+        } catch (demoError) {
+          console.log('Demo endpoint failed, using fallback data...');
+          // Use fallback mock data when endpoints are not available
+          response = {
+            data: generateMockInventoryData()
+          };
+        }
       }
       
       setAllProductsData(response.data);
@@ -540,6 +600,23 @@ const AllProductAnalytics = () => {
                 <p className="text-gray-600 mb-4">
                   Comprehensive view of all products with inventory levels, age analysis, and restock recommendations.
                 </p>
+
+                {/* Fallback Mode Indicator */}
+                {allProductsData.fallback_mode && (
+                  <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center">
+                      <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
+                      <div>
+                        <p className="text-sm font-medium text-orange-800">
+                          Demo Mode: Using Mock Data
+                        </p>
+                        <p className="text-xs text-orange-700 mt-1">
+                          Backend endpoints are not available. Showing sample inventory age data for demonstration purposes.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Summary Stats */}
                 {allProductsData.summary && (

@@ -89,6 +89,36 @@ const AllProductAnalytics = () => {
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
         console.log('✓ Successfully loaded real inventory age data');
+        
+        // Debug the raw response
+        console.log('Raw response type:', typeof response.data);
+        console.log('Is array?', Array.isArray(response.data));
+        console.log('Response data constructor:', response.data?.constructor?.name);
+        
+        // Check if response.data is a string that needs parsing
+        if (typeof response.data === 'string') {
+          console.log('Response is a string, length:', response.data.length);
+          console.log('First 200 chars:', response.data.substring(0, 200));
+          try {
+            const parsed = JSON.parse(response.data);
+            console.log('Successfully parsed string response');
+            console.log('Parsed keys:', Object.keys(parsed));
+            response.data = parsed;
+          } catch (e) {
+            console.error('Failed to parse string response:', e);
+          }
+        }
+        
+        // If it's an array or has numeric keys, log more info
+        if (Array.isArray(response.data) || (response.data && Object.keys(response.data)[0] === '0')) {
+          console.log('WARNING: Response appears to be an array or array-like object!');
+          console.log('Sample of response:', response.data?.slice ? response.data.slice(0, 3) : 'Cannot slice');
+          console.log('First item type:', typeof response.data[0]);
+          if (response.data[0]) {
+            console.log('First item:', response.data[0]);
+          }
+        }
+        
         console.log('Backend response data keys:', Object.keys(response.data || {}));
         console.log('Age analysis exists?', !!response.data?.age_analysis);
         console.log('Age analysis type:', typeof response.data?.age_analysis);

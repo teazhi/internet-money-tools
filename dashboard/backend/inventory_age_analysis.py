@@ -55,12 +55,33 @@ class InventoryAgeAnalyzer:
             print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis keys sample: {list(age_analysis.keys())[:5]}")
             print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis type: {type(age_analysis)}")
             
-            return {
+            # Ensure no pandas objects in the final return
+            result = {
                 'age_analysis': age_analysis,
                 'summary': summary,
                 'age_categories': self.age_categories,
                 'generated_at': datetime.now().isoformat()
             }
+            
+            # Debug: Check for any pandas objects in the result
+            def check_for_pandas_objects(obj, path=""):
+                import pandas as pd
+                if isinstance(obj, (pd.DataFrame, pd.Series)):
+                    print(f"WARNING - Found pandas object at {path}: {type(obj)}")
+                    return True
+                elif isinstance(obj, dict):
+                    for key, value in obj.items():
+                        if check_for_pandas_objects(value, f"{path}.{key}"):
+                            return True
+                elif isinstance(obj, list):
+                    for i, item in enumerate(obj):
+                        if check_for_pandas_objects(item, f"{path}[{i}]"):
+                            return True
+                return False
+            
+            check_for_pandas_objects(result, "age_analysis_result")
+            
+            return result
             
         except Exception as e:
             print(f"Error in inventory age analysis: {str(e)}")

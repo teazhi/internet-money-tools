@@ -11672,10 +11672,27 @@ def get_inventory_age_analysis():
             }), 500
         except Exception as json_error:
             print(f"ERROR - JSON serialization failed: {str(json_error)}")
-            return jsonify({
-                'error': 'Response serialization failed',
-                'message': 'The response data contains non-serializable objects'
-            }), 500
+            # Try to debug what exactly is causing the serialization failure
+            try:
+                # Test each top-level key individually to identify the problematic data
+                problematic_keys = []
+                for key, value in age_analysis.items():
+                    try:
+                        json.dumps(value)
+                    except Exception as key_error:
+                        problematic_keys.append(f"{key}: {str(key_error)}")
+                
+                print(f"DEBUG - Problematic keys: {problematic_keys}")
+                return jsonify({
+                    'error': 'Response serialization failed',
+                    'message': 'The response data contains non-serializable objects',
+                    'problematic_keys': problematic_keys
+                }), 500
+            except Exception:
+                return jsonify({
+                    'error': 'Response serialization failed',
+                    'message': 'The response data contains non-serializable objects'
+                }), 500
         
     except Exception as e:
         import traceback

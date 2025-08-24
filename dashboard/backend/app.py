@@ -34,6 +34,17 @@ def sanitize_for_json(obj):
     import numpy as np
     from datetime import datetime, date
     
+    # Handle pandas NA/null values first (works with all pandas versions)
+    try:
+        if pd.isna(obj):
+            return None
+    except:
+        # If pd.isna fails, try alternative null checks
+        if obj is None or (hasattr(obj, '__class__') and obj.__class__.__name__ == 'NaTType'):
+            return None
+        if str(obj) == '<NA>' or str(obj) == 'NaT' or str(obj) == 'nan':
+            return None
+    
     if isinstance(obj, dict):
         return {key: sanitize_for_json(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -49,6 +60,9 @@ def sanitize_for_json(obj):
     elif isinstance(obj, (datetime, date)):
         return obj.isoformat()
     elif str(type(obj)).startswith('<class \'pandas.'):
+        # Handle pandas-specific types including NA
+        if str(obj) == '<NA>':
+            return None
         return str(obj)
     elif str(type(obj)).startswith('<class \'numpy.'):
         # Handle numpy types
@@ -56,12 +70,10 @@ def sanitize_for_json(obj):
             return obj.item()
         else:
             return str(obj)
-    elif obj is pd.NaType or (hasattr(pd, 'isna') and pd.isna(obj)):
-        return None
     elif isinstance(obj, (int, float, str, bool)) or obj is None:
         return obj
     else:
-        # For any other types, convert to string as a safe fallback
+        # Fallback for any other type
         return str(obj)
 
 # Load environment variables

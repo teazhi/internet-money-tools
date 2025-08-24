@@ -266,7 +266,22 @@ class EnhancedOrdersAnalysis:
                 break
         if not product_col:
             raise ValueError("Products column not found in CSV.")
-        return orders_df[product_col].value_counts().to_dict()
+        # Convert value_counts result to regular Python dict with native types
+        value_counts = orders_df[product_col].value_counts()
+        result_dict = {}
+        for key, value in value_counts.items():
+            # Ensure both key and value are JSON-serializable
+            try:
+                if hasattr(value, 'item'):  # numpy scalar
+                    value = value.item()
+                if hasattr(key, 'item'):  # numpy scalar key
+                    key = key.item()
+                result_dict[str(key)] = int(value)
+            except Exception:
+                # Fallback to string conversion
+                result_dict[str(key)] = int(value) if isinstance(value, (int, float)) else str(value)
+        
+        return result_dict
 
     def calculate_enhanced_velocity(self, asin: str, orders_df: pd.DataFrame, target_date: date, user_timezone: str = None) -> Dict:
         """Calculate enhanced multi-period velocity with trend analysis (optimized for 30-day Sellerboard data)"""
@@ -777,7 +792,27 @@ class EnhancedOrdersAnalysis:
             asin = str(row[asin_col]).strip()
             # Skip empty ASINs
             if asin and asin != 'nan' and asin != 'None':
-                stock_info[asin] = row.to_dict()
+                # Convert to dict and ensure all values are JSON-serializable
+                row_dict = row.to_dict()
+                # Convert any pandas/numpy types to native Python types
+                serializable_dict = {}
+                for key, value in row_dict.items():
+                    try:
+                        # Convert numpy/pandas types to native Python types
+                        if hasattr(value, 'item'):  # numpy scalar
+                            value = value.item()
+                        elif hasattr(value, 'to_pydatetime'):  # pandas timestamp
+                            value = value.to_pydatetime().isoformat()
+                        elif str(type(value)).startswith('<class \'pandas.'):  # other pandas types
+                            value = str(value)
+                        elif str(type(value)).startswith('<class \'numpy.'):  # other numpy types
+                            value = str(value)
+                        serializable_dict[key] = value
+                    except Exception:
+                        # If conversion fails, convert to string as fallback
+                        serializable_dict[key] = str(value)
+                
+                stock_info[asin] = serializable_dict
             
         print(f"Extracted {len(stock_info)} products from stock report using column '{asin_col}'")
         return stock_info

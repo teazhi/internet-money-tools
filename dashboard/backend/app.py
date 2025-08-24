@@ -25,6 +25,45 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from inventory_age_analysis import InventoryAgeAnalyzer
 
+def sanitize_for_json(obj):
+    """
+    Recursively sanitize a data structure to ensure all values are JSON-serializable.
+    This prevents issues with pandas/numpy types that can cause unexpected serialization behavior.
+    """
+    import pandas as pd
+    import numpy as np
+    from datetime import datetime, date
+    
+    if isinstance(obj, dict):
+        return {key: sanitize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return [sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, (pd.DataFrame, pd.Series)):
+        raise ValueError(f"Found pandas object in response data: {type(obj)}. This should not be serialized.")
+    elif hasattr(obj, 'item'):  # numpy scalar types
+        return obj.item()
+    elif hasattr(obj, 'to_pydatetime'):  # pandas timestamp
+        return obj.to_pydatetime().isoformat()
+    elif isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    elif str(type(obj)).startswith('<class \'pandas.'):
+        return str(obj)
+    elif str(type(obj)).startswith('<class \'numpy.'):
+        # Handle numpy types
+        if hasattr(obj, 'item'):
+            return obj.item()
+        else:
+            return str(obj)
+    elif obj is pd.NaType or (hasattr(pd, 'isna') and pd.isna(obj)):
+        return None
+    elif isinstance(obj, (int, float, str, bool)) or obj is None:
+        return obj
+    else:
+        # For any other types, convert to string as a safe fallback
+        return str(obj)
+
 # Load environment variables
 try:
     load_dotenv()
@@ -2782,7 +2821,22 @@ def debug_stock_columns():
         
         # Get sample data from first row
         if len(stock_df) > 0:
-            sample_row = stock_df.iloc[0].to_dict()
+            sample_row_raw = stock_df.iloc[0].to_dict()
+            # Convert to JSON-serializable format
+            sample_row = {}
+            for key, value in sample_row_raw.items():
+                try:
+                    if hasattr(value, 'item'):  # numpy scalar
+                        value = value.item()
+                    elif hasattr(value, 'to_pydatetime'):  # pandas timestamp
+                        value = value.to_pydatetime().isoformat()
+                    elif str(type(value)).startswith('<class \'pandas.'):  # other pandas types
+                        value = str(value)
+                    elif str(type(value)).startswith('<class \'numpy.'):  # other numpy types
+                        value = str(value)
+                    sample_row[key] = value
+                except Exception:
+                    sample_row[key] = str(value)
             # Sample row data retrieved
             
             # Look for source-like columns
@@ -10668,7 +10722,19 @@ def get_product_by_asin(asin):
             
             # Debug: Show first few rows to understand data structure
             if not stock_df.empty:
-                print(f"eBay Lister: First row of data: {stock_df.iloc[0].to_dict()}")
+                # Convert first row to JSON-serializable format for debug output
+                first_row_raw = stock_df.iloc[0].to_dict()
+                first_row_safe = {}
+                for key, value in first_row_raw.items():
+                    try:
+                        if hasattr(value, 'item'):  # numpy scalar
+                            value = value.item()
+                        elif str(type(value)).startswith('<class \'pandas.') or str(type(value)).startswith('<class \'numpy.'):
+                            value = str(value)
+                        first_row_safe[key] = value
+                    except Exception:
+                        first_row_safe[key] = str(value)
+                print(f"eBay Lister: First row of data: {first_row_safe}")
             
             # Try to parse stock info, but handle errors gracefully
             try:
@@ -11567,10 +11633,49 @@ def get_inventory_age_analysis():
         
         # Debug: Log the actual JSON structure being returned
         import json
-        json_str = json.dumps(age_analysis, default=str, indent=2)
-        print(f"DEBUG - JSON response preview (first 500 chars): {json_str[:500]}")
         
-        return jsonify(age_analysis)
+        # Sanitize the entire response to ensure JSON compatibility
+        try:
+            sanitized_age_analysis = sanitize_for_json(age_analysis)
+            
+            # Check response size after sanitization
+            json_str = json.dumps(sanitized_age_analysis, indent=2)
+            response_size = len(json_str)
+            print(f"DEBUG - JSON response size after sanitization: {response_size} bytes")
+            print(f"DEBUG - JSON response preview (first 500 chars): {json_str[:500]}")
+            
+            # Check if response is unexpectedly large
+            if response_size > 50000:  # More than 50KB is suspicious for this endpoint
+                print(f"WARNING - Response size is unusually large: {response_size} bytes")
+                
+                # Try to identify what's causing the large response
+                for key, value in sanitized_age_analysis.items():
+                    try:
+                        key_size = len(json.dumps(value))
+                        print(f"DEBUG - {key} size: {key_size} bytes")
+                        if key_size > 10000:  # Log details for large sections
+                            if isinstance(value, dict):
+                                print(f"DEBUG - {key} contains {len(value)} items")
+                            elif isinstance(value, list):
+                                print(f"DEBUG - {key} contains {len(value)} items")
+                    except Exception as e:
+                        print(f"DEBUG - {key} serialization error: {str(e)}")
+            
+            return jsonify(sanitized_age_analysis)
+                        
+        except ValueError as sanitize_error:
+            print(f"ERROR - Data sanitization failed: {str(sanitize_error)}")
+            return jsonify({
+                'error': 'Response contains non-serializable data structures',
+                'message': str(sanitize_error),
+                'suggestion': 'Check for pandas DataFrames or other non-JSON types in the response data'
+            }), 500
+        except Exception as json_error:
+            print(f"ERROR - JSON serialization failed: {str(json_error)}")
+            return jsonify({
+                'error': 'Response serialization failed',
+                'message': 'The response data contains non-serializable objects'
+            }), 500
         
     except Exception as e:
         import traceback

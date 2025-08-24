@@ -95,9 +95,26 @@ class SPAPIAnalytics:
         sellerboard_orders = []
         
         for _, order in orders_df.iterrows():
-            # Process each order
+            # Process each order and ensure JSON-serializable
             order_dict = order.to_dict()
-            sellerboard_orders.append(order_dict)
+            serializable_order = {}
+            for key, value in order_dict.items():
+                try:
+                    # Convert pandas/numpy types to native Python types
+                    if hasattr(value, 'item'):  # numpy scalar
+                        value = value.item()
+                    elif hasattr(value, 'to_pydatetime'):  # pandas timestamp
+                        value = value.to_pydatetime().isoformat()
+                    elif str(type(value)).startswith('<class \'pandas.'):  # other pandas types
+                        value = str(value)
+                    elif str(type(value)).startswith('<class \'numpy.'):  # other numpy types
+                        value = str(value)
+                    serializable_order[key] = value
+                except Exception:
+                    # If conversion fails, convert to string as fallback
+                    serializable_order[key] = str(value)
+            
+            sellerboard_orders.append(serializable_order)
             
             # Count sales by ASIN
             if 'ASINs' in order_dict and order_dict['ASINs']:

@@ -11673,7 +11673,32 @@ def get_inventory_age_analysis():
                     except Exception as e:
                         print(f"DEBUG - {key} serialization error: {str(e)}")
             
-            return jsonify(sanitized_age_analysis)
+            # Final check before returning
+            if 'age_analysis' not in sanitized_age_analysis:
+                print(f"ERROR - Missing 'age_analysis' key in response. Keys found: {list(sanitized_age_analysis.keys())}")
+            
+            # Check if the response looks like an array (numeric keys)
+            if all(key.isdigit() for key in list(str(k) for k in sanitized_age_analysis.keys())[:10]):
+                print(f"ERROR - Response has numeric keys, suggesting DataFrame serialization!")
+                print(f"First 10 keys: {list(sanitized_age_analysis.keys())[:10]}")
+                return jsonify({
+                    'error': 'Invalid response structure',
+                    'message': 'Response contains array-like structure instead of expected format',
+                    'debug_keys': list(sanitized_age_analysis.keys())[:10]
+                }), 500
+            
+            # Try returning raw JSON response to bypass any jsonify issues
+            json_string = json.dumps(sanitized_age_analysis)
+            print(f"DEBUG - JSON string first 500 chars: {json_string[:500]}")
+            print(f"DEBUG - JSON string length: {len(json_string)}")
+            
+            # Check if the JSON string looks correct
+            parsed_check = json.loads(json_string)
+            print(f"DEBUG - Parsed JSON keys: {list(parsed_check.keys())}")
+            
+            response = make_response(json_string)
+            response.headers['Content-Type'] = 'application/json'
+            return response
                         
         except ValueError as sanitize_error:
             print(f"ERROR - Data sanitization failed: {str(sanitize_error)}")

@@ -84,7 +84,12 @@ const AllProductAnalytics = () => {
         const url = '/api/analytics/inventory-age';
         console.log('Calling endpoint:', url);
         response = await axios.get(url, { 
-          withCredentials: true 
+          withCredentials: true,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          responseType: 'json' // Force axios to parse as JSON
         });
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
@@ -99,6 +104,21 @@ const AllProductAnalytics = () => {
         if (typeof response.data === 'string') {
           console.log('Response is a string, length:', response.data.length);
           console.log('First 200 chars:', response.data.substring(0, 200));
+          console.log('Last 200 chars:', response.data.substring(response.data.length - 200));
+          
+          // Check if the string looks like it might be double-encoded or corrupted
+          const firstChar = response.data[0];
+          console.log('First character:', firstChar, 'char code:', firstChar.charCodeAt(0));
+          
+          // Log character at position 6 where error occurs
+          console.log('Character at position 6:', response.data[6], 'char code:', response.data.charCodeAt(6));
+          
+          // Check for BOM or other invisible characters
+          if (response.data.charCodeAt(0) === 0xFEFF) {
+            console.log('Found BOM, removing it');
+            response.data = response.data.substring(1);
+          }
+          
           try {
             const parsed = JSON.parse(response.data);
             console.log('Successfully parsed string response');
@@ -106,6 +126,18 @@ const AllProductAnalytics = () => {
             response.data = parsed;
           } catch (e) {
             console.error('Failed to parse string response:', e);
+            // Try to find where the JSON might be valid
+            const validJsonMatch = response.data.match(/(\{[\s\S]*\})/);
+            if (validJsonMatch) {
+              console.log('Found potential JSON match');
+              try {
+                const parsed = JSON.parse(validJsonMatch[1]);
+                console.log('Successfully parsed extracted JSON');
+                response.data = parsed;
+              } catch (e2) {
+                console.error('Failed to parse extracted JSON:', e2);
+              }
+            }
           }
         }
         

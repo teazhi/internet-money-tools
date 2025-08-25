@@ -11829,7 +11829,7 @@ def get_demo_inventory_age_analysis():
         'moderate': {'min': 31, 'max': 90, 'label': 'Moderate (31-90 days)', 'color': '#f59e0b'}, 
         'aged': {'min': 91, 'max': 180, 'label': 'Aged (91-180 days)', 'color': '#f97316'},
         'old': {'min': 181, 'max': 365, 'label': 'Old (181-365 days)', 'color': '#dc2626'},
-        'ancient': {'min': 366, 'max': float('inf'), 'label': 'Ancient (365+ days)', 'color': '#7c2d12'}
+        'ancient': {'min': 366, 'max': 999999, 'label': 'Ancient (365+ days)', 'color': '#7c2d12'}
     }
     
     import random
@@ -11901,7 +11901,7 @@ def get_demo_inventory_age_analysis():
                 'urgency_score': urgency_scores[category] + random.uniform(-0.1, 0.1),
                 'estimated_value': current_stock * random.uniform(10, 50),
                 'recommendations': recommendations,
-                'days_to_sell': current_stock / velocity if velocity > 0 else float('inf')
+                'days_to_sell': current_stock / velocity if velocity > 0 else 999999
             })
     
     # Sort action items by urgency

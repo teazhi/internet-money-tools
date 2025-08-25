@@ -181,6 +181,11 @@ const AllProductAnalytics = () => {
         }
       }
       
+      // Debug what we're setting
+      console.log('Setting allProductsData with:', response.data);
+      console.log('Type of data being set:', typeof response.data);
+      console.log('Has age_analysis?', !!response.data?.age_analysis);
+      
       setAllProductsData(response.data);
       
     } catch (err) {
@@ -204,7 +209,17 @@ const AllProductAnalytics = () => {
 
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
-    if (!allProductsData?.age_analysis) return [];
+    console.log('Preparing inventory table data...');
+    console.log('allProductsData:', allProductsData);
+    console.log('allProductsData type:', typeof allProductsData);
+    console.log('Has age_analysis?', !!allProductsData?.age_analysis);
+    
+    if (!allProductsData?.age_analysis) {
+      console.log('No age_analysis found in allProductsData');
+      return [];
+    }
+    
+    console.log('Processing age_analysis with', Object.keys(allProductsData.age_analysis).length, 'items');
     
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
@@ -675,7 +690,7 @@ const AllProductAnalytics = () => {
             </div>
           )}
 
-          {!loading && !error && allProductsData && (
+          {!loading && !error && allProductsData && allProductsData.age_analysis && (
             <>
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Complete Inventory Analysis</h3>
@@ -756,13 +771,23 @@ const AllProductAnalytics = () => {
             </>
           )}
 
-          {!loading && !error && !allProductsData && (
+          {!loading && !error && (!allProductsData || !allProductsData.age_analysis) && (
             <div className="text-center py-12">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
               <p className="text-gray-600">
-                Configure your data sources in Settings to see inventory analysis.
+                {allProductsData && !allProductsData.age_analysis ? 
+                  'Invalid data format received. The response may have been truncated.' :
+                  'Configure your data sources in Settings to see inventory analysis.'}
               </p>
+              {allProductsData && !allProductsData.age_analysis && (
+                <button
+                  onClick={fetchAllProductsData}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Retry with Demo Data
+                </button>
+              )}
             </div>
           )}
         </div>

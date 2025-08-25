@@ -2799,6 +2799,71 @@ def get_gmail_message_admin(message_id):
         print(f"Error getting Gmail message (admin): {e}")
         return None
 
+@app.route('/api/debug/stock-raw')
+@login_required  
+def debug_stock_raw():
+    """Debug endpoint to check raw stock CSV data"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+        
+        stock_url = user_record.get('sellerboard_stock_url')
+        if not stock_url:
+            return jsonify({'error': 'Stock URL not configured'}), 400
+        
+        from orders_analysis import EnhancedOrdersAnalysis
+        analyzer = EnhancedOrdersAnalysis("dummy", stock_url)
+        
+        # Download raw CSV to see exactly what data we get
+        import requests
+        from io import StringIO
+        import pandas as pd
+        
+        response = requests.get(stock_url, timeout=30)
+        response.raise_for_status()
+        
+        # Show raw CSV content (first 2000 characters)
+        raw_csv_preview = response.text[:2000]
+        
+        # Parse CSV
+        df = pd.read_csv(StringIO(response.text))
+        
+        # Convert first 3 rows to JSON-safe format
+        sample_rows = []
+        for i in range(min(3, len(df))):
+            row = df.iloc[i].to_dict()
+            # Convert to JSON-safe format
+            safe_row = {}
+            for key, value in row.items():
+                try:
+                    if hasattr(value, 'item'):
+                        value = value.item()
+                    elif pd.isna(value):
+                        value = None
+                    safe_row[key] = value
+                except:
+                    safe_row[key] = str(value)
+            sample_rows.append(safe_row)
+        
+        # Find stock-related columns
+        stock_related_cols = [col for col in df.columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
+        
+        return jsonify({
+            'url': stock_url,
+            'csv_preview': raw_csv_preview,
+            'total_rows': len(df),
+            'total_columns': len(df.columns),
+            'all_columns': list(df.columns),
+            'stock_related_columns': stock_related_cols,
+            'sample_rows': sample_rows
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/stock-columns')
 @login_required
 def debug_stock_columns():

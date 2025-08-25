@@ -156,10 +156,27 @@ class EnhancedOrdersAnalysis:
                 # Debug: Show CSV info if this is a stock URL
                 if 'stock' in url.lower() or 'inventory' in url.lower():
                     print(f"DEBUG - Downloaded stock CSV with {len(df)} rows and {len(df.columns)} columns")
+                    print(f"DEBUG - Stock CSV URL: {url}")
                     print(f"DEBUG - Stock CSV columns: {list(df.columns)}")
                     if len(df) > 0:
-                        # Show first row sample
-                        print(f"DEBUG - First row sample: {df.iloc[0].to_dict()}")
+                        # Show first 3 rows to see actual data
+                        print(f"DEBUG - First 3 rows of stock CSV:")
+                        for i in range(min(3, len(df))):
+                            row_dict = df.iloc[i].to_dict()
+                            print(f"  Row {i+1}: {row_dict}")
+                        print()
+                        
+                        # Show stock-related columns specifically
+                        stock_related_cols = [col for col in df.columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
+                        if stock_related_cols:
+                            print(f"DEBUG - Stock-related columns found: {stock_related_cols}")
+                            print(f"DEBUG - Stock values for first 3 rows:")
+                            for i in range(min(3, len(df))):
+                                stock_values = {col: df.iloc[i][col] for col in stock_related_cols}
+                                print(f"  Row {i+1}: {stock_values}")
+                        else:
+                            print(f"DEBUG - WARNING: No stock-related columns found in CSV!")
+                        print()
                 
                 return df
             except Exception as csv_error:
@@ -889,18 +906,34 @@ class EnhancedOrdersAnalysis:
             # Summary of stock extraction results
             total_products = len(stock_info)
             products_with_stock = 0
+            products_with_zero_stock = 0
             total_stock_detected = 0
+            high_stock_products = []
             
+            print(f"DEBUG - Detailed stock extraction for all {total_products} products:")
             for asin, data in stock_info.items():
                 stock = self.extract_current_stock(data)
                 if stock > 0:
                     products_with_stock += 1
                     total_stock_detected += stock
+                    if stock > 10:  # Flag potentially suspicious high stock values
+                        high_stock_products.append((asin, stock))
+                    print(f"  {asin}: {stock} units")
+                else:
+                    products_with_zero_stock += 1
+                    print(f"  {asin}: 0 units (no stock)")
             
-            print(f"DEBUG - Stock extraction summary: {products_with_stock}/{total_products} products have stock > 0")
-            print(f"DEBUG - Total stock detected: {total_stock_detected} units across all products")
+            print(f"\nDEBUG - Stock extraction summary:")
+            print(f"  - {products_with_stock} products have stock > 0")
+            print(f"  - {products_with_zero_stock} products have 0 stock")
+            print(f"  - Total stock detected: {total_stock_detected} units")
             if products_with_stock > 0:
-                print(f"DEBUG - Average stock per product with inventory: {total_stock_detected/products_with_stock:.1f}")
+                print(f"  - Average stock per product with inventory: {total_stock_detected/products_with_stock:.1f}")
+            
+            if high_stock_products:
+                print(f"DEBUG - Products with >10 units (potentially verify these):")
+                for asin, stock in high_stock_products[:10]:  # Show first 10
+                    print(f"  {asin}: {stock} units")
             print()
         return stock_info
 

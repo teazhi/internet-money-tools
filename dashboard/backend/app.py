@@ -11639,6 +11639,9 @@ def get_inventory_age_analysis():
         from datetime import date
         target_date = date.today() - timedelta(days=1)  # Use yesterday's date for most recent complete data
         
+        # Extract user timezone
+        user_timezone = user_record.get('timezone')
+        
         # Debug: Check what settings we're passing
         # Force search_all_worksheets for inventory age analysis to get complete purchase history
         user_settings = {

@@ -11578,6 +11578,7 @@ def get_inventory_age_analysis():
         target_date = date.today() - timedelta(days=1)  # Use yesterday's date for most recent complete data
         
         # Debug: Check what settings we're passing
+        # Force search_all_worksheets for inventory age analysis to get complete purchase history
         user_settings = {
             'access_token': user_record.get('google_tokens', {}).get('access_token'),
             'google_tokens': user_record.get('google_tokens', {}),  # Add the full google_tokens dict
@@ -11585,6 +11586,8 @@ def get_inventory_age_analysis():
             'worksheet_title': user_record.get('worksheet_title'),
             'column_mapping': user_record.get('column_mapping', {}),
             'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
+            'search_all_worksheets': True,  # Force all worksheets for inventory age analysis
+            'enable_source_links': True,  # Enable Google Sheets integration
             'discord_id': discord_id
         }
         
@@ -11595,7 +11598,8 @@ def get_inventory_age_analysis():
             stock_url=stock_url
         ).analyze(
             for_date=target_date,
-            user_settings=user_settings
+            user_settings=user_settings,
+            preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
         )
         
         if not analysis or not analysis.get('enhanced_analytics'):

@@ -203,12 +203,20 @@ class InventoryAgeAnalyzer:
             if not product_stock:
                 return None
             
+            # Debug: Log available fields for first few products
+            if not hasattr(self, '_logged_stock_fields'):
+                self._logged_stock_fields = True
+                print(f"DEBUG - Stock data fields for {asin}: {list(product_stock.keys())[:20]}")
+            
             # Look for various date fields that might indicate inventory creation/received dates
             date_fields = [
                 'Created Date', 'created_date', 'Created', 
                 'First Received', 'first_received', 'Received Date',
                 'Listing Created', 'listing_created', 'Date Added',
-                'First Stock Date', 'first_stock_date'
+                'First Stock Date', 'first_stock_date',
+                # Add more potential date fields
+                'Last Update', 'last_update', 'Updated', 'updated_at',
+                'Date', 'date', 'Timestamp', 'timestamp'
             ]
             
             for field in date_fields:
@@ -241,7 +249,8 @@ class InventoryAgeAnalyzer:
             current_stock = product_data.get('restock', {}).get('current_stock', 0)
             daily_velocity = velocity_data.get('weighted_velocity', 0)
             
-            if current_stock <= 0 or daily_velocity <= 0:
+            if current_stock <= 0:
+                # Must have stock to infer age
                 return None
             
             # Filter orders for this ASIN to analyze sales pattern
@@ -265,6 +274,17 @@ class InventoryAgeAnalyzer:
                     'buffer_days': estimated_buffer_days
                 }
             
+            # If no sales history but we have stock, estimate based on typical inventory turnover
+            if current_stock > 0:
+                # Use industry average turnover as fallback
+                # Assume average inventory age of 60 days for products with no sales
+                return {
+                    'age_days': 60,
+                    'method': 'no_sales_default',
+                    'confidence': 0.2,
+                    'reasoning': 'No sales history - using default estimate'
+                }
+            
             return None
             
         except Exception as e:
@@ -280,27 +300,50 @@ class InventoryAgeAnalyzer:
             current_stock = restock_data.get('current_stock', 0)
             daily_velocity = velocity_data.get('weighted_velocity', 0)
             
-            if current_stock <= 0 or daily_velocity <= 0:
+            if current_stock <= 0:
                 return None
+            
+            # If we have stock but no velocity, assume stale inventory
+            if daily_velocity <= 0:
+                return {
+                    'age_days': 180,  # Assume 6 months for dead stock
+                    'method': 'dead_stock_estimation',
+                    'confidence': 0.3,
+                    'reasoning': 'No recent sales - likely old inventory'
+                }
             
             # If we have high stock but low recent sales, inventory might be older
             days_of_stock = current_stock / daily_velocity
             
-            # Rough estimation: if you have more than 6 months of stock at current velocity,
-            # inventory is probably older (especially for slow-moving items)
+            # Estimate age based on stock coverage
             if days_of_stock > 180:
-                # Estimate that inventory is at least 50% of the days_of_stock old
+                # High stock coverage suggests older inventory
                 estimated_age = min(days_of_stock * 0.5, 365)  # Cap at 1 year
-                
-                return {
-                    'age_days': estimated_age,
-                    'method': 'high_stock_estimation',
-                    'confidence': 0.3,
-                    'days_of_stock': days_of_stock,
-                    'reasoning': 'High stock level suggests older inventory'
-                }
+                confidence = 0.3
+                reasoning = 'High stock level suggests older inventory'
+            elif days_of_stock > 90:
+                # Moderate stock coverage
+                estimated_age = days_of_stock * 0.3
+                confidence = 0.25
+                reasoning = 'Moderate stock coverage'
+            elif days_of_stock > 30:
+                # Normal stock coverage
+                estimated_age = days_of_stock * 0.2
+                confidence = 0.2
+                reasoning = 'Normal stock levels'
+            else:
+                # Low stock - recently restocked
+                estimated_age = max(7, days_of_stock * 0.5)
+                confidence = 0.15
+                reasoning = 'Low stock suggests recent restock'
             
-            return None
+            return {
+                'age_days': int(estimated_age),
+                'method': 'stock_level_estimation',
+                'confidence': confidence,
+                'days_of_stock': days_of_stock,
+                'reasoning': reasoning
+            }
             
         except Exception as e:
             print(f"Error estimating stock-level age for {asin}: {str(e)}")

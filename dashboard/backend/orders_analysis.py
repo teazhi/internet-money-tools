@@ -1435,7 +1435,7 @@ class EnhancedOrdersAnalysis:
         with open(YESTERDAY_SALES_FILE, 'w') as f:
             json.dump(today_sales, f)
 
-    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None) -> dict:
+    def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None, preserve_purchase_history: bool = False) -> dict:
         """Main analysis function with enhanced logic"""
         # Download and process orders data
         orders_df = self.download_csv(self.orders_url)
@@ -1565,7 +1565,7 @@ class EnhancedOrdersAnalysis:
                     if not sheet_data.empty:
                         print(f"DEBUG - Generating purchase analytics from sheet data with {len(sheet_data)} rows")
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
-                            sheet_data, column_mapping_for_purchase
+                            sheet_data, column_mapping_for_purchase, preserve_all_history=preserve_purchase_history
                         )
                         print(f"DEBUG - Purchase insights generated: {len(purchase_insights)} categories")
                         print(f"DEBUG - Purchase insights keys: {list(purchase_insights.keys())}")

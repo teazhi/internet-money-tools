@@ -16,13 +16,14 @@ class PurchaseAnalytics:
         self.current_month = datetime.now().month
         self.current_year = datetime.now().year
     
-    def analyze_purchase_data(self, sheet_data: pd.DataFrame, column_mapping: dict) -> Dict:
+    def analyze_purchase_data(self, sheet_data: pd.DataFrame, column_mapping: dict, preserve_all_history: bool = False) -> Dict:
         """
         Analyze purchase data from Google Sheets to generate restocking insights
         
         Args:
             sheet_data: DataFrame containing Google Sheets data
             column_mapping: Mapping of column names to actual sheet columns
+            preserve_all_history: If True, preserves all purchase history instead of filtering to last 12 months
             
         Returns:
             Dictionary containing purchase-based insights
@@ -44,7 +45,7 @@ class PurchaseAnalytics:
                 'cogs': cogs_field,
                 'sale_price': sale_price_field,
                 'units': units_field
-            })
+            }, preserve_all_history=preserve_all_history)
             
             if df.empty:
                 return self._empty_analytics_response()
@@ -67,7 +68,7 @@ class PurchaseAnalytics:
             pass  # Debug print removed
             return self._empty_analytics_response()
     
-    def _clean_purchase_data(self, df: pd.DataFrame, field_mapping: dict) -> pd.DataFrame:
+    def _clean_purchase_data(self, df: pd.DataFrame, field_mapping: dict, preserve_all_history: bool = False) -> pd.DataFrame:
         """Clean and standardize purchase data"""
         try:
             # Create working copy
@@ -92,9 +93,12 @@ class PurchaseAnalytics:
                 clean_df['date'] = pd.to_datetime(clean_df[field_mapping['date']], errors='coerce')
                 clean_df = clean_df[clean_df['date'].notna()]
                 
-                # Filter to last 12 months for relevant analysis
-                cutoff_date = datetime.now() - timedelta(days=365)
-                clean_df = clean_df[clean_df['date'] >= cutoff_date]
+                # Filter to last 12 months for relevant analysis, unless preserving all history for inventory age analysis
+                if not preserve_all_history:
+                    cutoff_date = datetime.now() - timedelta(days=365)
+                    clean_df = clean_df[clean_df['date'] >= cutoff_date]
+                else:
+                    print("DEBUG - Purchase analytics: preserving all purchase history for inventory age analysis")
             
             # Remove rows with invalid core data
             clean_df = clean_df[

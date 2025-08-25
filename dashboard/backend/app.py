@@ -11696,6 +11696,32 @@ def get_inventory_age_analysis():
             parsed_check = json.loads(json_string)
             print(f"DEBUG - Parsed JSON keys: {list(parsed_check.keys())}")
             
+            # If response is too large, try to reduce it
+            if len(json_string) > 150000:  # 150KB threshold
+                print("WARNING - Response too large, reducing data")
+                
+                # Keep only essential data for each product
+                reduced_age_analysis = {}
+                for asin, data in sanitized_age_analysis.get('age_analysis', {}).items():
+                    reduced_age_analysis[asin] = {
+                        'estimated_age_days': data.get('estimated_age_days'),
+                        'age_category': data.get('age_category'),
+                        'confidence_score': data.get('confidence_score'),
+                        'recommendations': data.get('recommendations', [])[:1]  # Keep only first recommendation
+                    }
+                
+                reduced_response = {
+                    'age_analysis': reduced_age_analysis,
+                    'summary': sanitized_age_analysis.get('summary'),
+                    'age_categories': sanitized_age_analysis.get('age_categories'),
+                    'generated_at': sanitized_age_analysis.get('generated_at'),
+                    'total_action_items': sanitized_age_analysis.get('total_action_items'),
+                    'reduced': True  # Flag to indicate reduced response
+                }
+                
+                json_string = json.dumps(reduced_response)
+                print(f"DEBUG - Reduced JSON string length: {len(json_string)}")
+            
             response = make_response(json_string)
             response.headers['Content-Type'] = 'application/json'
             return response

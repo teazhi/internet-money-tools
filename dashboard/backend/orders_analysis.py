@@ -152,6 +152,15 @@ class EnhancedOrdersAnalysis:
             # Try to parse the CSV
             try:
                 df = pd.read_csv(StringIO(response.text))
+                
+                # Debug: Show CSV info if this is a stock URL
+                if 'stock' in url.lower() or 'inventory' in url.lower():
+                    print(f"DEBUG - Downloaded stock CSV with {len(df)} rows and {len(df.columns)} columns")
+                    print(f"DEBUG - Stock CSV columns: {list(df.columns)}")
+                    if len(df) > 0:
+                        # Show first row sample
+                        print(f"DEBUG - First row sample: {df.iloc[0].to_dict()}")
+                
                 return df
             except Exception as csv_error:
                 pass  # Debug print removed
@@ -855,6 +864,44 @@ class EnhancedOrdersAnalysis:
                 stock_info[asin] = serializable_dict
             
         print(f"Extracted {len(stock_info)} products from stock report using column '{asin_col}'")
+        
+        # Debug: Show first few products with their stock values
+        if stock_info:
+            print("DEBUG - First 5 products from stock CSV:")
+            for i, (asin, data) in enumerate(stock_info.items()):
+                if i >= 5:
+                    break
+                # Test stock extraction on this product
+                extracted_stock = self.extract_current_stock(data, debug_asin=asin)
+                print(f"  ASIN: {asin}")
+                print(f"    Raw data keys: {list(data.keys())}")
+                print(f"    Extracted stock: {extracted_stock}")
+                
+                # Show specific stock-related values
+                stock_related_data = {k: v for k, v in data.items() if any(keyword in k.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])}
+                if stock_related_data:
+                    print(f"    Stock-related fields: {stock_related_data}")
+                else:
+                    print(f"    No stock-related fields found!")
+                    print(f"    ALL fields: {data}")
+                print()
+            
+            # Summary of stock extraction results
+            total_products = len(stock_info)
+            products_with_stock = 0
+            total_stock_detected = 0
+            
+            for asin, data in stock_info.items():
+                stock = self.extract_current_stock(data)
+                if stock > 0:
+                    products_with_stock += 1
+                    total_stock_detected += stock
+            
+            print(f"DEBUG - Stock extraction summary: {products_with_stock}/{total_products} products have stock > 0")
+            print(f"DEBUG - Total stock detected: {total_stock_detected} units across all products")
+            if products_with_stock > 0:
+                print(f"DEBUG - Average stock per product with inventory: {total_stock_detected/products_with_stock:.1f}")
+            print()
         return stock_info
 
     def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:

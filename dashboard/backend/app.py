@@ -2882,6 +2882,37 @@ def debug_stock_columns():
                     except (ValueError, TypeError):
                         continue
             
+            # Also test the full process to see what happens in the analysis
+            stock_info = analyzer.get_stock_info(stock_df)
+            
+            # Test first 3 products through the full analysis chain
+            analysis_test_results = []
+            for i, (asin, data) in enumerate(stock_info.items()):
+                if i >= 3:
+                    break
+                
+                # Test stock extraction
+                extracted_stock = analyzer.extract_current_stock(data)
+                
+                # Test restock calculation (needs dummy velocity data)
+                dummy_velocity = {'weighted_velocity': 1.0, 'trend_factor': 1.0, 'confidence': 0.8}
+                try:
+                    restock_result = analyzer.calculate_optimal_restock_quantity(
+                        asin, dummy_velocity, data, lead_time_days=90, purchase_analytics={}
+                    )
+                    restock_current_stock = restock_result.get('current_stock', 'ERROR')
+                except Exception as e:
+                    restock_result = {'error': str(e)}
+                    restock_current_stock = 'ERROR'
+                
+                analysis_test_results.append({
+                    'asin': asin,
+                    'raw_stock_fields': {k: v for k, v in data.items() if any(keyword in k.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])},
+                    'extracted_stock': extracted_stock,
+                    'restock_current_stock': restock_current_stock,
+                    'restock_result': restock_result
+                })
+            
             return jsonify({
                 'columns': columns,
                 'sample_data': sample_row,
@@ -2889,7 +2920,8 @@ def debug_stock_columns():
                 'potential_stock_columns': potential_stock_columns,
                 'detected_stock_value': detected_stock,
                 'stock_column_used': stock_column_used,
-                'total_rows': len(stock_df)
+                'total_rows': len(stock_df),
+                'analysis_test_results': analysis_test_results
             })
         else:
             return jsonify({
@@ -11623,11 +11655,11 @@ def get_inventory_age_analysis():
         
         print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(user_settings.get('google_tokens'))}")
         
-        analysis = EnhancedOrdersAnalysis(
-            orders_url=orders_url,
-            stock_url=stock_url
-        ).analyze(
+        from orders_analysis import OrdersAnalysis
+        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+        analysis = analyzer.analyze(
             for_date=target_date,
+            user_timezone=user_timezone,
             user_settings=user_settings,
             preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
         )
@@ -11645,13 +11677,24 @@ def get_inventory_age_analysis():
         enhanced_analytics = analysis.get('enhanced_analytics', {})
         purchase_insights = analysis.get('purchase_insights', {})
         
-        # Download raw orders data for velocity inference
-        orders_analysis = EnhancedOrdersAnalysis(orders_url, stock_url)
-        orders_df = orders_analysis.download_csv(orders_url)
+        # Debug: Compare stock values between enhanced_analytics and raw stock_data
+        print(f"DEBUG - Inventory age analysis: got {len(enhanced_analytics)} products from enhanced_analytics")
+        if enhanced_analytics:
+            sample_asin = list(enhanced_analytics.keys())[0]
+            sample_data = enhanced_analytics[sample_asin]
+            restock_stock = sample_data.get('restock', {}).get('current_stock', 'NOT_FOUND')
+            print(f"DEBUG - Sample ASIN {sample_asin}: restock.current_stock = {restock_stock}")
+            if 'stock_info' in sample_data:
+                raw_stock_fields = {k: v for k, v in sample_data['stock_info'].items() if any(keyword in k.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])}
+                print(f"DEBUG - Sample ASIN {sample_asin}: raw stock fields = {raw_stock_fields}")
+            print()
         
-        # Get raw stock data
-        stock_df = orders_analysis.download_csv(stock_url)
-        stock_data = orders_analysis.get_stock_info(stock_df)
+        # Download raw orders data for velocity inference using the same analyzer
+        orders_df = analyzer.download_csv(orders_url)
+        
+        # Get raw stock data using the same analyzer
+        stock_df = analyzer.download_csv(stock_url)
+        stock_data = analyzer.get_stock_info(stock_df)
         
         # Perform age analysis
         age_analysis = age_analyzer.analyze_inventory_age(

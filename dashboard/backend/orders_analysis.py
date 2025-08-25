@@ -457,13 +457,56 @@ class EnhancedOrdersAnalysis:
         
         return seasonality_multipliers.get(month, 1.0)
 
+    def extract_current_stock(self, stock_info: Dict, debug_asin: str = None) -> float:
+        """Extract current stock from Sellerboard data using multiple possible column names"""
+        if not stock_info:
+            return 0
+        
+        # Try multiple stock column variations in order of preference
+        stock_fields = [
+            'FBA/FBM Stock', 'FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock',
+            'FBA Stock', 'FBM Stock', 'Total Stock', 'Available Stock', 'Qty Available',
+            'Inventory', 'Units Available', 'Available Quantity', 'Stock Quantity'
+        ]
+        
+        # Debug logging for first few products
+        if not hasattr(self, '_stock_extraction_logged'):
+            self._stock_extraction_logged = True
+            available_columns = list(stock_info.keys())
+            print(f"DEBUG - Stock extraction available columns: {available_columns}")
+            
+            # Show which stock-related columns are available
+            stock_related = [col for col in available_columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
+            print(f"DEBUG - Stock-related columns found: {stock_related}")
+        
+        for field in stock_fields:
+            if field in stock_info and stock_info[field] is not None:
+                try:
+                    stock_val = str(stock_info[field]).replace(',', '').strip()
+                    if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null']:
+                        current_stock = float(stock_val)
+                        if current_stock >= 0:  # Ensure non-negative stock
+                            if debug_asin:
+                                print(f"DEBUG - Stock extraction for {debug_asin}: found {current_stock} in column '{field}'")
+                            return current_stock
+                except (ValueError, TypeError) as e:
+                    if debug_asin:
+                        print(f"DEBUG - Stock extraction for {debug_asin}: failed to parse '{field}' value '{stock_info[field]}': {e}")
+                    continue
+        
+        # If no stock found, log available columns for debugging
+        if debug_asin:
+            print(f"DEBUG - Stock extraction for {debug_asin}: no valid stock found. Available columns: {list(stock_info.keys())}")
+        
+        return 0
+    
     def get_priority_score(self, asin: str, velocity_data: Dict, stock_info: Dict, current_sales: int) -> Dict:
         """Calculate priority score for restocking decisions"""
         if not stock_info:
             return {'score': 0, 'category': 'no_data', 'reasoning': 'No stock data available'}
         
         try:
-            current_stock = float(stock_info.get('FBA/FBM Stock', 0))
+            current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
             # Handle column name variations with spaces
             days_left_key = None
             for key in stock_info.keys():
@@ -583,10 +626,7 @@ class EnhancedOrdersAnalysis:
         if not stock_info or not velocity_data:
             return {'suggested_quantity': 0, 'reasoning': 'Insufficient data', 'monthly_purchase_adjustment': 0}
         
-        try:
-            current_stock = float(stock_info.get('FBA/FBM Stock', 0))
-        except (ValueError, TypeError):
-            current_stock = 0
+        current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
         
         # Base velocity with trend adjustment
         base_velocity = velocity_data.get('weighted_velocity', 0)
@@ -1741,7 +1781,7 @@ class EnhancedOrdersAnalysis:
                 
             # 30-day stockout calculation
             try:
-                current_stock = float(stock.get('FBA/FBM Stock', 0))
+                current_stock = self.extract_current_stock(stock, debug_asin=asin)
                 days_left_calc = current_stock / max(sales, 1)
                 if days_left_calc < 30:
                     suggested_reorder = max(0, int((30 * sales) - current_stock))

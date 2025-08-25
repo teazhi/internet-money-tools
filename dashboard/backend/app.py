@@ -2853,12 +2853,42 @@ def debug_stock_columns():
             
             # Look for source-like columns
             source_columns = [col for col in columns if 'source' in col.lower() or 'link' in col.lower() or 'url' in col.lower()]
-            # Source columns identified
+            
+            # Look for stock-like columns and test stock extraction
+            stock_fields = [
+                'FBA/FBM Stock', 'FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock',
+                'FBA Stock', 'FBM Stock', 'Total Stock', 'Available Stock', 'Qty Available',
+                'Inventory', 'Units Available', 'Available Quantity', 'Stock Quantity'
+            ]
+            
+            potential_stock_columns = [col for col in columns if any(stock_field.lower() in col.lower() for stock_field in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
+            
+            # Test stock extraction with sample row
+            from orders_analysis import EnhancedOrdersAnalysis
+            test_analyzer = EnhancedOrdersAnalysis("dummy", "dummy")
+            detected_stock = test_analyzer.extract_current_stock(sample_row)
+            
+            # Find which column was used
+            stock_column_used = None
+            for field in stock_fields:
+                if field in sample_row and sample_row[field] is not None:
+                    try:
+                        stock_val = str(sample_row[field]).replace(',', '').strip()
+                        if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null']:
+                            test_stock = float(stock_val)
+                            if test_stock >= 0:
+                                stock_column_used = field
+                                break
+                    except (ValueError, TypeError):
+                        continue
             
             return jsonify({
                 'columns': columns,
                 'sample_data': sample_row,
                 'potential_source_columns': source_columns,
+                'potential_stock_columns': potential_stock_columns,
+                'detected_stock_value': detected_stock,
+                'stock_column_used': stock_column_used,
                 'total_rows': len(stock_df)
             })
         else:

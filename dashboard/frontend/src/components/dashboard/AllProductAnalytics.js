@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
 import { useProductImages } from '../../hooks/useProductImages';
+import { API_ENDPOINTS } from '../../config/api';
 
 // Mock data generator for when endpoints are unavailable
 const generateMockInventoryData = () => {
@@ -81,15 +82,9 @@ const AllProductAnalytics = () => {
       // Try main endpoint first, fallback to demo, then fallback to mock data
       let response;
       try {
-        const url = '/api/analytics/inventory-age';
-        console.log('Calling endpoint:', url);
-        response = await axios.get(url, { 
-          withCredentials: true,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          responseType: 'json' // Force axios to parse as JSON
+        console.log('Calling endpoint:', API_ENDPOINTS.ANALYTICS_INVENTORY_AGE);
+        response = await axios.get(API_ENDPOINTS.ANALYTICS_INVENTORY_AGE, { 
+          withCredentials: true
         });
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
@@ -131,7 +126,7 @@ const AllProductAnalytics = () => {
             // If response is truncated, try to use demo mode as fallback
             console.log('Falling back to demo mode due to truncated response');
             try {
-              response = await axios.get('/api/demo/analytics/inventory-age', { 
+              response = await axios.get(API_ENDPOINTS.DEMO_ANALYTICS_INVENTORY_AGE, { 
                 withCredentials: true 
               });
               console.log('✓ Successfully loaded demo inventory age data as fallback');
@@ -167,7 +162,7 @@ const AllProductAnalytics = () => {
         console.log('Main endpoint failed:', mainError.response?.data);
         console.log('Trying demo mode...');
         try {
-          response = await axios.get('/api/demo/analytics/inventory-age', { 
+          response = await axios.get(API_ENDPOINTS.DEMO_ANALYTICS_INVENTORY_AGE, { 
             withCredentials: true 
           });
           console.log('✓ Successfully loaded demo inventory age data');
@@ -184,9 +179,25 @@ const AllProductAnalytics = () => {
       // Debug what we're setting
       console.log('Setting allProductsData with:', response.data);
       console.log('Type of data being set:', typeof response.data);
-      console.log('Has age_analysis?', !!response.data?.age_analysis);
       
-      setAllProductsData(response.data);
+      // Ensure we have an object, not a string
+      let dataToSet = response.data;
+      if (typeof response.data === 'string') {
+        console.log('Response data is a string, parsing it...');
+        try {
+          dataToSet = JSON.parse(response.data);
+          console.log('Successfully parsed response data');
+        } catch (e) {
+          console.error('Failed to parse response data:', e);
+          // Use mock data as fallback
+          dataToSet = generateMockInventoryData();
+        }
+      }
+      
+      console.log('Has age_analysis?', !!dataToSet?.age_analysis);
+      console.log('Final data type:', typeof dataToSet);
+      
+      setAllProductsData(dataToSet);
       
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load product data');

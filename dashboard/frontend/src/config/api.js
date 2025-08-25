@@ -23,6 +23,8 @@ export const API_ENDPOINTS = {
   
   // Analytics endpoints
   ANALYTICS_ORDERS: `${API_BASE_URL}/api/analytics/orders`,
+  ANALYTICS_INVENTORY_AGE: `${API_BASE_URL}/api/analytics/inventory-age`,
+  DEMO_ANALYTICS_INVENTORY_AGE: `${API_BASE_URL}/api/demo/analytics/inventory-age`,
   
   // Discount leads endpoints
   DISCOUNT_LEADS: `${API_BASE_URL}/api/discount-leads/fetch`,

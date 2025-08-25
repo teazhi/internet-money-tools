@@ -246,6 +246,7 @@ class InventoryAgeAnalyzer:
         """Infer inventory age from sales velocity patterns"""
         try:
             velocity_data = product_data.get('velocity', {})
+            # Use the exact same current_stock value that Smart Restock Recommendations uses
             current_stock = product_data.get('restock', {}).get('current_stock', 0)
             daily_velocity = velocity_data.get('weighted_velocity', 0)
             
@@ -522,7 +523,8 @@ class InventoryAgeAnalyzer:
             # Focus on aged, old, and ancient inventory
             if category in ['aged', 'old', 'ancient']:
                 product_data = enhanced_analytics.get(asin, {})
-                current_stock = product_data.get('restock', {}).get('current_stock', 0)
+                # Use the exact same current_stock value that Smart Restock Recommendations uses
+            current_stock = product_data.get('restock', {}).get('current_stock', 0)
                 velocity = product_data.get('velocity', {}).get('weighted_velocity', 0)
                 
                 # Calculate urgency score

@@ -11741,21 +11741,25 @@ def get_inventory_age_analysis():
         # Initialize age analyzer
         age_analyzer = InventoryAgeAnalyzer()
         
-        # Get raw data for age analysis
+        # Get raw data for age analysis - use the SAME data that Smart Restock uses
         enhanced_analytics = analysis.get('enhanced_analytics', {})
+        restock_alerts = analysis.get('restock_alerts', {})  # This is what Smart Restock uses
         purchase_insights = analysis.get('purchase_insights', {})
         
-        # Debug: Compare stock values between enhanced_analytics and raw stock_data
-        print(f"DEBUG - Inventory age analysis: got {len(enhanced_analytics)} products from enhanced_analytics")
-        if enhanced_analytics:
-            sample_asin = list(enhanced_analytics.keys())[0]
-            sample_data = enhanced_analytics[sample_asin]
-            restock_stock = sample_data.get('restock', {}).get('current_stock', 'NOT_FOUND')
-            print(f"DEBUG - Sample ASIN {sample_asin}: restock.current_stock = {restock_stock}")
-            if 'stock_info' in sample_data:
-                raw_stock_fields = {k: v for k, v in sample_data['stock_info'].items() if any(keyword in k.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])}
-                print(f"DEBUG - Sample ASIN {sample_asin}: raw stock fields = {raw_stock_fields}")
-            print()
+        # Verify we have the same data structure as Smart Restock Recommendations
+        print(f"DEBUG - Inventory age analysis:")
+        print(f"  - enhanced_analytics: {len(enhanced_analytics)} products")
+        print(f"  - restock_alerts: {len(restock_alerts)} products")
+        
+        # Compare current_stock values from both sources for first 3 products
+        if enhanced_analytics and restock_alerts:
+            print("DEBUG - Current stock comparison (enhanced_analytics vs restock_alerts):")
+            common_asins = set(enhanced_analytics.keys()) & set(restock_alerts.keys())
+            for i, asin in enumerate(list(common_asins)[:3]):
+                enhanced_stock = enhanced_analytics[asin].get('restock', {}).get('current_stock', 'N/A')
+                alert_stock = restock_alerts[asin].get('current_stock', 'N/A')
+                print(f"  {asin}: enhanced={enhanced_stock}, alert={alert_stock}")
+        print()
         
         # Download raw orders data for velocity inference using the same analyzer
         orders_df = analyzer.download_csv(orders_url)
@@ -11764,9 +11768,30 @@ def get_inventory_age_analysis():
         stock_df = analyzer.download_csv(stock_url)
         stock_data = analyzer.get_stock_info(stock_df)
         
-        # Perform age analysis
+        # Use the same data source as Smart Restock Recommendations
+        # Convert restock_alerts to the format expected by age analysis
+        if restock_alerts:
+            print("DEBUG - Using restock_alerts data (same as Smart Restock)")
+            # Use restock_alerts instead of enhanced_analytics since it has the exact same current_stock values
+            age_analysis_source = {}
+            for asin, alert in restock_alerts.items():
+                # Create the expected structure using alert data (same as Smart Restock uses)
+                age_analysis_source[asin] = {
+                    'restock': {
+                        'current_stock': alert.get('current_stock', 0),
+                        'suggested_quantity': alert.get('suggested_quantity', 0)
+                    },
+                    'velocity': {
+                        'weighted_velocity': alert.get('velocity', 0)
+                    }
+                }
+        else:
+            print("DEBUG - Fallback to enhanced_analytics")
+            age_analysis_source = enhanced_analytics
+        
+        # Perform age analysis using the same current_stock values as Smart Restock
         age_analysis = age_analyzer.analyze_inventory_age(
-            enhanced_analytics=enhanced_analytics,
+            enhanced_analytics=age_analysis_source,
             purchase_insights=purchase_insights,
             stock_data=stock_data,
             orders_data=orders_df

@@ -492,7 +492,8 @@ class EnhancedOrdersAnalysis:
         stock_fields = [
             'FBA/FBM Stock', 'FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock',
             'FBA Stock', 'FBM Stock', 'Total Stock', 'Available Stock', 'Qty Available',
-            'Inventory', 'Units Available', 'Available Quantity', 'Stock Quantity'
+            'Inventory', 'Units Available', 'Available Quantity', 'Stock Quantity',
+            'FBA/FBM stock', 'FBA / FBM Stock'  # Additional variations
         ]
         
         # Debug logging for first few products
@@ -647,12 +648,18 @@ class EnhancedOrdersAnalysis:
             'emoji': emoji
         }
 
-    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 90, purchase_analytics: Dict = None) -> Dict:
+    def calculate_optimal_restock_quantity(self, asin: str, velocity_data: Dict, stock_info: Dict, lead_time_days: int = 90, purchase_analytics: Dict = None, stock_df: pd.DataFrame = None) -> Dict:
         """Calculate realistic restock quantity with practical business constraints"""
         if not stock_info or not velocity_data:
             return {'suggested_quantity': 0, 'reasoning': 'Insufficient data', 'monthly_purchase_adjustment': 0}
         
-        current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
+        # Try direct extraction from stock DataFrame if available
+        if stock_df is not None:
+            current_stock = self.get_direct_stock_value(stock_df, asin)
+            if current_stock == 0:  # If not found, fallback to normal method
+                current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
+        else:
+            current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
         
         # Base velocity with trend adjustment
         base_velocity = velocity_data.get('weighted_velocity', 0)
@@ -819,6 +826,44 @@ class EnhancedOrdersAnalysis:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
                 return qty
         
+        return 0
+    
+    def get_direct_stock_value(self, stock_df: pd.DataFrame, asin: str) -> float:
+        """Get stock value directly from Sellerboard CSV for a specific ASIN"""
+        # Find ASIN column
+        asin_col = None
+        for col in stock_df.columns:
+            if col.strip().upper() == 'ASIN':
+                asin_col = col
+                break
+        
+        if not asin_col:
+            return 0
+        
+        # Find row with this ASIN
+        asin_rows = stock_df[stock_df[asin_col].astype(str).str.strip() == asin]
+        if asin_rows.empty:
+            return 0
+            
+        row = asin_rows.iloc[0]
+        
+        # Look for stock value in common column names
+        stock_columns = ['FBA/FBM Stock', 'FBA stock', 'Stock', 'Inventory', 'Available']
+        for col in stock_columns:
+            if col in stock_df.columns and pd.notna(row[col]):
+                try:
+                    return float(str(row[col]).replace(',', ''))
+                except:
+                    continue
+        
+        # If no exact match, look for any column containing 'stock'
+        for col in stock_df.columns:
+            if 'stock' in col.lower() and pd.notna(row[col]):
+                try:
+                    return float(str(row[col]).replace(',', ''))
+                except:
+                    continue
+                    
         return 0
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
@@ -1754,7 +1799,7 @@ class EnhancedOrdersAnalysis:
             user_lead_time = user_settings.get('amazon_lead_time_days', 90) if user_settings else 90
             
             # Calculate optimal restock quantity with purchase analytics and user's lead time
-            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], lead_time_days=user_lead_time, purchase_analytics=purchase_insights)
+            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], lead_time_days=user_lead_time, purchase_analytics=purchase_insights, stock_df=stock_df)
             
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {

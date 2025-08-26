@@ -2799,6 +2799,125 @@ def get_gmail_message_admin(message_id):
         print(f"Error getting Gmail message (admin): {e}")
         return None
 
+@app.route('/api/debug/stock-direct/<asin>')
+@login_required
+def debug_stock_direct(asin):
+    """Debug endpoint to get stock directly for a specific ASIN"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+            
+        stock_url = user_record.get('sellerboard_stock_url')
+        if not stock_url:
+            return jsonify({'error': 'Stock URL not configured'}), 400
+            
+        from orders_analysis import EnhancedOrdersAnalysis
+        analyzer = EnhancedOrdersAnalysis("dummy", stock_url)
+        
+        # Download stock CSV
+        stock_df = analyzer.download_csv(stock_url)
+        
+        # Get direct stock value
+        direct_stock = analyzer.get_direct_stock_value(stock_df, asin)
+        
+        # Also get via the normal method for comparison
+        stock_info = analyzer.get_stock_info(stock_df)
+        normal_stock = 'Not found'
+        if asin in stock_info:
+            normal_stock = analyzer.extract_current_stock(stock_info[asin])
+        
+        # Find the actual row for this ASIN
+        asin_col = None
+        for col in stock_df.columns:
+            if col.strip().upper() == 'ASIN':
+                asin_col = col
+                break
+                
+        raw_row = {}
+        if asin_col:
+            asin_rows = stock_df[stock_df[asin_col].astype(str).str.strip() == asin]
+            if not asin_rows.empty:
+                raw_row = asin_rows.iloc[0].to_dict()
+                # Convert to JSON-safe
+                for key, value in raw_row.items():
+                    if pd.isna(value):
+                        raw_row[key] = None
+                    elif hasattr(value, 'item'):
+                        raw_row[key] = value.item()
+                    else:
+                        raw_row[key] = str(value)
+        
+        return jsonify({
+            'asin': asin,
+            'direct_stock_value': direct_stock,
+            'normal_stock_value': normal_stock,
+            'raw_csv_row': raw_row,
+            'stock_columns_found': [col for col in stock_df.columns if 'stock' in col.lower()],
+            'total_rows_in_csv': len(stock_df)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/test/stock-simple')
+@login_required
+def test_stock_simple():
+    """Simple test to show actual stock values from Sellerboard CSV"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        stock_url = user_record.get('sellerboard_stock_url')
+        if not stock_url:
+            return jsonify({'error': 'Stock URL not configured'}), 400
+        
+        # Download CSV directly
+        import requests
+        from io import StringIO
+        import pandas as pd
+        
+        response = requests.get(stock_url, timeout=30)
+        df = pd.read_csv(StringIO(response.text))
+        
+        # Find ASIN and stock columns
+        asin_col = None
+        stock_col = None
+        
+        for col in df.columns:
+            if 'ASIN' in col.upper():
+                asin_col = col
+            if 'FBA/FBM Stock' in col or 'Stock' in col:
+                stock_col = col
+                
+        if not asin_col:
+            return jsonify({'error': 'No ASIN column found', 'columns': list(df.columns)}), 500
+        
+        # Get first 5 products with stock info
+        result = {
+            'asin_column': asin_col,
+            'stock_column': stock_col,
+            'all_columns': list(df.columns),
+            'sample_data': []
+        }
+        
+        for i, row in df.head(10).iterrows():
+            asin = row[asin_col]
+            stock = row[stock_col] if stock_col else 'No stock column found'
+            
+            result['sample_data'].append({
+                'asin': str(asin),
+                'stock': str(stock),
+                'all_values': {col: str(row[col]) for col in df.columns if 'stock' in col.lower()}
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/stock-raw')
 @login_required  
 def debug_stock_raw():
@@ -11768,26 +11887,14 @@ def get_inventory_age_analysis():
         stock_df = analyzer.download_csv(stock_url)
         stock_data = analyzer.get_stock_info(stock_df)
         
-        # Use the same data source as Smart Restock Recommendations
-        # Convert restock_alerts to the format expected by age analysis
-        if restock_alerts:
-            print("DEBUG - Using restock_alerts data (same as Smart Restock)")
-            # Use restock_alerts instead of enhanced_analytics since it has the exact same current_stock values
-            age_analysis_source = {}
-            for asin, alert in restock_alerts.items():
-                # Create the expected structure using alert data (same as Smart Restock uses)
-                age_analysis_source[asin] = {
-                    'restock': {
-                        'current_stock': alert.get('current_stock', 0),
-                        'suggested_quantity': alert.get('suggested_quantity', 0)
-                    },
-                    'velocity': {
-                        'weighted_velocity': alert.get('velocity', 0)
-                    }
-                }
-        else:
-            print("DEBUG - Fallback to enhanced_analytics")
-            age_analysis_source = enhanced_analytics
+        # Debug: Show what stock values we're actually getting
+        print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")
+        print(f"DEBUG - Sample stock values from enhanced_analytics:")
+        for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:5]):
+            stock_value = data.get('restock', {}).get('current_stock', 'NOT_FOUND')
+            print(f"  {asin}: {stock_value} units")
+        
+        age_analysis_source = enhanced_analytics
         
         # Perform age analysis using the same current_stock values as Smart Restock
         age_analysis = age_analyzer.analyze_inventory_age(

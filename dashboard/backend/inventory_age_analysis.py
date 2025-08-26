@@ -524,7 +524,7 @@ class InventoryAgeAnalyzer:
             if category in ['aged', 'old', 'ancient']:
                 product_data = enhanced_analytics.get(asin, {})
                 # Use the exact same current_stock value that Smart Restock Recommendations uses
-            current_stock = product_data.get('restock', {}).get('current_stock', 0)
+                current_stock = product_data.get('restock', {}).get('current_stock', 0)
                 velocity = product_data.get('velocity', {}).get('weighted_velocity', 0)
                 
                 # Calculate urgency score

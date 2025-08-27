@@ -55,6 +55,7 @@ const AdminCompact = () => {
   const [showDiscountEmailModal, setShowDiscountEmailModal] = useState(false);
   const [discountEmailForm, setDiscountEmailForm] = useState({
     email_address: '',
+    config_type: 'gmail_oauth',
     imap_server: '',
     imap_port: 993,
     username: '',
@@ -497,10 +498,29 @@ const AdminCompact = () => {
   const handleUpdateDiscountEmail = async () => {
     try {
       setError('');
-      await axios.post('/api/admin/discount-email/config', discountEmailForm, { withCredentials: true });
-      setSuccess('Discount email configuration updated successfully!');
-      setShowDiscountEmailModal(false);
-      fetchData();
+      
+      if (discountEmailForm.config_type === 'gmail_oauth') {
+        // For Gmail OAuth, start the OAuth flow
+        const response = await axios.post('/api/admin/discount-email/gmail-oauth', {
+          email_address: discountEmailForm.email_address
+        }, { withCredentials: true });
+        
+        // Open OAuth URL in new window
+        window.open(response.data.auth_url, '_blank', 'width=600,height=600');
+        setSuccess('Gmail OAuth setup started. Please complete authorization in the new window.');
+        setShowDiscountEmailModal(false);
+        
+        // Refresh data after a few seconds to show updated config
+        setTimeout(() => {
+          fetchData();
+        }, 5000);
+      } else {
+        // For IMAP, use the existing endpoint
+        await axios.post('/api/admin/discount-email/config', discountEmailForm, { withCredentials: true });
+        setSuccess('Discount email configuration updated successfully!');
+        setShowDiscountEmailModal(false);
+        fetchData();
+      }
     } catch (error) {
       setError(`Failed to update discount email config: ${error.response?.data?.error || error.message}`);
     }
@@ -1095,10 +1115,12 @@ const AdminCompact = () => {
                             // Pre-fill form with existing config
                             setDiscountEmailForm({
                               email_address: discountEmailConfig.config?.email_address || '',
+                              config_type: discountEmailConfig.config?.config_type || 'gmail_oauth',
                               imap_server: discountEmailConfig.config?.imap_server || '',
                               imap_port: discountEmailConfig.config?.imap_port || 993,
                               username: discountEmailConfig.config?.username || '',
-                              password: ''
+                              password: '',
+                              is_active: true
                             });
                           }
                           setShowDiscountEmailModal(true);
@@ -1133,13 +1155,33 @@ const AdminCompact = () => {
                           <p className="text-gray-600">{discountEmailConfig.config?.email_address}</p>
                         </div>
                         <div>
-                          <span className="font-medium text-gray-900">IMAP Server:</span>
-                          <p className="text-gray-600">{discountEmailConfig.config?.imap_server}:{discountEmailConfig.config?.imap_port}</p>
+                          <span className="font-medium text-gray-900">Configuration Type:</span>
+                          <p className="text-gray-600">
+                            {discountEmailConfig.config?.config_type === 'gmail_oauth' 
+                              ? 'Gmail OAuth' 
+                              : discountEmailConfig.config?.config_type === 'imap'
+                                ? 'IMAP'
+                                : 'Unknown'
+                            }
+                            {discountEmailConfig.config?.config_type === 'gmail_oauth' && (
+                              <span className="ml-2 px-1 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                                {discountEmailConfig.config?.has_gmail_token ? 'Connected' : 'Disconnected'}
+                              </span>
+                            )}
+                          </p>
                         </div>
-                        <div>
-                          <span className="font-medium text-gray-900">Username:</span>
-                          <p className="text-gray-600">{discountEmailConfig.config?.username}</p>
-                        </div>
+                        {discountEmailConfig.config?.config_type === 'imap' && (
+                          <>
+                            <div>
+                              <span className="font-medium text-gray-900">IMAP Server:</span>
+                              <p className="text-gray-600">{discountEmailConfig.config?.imap_server}:{discountEmailConfig.config?.imap_port}</p>
+                            </div>
+                            <div>
+                              <span className="font-medium text-gray-900">Username:</span>
+                              <p className="text-gray-600">{discountEmailConfig.config?.username}</p>
+                            </div>
+                          </>
+                        )}
                         <div>
                           <span className="font-medium text-gray-900">Last Updated:</span>
                           <p className="text-gray-600">
@@ -1156,7 +1198,7 @@ const AdminCompact = () => {
                             <AlertTriangle className="h-5 w-5 text-yellow-400" />
                             <div className="ml-3">
                               <p className="text-sm text-yellow-800">
-                                Using legacy Gmail OAuth configuration. Consider updating to the new IMAP configuration for better reliability.
+                                Using legacy Gmail OAuth configuration. Consider updating to the new database-based configuration for better management.
                               </p>
                             </div>
                           </div>
@@ -1423,6 +1465,21 @@ const AdminCompact = () => {
             
             <div className="space-y-4">
               <div>
+                <label className="block text-sm font-medium mb-1">Configuration Type</label>
+                <select
+                  value={discountEmailForm.config_type}
+                  onChange={(e) => setDiscountEmailForm({...discountEmailForm, config_type: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                >
+                  <option value="gmail_oauth">Gmail OAuth (Recommended)</option>
+                  <option value="imap">IMAP (Manual Configuration)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Gmail OAuth is recommended for Gmail accounts and provides better security
+                </p>
+              </div>
+              
+              <div>
                 <label className="block text-sm font-medium mb-1">Email Address</label>
                 <input
                   type="email"
@@ -1431,10 +1488,17 @@ const AdminCompact = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="your-email@example.com"
                 />
+                {discountEmailForm.config_type === 'gmail_oauth' && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Must be a Gmail address (@gmail.com or G Suite domain)
+                  </p>
+                )}
               </div>
               
-              <div>
-                <label className="block text-sm font-medium mb-1">IMAP Server</label>
+              {discountEmailForm.config_type === 'imap' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">IMAP Server</label>
                 <select
                   value={discountEmailForm.imap_server}
                   onChange={(e) => {
@@ -1500,10 +1564,12 @@ const AdminCompact = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                   placeholder="Email password or app password"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  For Gmail, use an App Password instead of your main password
-                </p>
-              </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      For Gmail, use an App Password instead of your main password
+                    </p>
+                  </div>
+                </>
+              )}
               
               {discountEmailTestResult && (
                 <div className={`p-3 rounded-md text-sm ${
@@ -1515,13 +1581,16 @@ const AdminCompact = () => {
             </div>
             
             <div className="flex justify-between mt-6">
-              <button
-                onClick={handleTestDiscountEmail}
-                disabled={testingDiscountEmail || !discountEmailForm.email_address || !discountEmailForm.imap_server || !discountEmailForm.password}
-                className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 text-sm disabled:opacity-50"
-              >
-                {testingDiscountEmail ? 'Testing...' : 'Test Connection'}
-              </button>
+              {discountEmailForm.config_type === 'imap' && (
+                <button
+                  onClick={handleTestDiscountEmail}
+                  disabled={testingDiscountEmail || !discountEmailForm.email_address || !discountEmailForm.imap_server || !discountEmailForm.password}
+                  className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 text-sm disabled:opacity-50"
+                >
+                  {testingDiscountEmail ? 'Testing...' : 'Test Connection'}
+                </button>
+              )}
+              {discountEmailForm.config_type === 'gmail_oauth' && <div></div>}
               <div className="space-x-3">
                 <button
                   onClick={() => {
@@ -1529,6 +1598,7 @@ const AdminCompact = () => {
                     setDiscountEmailTestResult(null);
                     setDiscountEmailForm({
                       email_address: '',
+                      config_type: 'gmail_oauth',
                       imap_server: '',
                       imap_port: 993,
                       username: '',
@@ -1542,11 +1612,14 @@ const AdminCompact = () => {
                 </button>
                 <button
                   onClick={handleUpdateDiscountEmail}
-                  disabled={!discountEmailForm.email_address || !discountEmailForm.imap_server || !discountEmailForm.password}
+                  disabled={
+                    !discountEmailForm.email_address || 
+                    (discountEmailForm.config_type === 'imap' && (!discountEmailForm.imap_server || !discountEmailForm.password))
+                  }
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
                 >
                   <Save className="h-4 w-4 mr-2 inline" />
-                  Save
+                  {discountEmailForm.config_type === 'gmail_oauth' ? 'Setup Gmail OAuth' : 'Save Configuration'}
                 </button>
               </div>
             </div>

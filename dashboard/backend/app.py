@@ -2694,7 +2694,8 @@ def get_admin_gmail_config():
         cursor_local = conn_local.cursor()
         
         cursor_local.execute('''
-            SELECT email_address, imap_server, imap_port, username, password_encrypted, last_updated
+            SELECT email_address, config_type, imap_server, imap_port, username, password_encrypted, 
+                   gmail_access_token, gmail_refresh_token, gmail_token_expires_at, last_updated
             FROM discount_email_config
             WHERE is_active = 1
             ORDER BY created_at DESC
@@ -2706,17 +2707,35 @@ def get_admin_gmail_config():
         
         if row:
             # Return database configuration
-            email_address, imap_server, imap_port, username, password_encrypted, last_updated = row
-            return {
+            email_address, config_type, imap_server, imap_port, username, password_encrypted, gmail_access_token, gmail_refresh_token, gmail_token_expires_at, last_updated = row
+            
+            config = {
                 'email_address': email_address,
-                'imap_server': imap_server,
-                'imap_port': imap_port,
-                'username': username,
-                'password_encrypted': password_encrypted,
+                'config_type': config_type,
                 'gmail_email': email_address,  # For compatibility
                 'connected_at': last_updated,
                 'is_database_config': True
             }
+            
+            if config_type == 'gmail_oauth' and gmail_access_token:
+                # Gmail OAuth configuration
+                config.update({
+                    'tokens': {
+                        'access_token': gmail_access_token,
+                        'refresh_token': gmail_refresh_token,
+                        'expires_at': gmail_token_expires_at
+                    }
+                })
+            elif config_type == 'imap':
+                # IMAP configuration
+                config.update({
+                    'imap_server': imap_server,
+                    'imap_port': imap_port,
+                    'username': username,
+                    'password_encrypted': password_encrypted
+                })
+            
+            return config
         
         # Fallback to S3 config for backward compatibility
         config_bucket = CONFIG_S3_BUCKET
@@ -7756,10 +7775,14 @@ def init_feature_flags():
             CREATE TABLE IF NOT EXISTS discount_email_config (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email_address TEXT NOT NULL,
-                imap_server TEXT NOT NULL,
+                config_type TEXT NOT NULL DEFAULT 'gmail_oauth', -- 'gmail_oauth' or 'imap'
+                imap_server TEXT,
                 imap_port INTEGER DEFAULT 993,
-                username TEXT NOT NULL,
-                password_encrypted TEXT NOT NULL,
+                username TEXT,
+                password_encrypted TEXT,
+                gmail_access_token TEXT,
+                gmail_refresh_token TEXT,
+                gmail_token_expires_at TIMESTAMP,
                 is_active BOOLEAN DEFAULT 1,
                 created_by TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -9779,10 +9802,16 @@ def fetch_discount_email_alerts():
         admin_gmail_config = get_admin_gmail_config()
         
         if admin_gmail_config and admin_gmail_config.get('is_database_config'):
-            # Use new IMAP configuration
-            print(f"[DEBUG] ✅ Using IMAP configuration for discount email")
-            print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
-            return fetch_discount_alerts_from_imap(admin_gmail_config)
+            # Check configuration type from database
+            config_type = admin_gmail_config.get('config_type', 'gmail_oauth')
+            if config_type == 'imap':
+                print(f"[DEBUG] ✅ Using IMAP configuration for discount email")
+                print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
+                return fetch_discount_alerts_from_imap(admin_gmail_config)
+            else:  # gmail_oauth
+                print(f"[DEBUG] ✅ Using Gmail OAuth configuration for discount email")
+                print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
+                return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
         elif admin_gmail_config and admin_gmail_config.get('tokens'):
             # Use legacy Gmail API configuration
@@ -9911,14 +9940,138 @@ def fetch_discount_alerts_from_imap(email_config):
         return fetch_mock_discount_alerts()
 
 def fetch_discount_alerts_from_gmail_api(gmail_config):
-    """Fetch discount alerts using legacy Gmail API configuration"""
+    """Fetch discount alerts using Gmail API configuration"""
     try:
-        print(f"[DEBUG] ✅ FOUND SYSTEM-WIDE DISCOUNT GMAIL CONFIG")
+        print(f"[DEBUG] ✅ Using Gmail API for discount email")
         print(f"[DEBUG] Connected Gmail: {gmail_config.get('gmail_email', 'Unknown')}")
         
-        # Just return the original Gmail API implementation
-        # For now, use mock data until we refactor the Gmail API code
-        return fetch_mock_discount_alerts()
+        # Create a mock user record for API calls
+        user_record = {
+            'google_tokens': gmail_config.get('tokens', {})
+        }
+        
+        # Search for discount-related emails from the last few days
+        days_back = get_discount_email_days_back()
+        from datetime import datetime, timedelta
+        
+        # Build search query for discount emails
+        search_queries = []
+        
+        # Search for emails from specific sender if configured
+        if DISCOUNT_SENDER_EMAIL:
+            search_queries.append(f'from:{DISCOUNT_SENDER_EMAIL}')
+        
+        # Search for discount-related subjects
+        discount_keywords = ['discount', 'clearance', 'sale', 'alert', 'deal', 'promotion']
+        for keyword in discount_keywords:
+            search_queries.append(f'subject:{keyword}')
+        
+        # Combine queries with OR
+        query = ' OR '.join(search_queries)
+        
+        # Add date filter
+        cutoff_date = datetime.now() - timedelta(days=days_back)
+        query += f' after:{cutoff_date.strftime("%Y/%m/%d")}'
+        
+        print(f"[DEBUG] Gmail search query: {query}")
+        
+        # Search for messages
+        messages = search_gmail_messages(user_record, query, max_results=50)
+        
+        if not messages or not messages.get('messages'):
+            print(f"[DEBUG] No discount emails found in Gmail")
+            return fetch_mock_discount_alerts()
+        
+        alerts = []
+        
+        # Process each message
+        for message in messages['messages'][:50]:  # Limit to 50 for performance
+            try:
+                message_id = message['id']
+                email_data = get_gmail_message(user_record, message_id)
+                
+                if not email_data:
+                    continue
+                
+                # Extract email details
+                headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                subject = headers.get('Subject', '')
+                sender = headers.get('From', '')
+                date_received = headers.get('Date', '')
+                
+                # Get email body
+                html_content = ""
+                payload = email_data.get('payload', {})
+                
+                def extract_html_from_payload(payload):
+                    if payload.get('mimeType') == 'text/html':
+                        data = payload.get('body', {}).get('data', '')
+                        if data:
+                            import base64
+                            return base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                    
+                    if payload.get('mimeType') == 'text/plain' and not html_content:
+                        data = payload.get('body', {}).get('data', '')
+                        if data:
+                            import base64
+                            plain_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                            return f"<div>{plain_text}</div>"
+                    
+                    # Check multipart messages
+                    for part in payload.get('parts', []):
+                        result = extract_html_from_payload(part)
+                        if result:
+                            return result
+                    
+                    return None
+                
+                html_content = extract_html_from_payload(payload) or "<div>No content</div>"
+                
+                # Extract ASIN from subject or content
+                import re
+                asin_match = re.search(r'B[0-9A-Z]{9}', subject + ' ' + html_content)
+                asin = asin_match.group() if asin_match else f'UNKNOWN_{len(alerts)}'
+                
+                # Determine retailer from sender or subject
+                retailer = 'Unknown'
+                sender_lower = sender.lower()
+                subject_lower = subject.lower()
+                
+                retailers_map = {
+                    'vitacost': 'Vitacost',
+                    'walmart': 'Walmart',
+                    'target': 'Target',
+                    'amazon': 'Amazon',
+                    'costco': 'Costco',
+                    'lowes': 'Lowes',
+                    'lowe': 'Lowes'
+                }
+                
+                for key, name in retailers_map.items():
+                    if key in sender_lower or key in subject_lower:
+                        retailer = name
+                        break
+                
+                # Convert Gmail date to ISO format
+                alert_time = convert_gmail_date_to_iso(date_received)
+                
+                alert = {
+                    'retailer': retailer,
+                    'asin': asin,
+                    'subject': subject,
+                    'html_content': html_content,
+                    'alert_time': alert_time
+                }
+                
+                alerts.append(alert)
+                print(f"[DEBUG] Processed Gmail alert: {retailer} - {asin}")
+                
+            except Exception as e:
+                print(f"Error processing Gmail message {message_id}: {e}")
+                continue
+        
+        print(f"[DEBUG] Found {len(alerts)} Gmail discount alerts")
+        return alerts if alerts else fetch_mock_discount_alerts()
         
     except Exception as e:
         print(f"Error fetching Gmail API alerts: {e}")
@@ -13508,7 +13661,8 @@ def get_discount_email_config():
         local_cursor = local_conn.cursor()
         
         local_cursor.execute('''
-            SELECT id, email_address, imap_server, imap_port, username, is_active, created_at, last_updated
+            SELECT id, email_address, config_type, imap_server, imap_port, username, 
+                   gmail_access_token, is_active, created_at, last_updated
             FROM discount_email_config
             WHERE is_active = 1
             ORDER BY created_at DESC
@@ -13519,19 +13673,30 @@ def get_discount_email_config():
         local_conn.close()
         
         if row:
-            id_val, email, server, port, username, is_active, created, updated = row
-            return jsonify({
-                'configured': True,
-                'config': {
-                    'id': id_val,
-                    'email_address': email,
+            id_val, email, config_type, server, port, username, gmail_token, is_active, created, updated = row
+            config_data = {
+                'id': id_val,
+                'email_address': email,
+                'config_type': config_type or 'gmail_oauth',
+                'is_active': bool(is_active),
+                'created_at': created,
+                'last_updated': updated
+            }
+            
+            if config_type == 'imap':
+                config_data.update({
                     'imap_server': server,
                     'imap_port': port,
-                    'username': username,
-                    'is_active': bool(is_active),
-                    'created_at': created,
-                    'last_updated': updated
-                }
+                    'username': username
+                })
+            elif config_type == 'gmail_oauth':
+                config_data.update({
+                    'has_gmail_token': bool(gmail_token)
+                })
+            
+            return jsonify({
+                'configured': True,
+                'config': config_data
             })
         else:
             # Check for legacy Gmail config
@@ -13668,6 +13833,129 @@ def clear_discount_cache():
     except Exception as e:
         print(f"Error clearing discount cache: {e}")
         return jsonify({'error': 'Failed to clear cache'}), 500
+
+@app.route('/api/admin/discount-email/gmail-oauth', methods=['POST'])
+@admin_required
+def setup_gmail_oauth_discount():
+    """Setup Gmail OAuth for discount opportunities"""
+    try:
+        data = request.get_json()
+        email_address = data.get('email_address')
+        
+        if not email_address:
+            return jsonify({'error': 'Email address is required'}), 400
+        
+        # Generate OAuth URL for Gmail access
+        google_auth_url = (
+            f"https://accounts.google.com/o/oauth2/v2/auth"
+            f"?client_id={GOOGLE_CLIENT_ID}"
+            f"&redirect_uri={urllib.parse.quote(GOOGLE_REDIRECT_URI)}"
+            f"&response_type=code"
+            f"&scope=https://www.googleapis.com/auth/gmail.readonly"
+            f"&access_type=offline"
+            f"&prompt=consent"
+            f"&state=discount_email:{email_address}"  # Include email in state
+        )
+        
+        return jsonify({
+            'auth_url': google_auth_url,
+            'message': 'Please complete OAuth authorization'
+        })
+        
+    except Exception as e:
+        print(f"Error setting up Gmail OAuth: {e}")
+        return jsonify({'error': 'Failed to setup Gmail OAuth'}), 500
+
+@app.route('/api/admin/discount-email/oauth-callback')
+def handle_discount_gmail_oauth_callback():
+    """Handle OAuth callback for discount email Gmail setup"""
+    try:
+        code = request.args.get('code')
+        state = request.args.get('state')
+        error = request.args.get('error')
+        
+        if error:
+            return f"<html><body><h1>OAuth Error</h1><p>Error: {error}</p><p>Please try again.</p></body></html>", 400
+        
+        if not code:
+            return "<html><body><h1>OAuth Error</h1><p>No authorization code received</p></body></html>", 400
+        
+        # Parse email from state
+        email_address = None
+        if state and state.startswith('discount_email:'):
+            email_address = state.replace('discount_email:', '')
+        
+        if not email_address:
+            return "<html><body><h1>OAuth Error</h1><p>Invalid state parameter</p></body></html>", 400
+        
+        # Exchange code for tokens
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+        }
+        
+        token_response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
+        token_response.raise_for_status()
+        tokens = token_response.json()
+        
+        access_token = tokens['access_token']
+        refresh_token = tokens.get('refresh_token')
+        expires_in = tokens.get('expires_in', 3600)
+        
+        # Calculate expiration time
+        from datetime import datetime, timedelta
+        expires_at = datetime.now() + timedelta(seconds=expires_in)
+        
+        # Save to database
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Deactivate any existing configurations
+        local_cursor.execute('''
+            UPDATE discount_email_config SET is_active = 0 WHERE is_active = 1
+        ''')
+        
+        # Insert new Gmail OAuth configuration
+        local_cursor.execute('''
+            INSERT INTO discount_email_config 
+            (email_address, config_type, gmail_access_token, gmail_refresh_token, 
+             gmail_token_expires_at, is_active, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            email_address,
+            'gmail_oauth',
+            access_token,
+            refresh_token,
+            expires_at.isoformat(),
+            True,
+            session.get('discord_id', 'admin')
+        ))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return """
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+            <h1 style="color: #22c55e;">✅ Gmail OAuth Setup Complete!</h1>
+            <p>Your Gmail account has been successfully connected for discount opportunities.</p>
+            <p><strong>Email:</strong> {}</p>
+            <p>You can now close this tab and return to the admin panel.</p>
+            <script>
+                setTimeout(function() {{
+                    window.close();
+                }}, 3000);
+            </script>
+        </body>
+        </html>
+        """.format(email_address)
+        
+    except Exception as e:
+        print(f"Error in Gmail OAuth callback: {e}")
+        return f"<html><body><h1>OAuth Error</h1><p>Setup failed: {str(e)}</p></body></html>", 500
 
 if __name__ == '__main__':
     try:

@@ -506,6 +506,20 @@ class EnhancedOrdersAnalysis:
             stock_related = [col for col in available_columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
             print(f"DEBUG - Stock-related columns found: {stock_related}")
         
+        # First, try to find FBA/FBM Stock specifically (highest priority)
+        if 'FBA/FBM Stock' in stock_info:
+            try:
+                stock_val = str(stock_info['FBA/FBM Stock']).replace(',', '').strip()
+                if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null']:
+                    current_stock = float(stock_val)
+                    if current_stock >= 0:
+                        if debug_asin:
+                            print(f"DEBUG - Stock extraction for {debug_asin}: found {current_stock} in 'FBA/FBM Stock'")
+                        return current_stock
+            except (ValueError, TypeError):
+                pass
+        
+        # Then try other fields
         for field in stock_fields:
             if field in stock_info and stock_info[field] is not None:
                 try:

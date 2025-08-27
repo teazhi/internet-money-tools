@@ -2889,7 +2889,10 @@ def test_stock_simple():
         for col in df.columns:
             if 'ASIN' in col.upper():
                 asin_col = col
-            if 'FBA/FBM Stock' in col or 'Stock' in col:
+            # Be more specific - look for FBA/FBM Stock first
+            if col == 'FBA/FBM Stock':
+                stock_col = col
+            elif not stock_col and 'Stock' in col and 'AWD' not in col:
                 stock_col = col
                 
         if not asin_col:

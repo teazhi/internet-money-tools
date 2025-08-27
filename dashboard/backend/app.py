@@ -5483,14 +5483,27 @@ def manual_sellerboard_update():
                     
             except Exception as cogs_error:
                 print(f"DEBUG: All COGS approaches failed: {cogs_error}")
+                
+                # Additional diagnostic information
+                print("DEBUG: === PERMISSION ANALYSIS ===")
+                print("DEBUG: Stock report works fine (200 status)")
+                print("DEBUG: COGS report fails with 401 (Unauthorized)")
+                print("DEBUG: Same token works for stock but not COGS")
+                print("DEBUG: This indicates COGS report has different permission requirements")
+                print("DEBUG: Possible solutions:")
+                print("DEBUG: 1. COGS report may require different subscription level")
+                print("DEBUG: 2. COGS report may need different authentication method")
+                print("DEBUG: 3. User may not have COGS report access enabled in Sellerboard")
+                print("DEBUG: 4. COGS automation URL may need to be regenerated")
+                
                 return jsonify({
                     'success': False,
-                    'message': 'Update failed due to connection issues.',
+                    'message': 'Update failed - COGS report access denied.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'Failed to download Sellerboard data: {str(cogs_error)}'],
-                    'details': f'Could not access Sellerboard COGS URL. Error: {str(cogs_error)}'
+                    'errors': ['COGS report permission denied - stock report works but COGS report returns 401 Unauthorized'],
+                    'details': 'The Sellerboard COGS report requires different permissions than the stock report. Please check: 1) COGS report access is enabled in your Sellerboard account, 2) Your subscription includes COGS reporting, 3) The COGS automation URL is valid and current, 4) The COGS report exists and is accessible.'
                 })
             
             # Final check that we have the data

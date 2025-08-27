@@ -5350,35 +5350,90 @@ def manual_sellerboard_update():
             print("DEBUG: Downloading Sellerboard COGS CSV...")
             print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
-            # Use simple requests.get() approach exactly like other working endpoints
+            # Test redirect behavior vs stock URL to see what's different
+            print("DEBUG: Let's compare with stock URL behavior first...")
+            stock_url = user_record.get('sellerboard_stock_url')
+            
+            if stock_url:
+                try:
+                    print(f"DEBUG: Testing stock URL behavior: {stock_url}")
+                    stock_response = requests.get(stock_url, timeout=30, allow_redirects=False)
+                    print(f"DEBUG: Stock URL initial response: {stock_response.status_code}")
+                    if stock_response.status_code == 302:
+                        print(f"DEBUG: Stock URL redirects to: {stock_response.headers.get('Location')}")
+                    else:
+                        print("DEBUG: Stock URL doesn't redirect - that's the difference!")
+                except Exception as e:
+                    print(f"DEBUG: Stock URL test failed: {e}")
+            
+            # Now test COGS URL redirect behavior
             try:
-                print("DEBUG: Using simple requests.get() approach like other endpoints...")
+                print("DEBUG: Testing COGS URL redirect behavior...")
+                print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
                 
-                # Download CSV directly - same as /api/stock/direct-test and /api/stock/raw-test
-                import requests
-                from io import StringIO
+                # First check without following redirects
+                initial_response = requests.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
+                print(f"DEBUG: COGS URL initial response: {initial_response.status_code}")
                 
-                response = requests.get(sellerboard_cogs_url, timeout=30)
-                response.raise_for_status()
-                
-                print(f"DEBUG: Simple request status: {response.status_code}")
-                print(f"DEBUG: Response URL: {response.url}")
-                print(f"DEBUG: Content type: {response.headers.get('Content-Type', 'Unknown')}")
-                
-                # Parse CSV directly
-                sellerboard_df = pd.read_csv(StringIO(response.text))
-                print(f"DEBUG: Simple approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                
-            except Exception as simple_error:
-                print(f"DEBUG: Simple approach failed: {simple_error}")
+                if initial_response.status_code == 302:
+                    redirect_url = initial_response.headers.get('Location')
+                    print(f"DEBUG: COGS URL redirects to: {redirect_url}")
+                    
+                    # The key insight: maybe the redirect URL needs different authentication
+                    # Let's try to access the CSV content directly from the initial response
+                    if initial_response.text:
+                        print("DEBUG: Checking if initial response has CSV content...")
+                        try:
+                            # Sometimes the CSV data is in the initial response
+                            sellerboard_df = pd.read_csv(StringIO(initial_response.text))
+                            print(f"DEBUG: Initial response has CSV! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                        except:
+                            print("DEBUG: Initial response doesn't have CSV data")
+                            
+                            # If initial response doesn't have CSV, we need to handle the redirect properly
+                            # The issue might be that the automation URL has a token that's not being passed through
+                            # Let's try reconstructing the redirect URL with the original token
+                            if 't=' in sellerboard_cogs_url and redirect_url:
+                                # Extract token from original URL
+                                token_part = sellerboard_cogs_url.split('t=')[-1]
+                                if '&' in token_part:
+                                    token = token_part.split('&')[0]
+                                else:
+                                    token = token_part
+                                
+                                print(f"DEBUG: Extracted token: {token}")
+                                print(f"DEBUG: Trying redirect URL with token...")
+                                
+                                # Add token to redirect URL if it doesn't have it
+                                if 't=' not in redirect_url:
+                                    separator = '&' if '?' in redirect_url else '?'
+                                    redirect_with_token = f"{redirect_url}{separator}t={token}"
+                                    print(f"DEBUG: Redirect URL with token: {redirect_with_token}")
+                                    
+                                    token_response = requests.get(redirect_with_token, timeout=30)
+                                    token_response.raise_for_status()
+                                    
+                                    sellerboard_df = pd.read_csv(StringIO(token_response.text))
+                                    print(f"DEBUG: Token approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                else:
+                                    raise Exception("Redirect URL already has token but still fails")
+                            else:
+                                raise Exception("Cannot extract token from original URL")
+                else:
+                    # No redirect, try to parse directly
+                    sellerboard_df = pd.read_csv(StringIO(initial_response.text))
+                    print(f"DEBUG: No redirect approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    
+            except Exception as cogs_error:
+                print(f"DEBUG: COGS URL approach failed: {cogs_error}")
                 return jsonify({
                     'success': False,
                     'message': 'Update failed due to connection issues.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'Failed to download Sellerboard data: {str(simple_error)}'],
-                    'details': f'Could not access Sellerboard COGS URL. Error: {str(simple_error)}'
+                    'errors': [f'Failed to download Sellerboard data: {str(cogs_error)}'],
+                    'details': f'Could not access Sellerboard COGS URL. Error: {str(cogs_error)}'
                 })
             
             print(f"DEBUG: Downloaded Sellerboard CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")

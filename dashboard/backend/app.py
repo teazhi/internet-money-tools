@@ -5238,8 +5238,7 @@ def manual_sellerboard_update():
         discord_id = session['discord_id']
         
         # Get user configuration
-        s3_config = load_s3_config()
-        users = s3_config.get('users', [])
+        users = get_users_config()
         user_config = None
         
         for user in users:

@@ -5340,37 +5340,16 @@ def manual_sellerboard_update():
                 
                 # Check if Lambda executed successfully
                 if status_code == 200 and not result.get('errorMessage'):
-                    # Parse logs to check if emails were actually sent
-                    lambda_logs = result.get('body', '') if isinstance(result.get('body'), str) else str(result)
+                    # Get execution details from Lambda response
+                    execution_details = result.get('execution_details', {})
+                    lambda_body = result.get('body', '')
                     
-                    # Look for email success indicators in logs
-                    emails_sent = 0
-                    users_processed = 0
-                    errors = []
+                    emails_sent = execution_details.get('emails_sent', 0)
+                    users_processed = execution_details.get('processed_users', 0)
+                    skipped_users = execution_details.get('skipped_users', 0)
+                    skipped_reasons = execution_details.get('skipped_reasons', [])
                     
-                    # Check for common success patterns in logs
-                    if '✅ Successfully sent email' in lambda_logs:
-                        emails_sent = lambda_logs.count('✅ Successfully sent email')
-                    elif 'Email sent successfully' in lambda_logs:
-                        emails_sent = lambda_logs.count('Email sent successfully')
-                    
-                    # Check for user processing
-                    if 'USER' in lambda_logs and 'Processing' in lambda_logs:
-                        users_processed = lambda_logs.count('Processing')
-                    
-                    # Check for common error patterns
-                    if 'SKIPPING' in lambda_logs:
-                        skip_count = lambda_logs.count('SKIPPING')
-                        errors.append(f"{skip_count} user(s) skipped due to configuration issues")
-                    
-                    if 'No Sellerboard URL configured' in lambda_logs:
-                        errors.append("Sellerboard COGS URL not configured")
-                    
-                    if 'Failed to fetch Sellerboard data' in lambda_logs:
-                        errors.append("Failed to fetch data from Sellerboard URL")
-                    
-                    if 'No changes to process' in lambda_logs:
-                        errors.append("No changes found to process")
+                    print(f"DEBUG: Execution details: {execution_details}")
                     
                     # Determine success based on actual email delivery
                     if emails_sent > 0:
@@ -5383,17 +5362,23 @@ def manual_sellerboard_update():
                             'details': f'{"Full" if full_update else "Quick"} update processed {users_processed} user(s) and sent {emails_sent} email(s).'
                         })
                     else:
-                        # No emails sent - provide detailed reason
-                        error_summary = '; '.join(errors) if errors else 'Unknown reason - check your configuration'
+                        # No emails sent - provide detailed reasons
+                        reasons = []
+                        if skipped_users > 0:
+                            reasons.extend(skipped_reasons)
+                        if not reasons:
+                            reasons.append("No data changes found or configuration issues")
+                        
                         return jsonify({
                             'success': False,
                             'message': f'Update completed but no emails were sent.',
                             'full_update': full_update,
                             'emails_sent': 0,
                             'users_processed': users_processed,
-                            'errors': errors,
-                            'details': f'Reason: {error_summary}',
-                            'logs_preview': lambda_logs[-500:] if lambda_logs else 'No logs available'
+                            'skipped_users': skipped_users,
+                            'errors': reasons,
+                            'details': f'Reasons: {"; ".join(reasons)}',
+                            'lambda_response': lambda_body
                         })
                 else:
                     # Lambda execution failed

@@ -5536,7 +5536,111 @@ def manual_sellerboard_update():
                                     
                             except Exception as manual_error:
                                 print(f"DEBUG: Manual encoding failed: {manual_error}")
-                                print("DEBUG: Trying with token...")
+                                
+                                # One more approach: Use session with cookies from the initial redirect
+                                print("DEBUG: Trying session approach with cookies from redirect...")
+                                try:
+                                    session = requests.Session()
+                                    
+                                    # Make the initial request to get any cookies
+                                    initial_resp = session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
+                                    print(f"DEBUG: Initial request status: {initial_resp.status_code}")
+                                    print(f"DEBUG: Cookies from initial request: {list(session.cookies.keys())}")
+                                    
+                                    if initial_resp.status_code == 302:
+                                        redirect_location = initial_resp.headers.get('Location')
+                                        print(f"DEBUG: Following redirect with session cookies...")
+                                        
+                                        # Follow redirect with session (preserves cookies)
+                                        final_resp = session.get(redirect_location, timeout=30)
+                                        print(f"DEBUG: Final response status: {final_resp.status_code}")
+                                        print(f"DEBUG: Final response URL: {final_resp.url}")
+                                        
+                                        if final_resp.status_code == 200:
+                                            print("DEBUG: Session approach worked!")
+                                            sellerboard_df = pd.read_csv(StringIO(final_resp.text))
+                                            print(f"DEBUG: Session success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        else:
+                                            print(f"DEBUG: Session approach still failed with {final_resp.status_code}")
+                                            raise Exception("Session approach failed")
+                                    else:
+                                        raise Exception("No redirect in session approach")
+                                        
+                                except Exception as session_error:
+                                    print(f"DEBUG: Session approach failed: {session_error}")
+                                    
+                                    # Final approach: Use urllib3 to avoid requests' automatic URL encoding
+                                    print("DEBUG: Trying urllib3 to preserve spaces in URL...")
+                                    try:
+                                        import urllib3
+                                        
+                                        # Create a PoolManager
+                                        http = urllib3.PoolManager()
+                                        
+                                        # Make request with urllib3 - it handles spaces differently
+                                        print(f"DEBUG: urllib3 request to: {redirect_url}")
+                                        
+                                        urllib3_resp = http.request('GET', redirect_url,
+                                                                  headers={
+                                                                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                                      'Accept': 'text/csv,application/csv,text/plain,*/*'
+                                                                  })
+                                        
+                                        print(f"DEBUG: urllib3 response status: {urllib3_resp.status}")
+                                        
+                                        if urllib3_resp.status == 200:
+                                            print("DEBUG: urllib3 approach worked!")
+                                            response_text = urllib3_resp.data.decode('utf-8')
+                                            sellerboard_df = pd.read_csv(StringIO(response_text))
+                                            print(f"DEBUG: urllib3 success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        else:
+                                            print(f"DEBUG: urllib3 still failed with {urllib3_resp.status}")
+                                            
+                                            # If urllib3 also fails, try one more approach - manually encode just specific characters
+                                            print("DEBUG: Trying selective URL encoding (encode special chars but keep spaces)...")
+                                            
+                                            # Only encode characters that need encoding, but keep spaces as spaces
+                                            import urllib.parse
+                                            
+                                            # Parse URL
+                                            parsed = urllib.parse.urlparse(redirect_url)
+                                            
+                                            # Custom encoding: encode special characters but preserve spaces
+                                            safe_path = parsed.path
+                                            # Replace parentheses and other special chars but NOT spaces
+                                            safe_path = safe_path.replace('(', '%28').replace(')', '%29')
+                                            # You can add more replacements here for other special chars if needed
+                                            
+                                            safe_url = urllib.parse.urlunparse((
+                                                parsed.scheme,
+                                                parsed.netloc,
+                                                safe_path,
+                                                parsed.params,
+                                                parsed.query,
+                                                parsed.fragment
+                                            ))
+                                            
+                                            print(f"DEBUG: Selectively encoded URL: {safe_url}")
+                                            
+                                            selective_resp = http.request('GET', safe_url,
+                                                                        headers={
+                                                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                                            'Accept': 'text/csv,application/csv,text/plain,*/*'
+                                                                        })
+                                            
+                                            print(f"DEBUG: Selective encoding response status: {selective_resp.status}")
+                                            
+                                            if selective_resp.status == 200:
+                                                print("DEBUG: Selective encoding worked!")
+                                                response_text = selective_resp.data.decode('utf-8')
+                                                sellerboard_df = pd.read_csv(StringIO(response_text))
+                                                print(f"DEBUG: Selective encoding success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                            else:
+                                                raise Exception("All urllib3 approaches failed")
+                                    
+                                    except Exception as urllib3_error:
+                                        print(f"DEBUG: urllib3 approach failed: {urllib3_error}")
+                                        print("DEBUG: All manual approaches failed, trying token...")
                     
                     # The redirect URL doesn't have the authentication token - let's add it
                     print("DEBUG: Need to add token to redirect URL for authentication")

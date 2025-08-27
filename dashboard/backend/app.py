@@ -5436,58 +5436,72 @@ def manual_sellerboard_update():
                             
                         print(f"DEBUG: Attempting custom request to: {full_url_with_spaces}")
                         
-                        # Use http.client for maximum control over the raw HTTP request
+                        # Use monkey patching to bypass URL validation and allow spaces
                         try:
                             import http.client
                             import ssl
                             
-                            print("DEBUG: Using http.client for raw HTTP control...")
+                            print("DEBUG: Bypassing HTTP URL validation to allow spaces...")
                             
-                            # Create SSL context
-                            context = ssl.create_default_context()
+                            # Monkey patch the _validate_path method to allow spaces
+                            original_validate_path = http.client._validate_path
                             
-                            # Create HTTPS connection
-                            conn = http.client.HTTPSConnection(host, context=context)
+                            def patched_validate_path(url, method="GET"):
+                                # Allow spaces by removing the validation
+                                return url
                             
-                            # Make request with spaces preserved in path
-                            # http.client should allow us to send the exact path without auto-encoding
-                            headers = {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*',
-                                'Host': host,
-                                'Connection': 'close'
-                            }
+                            # Apply the patch
+                            http.client._validate_path = patched_validate_path
                             
-                            print(f"DEBUG: Making request to path: {path}")
-                            print(f"DEBUG: Headers: {headers}")
-                            
-                            # This is the key - http.client.request() with the exact path
-                            conn.request("GET", path, headers=headers)
-                            response = conn.getresponse()
-                            
-                            print(f"DEBUG: Response status: {response.status}")
-                            print(f"DEBUG: Response reason: {response.reason}")
-                            
-                            if response.status == 200:
-                                print("DEBUG: http.client with spaces worked!")
-                                response_data = response.read()
-                                conn.close()
+                            try:
+                                # Create SSL context
+                                context = ssl.create_default_context()
                                 
-                                # Process the response based on content type
-                                if 'format=xls' in cogs_url:
-                                    from io import BytesIO
-                                    sellerboard_df = pd.read_excel(BytesIO(response_data))
-                                else:
-                                    sellerboard_df = pd.read_csv(StringIO(response_data.decode('utf-8')))
+                                # Create HTTPS connection
+                                conn = http.client.HTTPSConnection(host, context=context)
+                                
+                                # Make request with spaces preserved in path
+                                headers = {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*',
+                                    'Host': host,
+                                    'Connection': 'close'
+                                }
+                                
+                                print(f"DEBUG: Making patched request to path: {path}")
+                                print(f"DEBUG: Headers: {headers}")
+                                
+                                # Now this should work with spaces
+                                conn.request("GET", path, headers=headers)
+                                response = conn.getresponse()
+                                
+                                print(f"DEBUG: Response status: {response.status}")
+                                print(f"DEBUG: Response reason: {response.reason}")
+                                
+                                if response.status == 200:
+                                    print("DEBUG: Monkey-patched http.client with spaces worked!")
+                                    response_data = response.read()
+                                    conn.close()
                                     
-                                print(f"DEBUG: SUCCESS! Spaces preserved! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                            else:
-                                conn.close()
-                                print(f"DEBUG: http.client failed with status: {response.status}")
-                                raise Exception(f"http.client approach failed: {response.status} {response.reason}")
+                                    # Process the response based on content type
+                                    if 'format=xls' in cogs_url:
+                                        from io import BytesIO
+                                        sellerboard_df = pd.read_excel(BytesIO(response_data))
+                                    else:
+                                        sellerboard_df = pd.read_csv(StringIO(response_data.decode('utf-8')))
+                                        
+                                    print(f"DEBUG: SUCCESS! Spaces preserved with monkey patch! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                else:
+                                    conn.close()
+                                    print(f"DEBUG: Patched http.client failed with status: {response.status}")
+                                    raise Exception(f"Patched http.client approach failed: {response.status} {response.reason}")
+                                    
+                            finally:
+                                # Restore original validation function
+                                http.client._validate_path = original_validate_path
                                 
                         except Exception as e:
-                            print(f"DEBUG: http.client failed: {e}")
+                            print(f"DEBUG: Monkey-patched http.client failed: {e}")
                             raise Exception(f"All approaches to preserve spaces failed: {e}")
                     else:
                         print("DEBUG: No spaces in redirect, processing normally")

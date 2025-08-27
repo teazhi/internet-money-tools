@@ -5350,27 +5350,35 @@ def manual_sellerboard_update():
             print("DEBUG: Downloading Sellerboard COGS CSV...")
             print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
-            # Use EnhancedOrdersAnalysis like other working features
+            # Use simple requests.get() approach exactly like other working endpoints
             try:
-                print("DEBUG: Using EnhancedOrdersAnalysis download_csv method...")
+                print("DEBUG: Using simple requests.get() approach like other endpoints...")
                 
-                # Create analyzer instance (dummy orders URL since we only need CSV download)
-                analyzer = EnhancedOrdersAnalysis("dummy", sellerboard_cogs_url)
+                # Download CSV directly - same as /api/stock/direct-test and /api/stock/raw-test
+                import requests
+                from io import StringIO
                 
-                # Download CSV using the proven working method
-                sellerboard_df = analyzer.download_csv(sellerboard_cogs_url)
-                print(f"DEBUG: EnhancedOrdersAnalysis approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                response = requests.get(sellerboard_cogs_url, timeout=30)
+                response.raise_for_status()
                 
-            except Exception as analyzer_error:
-                print(f"DEBUG: EnhancedOrdersAnalysis approach failed: {analyzer_error}")
+                print(f"DEBUG: Simple request status: {response.status_code}")
+                print(f"DEBUG: Response URL: {response.url}")
+                print(f"DEBUG: Content type: {response.headers.get('Content-Type', 'Unknown')}")
+                
+                # Parse CSV directly
+                sellerboard_df = pd.read_csv(StringIO(response.text))
+                print(f"DEBUG: Simple approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                
+            except Exception as simple_error:
+                print(f"DEBUG: Simple approach failed: {simple_error}")
                 return jsonify({
                     'success': False,
                     'message': 'Update failed due to connection issues.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'Failed to download Sellerboard data: {str(analyzer_error)}'],
-                    'details': f'Could not access Sellerboard COGS URL. Error: {str(analyzer_error)}'
+                    'errors': [f'Failed to download Sellerboard data: {str(simple_error)}'],
+                    'details': f'Could not access Sellerboard COGS URL. Error: {str(simple_error)}'
                 })
             
             print(f"DEBUG: Downloaded Sellerboard CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")

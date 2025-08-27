@@ -5445,22 +5445,98 @@ def manual_sellerboard_update():
                     # Check if we can access the redirect URL directly first
                     if redirect_url:
                         print("DEBUG: Testing direct access to redirect URL (as extracted)...")
+                        
+                        # The issue: requests automatically URL-encodes spaces, but Sellerboard expects unencoded spaces
+                        # Solution: Use requests.Session with custom handling or use urllib.parse properly
+                        
+                        import urllib.parse
+                        
+                        # First, try with the URL exactly as extracted (spaces intact)
                         try:
-                            direct_redirect_response = requests.get(redirect_url, timeout=30)
-                            print(f"DEBUG: Direct redirect response status: {direct_redirect_response.status_code}")
-                            print(f"DEBUG: Direct redirect final URL: {direct_redirect_response.url}")
+                            print("DEBUG: Trying with manual request to avoid auto URL encoding...")
                             
-                            if direct_redirect_response.status_code == 200:
-                                print("DEBUG: Direct redirect works! Using this approach...")
-                                sellerboard_df = pd.read_csv(StringIO(direct_redirect_response.text))
-                                print(f"DEBUG: Direct redirect success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                            # The key insight: we need to use the URL exactly as Sellerboard provided it
+                            # without letting requests auto-encode the spaces
+                            
+                            import http.client
+                            import urllib.parse
+                            
+                            # Parse the URL to get components
+                            parsed = urllib.parse.urlparse(redirect_url)
+                            
+                            print(f"DEBUG: Parsed URL components:")
+                            print(f"DEBUG: - Scheme: {parsed.scheme}")
+                            print(f"DEBUG: - Netloc: {parsed.netloc}")
+                            print(f"DEBUG: - Path: {parsed.path}")
+                            
+                            # Use http.client to make raw HTTP request with exact URL
+                            if parsed.scheme == 'https':
+                                conn = http.client.HTTPSConnection(parsed.netloc, timeout=30)
                             else:
-                                print(f"DEBUG: Direct redirect failed with {direct_redirect_response.status_code}, trying token approach...")
-                                raise Exception("Direct redirect failed, trying with token")
+                                conn = http.client.HTTPConnection(parsed.netloc, timeout=30)
+                            
+                            # Make request with exact path (including spaces)
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                                'Accept': 'text/csv,application/csv,text/plain,*/*',
+                            }
+                            
+                            print(f"DEBUG: Making raw HTTP request to: {parsed.path}")
+                            conn.request("GET", parsed.path, headers=headers)
+                            
+                            raw_response = conn.getresponse()
+                            print(f"DEBUG: Raw HTTP response status: {raw_response.status}")
+                            
+                            if raw_response.status == 200:
+                                print("DEBUG: Raw HTTP request with spaces worked!")
+                                response_data = raw_response.read().decode('utf-8')
+                                sellerboard_df = pd.read_csv(StringIO(response_data))
+                                print(f"DEBUG: Raw HTTP success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                conn.close()
+                            else:
+                                print(f"DEBUG: Raw HTTP still failed with {raw_response.status}")
+                                conn.close()
+                                raise Exception("Raw HTTP approach still fails")
                                 
-                        except Exception as direct_error:
-                            print(f"DEBUG: Direct redirect failed: {direct_error}")
-                            print("DEBUG: Trying with token...")
+                        except Exception as spaces_error:
+                            print(f"DEBUG: Spaces approach failed: {spaces_error}")
+                            
+                            # Try manually encoding just the path part properly
+                            try:
+                                print("DEBUG: Trying with manual URL encoding...")
+                                
+                                # Parse the URL properly
+                                parsed = urllib.parse.urlparse(redirect_url)
+                                
+                                # Encode only the path, keeping spaces as spaces (not %20)
+                                # This is tricky - we want to encode special chars but keep spaces
+                                encoded_path = parsed.path.replace(' ', ' ')  # Keep spaces as spaces
+                                
+                                # Reconstruct URL
+                                reconstructed_url = urllib.parse.urlunparse((
+                                    parsed.scheme,
+                                    parsed.netloc, 
+                                    encoded_path,
+                                    parsed.params,
+                                    parsed.query,
+                                    parsed.fragment
+                                ))
+                                
+                                print(f"DEBUG: Reconstructed URL: {reconstructed_url}")
+                                
+                                # Try with requests.get but using allow_redirects=False to prevent further encoding
+                                response = requests.get(reconstructed_url, timeout=30, allow_redirects=False)
+                                print(f"DEBUG: Manual encoding response status: {response.status_code}")
+                                
+                                if response.status_code == 200:
+                                    sellerboard_df = pd.read_csv(StringIO(response.text))
+                                    print(f"DEBUG: Manual encoding worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                else:
+                                    raise Exception("Manual encoding still fails")
+                                    
+                            except Exception as manual_error:
+                                print(f"DEBUG: Manual encoding failed: {manual_error}")
+                                print("DEBUG: Trying with token...")
                     
                     # The redirect URL doesn't have the authentication token - let's add it
                     print("DEBUG: Need to add token to redirect URL for authentication")

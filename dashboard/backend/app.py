@@ -5436,73 +5436,80 @@ def manual_sellerboard_update():
                             
                         print(f"DEBUG: Attempting custom request to: {full_url_with_spaces}")
                         
-                        # Use monkey patching to bypass URL validation and allow spaces
+                        # Final attempt: Use raw socket to send HTTP request with spaces
                         try:
-                            import http.client
+                            import socket
                             import ssl
                             
-                            print("DEBUG: Bypassing HTTP URL validation to allow spaces...")
+                            print("DEBUG: Using raw socket connection to preserve spaces...")
                             
-                            # Monkey patch the _validate_path method to allow spaces
-                            original_validate_path = http.client._validate_path
+                            # Create SSL context
+                            context = ssl.create_default_context()
                             
-                            def patched_validate_path(url, method="GET"):
-                                # Allow spaces by removing the validation
-                                return url
+                            # Build the raw HTTP request with spaces preserved
+                            http_request = f"GET {path} HTTP/1.1\r\n"
+                            http_request += f"Host: {host}\r\n"
+                            http_request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
+                            http_request += "Accept: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*\r\n"
+                            http_request += "Connection: close\r\n"
+                            http_request += "\r\n"
                             
-                            # Apply the patch
-                            http.client._validate_path = patched_validate_path
+                            print(f"DEBUG: Raw HTTP request:\n{http_request[:200]}...")
                             
-                            try:
-                                # Create SSL context
-                                context = ssl.create_default_context()
-                                
-                                # Create HTTPS connection
-                                conn = http.client.HTTPSConnection(host, context=context)
-                                
-                                # Make request with spaces preserved in path
-                                headers = {
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*',
-                                    'Host': host,
-                                    'Connection': 'close'
-                                }
-                                
-                                print(f"DEBUG: Making patched request to path: {path}")
-                                print(f"DEBUG: Headers: {headers}")
-                                
-                                # Now this should work with spaces
-                                conn.request("GET", path, headers=headers)
-                                response = conn.getresponse()
-                                
-                                print(f"DEBUG: Response status: {response.status}")
-                                print(f"DEBUG: Response reason: {response.reason}")
-                                
-                                if response.status == 200:
-                                    print("DEBUG: Monkey-patched http.client with spaces worked!")
-                                    response_data = response.read()
-                                    conn.close()
+                            # Create socket and wrap with SSL
+                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                                sock.settimeout(30)
+                                with context.wrap_socket(sock, server_hostname=host) as ssock:
+                                    # Connect to the server
+                                    ssock.connect((host, 443))
                                     
-                                    # Process the response based on content type
-                                    if 'format=xls' in cogs_url:
-                                        from io import BytesIO
-                                        sellerboard_df = pd.read_excel(BytesIO(response_data))
-                                    else:
-                                        sellerboard_df = pd.read_csv(StringIO(response_data.decode('utf-8')))
+                                    # Send the request with spaces
+                                    ssock.sendall(http_request.encode())
+                                    
+                                    # Read the response
+                                    response_data = b""
+                                    while True:
+                                        chunk = ssock.recv(4096)
+                                        if not chunk:
+                                            break
+                                        response_data += chunk
+                                    
+                                    # Parse HTTP response
+                                    response_str = response_data.decode('utf-8', errors='ignore')
+                                    print(f"DEBUG: Raw socket response status: {response_str[:100]}...")
+                                    
+                                    if 'HTTP/1.1 200 OK' in response_str:
+                                        print("DEBUG: Raw socket with spaces worked!")
                                         
-                                    print(f"DEBUG: SUCCESS! Spaces preserved with monkey patch! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                else:
-                                    conn.close()
-                                    print(f"DEBUG: Patched http.client failed with status: {response.status}")
-                                    raise Exception(f"Patched http.client approach failed: {response.status} {response.reason}")
-                                    
-                            finally:
-                                # Restore original validation function
-                                http.client._validate_path = original_validate_path
-                                
+                                        # Extract body after headers
+                                        if '\r\n\r\n' in response_str:
+                                            headers_end = response_str.find('\r\n\r\n') + 4
+                                            body_data = response_data[headers_end:]
+                                            
+                                            # Process the response based on content type
+                                            if 'format=xls' in cogs_url:
+                                                from io import BytesIO
+                                                sellerboard_df = pd.read_excel(BytesIO(body_data))
+                                            else:
+                                                body_str = body_data.decode('utf-8')
+                                                sellerboard_df = pd.read_csv(StringIO(body_str))
+                                                
+                                            print(f"DEBUG: SUCCESS! Raw socket preserved spaces! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        else:
+                                            raise Exception("Could not find body in raw socket response")
+                                    elif 'HTTP/1.1 400 Bad Request' in response_str:
+                                        print("DEBUG: 400 Bad Request - spaces violate HTTP spec")
+                                        raise Exception("Server rejected request with spaces (400 Bad Request)")
+                                    elif 'HTTP/1.1 401 Unauthorized' in response_str:
+                                        print("DEBUG: 401 Unauthorized - authentication issue")
+                                        raise Exception("Server rejected request (401 Unauthorized)")
+                                    else:
+                                        status_line = response_str.split('\r\n')[0]
+                                        raise Exception(f"Raw socket request failed: {status_line}")
+                                        
                         except Exception as e:
-                            print(f"DEBUG: Monkey-patched http.client failed: {e}")
-                            raise Exception(f"All approaches to preserve spaces failed: {e}")
+                            print(f"DEBUG: Raw socket with spaces failed: {e}")
+                            raise Exception(f"Cannot make HTTP request with literal spaces: {e}")
                     else:
                         print("DEBUG: No spaces in redirect, processing normally")
                         response = req_session.get(redirect_url, timeout=30)

@@ -5368,92 +5368,108 @@ def manual_sellerboard_update():
             from io import StringIO
             import pandas as pd
             
-            print("DEBUG: Using urllib.request to avoid automatic space encoding...")
+            # Based on our previous testing, we know the issue is URL encoding of spaces
+            # The automation URL redirects to a download URL with spaces in the filename
+            # All HTTP libraries automatically encode spaces to %20, but Sellerboard expects literal spaces
             
-            # Try urllib.request instead of requests to avoid automatic URL encoding
-            import urllib.request
-            import urllib.error
+            print("DEBUG: Implementing solution based on previous space encoding tests...")
             
+            # Step 1: Get the redirect URL manually without following it
             try:
-                # Use urllib.request which handles URLs differently than requests
-                with urllib.request.urlopen(cogs_url, timeout=30) as response:
-                    response_data = response.read().decode('utf-8')
-                    response_code = response.getcode()
-                    response_url = response.geturl()
+                # Don't follow redirects automatically - get redirect URL first
+                response = requests.get(cogs_url, timeout=30, allow_redirects=False)
+                print(f"DEBUG: Initial response status: {response.status_code}")
+                
+                if response.status_code == 302:
+                    redirect_url = response.headers.get('Location')
+                    print(f"DEBUG: Extracted redirect URL: {redirect_url}")
+                    print(f"DEBUG: Contains spaces: {'Cost of Goods Sold' in redirect_url}")
                     
-                print(f"DEBUG: urllib response status: {response_code}")
-                print(f"DEBUG: urllib response URL: {response_url}")
-                
-                if response_code != 200:
-                    print(f"DEBUG: urllib failed with status {response_code}")
-                    return jsonify({
-                        'success': False,
-                        'message': 'Update failed due to connection issues.',
-                        'full_update': full_update,
-                        'emails_sent': 0,
-                        'users_processed': 0,
-                        'errors': [f'HTTP {response_code} error accessing Sellerboard COGS URL'],
-                        'details': f'Could not access Sellerboard COGS URL. HTTP Status: {response_code}. URL: {response_url}'
-                    })
-                
-                sellerboard_df = pd.read_csv(StringIO(response_data))
-                print(f"DEBUG: urllib approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                
-            except urllib.error.HTTPError as e:
-                print(f"DEBUG: urllib HTTPError: {e.code} - {e.reason}")
-                print(f"DEBUG: Error URL: {e.url}")
-                
-                # If urllib also fails due to URL encoding, try manual approach
-                if e.code == 401:
-                    print("DEBUG: 401 error with urllib too - trying manual redirect handling...")
-                    
-                    # Get the redirect manually without following it
-                    try:
-                        req = urllib.request.Request(cogs_url)
-                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                    if redirect_url and 'Cost of Goods Sold' in redirect_url:
+                        print("DEBUG: Confirmed space issue - trying to work around it...")
                         
-                        # Try to get redirect location manually
-                        try:
-                            with urllib.request.urlopen(req, timeout=30) as resp:
-                                # This should work, but if not, we'll get the redirect info
-                                pass
-                        except urllib.error.HTTPError as redirect_error:
-                            if redirect_error.code == 302:
-                                # Get redirect location
-                                redirect_url = redirect_error.headers.get('Location')
-                                print(f"DEBUG: Manual redirect URL: {redirect_url}")
+                        # The problem is that any HTTP request will encode the spaces
+                        # Based on your manual testing, you said the URL with spaces works
+                        # but the URL with %20 doesn't work
+                        
+                        # Try a few different approaches that might preserve spaces:
+                        
+                        # Approach 1: Use the raw socket approach (most direct)
+                        print("DEBUG: Attempting raw socket connection to preserve spaces...")
+                        
+                        import socket
+                        import ssl
+                        import urllib.parse
+                        
+                        # Parse the redirect URL
+                        parsed = urllib.parse.urlparse(redirect_url)
+                        host = parsed.netloc
+                        path = parsed.path
+                        
+                        print(f"DEBUG: Host: {host}")
+                        print(f"DEBUG: Path with spaces: {path}")
+                        
+                        # Create raw HTTP request with spaces preserved
+                        http_request = f"GET {path} HTTP/1.1\r\n"
+                        http_request += f"Host: {host}\r\n"
+                        http_request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
+                        http_request += "Accept: text/csv,application/csv,text/plain,*/*\r\n"
+                        http_request += "Connection: close\r\n"
+                        http_request += "\r\n"
+                        
+                        # Create SSL socket connection
+                        context = ssl.create_default_context()
+                        with socket.create_connection((host, 443)) as sock:
+                            with context.wrap_socket(sock, server_hostname=host) as ssock:
+                                print(f"DEBUG: Sending raw HTTP request with preserved spaces...")
+                                ssock.send(http_request.encode())
                                 
-                                if redirect_url and 'Cost of Goods Sold' in redirect_url:
-                                    print("DEBUG: Found spaces in redirect URL - this confirms the issue!")
-                                    print("DEBUG: Trying to access redirect URL directly with spaces preserved...")
+                                # Read response
+                                response_data = b""
+                                while True:
+                                    chunk = ssock.recv(4096)
+                                    if not chunk:
+                                        break
+                                    response_data += chunk
+                                
+                                # Parse HTTP response
+                                response_str = response_data.decode('utf-8', errors='ignore')
+                                if 'HTTP/1.1 200 OK' in response_str or 'HTTP/1.0 200 OK' in response_str:
+                                    print("DEBUG: Raw socket approach worked!")
                                     
-                                    # Try to construct a working URL
-                                    # The issue might be that we need to make a request that preserves spaces
-                                    raise Exception(f"Confirmed URL space encoding issue. Redirect URL: {redirect_url}")
+                                    # Extract CSV data (after headers)
+                                    if '\r\n\r\n' in response_str:
+                                        csv_data = response_str.split('\r\n\r\n', 1)[1]
+                                        sellerboard_df = pd.read_csv(StringIO(csv_data))
+                                        print(f"DEBUG: Raw socket success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                    else:
+                                        raise Exception("Could not parse CSV data from raw response")
+                                        
+                                elif 'HTTP/1.1 401' in response_str or 'HTTP/1.0 401' in response_str:
+                                    print("DEBUG: Raw socket also got 401 - the URL itself might be invalid")
+                                    raise Exception("Raw socket approach also got 401 Unauthorized")
+                                else:
+                                    print(f"DEBUG: Raw socket got unexpected response: {response_str[:200]}...")
+                                    raise Exception("Raw socket approach got unexpected response")
+                                    
+                    else:
+                        raise Exception("No redirect URL found or no spaces in filename")
+                        
+                else:
+                    # Direct response without redirect
+                    sellerboard_df = pd.read_csv(StringIO(response.text))
+                    print(f"DEBUG: Direct response worked: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                     
-                    except Exception as manual_error:
-                        print(f"DEBUG: Manual approach also failed: {manual_error}")
-                
-                return jsonify({
-                    'success': False,
-                    'message': 'Update failed due to connection issues.',
-                    'full_update': full_update,
-                    'emails_sent': 0,
-                    'users_processed': 0,
-                    'errors': [f'HTTP {e.code} error accessing Sellerboard COGS URL: {e.reason}'],
-                    'details': f'Could not access Sellerboard COGS URL. HTTP Status: {e.code}. Error: {e.reason}. This appears to be related to URL encoding of spaces in the filename.'
-                })
-                
             except Exception as e:
-                print(f"DEBUG: urllib general error: {e}")
+                print(f"DEBUG: All approaches failed: {e}")
                 return jsonify({
                     'success': False,
-                    'message': 'Update failed due to connection issues.',
+                    'message': 'Update failed - COGS URL space encoding issue.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'Error accessing Sellerboard COGS URL: {str(e)}'],
-                    'details': f'Could not access Sellerboard COGS URL. Error: {str(e)}'
+                    'errors': [f'COGS URL contains spaces that cannot be handled: {str(e)}'],
+                    'details': f'The Sellerboard COGS URL redirects to a filename with spaces ("Cost of Goods Sold") which gets automatically URL-encoded by HTTP libraries, but Sellerboard expects literal spaces. This is a technical limitation. Error: {str(e)}'
                 })
             print(f"DEBUG: Successfully downloaded COGS CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
             print(f"DEBUG: COGS CSV columns: {list(sellerboard_df.columns)}")

@@ -5368,24 +5368,93 @@ def manual_sellerboard_update():
             from io import StringIO
             import pandas as pd
             
-            print("DEBUG: Using simple requests.get approach like working stock endpoints...")
-            response = requests.get(cogs_url, timeout=30)
-            print(f"DEBUG: Response status: {response.status_code}")
-            print(f"DEBUG: Response URL: {response.url}")
+            print("DEBUG: Using urllib.request to avoid automatic space encoding...")
             
-            if response.status_code != 200:
-                print(f"DEBUG: Failed with status {response.status_code}")
+            # Try urllib.request instead of requests to avoid automatic URL encoding
+            import urllib.request
+            import urllib.error
+            
+            try:
+                # Use urllib.request which handles URLs differently than requests
+                with urllib.request.urlopen(cogs_url, timeout=30) as response:
+                    response_data = response.read().decode('utf-8')
+                    response_code = response.getcode()
+                    response_url = response.geturl()
+                    
+                print(f"DEBUG: urllib response status: {response_code}")
+                print(f"DEBUG: urllib response URL: {response_url}")
+                
+                if response_code != 200:
+                    print(f"DEBUG: urllib failed with status {response_code}")
+                    return jsonify({
+                        'success': False,
+                        'message': 'Update failed due to connection issues.',
+                        'full_update': full_update,
+                        'emails_sent': 0,
+                        'users_processed': 0,
+                        'errors': [f'HTTP {response_code} error accessing Sellerboard COGS URL'],
+                        'details': f'Could not access Sellerboard COGS URL. HTTP Status: {response_code}. URL: {response_url}'
+                    })
+                
+                sellerboard_df = pd.read_csv(StringIO(response_data))
+                print(f"DEBUG: urllib approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                
+            except urllib.error.HTTPError as e:
+                print(f"DEBUG: urllib HTTPError: {e.code} - {e.reason}")
+                print(f"DEBUG: Error URL: {e.url}")
+                
+                # If urllib also fails due to URL encoding, try manual approach
+                if e.code == 401:
+                    print("DEBUG: 401 error with urllib too - trying manual redirect handling...")
+                    
+                    # Get the redirect manually without following it
+                    try:
+                        req = urllib.request.Request(cogs_url)
+                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                        
+                        # Try to get redirect location manually
+                        try:
+                            with urllib.request.urlopen(req, timeout=30) as resp:
+                                # This should work, but if not, we'll get the redirect info
+                                pass
+                        except urllib.error.HTTPError as redirect_error:
+                            if redirect_error.code == 302:
+                                # Get redirect location
+                                redirect_url = redirect_error.headers.get('Location')
+                                print(f"DEBUG: Manual redirect URL: {redirect_url}")
+                                
+                                if redirect_url and 'Cost of Goods Sold' in redirect_url:
+                                    print("DEBUG: Found spaces in redirect URL - this confirms the issue!")
+                                    print("DEBUG: Trying to access redirect URL directly with spaces preserved...")
+                                    
+                                    # Try to construct a working URL
+                                    # The issue might be that we need to make a request that preserves spaces
+                                    raise Exception(f"Confirmed URL space encoding issue. Redirect URL: {redirect_url}")
+                    
+                    except Exception as manual_error:
+                        print(f"DEBUG: Manual approach also failed: {manual_error}")
+                
                 return jsonify({
                     'success': False,
                     'message': 'Update failed due to connection issues.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'HTTP {response.status_code} error accessing Sellerboard COGS URL'],
-                    'details': f'Could not access Sellerboard COGS URL. HTTP Status: {response.status_code}. URL: {response.url}'
+                    'errors': [f'HTTP {e.code} error accessing Sellerboard COGS URL: {e.reason}'],
+                    'details': f'Could not access Sellerboard COGS URL. HTTP Status: {e.code}. Error: {e.reason}. This appears to be related to URL encoding of spaces in the filename.'
                 })
-            
-            sellerboard_df = pd.read_csv(StringIO(response.text))
+                
+            except Exception as e:
+                print(f"DEBUG: urllib general error: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Update failed due to connection issues.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': [f'Error accessing Sellerboard COGS URL: {str(e)}'],
+                    'details': f'Could not access Sellerboard COGS URL. Error: {str(e)}'
+                })
             print(f"DEBUG: Successfully downloaded COGS CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
             print(f"DEBUG: COGS CSV columns: {list(sellerboard_df.columns)}")
             

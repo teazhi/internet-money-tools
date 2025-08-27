@@ -13834,16 +13834,19 @@ def clear_discount_cache():
         print(f"Error clearing discount cache: {e}")
         return jsonify({'error': 'Failed to clear cache'}), 500
 
-@app.route('/api/admin/discount-email/gmail-oauth', methods=['POST'])
+@app.route('/api/admin/discount-email/gmail-oauth-url', methods=['POST'])
 @admin_required
-def setup_gmail_oauth_discount():
-    """Setup Gmail OAuth for discount opportunities"""
+def get_discount_gmail_oauth_url():
+    """Get Gmail OAuth URL for discount opportunities"""
     try:
         data = request.get_json()
         email_address = data.get('email_address')
         
         if not email_address:
             return jsonify({'error': 'Email address is required'}), 400
+        
+        # Store email in session for later use
+        session['discount_email_setup'] = email_address
         
         # Generate OAuth URL for Gmail access
         google_auth_url = (
@@ -13854,7 +13857,7 @@ def setup_gmail_oauth_discount():
             f"&scope=https://www.googleapis.com/auth/gmail.readonly"
             f"&access_type=offline"
             f"&prompt=consent"
-            f"&state=discount_email:{email_address}"  # Include email in state
+            f"&state=discount_email_setup"  # Use state to identify this flow
         )
         
         return jsonify({
@@ -13866,38 +13869,38 @@ def setup_gmail_oauth_discount():
         print(f"Error setting up Gmail OAuth: {e}")
         return jsonify({'error': 'Failed to setup Gmail OAuth'}), 500
 
-@app.route('/api/admin/discount-email/oauth-callback')
-def handle_discount_gmail_oauth_callback():
-    """Handle OAuth callback for discount email Gmail setup"""
+@app.route('/api/admin/discount-email/complete-oauth', methods=['POST'])
+@admin_required
+def complete_discount_gmail_oauth():
+    """Complete Gmail OAuth setup for discount opportunities"""
     try:
-        code = request.args.get('code')
-        state = request.args.get('state')
-        error = request.args.get('error')
-        
-        if error:
-            return f"<html><body><h1>OAuth Error</h1><p>Error: {error}</p><p>Please try again.</p></body></html>", 400
+        data = request.get_json()
+        code = data.get('code')
+        state = data.get('state')
         
         if not code:
-            return "<html><body><h1>OAuth Error</h1><p>No authorization code received</p></body></html>", 400
+            return jsonify({'error': 'Authorization code required'}), 400
         
-        # Parse email from state
-        email_address = None
-        if state and state.startswith('discount_email:'):
-            email_address = state.replace('discount_email:', '')
-        
+        # Verify this is for discount email setup
+        if state != 'discount_email_setup':
+            return jsonify({'error': 'Invalid state parameter'}), 400
+            
+        # Get email from session
+        email_address = session.get('discount_email_setup')
         if not email_address:
-            return "<html><body><h1>OAuth Error</h1><p>Invalid state parameter</p></body></html>", 400
+            return jsonify({'error': 'Email address not found in session'}), 400
         
         # Exchange code for tokens
-        token_data = {
-            'client_id': GOOGLE_CLIENT_ID,
-            'client_secret': GOOGLE_CLIENT_SECRET,
-            'code': code,
-            'grant_type': 'authorization_code',
-            'redirect_uri': GOOGLE_REDIRECT_URI,
+        token_url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code"
         }
         
-        token_response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
+        token_response = requests.post(token_url, data=payload)
         token_response.raise_for_status()
         tokens = token_response.json()
         
@@ -13937,25 +13940,19 @@ def handle_discount_gmail_oauth_callback():
         local_conn.commit()
         local_conn.close()
         
-        return """
-        <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-            <h1 style="color: #22c55e;">✅ Gmail OAuth Setup Complete!</h1>
-            <p>Your Gmail account has been successfully connected for discount opportunities.</p>
-            <p><strong>Email:</strong> {}</p>
-            <p>You can now close this tab and return to the admin panel.</p>
-            <script>
-                setTimeout(function() {{
-                    window.close();
-                }}, 3000);
-            </script>
-        </body>
-        </html>
-        """.format(email_address)
+        # Clean up session
+        session.pop('discount_email_setup', None)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Gmail OAuth setup completed successfully',
+            'email': email_address
+        })
         
     except Exception as e:
-        print(f"Error in Gmail OAuth callback: {e}")
-        return f"<html><body><h1>OAuth Error</h1><p>Setup failed: {str(e)}</p></body></html>", 500
+        print(f"Error completing Gmail OAuth: {e}")
+        return jsonify({'error': f'Failed to complete OAuth setup: {str(e)}'}), 500
+
 
 if __name__ == '__main__':
     try:

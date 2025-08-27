@@ -66,6 +66,9 @@ const AdminCompact = () => {
   const [discountTestLoading, setDiscountTestLoading] = useState(false);
   const [discountEmailTestResult, setDiscountEmailTestResult] = useState(null);
   const [testingDiscountEmail, setTestingDiscountEmail] = useState(false);
+  const [showGmailOAuthStep, setShowGmailOAuthStep] = useState(false);
+  const [gmailAuthUrl, setGmailAuthUrl] = useState('');
+  const [gmailAuthCode, setGmailAuthCode] = useState('');
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -500,20 +503,15 @@ const AdminCompact = () => {
       setError('');
       
       if (discountEmailForm.config_type === 'gmail_oauth') {
-        // For Gmail OAuth, start the OAuth flow
-        const response = await axios.post('/api/admin/discount-email/gmail-oauth', {
+        // For Gmail OAuth, get the auth URL first
+        const response = await axios.post('/api/admin/discount-email/gmail-oauth-url', {
           email_address: discountEmailForm.email_address
         }, { withCredentials: true });
         
-        // Open OAuth URL in new window
-        window.open(response.data.auth_url, '_blank', 'width=600,height=600');
-        setSuccess('Gmail OAuth setup started. Please complete authorization in the new window.');
+        setGmailAuthUrl(response.data.auth_url);
+        setShowGmailOAuthStep(true);
         setShowDiscountEmailModal(false);
         
-        // Refresh data after a few seconds to show updated config
-        setTimeout(() => {
-          fetchData();
-        }, 5000);
       } else {
         // For IMAP, use the existing endpoint
         await axios.post('/api/admin/discount-email/config', discountEmailForm, { withCredentials: true });
@@ -523,6 +521,29 @@ const AdminCompact = () => {
       }
     } catch (error) {
       setError(`Failed to update discount email config: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleGmailAuth = async () => {
+    if (!gmailAuthCode) {
+      setError('Please enter the authorization code');
+      return;
+    }
+
+    try {
+      setError('');
+      const response = await axios.post('/api/admin/discount-email/complete-oauth', {
+        code: gmailAuthCode,
+        state: 'discount_email_setup'
+      }, { withCredentials: true });
+      
+      setSuccess(`Gmail OAuth completed successfully for ${response.data.email}!`);
+      setShowGmailOAuthStep(false);
+      setGmailAuthCode('');
+      setGmailAuthUrl('');
+      fetchData(); // Refresh to show updated config
+    } catch (error) {
+      setError(`Failed to complete OAuth: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -1622,6 +1643,81 @@ const AdminCompact = () => {
                   {discountEmailForm.config_type === 'gmail_oauth' ? 'Setup Gmail OAuth' : 'Save Configuration'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gmail OAuth Setup Step Modal */}
+      {showGmailOAuthStep && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-medium mb-4">Gmail OAuth Setup</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-4">
+                  To complete the Gmail OAuth setup, please follow these steps:
+                </p>
+                
+                <div className="bg-blue-50 p-4 rounded-md mb-4">
+                  <p className="text-sm text-blue-800 mb-2">
+                    <strong>1. Click the link below to authorize access:</strong>
+                  </p>
+                  <a
+                    href={gmailAuthUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Authorize Gmail Access
+                  </a>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    2. Paste the authorization code here:
+                  </label>
+                  <input
+                    type="text"
+                    value={gmailAuthCode}
+                    onChange={(e) => setGmailAuthCode(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Paste authorization code here..."
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    After authorizing, copy the code from the redirect page and paste it here.
+                  </p>
+                </div>
+              </div>
+              
+              {error && (
+                <div className="p-3 rounded-md text-sm bg-red-50 text-red-800">
+                  {error}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowGmailOAuthStep(false);
+                  setGmailAuthCode('');
+                  setGmailAuthUrl('');
+                  setError('');
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGmailAuth}
+                disabled={!gmailAuthCode}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
+              >
+                Complete Setup
+              </button>
             </div>
           </div>
         </div>

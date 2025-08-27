@@ -172,9 +172,8 @@ def stop_email_monitoring():
 # Register cleanup function
 atexit.register(stop_email_monitoring)
 
-# Start email monitoring when app starts (only in production)
-if os.environ.get('FLASK_ENV') != 'development':
-    start_email_monitoring()
+# Start email monitoring when app starts
+start_email_monitoring()
 
 # Configure session for cookies to work properly with cross-domain
 app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS cross-domain
@@ -7726,10 +7725,14 @@ def init_feature_flags():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 discord_id TEXT NOT NULL,
                 email_address TEXT NOT NULL,
-                imap_server TEXT NOT NULL,
+                auth_type TEXT DEFAULT 'imap', -- 'imap' or 'oauth'
+                imap_server TEXT,
                 imap_port INTEGER DEFAULT 993,
-                username TEXT NOT NULL,
-                password_encrypted TEXT NOT NULL,
+                username TEXT,
+                password_encrypted TEXT,
+                oauth_access_token TEXT,
+                oauth_refresh_token TEXT, 
+                oauth_token_expires_at TIMESTAMP,
                 is_active BOOLEAN DEFAULT 1,
                 last_checked TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -7789,6 +7792,27 @@ def init_feature_flags():
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Add new columns to existing email_monitoring table if they don't exist
+        try:
+            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN auth_type TEXT DEFAULT 'imap'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+            
+        try:
+            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN oauth_access_token TEXT")
+        except sqlite3.OperationalError:
+            pass
+            
+        try:
+            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN oauth_refresh_token TEXT")
+        except sqlite3.OperationalError:
+            pass
+            
+        try:
+            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN oauth_token_expires_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
         
         init_conn.commit()
         
@@ -13498,6 +13522,76 @@ def test_email_connection():
         print(f"Error testing email connection: {e}")
         return jsonify({'error': 'Failed to test email connection'}), 500
 
+@app.route('/api/email-monitoring/config', methods=['POST'])
+@login_required
+def create_email_monitoring_config():
+    """Create or update email monitoring configuration"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        auth_type = data.get('auth_type', 'imap')
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        if auth_type == 'oauth':
+            # Use existing OAuth tokens from user's Google account
+            user_record = get_user_by_discord_id(discord_id)
+            if not user_record or not user_record.get('google_tokens'):
+                return jsonify({'error': 'Google account not linked. Please link your Google account first.'}), 400
+                
+            google_tokens = user_record['google_tokens']
+            
+            # Insert or update configuration with OAuth
+            local_cursor.execute('''
+                INSERT OR REPLACE INTO email_monitoring 
+                (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, 
+                 oauth_token_expires_at, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                discord_id,
+                data['email_address'],
+                'oauth',
+                google_tokens.get('access_token'),
+                google_tokens.get('refresh_token'),
+                google_tokens.get('expires_at'),
+                data.get('is_active', True)
+            ))
+        else:
+            # Traditional IMAP configuration
+            from email_monitor import email_cipher
+            encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
+            
+            # Insert or update configuration
+            local_cursor.execute('''
+                INSERT OR REPLACE INTO email_monitoring 
+                (discord_id, email_address, auth_type, imap_server, imap_port, username, 
+                 password_encrypted, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                discord_id,
+                data['email_address'],
+                'imap',
+                data['imap_server'],
+                data.get('imap_port', 993),
+                data['username'],
+                encrypted_password,
+                data.get('is_active', True)
+            ))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Email monitoring configuration saved successfully'})
+        
+    except Exception as e:
+        print(f"Error saving email monitoring config: {e}")
+        return jsonify({'error': 'Failed to save email monitoring configuration'}), 500
+
 @app.route('/api/email-monitoring/status', methods=['GET'])
 @login_required
 def get_email_monitoring_status():
@@ -13621,6 +13715,136 @@ def check_emails_now():
     except Exception as e:
         print(f"Error triggering email check: {e}")
         return jsonify({'error': 'Failed to trigger email check'}), 500
+
+@app.route('/api/email-monitoring/debug', methods=['GET'])
+@login_required
+def debug_email_monitoring():
+    """Debug endpoint to check email monitoring configuration"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Check email configurations
+        local_cursor.execute('''
+            SELECT discord_id, email_address, imap_server, imap_port, username, is_active, last_checked
+            FROM email_monitoring 
+            WHERE discord_id = ?
+        ''', (discord_id,))
+        
+        configs = []
+        for row in local_cursor.fetchall():
+            configs.append({
+                'discord_id': row[0],
+                'email_address': row[1],
+                'imap_server': row[2],
+                'imap_port': row[3],
+                'username': row[4],
+                'is_active': bool(row[5]),
+                'last_checked': row[6]
+            })
+        
+        # Check monitoring rules
+        local_cursor.execute('''
+            SELECT id, rule_name, sender_filter, subject_filter, content_filter, webhook_url, is_active
+            FROM email_monitoring_rules 
+            WHERE discord_id = ?
+        ''', (discord_id,))
+        
+        rules = []
+        for row in local_cursor.fetchall():
+            rules.append({
+                'id': row[0],
+                'rule_name': row[1],
+                'sender_filter': row[2],
+                'subject_filter': row[3],
+                'content_filter': row[4],
+                'webhook_url': row[5],
+                'is_active': bool(row[6])
+            })
+        
+        # Check recent logs
+        local_cursor.execute('''
+            SELECT created_at, rule_id, email_subject, email_sender, email_date, webhook_sent, webhook_response
+            FROM email_monitoring_logs 
+            WHERE discord_id = ?
+            ORDER BY created_at DESC 
+            LIMIT 10
+        ''', (discord_id,))
+        
+        logs = []
+        for row in local_cursor.fetchall():
+            logs.append({
+                'timestamp': row[0],
+                'rule_id': row[1],
+                'subject': row[2],
+                'sender': row[3],
+                'email_date': row[4],
+                'webhook_sent': bool(row[5]),
+                'webhook_response': row[6]
+            })
+        
+        local_conn.close()
+        
+        return jsonify({
+            'service_running': email_monitor_instance is not None,
+            'configurations': configs,
+            'rules': rules,
+            'recent_logs': logs,
+            'discord_id': discord_id
+        })
+        
+    except Exception as e:
+        print(f"Error in email monitoring debug: {e}")
+        return jsonify({'error': f'Debug failed: {str(e)}'}), 500
+
+@app.route('/api/email-monitoring/reset-password', methods=['POST'])
+@login_required  
+def reset_email_monitoring_password():
+    """Reset/update password for email monitoring configuration"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        email_address = data.get('email_address')
+        new_password = data.get('password')
+        
+        if not email_address or not new_password:
+            return jsonify({'error': 'Email address and password are required'}), 400
+        
+        # Encrypt the new password
+        from email_monitor import email_cipher
+        encrypted_password = email_cipher.encrypt(new_password.encode()).decode()
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Update the password for this user's configuration
+        local_cursor.execute('''
+            UPDATE email_monitoring 
+            SET password_encrypted = ?
+            WHERE discord_id = ? AND email_address = ?
+        ''', (encrypted_password, discord_id, email_address))
+        
+        if local_cursor.rowcount == 0:
+            local_conn.close()
+            return jsonify({'error': 'Email configuration not found'}), 404
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Password updated successfully'})
+        
+    except Exception as e:
+        print(f"Error resetting email monitoring password: {e}")
+        return jsonify({'error': f'Failed to reset password: {str(e)}'}), 500
 
 @app.route('/api/email-monitoring/service-control', methods=['POST'])
 @admin_required

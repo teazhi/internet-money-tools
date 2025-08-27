@@ -164,6 +164,21 @@ const EmailMonitoring = () => {
     }
   };
 
+  const handleResetPassword = async (emailAddress, newPassword) => {
+    try {
+      const response = await axios.post('/api/email-monitoring/reset-password', {
+        email_address: emailAddress,
+        password: newPassword
+      }, { withCredentials: true });
+      
+      alert('Password updated successfully! You can now try checking emails again.');
+      fetchData(); // Refresh to show updated status
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      alert(error.response?.data?.error || 'Failed to reset password');
+    }
+  };
+
   const getCommonEmailServers = () => [
     { name: 'Gmail', server: 'imap.gmail.com', port: 993 },
     { name: 'Outlook/Hotmail', server: 'outlook.office365.com', port: 993 },
@@ -377,6 +392,17 @@ const EmailMonitoring = () => {
                           >
                             <TestTube className="h-3 w-3 mr-1 inline" />
                             Test
+                          </button>
+                          <button
+                            onClick={() => {
+                              const newPassword = prompt(`Enter new password for ${config.email_address}:`);
+                              if (newPassword) {
+                                handleResetPassword(config.email_address, newPassword);
+                              }
+                            }}
+                            className="px-3 py-1 text-sm border border-orange-300 text-orange-600 rounded-md hover:bg-orange-50"
+                          >
+                            Reset Password
                           </button>
                         </div>
                       </div>

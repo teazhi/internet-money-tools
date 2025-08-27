@@ -48,7 +48,8 @@ class EmailMonitor:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT discord_id, email_address, imap_server, imap_port, username, password_encrypted, last_checked
+            SELECT discord_id, email_address, auth_type, imap_server, imap_port, username, 
+                   password_encrypted, oauth_access_token, oauth_refresh_token, oauth_token_expires_at, last_checked
             FROM email_monitoring 
             WHERE is_active = 1
         ''')

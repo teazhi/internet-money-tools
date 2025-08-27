@@ -5374,30 +5374,130 @@ def manual_sellerboard_update():
             
             print("DEBUG: Implementing solution based on previous space encoding tests...")
             
-            # Updated approach: Handle XLS format instead of CSV to avoid space encoding issues
+            # FOCUS: The redirect URL contains spaces that get auto-encoded to %20
+            # Solution: Manually handle the redirect with custom urllib3 pool manager
             try:
-                print(f"DEBUG: Processing XLS format COGS data...")
+                print(f"DEBUG: Intercepting redirect to handle space encoding...")
                 
-                # Simple approach should work now with XLS format
-                response = requests.get(cogs_url, timeout=30)
-                response.raise_for_status()
+                # Step 1: Get the redirect URL but don't follow it
+                import urllib3
+                from urllib3.util.retry import Retry
+                from urllib3.util.timeout import Timeout
+                import urllib.parse
                 
-                print(f"DEBUG: Response status: {response.status_code}")
-                print(f"DEBUG: Content type: {response.headers.get('Content-Type', 'unknown')}")
-                print(f"DEBUG: Content length: {len(response.content)} bytes")
+                # Create a session to get initial redirect
+                session = requests.Session()
+                initial_response = session.get(cogs_url, allow_redirects=False, timeout=30)
                 
-                # Handle XLS format - need to use pandas read_excel instead of read_csv
-                if 'format=xls' in cogs_url or response.headers.get('Content-Type', '').startswith('application/vnd.ms-excel'):
-                    print("DEBUG: Processing as XLS file...")
-                    # For XLS, we need to handle binary content
-                    from io import BytesIO
-                    sellerboard_df = pd.read_excel(BytesIO(response.content))
-                    print(f"DEBUG: XLS processing successful! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                if initial_response.status_code == 302:
+                    redirect_url = initial_response.headers.get('Location')
+                    print(f"DEBUG: Got redirect URL: {redirect_url}")
+                    
+                    if 'Cost of Goods Sold' in redirect_url:
+                        print("DEBUG: Spaces detected in redirect - using custom urllib3 approach...")
+                        
+                        # Parse the URL to get components
+                        parsed = urllib.parse.urlparse(redirect_url)
+                        host = parsed.netloc
+                        path = parsed.path
+                        query = parsed.query
+                        
+                        print(f"DEBUG: Host: {host}")
+                        print(f"DEBUG: Path with spaces: {path}")
+                        print(f"DEBUG: Query: {query}")
+                        
+                        # Create custom urllib3 pool manager with retry
+                        http = urllib3.PoolManager(
+                            timeout=Timeout(total=30),
+                            retries=Retry(total=3, backoff_factor=1)
+                        )
+                        
+                        # Here's the key: construct the URL manually without letting urllib3 encode spaces
+                        # We'll construct the full URL but encode everything except spaces
+                        
+                        # First, encode only the parts that need encoding (not spaces)
+                        import re
+                        
+                        # Split path by spaces to encode each part separately
+                        path_parts = path.split(' ')
+                        encoded_parts = []
+                        for part in path_parts:
+                            # Encode this part but we'll join with literal spaces
+                            encoded_part = urllib.parse.quote(part, safe='/')
+                            encoded_parts.append(encoded_part)
+                        
+                        # Now we have encoded parts, but we need to join them with spaces
+                        # This is the tricky part - we need urllib3 to NOT encode the spaces
+                        
+                        # Try using the _encode_url_methods to bypass automatic encoding
+                        full_url_with_spaces = f"https://{host}{path}"
+                        if query:
+                            full_url_with_spaces += f"?{query}"
+                            
+                        print(f"DEBUG: Attempting custom request to: {full_url_with_spaces}")
+                        
+                        # Use urllib3's request method with preload_content=False to get raw response
+                        try:
+                            # Custom approach: manually construct headers and use low-level urllib3
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*'
+                            }
+                            
+                            # The key insight: maybe we can trick urllib3 by pre-encoding everything except spaces
+                            # Then manually replace %20 back to spaces in the final URL
+                            temp_encoded_url = urllib.parse.quote(full_url_with_spaces, safe=':/?#[]@!$&\'()*+,;=')
+                            final_url = temp_encoded_url.replace('%20', ' ')
+                            
+                            print(f"DEBUG: Final URL attempt: {final_url}")
+                            
+                            # This will likely still fail, but let's see the exact error
+                            response = http.request('GET', final_url, headers=headers)
+                            
+                            if response.status == 200:
+                                print("DEBUG: Custom urllib3 approach worked!")
+                                response_data = response.data
+                                
+                                # Process the response based on content type
+                                if 'format=xls' in cogs_url:
+                                    from io import BytesIO
+                                    sellerboard_df = pd.read_excel(BytesIO(response_data))
+                                else:
+                                    sellerboard_df = pd.read_csv(StringIO(response_data.decode('utf-8')))
+                                    
+                                print(f"DEBUG: Success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                            else:
+                                print(f"DEBUG: Custom approach failed with status: {response.status}")
+                                raise Exception(f"Custom urllib3 approach failed: {response.status}")
+                                
+                        except Exception as e:
+                            print(f"DEBUG: Custom urllib3 failed: {e}")
+                            # Last resort: try the problematic %20 URL to confirm it's the issue
+                            encoded_url = redirect_url.replace(' ', '%20')
+                            print(f"DEBUG: Confirming %20 issue with: {encoded_url}")
+                            response = session.get(encoded_url, timeout=30)
+                            print(f"DEBUG: %20 URL status: {response.status_code}")
+                            raise Exception(f"Confirmed: spaces in redirect URL cannot be handled. %20 gives {response.status_code}")
+                    else:
+                        print("DEBUG: No spaces in redirect, processing normally")
+                        response = session.get(redirect_url, timeout=30)
+                        response.raise_for_status()
+                        
+                        if 'format=xls' in cogs_url:
+                            from io import BytesIO
+                            sellerboard_df = pd.read_excel(BytesIO(response.content))
+                        else:
+                            sellerboard_df = pd.read_csv(StringIO(response.text))
                 else:
-                    print("DEBUG: Processing as CSV file...")
-                    # Fallback to CSV processing
-                    sellerboard_df = pd.read_csv(StringIO(response.text))
-                    print(f"DEBUG: CSV processing successful! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    print("DEBUG: No redirect, processing direct response")
+                    if initial_response.status_code == 200:
+                        if 'format=xls' in cogs_url:
+                            from io import BytesIO
+                            sellerboard_df = pd.read_excel(BytesIO(initial_response.content))
+                        else:
+                            sellerboard_df = pd.read_csv(StringIO(initial_response.text))
+                    else:
+                        raise Exception(f"Unexpected response status: {initial_response.status_code}")
                     
             except Exception as e:
                 print(f"DEBUG: COGS processing failed: {e}")

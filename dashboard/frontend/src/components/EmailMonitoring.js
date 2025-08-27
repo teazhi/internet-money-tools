@@ -229,7 +229,7 @@ const EmailMonitoring = () => {
         {status.service_running && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <p className="text-sm text-gray-600">
-              Emails are automatically checked every <span className="font-medium">2 hours</span>.
+              Emails are automatically checked <span className="font-medium">once per day</span>.
               {configs.length > 0 && rules.length > 0 ? 
                 ' The service is actively monitoring your configured email accounts.' :
                 ' Configure email accounts and rules to start monitoring.'}

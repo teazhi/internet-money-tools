@@ -18,7 +18,7 @@ from email.header import decode_header
 
 # Configuration
 DATABASE_FILE = 'app_data.db'
-CHECK_INTERVAL = int(os.getenv('EMAIL_CHECK_INTERVAL', '7200'))  # Default 2 hours (7200 seconds)
+CHECK_INTERVAL = int(os.getenv('EMAIL_CHECK_INTERVAL', '86400'))  # Default 24 hours (86400 seconds)
 BATCH_SIZE = 50  # Process emails in batches
 
 # Initialize encryption
@@ -200,16 +200,17 @@ class EmailMonitor:
                 # Convert last_checked to datetime and search for emails after that
                 try:
                     last_check_dt = datetime.fromisoformat(last_checked.replace('Z', '+00:00'))
-                    since_date = last_check_dt.strftime('%d-%b-%Y')
-                    search_criteria = f'SINCE "{since_date}"'
+                    # For daily checks, look back 2 days to ensure we don't miss anything
+                    two_days_ago = (datetime.now() - timedelta(days=2)).strftime('%d-%b-%Y')
+                    search_criteria = f'SINCE "{two_days_ago}"'
                 except:
-                    # If parsing fails, search all emails from last 24 hours
-                    yesterday = (datetime.now() - timedelta(days=1)).strftime('%d-%b-%Y')
-                    search_criteria = f'SINCE "{yesterday}"'
+                    # If parsing fails, search all emails from last 2 days
+                    two_days_ago = (datetime.now() - timedelta(days=2)).strftime('%d-%b-%Y')
+                    search_criteria = f'SINCE "{two_days_ago}"'
             else:
-                # First time checking - only check last 24 hours
-                yesterday = (datetime.now() - timedelta(days=1)).strftime('%d-%b-%Y')
-                search_criteria = f'SINCE "{yesterday}"'
+                # First time checking - check last 2 days
+                two_days_ago = (datetime.now() - timedelta(days=2)).strftime('%d-%b-%Y')
+                search_criteria = f'SINCE "{two_days_ago}"'
             
             print(f"Checking {email_address} with criteria: {search_criteria}")
             
@@ -325,7 +326,12 @@ class EmailMonitor:
     def start(self):
         """Start the email monitoring service"""
         print("🚀 Starting Email Monitoring Service")
-        print(f"Check interval: {CHECK_INTERVAL} seconds")
+        hours = CHECK_INTERVAL / 3600
+        if hours >= 24:
+            days = hours / 24
+            print(f"Check interval: {days:.0f} day{'s' if days != 1 else ''}")
+        else:
+            print(f"Check interval: {hours:.1f} hours")
         
         self.running = True
         

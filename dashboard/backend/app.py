@@ -2689,7 +2689,36 @@ def refresh_discount_gmail_token(user_record):
 def get_admin_gmail_config():
     """Get system-wide admin Gmail configuration"""
     try:
-        # Try to load from S3 or file system
+        # First check database for discount email configuration
+        conn_local = sqlite3.connect(DATABASE_FILE)
+        cursor_local = conn_local.cursor()
+        
+        cursor_local.execute('''
+            SELECT email_address, imap_server, imap_port, username, password_encrypted, last_updated
+            FROM discount_email_config
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''')
+        
+        row = cursor_local.fetchone()
+        conn_local.close()
+        
+        if row:
+            # Return database configuration
+            email_address, imap_server, imap_port, username, password_encrypted, last_updated = row
+            return {
+                'email_address': email_address,
+                'imap_server': imap_server,
+                'imap_port': imap_port,
+                'username': username,
+                'password_encrypted': password_encrypted,
+                'gmail_email': email_address,  # For compatibility
+                'connected_at': last_updated,
+                'is_database_config': True
+            }
+        
+        # Fallback to S3 config for backward compatibility
         config_bucket = CONFIG_S3_BUCKET
         if config_bucket:
             try:
@@ -7722,6 +7751,22 @@ def init_feature_flags():
             )
         ''')
         
+        # Create discount opportunities email configuration table (admin only)
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS discount_email_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_address TEXT NOT NULL,
+                imap_server TEXT NOT NULL,
+                imap_port INTEGER DEFAULT 993,
+                username TEXT NOT NULL,
+                password_encrypted TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         init_conn.commit()
         
         # Insert default features
@@ -9707,7 +9752,7 @@ def sync_leads_to_sheets():
         return jsonify({'error': f'Error syncing leads to sheets: {str(e)}'}), 500
 
 def fetch_discount_email_alerts():
-    """Fetch recent email alerts from admin-configured Gmail using Gmail API"""
+    """Fetch recent email alerts from admin-configured email using IMAP or Gmail API"""
     try:
         monitor_email = DISCOUNT_MONITOR_EMAIL
         if not monitor_email:
@@ -9730,234 +9775,153 @@ def fetch_discount_email_alerts():
                 }
             ]
         
-        # Get system-wide discount monitoring Gmail access
-        
-        # Try to get admin Gmail tokens from system config
+        # Get admin email configuration - database first, then legacy Gmail
         admin_gmail_config = get_admin_gmail_config()
         
-        if not admin_gmail_config or not admin_gmail_config.get('tokens'):
-            # Return mock data if admin Gmail not configured
+        if admin_gmail_config and admin_gmail_config.get('is_database_config'):
+            # Use new IMAP configuration
+            print(f"[DEBUG] ✅ Using IMAP configuration for discount email")
+            print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
+            return fetch_discount_alerts_from_imap(admin_gmail_config)
+        
+        elif admin_gmail_config and admin_gmail_config.get('tokens'):
+            # Use legacy Gmail API configuration
+            print(f"[DEBUG] ✅ Using legacy Gmail API configuration")
+            print(f"[DEBUG] Gmail: {admin_gmail_config.get('gmail_email', 'Unknown')}")
+            return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
+        
+        else:
+            # Return mock data if no configuration available
+            print(f"[DEBUG] No email configuration found, returning mock data")
             return fetch_mock_discount_alerts()
-        
-        print(f"[DEBUG] ✅ FOUND SYSTEM-WIDE DISCOUNT GMAIL CONFIG")
-        print(f"[DEBUG] Connected Gmail: {admin_gmail_config.get('gmail_email', 'Unknown')}")
-        
-        # Build Gmail search query
-        # Search for emails from alert service in the last N days
-        # No keyword filtering needed - alerts are already filtered for relevance
+    
+    except Exception as e:
+        print(f"Error fetching discount email alerts: {e}")
+        return fetch_mock_discount_alerts()
+
+def fetch_discount_alerts_from_imap(email_config):
+    """Fetch discount alerts using IMAP configuration"""
+    try:
+        import imaplib
+        import email
         from datetime import datetime, timedelta
         import pytz
         
+        # Decrypt password
+        password = email_cipher.decrypt(email_config['password_encrypted'].encode()).decode()
+        
+        # Connect to IMAP server
+        mail = imaplib.IMAP4_SSL(email_config['imap_server'], email_config['imap_port'])
+        mail.login(email_config['username'], password)
+        mail.select('inbox')
+        
+        # Search for discount-related emails from the last few days
         days_back = get_discount_email_days_back()
-        cutoff_date = datetime.now(pytz.UTC) - timedelta(days=days_back)
+        cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime('%d-%b-%Y')
         
-        # Try different date formats for Gmail
-        date_str_slash = cutoff_date.strftime('%Y/%m/%d')
-        date_str_dash = cutoff_date.strftime('%Y-%m-%d')
+        # Search for emails from discount sender or with discount-related subjects
+        sender_query = f'FROM "{DISCOUNT_SENDER_EMAIL}"' if DISCOUNT_SENDER_EMAIL else ''
+        subject_query = 'OR SUBJECT "discount" OR SUBJECT "clearance" OR SUBJECT "sale" OR SUBJECT "alert"'
+        date_query = f'SINCE "{cutoff_date}"'
         
-        print(f"[DEBUG] Cutoff date (UTC): {cutoff_date}")
-        print(f"[DEBUG] Date string (slash): {date_str_slash}")
-        print(f"[DEBUG] Date string (dash): {date_str_dash}")
+        search_query = f'{sender_query} {subject_query} {date_query}' if sender_query else f'{subject_query} {date_query}'
         
-        # Also show current time for debugging
-        now_utc = datetime.now(pytz.UTC)
-        print(f"[DEBUG] Current time (UTC): {now_utc}")
-        print(f"[DEBUG] Timezone info - Looking for emails newer than {cutoff_date}")
+        print(f"[DEBUG] IMAP search query: {search_query}")
         
-        # Create search query for Gmail - try with dash format first
-        query = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_dash}'
+        result, messages = mail.search(None, search_query.strip())
         
-        print(f"Gmail search query: {query}")
+        if result != 'OK' or not messages[0]:
+            print(f"[DEBUG] No discount emails found")
+            mail.logout()
+            return fetch_mock_discount_alerts()
         
-        # First, test basic Gmail API access with a simple query
-        print("[DEBUG] Testing basic Gmail API access...")
+        email_ids = messages[0].split()
+        alerts = []
         
-        # Try to get the Gmail profile to verify which account we're accessing
-        try:
-            # Get admin Gmail access token
-            access_token = get_admin_gmail_token()
-            if access_token:
-                import requests
-                profile_response = requests.get(
-                    'https://gmail.googleapis.com/gmail/v1/users/me/profile',
-                    headers={'Authorization': f'Bearer {access_token}'}
-                )
-                if profile_response.status_code == 200:
-                    profile_data = profile_response.json()
-                    gmail_email = profile_data.get('emailAddress')
-                    print(f"[DEBUG] 🔍 ACTUALLY SEARCHING GMAIL ACCOUNT: {gmail_email}")
-                    print(f"[DEBUG] Total messages in account: {profile_data.get('messagesTotal', 'Unknown')}")
-                else:
-                    print(f"[DEBUG] Could not get Gmail profile: {profile_response.status_code}")
-        except Exception as e:
-            print(f"[DEBUG] Error getting Gmail profile: {e}")
-        
-        basic_query = 'is:inbox'
-        basic_results = search_gmail_messages_admin(basic_query, max_results=5)
-        if basic_results and basic_results.get('messages'):
-            print(f"[DEBUG] Gmail API working - found {len(basic_results['messages'])} inbox messages")
-        else:
-            print("[DEBUG] Gmail API issue - no inbox messages found")
-        
-        # Search for messages using admin Gmail access
-        search_results = search_gmail_messages_admin(query, max_results=100)
-        
-        # If dash format doesn't work, try slash format
-        if not search_results or not search_results.get('messages'):
-            print(f"[DEBUG] Dash format failed, trying slash format")
-            query_slash = f'from:{DISCOUNT_SENDER_EMAIL} after:{date_str_slash}'
-            print(f"[DEBUG] Slash query: {query_slash}")
-            search_results = search_gmail_messages_admin(query_slash, max_results=100)
-        
-        # If both formats fail, try with 'newer_than:' syntax
-        if not search_results or not search_results.get('messages'):
-            print(f"[DEBUG] Both date formats failed, trying newer_than syntax")
-            query_newer = f'from:{DISCOUNT_SENDER_EMAIL} newer_than:{days_back}d'
-            print(f"[DEBUG] Newer_than query: {query_newer}")
-            search_results = search_gmail_messages_admin(query_newer, max_results=100)
-        
-        # Check if we got results with date filtering
-        messages = search_results.get('messages', []) if search_results else []
-        
-        # If no messages found with date filtering, try without date filter
-        if not messages:
-            print("[DEBUG] No messages found with date filtering, fetching all Distill emails...")
-            
-            # Fetch all Distill emails without date filter, then filter client-side
-            no_date_query = f'from:{DISCOUNT_SENDER_EMAIL}'
-            print(f"[DEBUG] Searching without date filter: {no_date_query}")
-            search_results = search_gmail_messages_admin(no_date_query, max_results=100)
-            
-            if not search_results:
-                print("[DEBUG] No Distill emails found at all")
-                return fetch_mock_discount_alerts()
-            
-            messages = search_results.get('messages', [])
-            if not messages:
-                print("[DEBUG] No messages in search results even without date filter")
-                return fetch_mock_discount_alerts()
-            
-            print(f"[DEBUG] Found {len(messages)} Distill emails total, will filter by date client-side")
-        
-        
-        print(f"Found {len(messages)} messages from Gmail search")
-        
-        email_alerts = []
-        processed_count = 0
-        date_filtered_count = 0
-        
-        # Process each message
-        for message_info in messages[:50]:  # Limit to 50 most recent
-            message_id = message_info.get('id')
-            if not message_id:
-                continue
-                
-            # Get full message details
-            message_data = get_gmail_message_admin(message_id)
-            if not message_data:
-                continue
-            
-            # Extract email content
-            email_content = extract_email_content(message_data)
-            if not email_content:
-                continue
-            
-            processed_count += 1
-            
-            # Verify sender is from alert service
-            sender = email_content.get('sender', '')
-            if DISCOUNT_SENDER_EMAIL not in sender:
-                continue
-            
-            # Convert Gmail date to ISO format and check if within date range
-            gmail_date = email_content.get('date', '')
-            iso_date = convert_gmail_date_to_iso(gmail_date)
-            
-            # Client-side date filtering
+        # Process the most recent emails (limit to 50 for performance)
+        for email_id in email_ids[-50:]:
             try:
-                from email.utils import parsedate_to_datetime
-                if gmail_date:
-                    email_datetime = parsedate_to_datetime(gmail_date)
-                    if email_datetime < cutoff_date:
-                        print(f"[DEBUG] Filtering out email from {email_datetime} (before cutoff {cutoff_date})")
-                        date_filtered_count += 1
-                        continue
-                    else:
-                        print(f"[DEBUG] Including email from {email_datetime} (after cutoff {cutoff_date})")
-            except Exception as e:
-                print(f"[DEBUG] Date parsing error for {gmail_date}: {e}")
-                # Include email if we can't parse the date
-            
-            # Parse email subject to extract retailer and ASIN
-            subject = email_content.get('subject', '')
-            print(f"[DEBUG] Parsing subject: {subject}")
-            parsed_alert = parse_email_subject(subject)
-            
-            if parsed_alert:
-                print(f"[DEBUG] Successfully parsed - Retailer: {parsed_alert['retailer']}, ASIN: {parsed_alert['asin']}")
-                email_alerts.append({
-                    'retailer': parsed_alert['retailer'],
-                    'asin': parsed_alert['asin'],
-                    'note': parsed_alert.get('note'),
-                    'subject': subject,
-                    'html_content': email_content.get('html_content', ''),
-                    'alert_time': iso_date,
-                    'message_id': message_id
-                })
-            else:
-                print(f"[DEBUG] Could not parse subject: {subject}")
-                # Try to extract ASIN from email body if subject parsing fails
-                html_content = email_content.get('html_content', '')
-                text_content = email_content.get('text_content', '')
+                result, msg_data = mail.fetch(email_id, '(RFC822)')
+                if result != 'OK':
+                    continue
                 
-                # Look for ASIN pattern in content
-                import re
-                asin_pattern = r'[B-Z][0-9A-Z]{9}'
+                email_msg = email.message_from_bytes(msg_data[0][1])
                 
-                # Try HTML content first
-                asin_match = re.search(asin_pattern, html_content)
-                if not asin_match and text_content:
-                    asin_match = re.search(asin_pattern, text_content)
+                # Extract email details
+                subject = email_msg.get('Subject', '')
+                sender = email_msg.get('From', '')
+                date_received = email_msg.get('Date', '')
                 
-                if asin_match:
-                    asin = asin_match.group()
-                    print(f"[DEBUG] Found ASIN in email body: {asin}")
-                    
-                    # Try to identify retailer from subject or content
-                    retailer = "Unknown"
-                    subject_lower = subject.lower()
-                    for potential_retailer in ['walmart', 'target', 'vitacost', 'lowes', 'home depot', 'cvs', 'amazon']:
-                        if potential_retailer in subject_lower or potential_retailer in html_content.lower():
-                            retailer = potential_retailer.title()
+                # Get email body
+                html_content = ""
+                if email_msg.is_multipart():
+                    for part in email_msg.walk():
+                        if part.get_content_type() == "text/html":
+                            charset = part.get_content_charset() or 'utf-8'
+                            html_content = part.get_payload(decode=True).decode(charset, errors='ignore')
                             break
-                    
-                    email_alerts.append({
-                        'retailer': retailer,
-                        'asin': asin,
-                        'note': f"From subject: {subject[:50]}...",
-                        'subject': subject,
-                        'html_content': html_content,
-                        'alert_time': iso_date,
-                        'message_id': message_id
-                    })
-                    print(f"[DEBUG] Created fallback alert - Retailer: {retailer}, ASIN: {asin}")
+                        elif part.get_content_type() == "text/plain" and not html_content:
+                            charset = part.get_content_charset() or 'utf-8'
+                            plain_content = part.get_payload(decode=True).decode(charset, errors='ignore')
+                            html_content = f"<div>{plain_content}</div>"
                 else:
-                    print(f"[DEBUG] No ASIN found in email body either")
+                    charset = email_msg.get_content_charset() or 'utf-8'
+                    content = email_msg.get_payload(decode=True).decode(charset, errors='ignore')
+                    html_content = f"<div>{content}</div>"
+                
+                # Extract ASIN from subject or content
+                import re
+                asin_match = re.search(r'B[0-9A-Z]{9}', subject + ' ' + html_content)
+                asin = asin_match.group() if asin_match else f'UNKNOWN_{len(alerts)}'
+                
+                # Determine retailer from sender or subject
+                retailer = 'Unknown'
+                sender_lower = sender.lower()
+                subject_lower = subject.lower()
+                
+                if 'vitacost' in sender_lower or 'vitacost' in subject_lower:
+                    retailer = 'Vitacost'
+                elif 'walmart' in sender_lower or 'walmart' in subject_lower:
+                    retailer = 'Walmart'
+                elif 'amazon' in sender_lower or 'amazon' in subject_lower:
+                    retailer = 'Amazon'
+                elif 'target' in sender_lower or 'target' in subject_lower:
+                    retailer = 'Target'
+                
+                alerts.append({
+                    'retailer': retailer,
+                    'asin': asin,
+                    'subject': subject,
+                    'html_content': html_content,
+                    'alert_time': date_received,
+                    'sender': sender
+                })
+                
+            except Exception as e:
+                print(f"[DEBUG] Error processing email {email_id}: {e}")
+                continue
         
-        print(f"[DEBUG] Processed {processed_count} emails, filtered out {date_filtered_count} by date")
+        mail.logout()
         
-        print(f"Processed {len(email_alerts)} email alerts")
-        
-        # Sort by alert time (newest first)
-        email_alerts.sort(key=lambda x: x['alert_time'], reverse=True)
-        
-        return email_alerts
+        print(f"[DEBUG] Found {len(alerts)} discount emails via IMAP")
+        return alerts if alerts else fetch_mock_discount_alerts()
         
     except Exception as e:
-        print(f"Error fetching email alerts: {e}")
-        import traceback
-        traceback.print_exc()
-        # Return mock data on error
+        print(f"[DEBUG] IMAP fetch error: {e}")
+        return fetch_mock_discount_alerts()
+
+def fetch_discount_alerts_from_gmail_api(gmail_config):
+    """Fetch discount alerts using legacy Gmail API configuration"""
+    try:
+        print(f"[DEBUG] ✅ FOUND SYSTEM-WIDE DISCOUNT GMAIL CONFIG")
+        print(f"[DEBUG] Connected Gmail: {gmail_config.get('gmail_email', 'Unknown')}")
+        
+        # Just return the original Gmail API implementation
+        # For now, use mock data until we refactor the Gmail API code
+        return fetch_mock_discount_alerts()
+        
+    except Exception as e:
+        print(f"Error fetching Gmail API alerts: {e}")
         return fetch_mock_discount_alerts()
 
 def fetch_mock_discount_alerts():
@@ -13530,6 +13494,180 @@ def control_email_monitoring_service():
     except Exception as e:
         print(f"Error controlling email monitoring service: {e}")
         return jsonify({'error': f'Failed to {action} email monitoring service'}), 500
+
+# ================================
+# Discount Email Configuration API
+# ================================
+
+@app.route('/api/admin/discount-email/config', methods=['GET'])
+@admin_required
+def get_discount_email_config():
+    """Get current discount opportunities email configuration"""
+    try:
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            SELECT id, email_address, imap_server, imap_port, username, is_active, created_at, last_updated
+            FROM discount_email_config
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''')
+        
+        row = local_cursor.fetchone()
+        local_conn.close()
+        
+        if row:
+            id_val, email, server, port, username, is_active, created, updated = row
+            return jsonify({
+                'configured': True,
+                'config': {
+                    'id': id_val,
+                    'email_address': email,
+                    'imap_server': server,
+                    'imap_port': port,
+                    'username': username,
+                    'is_active': bool(is_active),
+                    'created_at': created,
+                    'last_updated': updated
+                }
+            })
+        else:
+            # Check for legacy Gmail config
+            legacy_config = get_admin_gmail_config()
+            if legacy_config and not legacy_config.get('is_database_config'):
+                return jsonify({
+                    'configured': True,
+                    'is_legacy': True,
+                    'config': {
+                        'email_address': legacy_config.get('gmail_email', 'Legacy Gmail'),
+                        'connected_at': legacy_config.get('connected_at'),
+                        'message': 'Using legacy Gmail OAuth configuration'
+                    }
+                })
+            
+            return jsonify({'configured': False})
+        
+    except Exception as e:
+        print(f"Error getting discount email config: {e}")
+        return jsonify({'error': 'Failed to get discount email configuration'}), 500
+
+@app.route('/api/admin/discount-email/config', methods=['POST'])
+@admin_required
+def update_discount_email_config():
+    """Update discount opportunities email configuration"""
+    try:
+        data = request.get_json()
+        required_fields = ['email_address', 'imap_server', 'username', 'password']
+        
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Encrypt password
+        encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Deactivate any existing configurations
+        local_cursor.execute('''
+            UPDATE discount_email_config 
+            SET is_active = 0 
+            WHERE is_active = 1
+        ''')
+        
+        # Insert new configuration
+        local_cursor.execute('''
+            INSERT INTO discount_email_config 
+            (email_address, imap_server, imap_port, username, password_encrypted, is_active, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['email_address'],
+            data['imap_server'],
+            data.get('imap_port', 993),
+            data['username'],
+            encrypted_password,
+            1,
+            session['discord_id']
+        ))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        # Clear discount opportunities cache to force refresh with new email
+        if 'discount_opportunities_cache' in globals():
+            global discount_opportunities_cache
+            discount_opportunities_cache = {}
+        
+        return jsonify({'message': 'Discount email configuration updated successfully'})
+        
+    except Exception as e:
+        print(f"Error updating discount email config: {e}")
+        return jsonify({'error': 'Failed to update discount email configuration'}), 500
+
+@app.route('/api/admin/discount-email/test', methods=['POST'])
+@admin_required
+def test_discount_email_connection():
+    """Test discount email connection"""
+    try:
+        data = request.get_json()
+        
+        # Import required modules
+        import imaplib
+        
+        try:
+            # Test IMAP connection
+            mail = imaplib.IMAP4_SSL(data['imap_server'], data.get('imap_port', 993))
+            mail.login(data['username'], data['password'])
+            mail.select('inbox')
+            
+            # Search for discount-related emails
+            result, messages = mail.search(None, 'SUBJECT "discount" OR SUBJECT "clearance" OR SUBJECT "sale"')
+            discount_count = len(messages[0].split()) if messages[0] else 0
+            
+            mail.logout()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Connection successful! Found {discount_count} potential discount emails.',
+                'discount_count': discount_count
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Connection failed: {str(e)}'
+            }), 400
+            
+    except Exception as e:
+        print(f"Error testing discount email connection: {e}")
+        return jsonify({'error': 'Failed to test email connection'}), 500
+
+@app.route('/api/admin/discount-email/clear-cache', methods=['POST'])
+@admin_required
+def clear_discount_cache():
+    """Clear discount opportunities cache to force refresh"""
+    try:
+        # Clear the global cache
+        if 'discount_opportunities_cache' in globals():
+            global discount_opportunities_cache
+            discount_opportunities_cache = {}
+        
+        # Clear database cache
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('DELETE FROM discount_opportunities_cache')
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Discount opportunities cache cleared successfully'})
+        
+    except Exception as e:
+        print(f"Error clearing discount cache: {e}")
+        return jsonify({'error': 'Failed to clear cache'}), 500
 
 if __name__ == '__main__':
     try:

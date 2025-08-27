@@ -24,7 +24,8 @@ import {
   EyeOff,
   X,
   Settings,
-  ExternalLink
+  ExternalLink,
+  Save
 } from 'lucide-react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../../config/api';
@@ -50,6 +51,20 @@ const AdminCompact = () => {
   const [userFeatureAccess, setUserFeatureAccess] = useState({});
   const [showFeatureModal, setShowFeatureModal] = useState(false);
   const [selectedFeatureUser, setSelectedFeatureUser] = useState(null);
+  const [discountEmailConfig, setDiscountEmailConfig] = useState(null);
+  const [showDiscountEmailModal, setShowDiscountEmailModal] = useState(false);
+  const [discountEmailForm, setDiscountEmailForm] = useState({
+    email_address: '',
+    imap_server: '',
+    imap_port: 993,
+    username: '',
+    password: '',
+    is_active: true
+  });
+  const [discountTestResult, setDiscountTestResult] = useState(null);
+  const [discountTestLoading, setDiscountTestLoading] = useState(false);
+  const [discountEmailTestResult, setDiscountEmailTestResult] = useState(null);
+  const [testingDiscountEmail, setTestingDiscountEmail] = useState(false);
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -62,13 +77,14 @@ const AdminCompact = () => {
       
       // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
       const timestamp = Date.now();
-      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes] = await Promise.allSettled([
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, discountEmailRes] = await Promise.allSettled([
         axios.get(`/api/admin/users?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/stats?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/invitations?t=${timestamp}`, { withCredentials: true }),
         axios.get(`${API_ENDPOINTS.DISCOUNT_MONITORING_STATUS}?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/features?t=${timestamp}`, { withCredentials: true }),
-        axios.get(`/api/admin/user-features?t=${timestamp}`, { withCredentials: true })
+        axios.get(`/api/admin/user-features?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/discount-email/config?t=${timestamp}`, { withCredentials: true })
       ]);
       
       // Handle results with partial failure support
@@ -177,6 +193,14 @@ const AdminCompact = () => {
       } else {
         failedEndpoints.push('User Features');
         console.error('Failed to load user features:', userFeaturesRes.reason);
+      }
+      
+      // Discount email config (non-critical)
+      if (discountEmailRes.status === 'fulfilled') {
+        setDiscountEmailConfig(discountEmailRes.value.data);
+      } else {
+        failedEndpoints.push('Discount Email');
+        console.error('Failed to load discount email config:', discountEmailRes.reason);
       }
       
       
@@ -470,6 +494,44 @@ const AdminCompact = () => {
     );
   };
 
+  const handleUpdateDiscountEmail = async () => {
+    try {
+      setError('');
+      await axios.post('/api/admin/discount-email/config', discountEmailForm, { withCredentials: true });
+      setSuccess('Discount email configuration updated successfully!');
+      setShowDiscountEmailModal(false);
+      fetchData();
+    } catch (error) {
+      setError(`Failed to update discount email config: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const handleTestDiscountEmail = async () => {
+    try {
+      setTestingDiscountEmail(true);
+      setDiscountEmailTestResult(null);
+      const response = await axios.post('/api/admin/discount-email/test', discountEmailForm, { withCredentials: true });
+      setDiscountEmailTestResult({ success: true, message: response.data.message });
+    } catch (error) {
+      setDiscountEmailTestResult({ 
+        success: false, 
+        message: error.response?.data?.message || 'Connection test failed' 
+      });
+    } finally {
+      setTestingDiscountEmail(false);
+    }
+  };
+
+  const handleClearDiscountCache = async () => {
+    try {
+      setError('');
+      await axios.post('/api/admin/discount-email/clear-cache', {}, { withCredentials: true });
+      setSuccess('Discount opportunities cache cleared successfully!');
+    } catch (error) {
+      setError(`Failed to clear cache: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -484,7 +546,8 @@ const AdminCompact = () => {
 
   const tabs = [
     { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
-    { id: 'features', name: 'Features', icon: Settings, count: features.length }
+    { id: 'features', name: 'Features', icon: Settings, count: features.length },
+    { id: 'discount-email', name: 'Discount Email', icon: Mail, count: discountEmailConfig?.configured ? 1 : 0 }
   ];
 
   return (
@@ -1016,6 +1079,110 @@ const AdminCompact = () => {
                 </div>
               )}
 
+              {/* Discount Email Tab */}
+              {activeTab === 'discount-email' && (
+                <div className="space-y-6">
+                  {/* Email Configuration Status */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900">Discount Opportunities Email Configuration</h3>
+                        <p className="text-sm text-gray-600 mt-1">Configure the email account used to fetch discount opportunity alerts</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (discountEmailConfig?.configured) {
+                            // Pre-fill form with existing config
+                            setDiscountEmailForm({
+                              email_address: discountEmailConfig.config?.email_address || '',
+                              imap_server: discountEmailConfig.config?.imap_server || '',
+                              imap_port: discountEmailConfig.config?.imap_port || 993,
+                              username: discountEmailConfig.config?.username || '',
+                              password: ''
+                            });
+                          }
+                          setShowDiscountEmailModal(true);
+                        }}
+                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-builders-600 hover:bg-builders-700"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        {discountEmailConfig?.configured ? 'Update Configuration' : 'Configure Email'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Current Configuration */}
+                  {discountEmailConfig?.configured ? (
+                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-md font-medium text-gray-900">Current Configuration</h4>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={handleClearDiscountCache}
+                            className="inline-flex items-center px-2 py-1 text-xs border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Clear Cache
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium text-gray-900">Email Address:</span>
+                          <p className="text-gray-600">{discountEmailConfig.config?.email_address}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-900">IMAP Server:</span>
+                          <p className="text-gray-600">{discountEmailConfig.config?.imap_server}:{discountEmailConfig.config?.imap_port}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-900">Username:</span>
+                          <p className="text-gray-600">{discountEmailConfig.config?.username}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-900">Last Updated:</span>
+                          <p className="text-gray-600">
+                            {discountEmailConfig.config?.last_updated 
+                              ? new Date(discountEmailConfig.config.last_updated).toLocaleString()
+                              : 'Unknown'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {discountEmailConfig.is_legacy && (
+                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                          <div className="flex">
+                            <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                            <div className="ml-3">
+                              <p className="text-sm text-yellow-800">
+                                Using legacy Gmail OAuth configuration. Consider updating to the new IMAP configuration for better reliability.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+                      <div className="text-center">
+                        <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <h4 className="text-md font-medium text-gray-900 mb-2">No Email Configuration</h4>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Configure an email account to fetch discount opportunity alerts for the discount opportunities feature.
+                        </p>
+                        <button
+                          onClick={() => setShowDiscountEmailModal(true)}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-builders-600 hover:bg-builders-700"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Configure Email Account
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
             </>
           )}
@@ -1241,6 +1408,145 @@ const AdminCompact = () => {
                   className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
                 >
                   Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount Email Configuration Modal */}
+      {showDiscountEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-medium mb-4">Configure Discount Email</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={discountEmailForm.email_address}
+                  onChange={(e) => setDiscountEmailForm({...discountEmailForm, email_address: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  placeholder="your-email@example.com"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">IMAP Server</label>
+                <select
+                  value={discountEmailForm.imap_server}
+                  onChange={(e) => {
+                    const commonServers = [
+                      { name: 'Gmail', server: 'imap.gmail.com', port: 993 },
+                      { name: 'Outlook/Hotmail', server: 'outlook.office365.com', port: 993 },
+                      { name: 'Yahoo', server: 'imap.mail.yahoo.com', port: 993 },
+                      { name: 'iCloud', server: 'imap.mail.me.com', port: 993 }
+                    ];
+                    const server = commonServers.find(s => s.server === e.target.value);
+                    setDiscountEmailForm({
+                      ...discountEmailForm, 
+                      imap_server: e.target.value,
+                      imap_port: server ? server.port : 993
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                >
+                  <option value="">Select email provider or enter custom</option>
+                  <option value="imap.gmail.com">Gmail (imap.gmail.com)</option>
+                  <option value="outlook.office365.com">Outlook/Hotmail (outlook.office365.com)</option>
+                  <option value="imap.mail.yahoo.com">Yahoo (imap.mail.yahoo.com)</option>
+                  <option value="imap.mail.me.com">iCloud (imap.mail.me.com)</option>
+                </select>
+                {!['imap.gmail.com', 'outlook.office365.com', 'imap.mail.yahoo.com', 'imap.mail.me.com'].includes(discountEmailForm.imap_server) && (
+                  <input
+                    type="text"
+                    value={discountEmailForm.imap_server}
+                    onChange={(e) => setDiscountEmailForm({...discountEmailForm, imap_server: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mt-2"
+                    placeholder="imap.example.com"
+                  />
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Port</label>
+                <input
+                  type="number"
+                  value={discountEmailForm.imap_port}
+                  onChange={(e) => setDiscountEmailForm({...discountEmailForm, imap_port: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Username</label>
+                <input
+                  type="text"
+                  value={discountEmailForm.username}
+                  onChange={(e) => setDiscountEmailForm({...discountEmailForm, username: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  placeholder="Usually your email address"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Password</label>
+                <input
+                  type="password"
+                  value={discountEmailForm.password}
+                  onChange={(e) => setDiscountEmailForm({...discountEmailForm, password: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  placeholder="Email password or app password"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  For Gmail, use an App Password instead of your main password
+                </p>
+              </div>
+              
+              {discountEmailTestResult && (
+                <div className={`p-3 rounded-md text-sm ${
+                  discountEmailTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}>
+                  {discountEmailTestResult.message}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={handleTestDiscountEmail}
+                disabled={testingDiscountEmail || !discountEmailForm.email_address || !discountEmailForm.imap_server || !discountEmailForm.password}
+                className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 text-sm disabled:opacity-50"
+              >
+                {testingDiscountEmail ? 'Testing...' : 'Test Connection'}
+              </button>
+              <div className="space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDiscountEmailModal(false);
+                    setDiscountEmailTestResult(null);
+                    setDiscountEmailForm({
+                      email_address: '',
+                      imap_server: '',
+                      imap_port: 993,
+                      username: '',
+                      password: '',
+                      is_active: true
+                    });
+                  }}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateDiscountEmail}
+                  disabled={!discountEmailForm.email_address || !discountEmailForm.imap_server || !discountEmailForm.password}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4 mr-2 inline" />
+                  Save
                 </button>
               </div>
             </div>

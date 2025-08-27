@@ -5379,50 +5379,46 @@ def manual_sellerboard_update():
                     redirect_url = initial_response.headers.get('Location')
                     print(f"DEBUG: COGS URL redirects to: {redirect_url}")
                     
-                    # The key insight: maybe the redirect URL needs different authentication
-                    # Let's try to access the CSV content directly from the initial response
-                    if initial_response.text:
-                        print("DEBUG: Checking if initial response has CSV content...")
-                        try:
-                            # Sometimes the CSV data is in the initial response
-                            sellerboard_df = pd.read_csv(StringIO(initial_response.text))
-                            print(f"DEBUG: Initial response has CSV! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                        except:
-                            print("DEBUG: Initial response doesn't have CSV data")
+                    # The redirect URL doesn't have the authentication token - let's add it
+                    print("DEBUG: Need to add token to redirect URL for authentication")
+                    
+                    # Extract token from original URL
+                    if 't=' in sellerboard_cogs_url:
+                        token_part = sellerboard_cogs_url.split('t=')[-1]
+                        if '&' in token_part:
+                            token = token_part.split('&')[0]
+                        else:
+                            token = token_part
+                        
+                        print(f"DEBUG: Extracted token: {token}")
+                        
+                        # Add token to redirect URL if it doesn't have it
+                        if 't=' not in redirect_url:
+                            separator = '&' if '?' in redirect_url else '?'
+                            redirect_with_token = f"{redirect_url}{separator}t={token}"
+                            print(f"DEBUG: Redirect URL with token: {redirect_with_token}")
                             
-                            # If initial response doesn't have CSV, we need to handle the redirect properly
-                            # The issue might be that the automation URL has a token that's not being passed through
-                            # Let's try reconstructing the redirect URL with the original token
-                            if 't=' in sellerboard_cogs_url and redirect_url:
-                                # Extract token from original URL
-                                token_part = sellerboard_cogs_url.split('t=')[-1]
-                                if '&' in token_part:
-                                    token = token_part.split('&')[0]
-                                else:
-                                    token = token_part
-                                
-                                print(f"DEBUG: Extracted token: {token}")
-                                print(f"DEBUG: Trying redirect URL with token...")
-                                
-                                # Add token to redirect URL if it doesn't have it
-                                if 't=' not in redirect_url:
-                                    separator = '&' if '?' in redirect_url else '?'
-                                    redirect_with_token = f"{redirect_url}{separator}t={token}"
-                                    print(f"DEBUG: Redirect URL with token: {redirect_with_token}")
-                                    
-                                    token_response = requests.get(redirect_with_token, timeout=30)
-                                    token_response.raise_for_status()
-                                    
-                                    sellerboard_df = pd.read_csv(StringIO(token_response.text))
-                                    print(f"DEBUG: Token approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                else:
-                                    raise Exception("Redirect URL already has token but still fails")
-                            else:
-                                raise Exception("Cannot extract token from original URL")
+                            token_response = requests.get(redirect_with_token, timeout=30)
+                            print(f"DEBUG: Token response status: {token_response.status_code}")
+                            token_response.raise_for_status()
+                            
+                            sellerboard_df = pd.read_csv(StringIO(token_response.text))
+                            print(f"DEBUG: Token approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                        else:
+                            print("DEBUG: Redirect URL already has token, using as-is")
+                            token_response = requests.get(redirect_url, timeout=30)
+                            print(f"DEBUG: Direct redirect response status: {token_response.status_code}")
+                            token_response.raise_for_status()
+                            
+                            sellerboard_df = pd.read_csv(StringIO(token_response.text))
+                            print(f"DEBUG: Direct redirect worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    else:
+                        raise Exception("Cannot extract token from original URL - no 't=' parameter found")
                 else:
                     # No redirect, try to parse directly
+                    print("DEBUG: No redirect detected, parsing response directly")
                     sellerboard_df = pd.read_csv(StringIO(initial_response.text))
-                    print(f"DEBUG: No redirect approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    print(f"DEBUG: Direct parse worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                     
             except Exception as cogs_error:
                 print(f"DEBUG: COGS URL approach failed: {cogs_error}")

@@ -5246,7 +5246,9 @@ def manual_sellerboard_update():
             return jsonify({'error': 'User not authenticated or discord_id not found'}), 401
         
         # Get user configuration
+        print("DEBUG: Getting users config...")
         users = get_users_config()
+        print(f"DEBUG: Found {len(users)} users in config")
         user_config = None
         
         for user in users:
@@ -5255,18 +5257,28 @@ def manual_sellerboard_update():
                 break
         
         if not user_config:
+            print(f"DEBUG: User config not found for discord_id: {discord_id}")
             return jsonify({'error': 'User configuration not found'}), 404
+        
+        print("DEBUG: Found user config, checking requirements...")
         
         # Check if user has required settings
         user_record = user_config.get('user_record', {})
+        print(f"DEBUG: User record keys: {list(user_record.keys()) if user_record else 'None'}")
+        
         if not user_record.get('sellerboard_stock_url'):
+            print("DEBUG: Missing sellerboard_stock_url")
             return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
         
         if not user_record.get('google_tokens', {}).get('refresh_token'):
+            print("DEBUG: Missing google refresh token")
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
         
         if not user_record.get('sheet_id') or not user_record.get('worksheet_title'):
+            print(f"DEBUG: Missing sheet config - sheet_id: {bool(user_record.get('sheet_id'))}, worksheet_title: {bool(user_record.get('worksheet_title'))}")
             return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
+        
+        print("DEBUG: All requirements met, preparing Lambda payload...")
         
         # Prepare Lambda payload
         lambda_payload = {
@@ -5281,7 +5293,10 @@ def manual_sellerboard_update():
         aws_region = os.getenv('AWS_REGION', 'us-east-1')
         lambda_name = os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload')
         
+        print(f"DEBUG: AWS config - access_key: {bool(aws_access_key)}, region: {aws_region}, lambda_name: {lambda_name}")
+        
         if not aws_access_key:
+            print("DEBUG: Missing AWS access key")
             return jsonify({'error': 'AWS configuration not available'}), 500
             
         try:

@@ -5409,20 +5409,42 @@ def manual_sellerboard_update():
                         print(f"DEBUG: Host: {host}")
                         print(f"DEBUG: Path with spaces: {path}")
                         
-                        # Create raw HTTP request with spaces preserved
-                        http_request = f"GET {path} HTTP/1.1\r\n"
-                        http_request += f"Host: {host}\r\n"
-                        http_request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
-                        http_request += "Accept: text/csv,application/csv,text/plain,*/*\r\n"
-                        http_request += "Connection: close\r\n"
-                        http_request += "\r\n"
+                        # The 400 Bad Request suggests spaces in URLs aren't actually valid HTTP
+                        # Let me try a different approach - maybe we need to handle this differently
                         
-                        # Create SSL socket connection
+                        print("DEBUG: 400 Bad Request suggests spaces aren't valid HTTP")
+                        print("DEBUG: Let me try a different approach - URL encoding but then replacing %20 back to spaces at the socket level")
+                        
+                        # Properly encode the URL first, then replace %20 with spaces in the raw request
+                        encoded_path = urllib.parse.quote(path, safe='/')
+                        print(f"DEBUG: Encoded path: {encoded_path}")
+                        
+                        # Replace %20 with spaces in the final HTTP request (risky but might work)
+                        final_path = encoded_path.replace('%20', ' ')
+                        print(f"DEBUG: Final path with spaces restored: {final_path}")
+                        
+                        # Wait, that's the same as the original... Let me try a different approach
+                        # Maybe the issue is that we need to properly handle the HTTP spec
+                        
+                        # According to HTTP spec, spaces should be encoded, but maybe Sellerboard
+                        # expects them unencoded in the actual request. Let me try both approaches:
+                        
+                        # Approach 1: Try with properly encoded URL (standard HTTP)
+                        print("DEBUG: First trying with proper URL encoding (standard HTTP)...")
+                        
+                        http_request_encoded = f"GET {encoded_path} HTTP/1.1\r\n"
+                        http_request_encoded += f"Host: {host}\r\n"
+                        http_request_encoded += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
+                        http_request_encoded += "Accept: text/csv,text/plain,*/*\r\n"
+                        http_request_encoded += "Connection: close\r\n"
+                        http_request_encoded += "\r\n"
+                        
+                        # Try the properly encoded version first
                         context = ssl.create_default_context()
                         with socket.create_connection((host, 443)) as sock:
                             with context.wrap_socket(sock, server_hostname=host) as ssock:
-                                print(f"DEBUG: Sending raw HTTP request with preserved spaces...")
-                                ssock.send(http_request.encode())
+                                print(f"DEBUG: Trying properly encoded URL...")
+                                ssock.send(http_request_encoded.encode())
                                 
                                 # Read response
                                 response_data = b""
@@ -5434,23 +5456,24 @@ def manual_sellerboard_update():
                                 
                                 # Parse HTTP response
                                 response_str = response_data.decode('utf-8', errors='ignore')
-                                if 'HTTP/1.1 200 OK' in response_str or 'HTTP/1.0 200 OK' in response_str:
-                                    print("DEBUG: Raw socket approach worked!")
+                                if 'HTTP/1.1 200 OK' in response_str:
+                                    print("DEBUG: Properly encoded URL worked!")
                                     
                                     # Extract CSV data (after headers)
                                     if '\r\n\r\n' in response_str:
                                         csv_data = response_str.split('\r\n\r\n', 1)[1]
                                         sellerboard_df = pd.read_csv(StringIO(csv_data))
-                                        print(f"DEBUG: Raw socket success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        print(f"DEBUG: Encoded URL success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                                     else:
-                                        raise Exception("Could not parse CSV data from raw response")
+                                        raise Exception("Could not parse CSV from encoded URL response")
                                         
-                                elif 'HTTP/1.1 401' in response_str or 'HTTP/1.0 401' in response_str:
-                                    print("DEBUG: Raw socket also got 401 - the URL itself might be invalid")
-                                    raise Exception("Raw socket approach also got 401 Unauthorized")
                                 else:
-                                    print(f"DEBUG: Raw socket got unexpected response: {response_str[:200]}...")
-                                    raise Exception("Raw socket approach got unexpected response")
+                                    # If encoded doesn't work, the issue might be something else entirely
+                                    print(f"DEBUG: Encoded URL failed: {response_str[:200]}...")
+                                    raise Exception(f"Both spaces and encoded spaces failed. Response: {response_str[:200]}")
+                        
+                        # If we get here without exception, we succeeded
+                        print("DEBUG: Successfully downloaded via encoded URL")
                                     
                     else:
                         raise Exception("No redirect URL found or no spaces in filename")

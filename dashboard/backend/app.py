@@ -5374,100 +5374,44 @@ def manual_sellerboard_update():
             
             print("DEBUG: Implementing solution based on previous space encoding tests...")
             
-            # Step 1: Get the redirect URL manually and capture any cookies/session data
+            # Updated approach: Handle XLS format instead of CSV to avoid space encoding issues
             try:
-                # Get the redirect URL to extract the actual download URL
-                print(f"DEBUG: Getting redirect URL from: {cogs_url}")
-                response = requests.get(cogs_url, timeout=30, allow_redirects=False)
-                print(f"DEBUG: Response status: {response.status_code}")
+                print(f"DEBUG: Processing XLS format COGS data...")
                 
-                if response.status_code == 302:
-                    redirect_url = response.headers.get('Location')
-                    print(f"DEBUG: Extracted redirect URL: {redirect_url}")
-                    print(f"DEBUG: Contains spaces: {'Cost of Goods Sold' in redirect_url}")
-                    
-                    if redirect_url and 'Cost of Goods Sold' in redirect_url:
-                        print("DEBUG: Confirmed space issue - using cookie authentication approach...")
-                        
-                        # Now use the captured cookies with a raw socket request to preserve spaces
-                        import socket
-                        import ssl
-                        import urllib.parse
-                        
-                        # Parse the redirect URL
-                        parsed = urllib.parse.urlparse(redirect_url)
-                        host = parsed.netloc
-                        path = parsed.path
-                        
-                        print(f"DEBUG: Host: {host}")
-                        print(f"DEBUG: Path with spaces: {path}")
-                        
-                        # The key issue: DON'T encode spaces to %20
-                        # Keep the original path with spaces as-is
-                        print(f"DEBUG: Using original path with spaces: {path}")
-                        
-                        # Build HTTP request with SPACES PRESERVED (no URL encoding)
-                        http_request = f"GET {path} HTTP/1.1\r\n"
-                        http_request += f"Host: {host}\r\n"
-                        http_request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
-                        http_request += "Accept: text/csv,text/plain,*/*\r\n"
-                        http_request += "Connection: close\r\n"
-                        http_request += "\r\n"
-                        
-                        print("DEBUG: Making raw socket request with spaces preserved...")
-                        context = ssl.create_default_context()
-                        with socket.create_connection((host, 443)) as sock:
-                            with context.wrap_socket(sock, server_hostname=host) as ssock:
-                                ssock.send(http_request.encode())
-                                
-                                # Read response
-                                response_data = b""
-                                while True:
-                                    chunk = ssock.recv(4096)
-                                    if not chunk:
-                                        break
-                                    response_data += chunk
-                                
-                                # Parse HTTP response
-                                response_str = response_data.decode('utf-8', errors='ignore')
-                                print(f"DEBUG: Raw socket response status: {response_str[:50]}...")
-                                
-                                if 'HTTP/1.1 200 OK' in response_str:
-                                    print("DEBUG: Spaces preserved - download successful!")
-                                    
-                                    # Extract CSV data (after headers)
-                                    if '\r\n\r\n' in response_str:
-                                        csv_data = response_str.split('\r\n\r\n', 1)[1]
-                                        sellerboard_df = pd.read_csv(StringIO(csv_data))
-                                        print(f"DEBUG: Spaces fix success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                    else:
-                                        raise Exception("Could not parse CSV from raw socket response")
-                                        
-                                else:
-                                    print(f"DEBUG: Raw socket with spaces failed: {response_str[:200]}...")
-                                    raise Exception(f"Raw socket request failed. Response: {response_str[:200]}")
-                                    
-                    else:
-                        raise Exception("No redirect URL found or no spaces in filename")
-                        
+                # Simple approach should work now with XLS format
+                response = requests.get(cogs_url, timeout=30)
+                response.raise_for_status()
+                
+                print(f"DEBUG: Response status: {response.status_code}")
+                print(f"DEBUG: Content type: {response.headers.get('Content-Type', 'unknown')}")
+                print(f"DEBUG: Content length: {len(response.content)} bytes")
+                
+                # Handle XLS format - need to use pandas read_excel instead of read_csv
+                if 'format=xls' in cogs_url or response.headers.get('Content-Type', '').startswith('application/vnd.ms-excel'):
+                    print("DEBUG: Processing as XLS file...")
+                    # For XLS, we need to handle binary content
+                    from io import BytesIO
+                    sellerboard_df = pd.read_excel(BytesIO(response.content))
+                    print(f"DEBUG: XLS processing successful! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                 else:
-                    # Direct response without redirect
+                    print("DEBUG: Processing as CSV file...")
+                    # Fallback to CSV processing
                     sellerboard_df = pd.read_csv(StringIO(response.text))
-                    print(f"DEBUG: Direct response worked: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    print(f"DEBUG: CSV processing successful! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                     
             except Exception as e:
-                print(f"DEBUG: All approaches failed: {e}")
+                print(f"DEBUG: COGS processing failed: {e}")
                 return jsonify({
                     'success': False,
-                    'message': 'Update failed - COGS URL space encoding issue.',
+                    'message': 'Update failed - Could not process COGS data.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': [f'COGS URL contains spaces that cannot be handled: {str(e)}'],
-                    'details': f'The Sellerboard COGS URL redirects to a filename with spaces ("Cost of Goods Sold") which gets automatically URL-encoded by HTTP libraries, but Sellerboard expects literal spaces. This is a technical limitation. Error: {str(e)}'
+                    'errors': [f'COGS data processing error: {str(e)}'],
+                    'details': f'Failed to download or process COGS data from Sellerboard. Error: {str(e)}'
                 })
-            print(f"DEBUG: Successfully downloaded COGS CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-            print(f"DEBUG: COGS CSV columns: {list(sellerboard_df.columns)}")
+            print(f"DEBUG: Successfully downloaded COGS data: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+            print(f"DEBUG: COGS data columns: {list(sellerboard_df.columns)}")
             
             # Get Google Sheet data for COGS processing
             print("DEBUG: Fetching Google Sheet data...")

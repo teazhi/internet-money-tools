@@ -5346,84 +5346,48 @@ def manual_sellerboard_update():
             print(f"DEBUG: COGS URL configured: {bool(sellerboard_cogs_url)}")
             print(f"DEBUG: Google Sheet configured: {bool(sheet_id and worksheet_title)}")
             
-            # Download Sellerboard COGS data using the existing working function
-            print("DEBUG: Downloading Sellerboard COGS CSV using proven working method...")
+            # Download Sellerboard COGS data using EXACT same approach as working stock endpoints
+            print("DEBUG: Downloading Sellerboard COGS CSV using exact stock pattern...")
             print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
-            try:
-                # Use the existing fetch_sellerboard_cogs_data function that already works
-                print("DEBUG: Using existing fetch_sellerboard_cogs_data function...")
-                inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
-                
-                if inventory_data and len(inventory_data) > 0:
-                    print(f"DEBUG: Successfully downloaded COGS data: {len(inventory_data)} items")
-                    
-                    # Convert the inventory data back to a DataFrame format for email processing
-                    # The function returns a dict, but we need DataFrame for CSV email
-                    sellerboard_df = pd.DataFrame(inventory_data)
-                    print(f"DEBUG: Converted to DataFrame: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                    
-                else:
-                    print("DEBUG: fetch_sellerboard_cogs_data returned no data")
-                    raise Exception("No COGS data returned")
-                    
-            except Exception as fetch_error:
-                print(f"DEBUG: fetch_sellerboard_cogs_data failed: {fetch_error}")
-                
-                # Fallback to simple requests approach like other working endpoints  
-                print("DEBUG: Trying simple fallback approach...")
-                try:
-                    response = requests.get(sellerboard_cogs_url, timeout=30)
-                    response.raise_for_status()
-                    print(f"DEBUG: Simple fallback response status: {response.status_code}")
-                    print(f"DEBUG: Simple fallback final URL: {response.url}")
-                    
-                    sellerboard_df = pd.read_csv(StringIO(response.text))
-                    print(f"DEBUG: Simple fallback worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                    
-                except Exception as simple_error:
-                    print(f"DEBUG: Simple fallback also failed: {simple_error}")
-                    raise Exception(f"All COGS download approaches failed. fetch_sellerboard_cogs_data error: {fetch_error}. Simple fallback error: {simple_error}")
-                    
-        except Exception as cogs_error:
-            print(f"DEBUG: All COGS approaches failed: {cogs_error}")
-                
-                # Additional diagnostic information
-                print("DEBUG: === PERMISSION ANALYSIS ===")
-                print("DEBUG: Stock report works fine (200 status)")
-                print("DEBUG: COGS report fails with 401 (Unauthorized)")
-                print("DEBUG: Same token works for stock but not COGS")
-                print("DEBUG: This indicates COGS report has different permission requirements")
-                print("DEBUG: Possible solutions:")
-                print("DEBUG: 1. COGS report may require different subscription level")
-                print("DEBUG: 2. COGS report may need different authentication method")
-                print("DEBUG: 3. User may not have COGS report access enabled in Sellerboard")
-                print("DEBUG: 4. COGS automation URL may need to be regenerated")
-                
+            # Copy exact pattern from /api/test/stock-simple endpoint
+            cogs_url = user_record.get('sellerboard_cogs_url')
+            if not cogs_url:
                 return jsonify({
                     'success': False,
-                    'message': 'Update failed - COGS report access denied.',
+                    'message': 'Update completed but no emails were sent.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': ['COGS report permission denied - stock report works but COGS report returns 401 Unauthorized'],
-                    'details': 'The Sellerboard COGS report requires different permissions than the stock report. Please check: 1) COGS report access is enabled in your Sellerboard account, 2) Your subscription includes COGS reporting, 3) The COGS automation URL is valid and current, 4) The COGS report exists and is accessible.'
+                    'errors': ['Sellerboard COGS URL not configured'],
+                    'details': 'Reasons: Sellerboard COGS URL not configured in settings.'
                 })
             
-            # Final check that we have the data
-            if sellerboard_df is None:
+            # Download CSV directly - EXACT same pattern as stock endpoints
+            import requests
+            from io import StringIO
+            import pandas as pd
+            
+            print("DEBUG: Using simple requests.get approach like working stock endpoints...")
+            response = requests.get(cogs_url, timeout=30)
+            print(f"DEBUG: Response status: {response.status_code}")
+            print(f"DEBUG: Response URL: {response.url}")
+            
+            if response.status_code != 200:
+                print(f"DEBUG: Failed with status {response.status_code}")
                 return jsonify({
                     'success': False,
-                    'message': 'Update failed - no data retrieved.',
+                    'message': 'Update failed due to connection issues.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': ['No Sellerboard data was successfully downloaded'],
-                    'details': 'All download approaches failed to retrieve Sellerboard data.'
+                    'errors': [f'HTTP {response.status_code} error accessing Sellerboard COGS URL'],
+                    'details': f'Could not access Sellerboard COGS URL. HTTP Status: {response.status_code}. URL: {response.url}'
                 })
             
-            print(f"DEBUG: Downloaded Sellerboard CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-            print(f"DEBUG: Sellerboard columns: {list(sellerboard_df.columns)}")
+            sellerboard_df = pd.read_csv(StringIO(response.text))
+            print(f"DEBUG: Successfully downloaded COGS CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+            print(f"DEBUG: COGS CSV columns: {list(sellerboard_df.columns)}")
             
             # Get Google Sheet data for COGS processing
             print("DEBUG: Fetching Google Sheet data...")

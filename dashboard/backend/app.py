@@ -5385,9 +5385,9 @@ def manual_sellerboard_update():
                 from urllib3.util.timeout import Timeout
                 import urllib.parse
                 
-                # Create a session to get initial redirect
-                session = requests.Session()
-                initial_response = session.get(cogs_url, allow_redirects=False, timeout=30)
+                # Create a requests session to get initial redirect
+                req_session = requests.Session()
+                initial_response = req_session.get(cogs_url, allow_redirects=False, timeout=30)
                 
                 if initial_response.status_code == 302:
                     redirect_url = initial_response.headers.get('Location')
@@ -5436,27 +5436,42 @@ def manual_sellerboard_update():
                             
                         print(f"DEBUG: Attempting custom request to: {full_url_with_spaces}")
                         
-                        # Use urllib3's request method with preload_content=False to get raw response
+                        # Use http.client for maximum control over the raw HTTP request
                         try:
-                            # Custom approach: manually construct headers and use low-level urllib3
+                            import http.client
+                            import ssl
+                            
+                            print("DEBUG: Using http.client for raw HTTP control...")
+                            
+                            # Create SSL context
+                            context = ssl.create_default_context()
+                            
+                            # Create HTTPS connection
+                            conn = http.client.HTTPSConnection(host, context=context)
+                            
+                            # Make request with spaces preserved in path
+                            # http.client should allow us to send the exact path without auto-encoding
                             headers = {
                                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*'
+                                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*',
+                                'Host': host,
+                                'Connection': 'close'
                             }
                             
-                            # The key insight: maybe we can trick urllib3 by pre-encoding everything except spaces
-                            # Then manually replace %20 back to spaces in the final URL
-                            temp_encoded_url = urllib.parse.quote(full_url_with_spaces, safe=':/?#[]@!$&\'()*+,;=')
-                            final_url = temp_encoded_url.replace('%20', ' ')
+                            print(f"DEBUG: Making request to path: {path}")
+                            print(f"DEBUG: Headers: {headers}")
                             
-                            print(f"DEBUG: Final URL attempt: {final_url}")
+                            # This is the key - http.client.request() with the exact path
+                            conn.request("GET", path, headers=headers)
+                            response = conn.getresponse()
                             
-                            # This will likely still fail, but let's see the exact error
-                            response = http.request('GET', final_url, headers=headers)
+                            print(f"DEBUG: Response status: {response.status}")
+                            print(f"DEBUG: Response reason: {response.reason}")
                             
                             if response.status == 200:
-                                print("DEBUG: Custom urllib3 approach worked!")
-                                response_data = response.data
+                                print("DEBUG: http.client with spaces worked!")
+                                response_data = response.read()
+                                conn.close()
                                 
                                 # Process the response based on content type
                                 if 'format=xls' in cogs_url:
@@ -5465,22 +5480,18 @@ def manual_sellerboard_update():
                                 else:
                                     sellerboard_df = pd.read_csv(StringIO(response_data.decode('utf-8')))
                                     
-                                print(f"DEBUG: Success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                print(f"DEBUG: SUCCESS! Spaces preserved! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                             else:
-                                print(f"DEBUG: Custom approach failed with status: {response.status}")
-                                raise Exception(f"Custom urllib3 approach failed: {response.status}")
+                                conn.close()
+                                print(f"DEBUG: http.client failed with status: {response.status}")
+                                raise Exception(f"http.client approach failed: {response.status} {response.reason}")
                                 
                         except Exception as e:
-                            print(f"DEBUG: Custom urllib3 failed: {e}")
-                            # Last resort: try the problematic %20 URL to confirm it's the issue
-                            encoded_url = redirect_url.replace(' ', '%20')
-                            print(f"DEBUG: Confirming %20 issue with: {encoded_url}")
-                            response = session.get(encoded_url, timeout=30)
-                            print(f"DEBUG: %20 URL status: {response.status_code}")
-                            raise Exception(f"Confirmed: spaces in redirect URL cannot be handled. %20 gives {response.status_code}")
+                            print(f"DEBUG: http.client failed: {e}")
+                            raise Exception(f"All approaches to preserve spaces failed: {e}")
                     else:
                         print("DEBUG: No spaces in redirect, processing normally")
-                        response = session.get(redirect_url, timeout=30)
+                        response = req_session.get(redirect_url, timeout=30)
                         response.raise_for_status()
                         
                         if 'format=xls' in cogs_url:

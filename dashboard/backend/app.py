@@ -5346,414 +5346,47 @@ def manual_sellerboard_update():
             print(f"DEBUG: COGS URL configured: {bool(sellerboard_cogs_url)}")
             print(f"DEBUG: Google Sheet configured: {bool(sheet_id and worksheet_title)}")
             
-            # Download Sellerboard COGS data using dashboard's working method
-            print("DEBUG: Downloading Sellerboard COGS CSV...")
+            # Download Sellerboard COGS data using the existing working function
+            print("DEBUG: Downloading Sellerboard COGS CSV using proven working method...")
             print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
-            # Test redirect behavior vs stock URL to see what's different
-            print("DEBUG: Let's compare with stock URL behavior first...")
-            stock_url = user_record.get('sellerboard_stock_url')
-            
-            if stock_url:
-                try:
-                    print(f"DEBUG: Testing stock URL behavior: {stock_url}")
-                    stock_response = requests.get(stock_url, timeout=30, allow_redirects=False)
-                    print(f"DEBUG: Stock URL initial response: {stock_response.status_code}")
-                    if stock_response.status_code == 302:
-                        stock_redirect = stock_response.headers.get('Location')
-                        print(f"DEBUG: Stock URL redirects to: {stock_redirect}")
-                        
-                        # Test if stock redirect works with same token approach
-                        if stock_redirect:
-                            print("DEBUG: Testing if stock redirect works with token...")
-                            stock_token = stock_url.split('t=')[-1].split('&')[0] if 't=' in stock_url else None
-                            if stock_token:
-                                stock_redirect_with_token = f"{stock_redirect}?t={stock_token}"
-                                print(f"DEBUG: Stock redirect with token: {stock_redirect_with_token}")
-                                
-                                stock_token_response = requests.get(stock_redirect_with_token, timeout=30)
-                                print(f"DEBUG: Stock token response status: {stock_token_response.status_code}")
-                                
-                                if stock_token_response.status_code == 200:
-                                    print("DEBUG: Stock works with token! This approach should work for COGS too...")
-                                else:
-                                    print("DEBUG: Stock also fails with token - this is a deeper authentication issue")
-                                    
-                                # Also test stock redirect without token
-                                stock_direct_response = requests.get(stock_redirect, timeout=30)
-                                print(f"DEBUG: Stock redirect without token status: {stock_direct_response.status_code}")
-                                
-                                # Test if stock URL works with normal redirect following (like other endpoints)
-                                print("DEBUG: Testing stock URL with normal redirect following...")
-                                stock_normal_response = requests.get(stock_url, timeout=30)  # allow_redirects=True by default
-                                print(f"DEBUG: Stock normal response status: {stock_normal_response.status_code}")
-                                print(f"DEBUG: Stock final URL: {stock_normal_response.url}")
-                                
-                                if stock_normal_response.status_code == 200:
-                                    print("DEBUG: Stock works with normal redirects! Let's try this for COGS...")
-                                    # Try COGS with normal redirects
-                                    print("DEBUG: Testing COGS with normal redirect following...")
-                                    cogs_normal_response = requests.get(sellerboard_cogs_url, timeout=30)
-                                    print(f"DEBUG: COGS normal response status: {cogs_normal_response.status_code}")
-                                    print(f"DEBUG: COGS final URL: {cogs_normal_response.url}")
-                                    
-                                    if cogs_normal_response.status_code == 200:
-                                        sellerboard_df = pd.read_csv(StringIO(cogs_normal_response.text))
-                                        print(f"DEBUG: COGS normal redirect worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                        # Skip the complex redirect handling since this worked
-                                    else:
-                                        print(f"DEBUG: COGS normal redirect failed with {cogs_normal_response.status_code}")
-                                        # Continue with complex redirect handling
-                                        raise Exception("Normal redirect failed, trying complex handling")
-                            
-                    else:
-                        print("DEBUG: Stock URL doesn't redirect - that's the difference!")
-                except Exception as e:
-                    print(f"DEBUG: Stock URL test failed: {e}")
-            
-            # If we got here, either stock test failed or we need to try COGS independently
-            # First try the simple approach that works for other endpoints
-            sellerboard_df = None
-            
             try:
-                print("DEBUG: Trying simple approach for COGS (like other endpoints)...")
-                simple_response = requests.get(sellerboard_cogs_url, timeout=30)  # Normal redirect following
-                print(f"DEBUG: Simple COGS response status: {simple_response.status_code}")
-                print(f"DEBUG: Simple COGS final URL: {simple_response.url}")
+                # Use the existing fetch_sellerboard_cogs_data function that already works
+                print("DEBUG: Using existing fetch_sellerboard_cogs_data function...")
+                inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
                 
-                if simple_response.status_code == 200:
-                    sellerboard_df = pd.read_csv(StringIO(simple_response.text))
-                    print(f"DEBUG: Simple COGS approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                if inventory_data and len(inventory_data) > 0:
+                    print(f"DEBUG: Successfully downloaded COGS data: {len(inventory_data)} items")
+                    
+                    # Convert the inventory data back to a DataFrame format for email processing
+                    # The function returns a dict, but we need DataFrame for CSV email
+                    sellerboard_df = pd.DataFrame(inventory_data)
+                    print(f"DEBUG: Converted to DataFrame: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                    
                 else:
-                    print("DEBUG: Simple approach failed, trying complex redirect handling...")
-                    raise Exception("Simple approach failed")
+                    print("DEBUG: fetch_sellerboard_cogs_data returned no data")
+                    raise Exception("No COGS data returned")
                     
-            except Exception as simple_error:
-                print(f"DEBUG: Simple approach failed: {simple_error}")
-                print("DEBUG: Trying complex redirect handling...")
+            except Exception as fetch_error:
+                print(f"DEBUG: fetch_sellerboard_cogs_data failed: {fetch_error}")
                 
-                # Complex redirect handling as fallback
-                initial_response = requests.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
-                print(f"DEBUG: COGS URL initial response: {initial_response.status_code}")
-                
-                if initial_response.status_code == 302:
-                    redirect_url = initial_response.headers.get('Location')
-                    print(f"DEBUG: COGS URL redirects to: {redirect_url}")
-                    print(f"DEBUG: Redirect URL length: {len(redirect_url) if redirect_url else 0}")
-                    print(f"DEBUG: Redirect URL contains spaces: {'Cost of Goods' in redirect_url if redirect_url else False}")
+                # Fallback to simple requests approach like other working endpoints  
+                print("DEBUG: Trying simple fallback approach...")
+                try:
+                    response = requests.get(sellerboard_cogs_url, timeout=30)
+                    response.raise_for_status()
+                    print(f"DEBUG: Simple fallback response status: {response.status_code}")
+                    print(f"DEBUG: Simple fallback final URL: {response.url}")
                     
-                    # Check if we can access the redirect URL directly first
-                    if redirect_url:
-                        print("DEBUG: Testing direct access to redirect URL (as extracted)...")
-                        
-                        # The issue: requests automatically URL-encodes spaces, but Sellerboard expects unencoded spaces
-                        # Solution: Use requests.Session with custom handling or use urllib.parse properly
-                        
-                        import urllib.parse
-                        
-                        # First, try with the URL exactly as extracted (spaces intact)
-                        try:
-                            print("DEBUG: Trying with manual request to avoid auto URL encoding...")
-                            
-                            # The key insight: we need to use the URL exactly as Sellerboard provided it
-                            # without letting requests auto-encode the spaces
-                            
-                            import http.client
-                            import urllib.parse
-                            
-                            # Parse the URL to get components
-                            parsed = urllib.parse.urlparse(redirect_url)
-                            
-                            print(f"DEBUG: Parsed URL components:")
-                            print(f"DEBUG: - Scheme: {parsed.scheme}")
-                            print(f"DEBUG: - Netloc: {parsed.netloc}")
-                            print(f"DEBUG: - Path: {parsed.path}")
-                            
-                            # Use http.client to make raw HTTP request with exact URL
-                            if parsed.scheme == 'https':
-                                conn = http.client.HTTPSConnection(parsed.netloc, timeout=30)
-                            else:
-                                conn = http.client.HTTPConnection(parsed.netloc, timeout=30)
-                            
-                            # Make request with exact path (including spaces)
-                            headers = {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                                'Accept': 'text/csv,application/csv,text/plain,*/*',
-                            }
-                            
-                            print(f"DEBUG: Making raw HTTP request to: {parsed.path}")
-                            conn.request("GET", parsed.path, headers=headers)
-                            
-                            raw_response = conn.getresponse()
-                            print(f"DEBUG: Raw HTTP response status: {raw_response.status}")
-                            
-                            if raw_response.status == 200:
-                                print("DEBUG: Raw HTTP request with spaces worked!")
-                                response_data = raw_response.read().decode('utf-8')
-                                sellerboard_df = pd.read_csv(StringIO(response_data))
-                                print(f"DEBUG: Raw HTTP success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                conn.close()
-                            else:
-                                print(f"DEBUG: Raw HTTP still failed with {raw_response.status}")
-                                conn.close()
-                                raise Exception("Raw HTTP approach still fails")
-                                
-                        except Exception as spaces_error:
-                            print(f"DEBUG: Spaces approach failed: {spaces_error}")
-                            
-                            # Try manually encoding just the path part properly
-                            try:
-                                print("DEBUG: Trying with manual URL encoding...")
-                                
-                                # Parse the URL properly
-                                parsed = urllib.parse.urlparse(redirect_url)
-                                
-                                # Encode only the path, keeping spaces as spaces (not %20)
-                                # This is tricky - we want to encode special chars but keep spaces
-                                encoded_path = parsed.path.replace(' ', ' ')  # Keep spaces as spaces
-                                
-                                # Reconstruct URL
-                                reconstructed_url = urllib.parse.urlunparse((
-                                    parsed.scheme,
-                                    parsed.netloc, 
-                                    encoded_path,
-                                    parsed.params,
-                                    parsed.query,
-                                    parsed.fragment
-                                ))
-                                
-                                print(f"DEBUG: Reconstructed URL: {reconstructed_url}")
-                                
-                                # Try with requests.get but using allow_redirects=False to prevent further encoding
-                                response = requests.get(reconstructed_url, timeout=30, allow_redirects=False)
-                                print(f"DEBUG: Manual encoding response status: {response.status_code}")
-                                
-                                if response.status_code == 200:
-                                    sellerboard_df = pd.read_csv(StringIO(response.text))
-                                    print(f"DEBUG: Manual encoding worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                else:
-                                    raise Exception("Manual encoding still fails")
-                                    
-                            except Exception as manual_error:
-                                print(f"DEBUG: Manual encoding failed: {manual_error}")
-                                
-                                # One more approach: Use session with cookies from the initial redirect
-                                print("DEBUG: Trying session approach with cookies from redirect...")
-                                try:
-                                    req_session = requests.Session()
-                                    
-                                    # Make the initial request to get any cookies
-                                    initial_resp = req_session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
-                                    print(f"DEBUG: Initial request status: {initial_resp.status_code}")
-                                    print(f"DEBUG: Cookies from initial request: {list(req_session.cookies.keys())}")
-                                    
-                                    if initial_resp.status_code == 302:
-                                        redirect_location = initial_resp.headers.get('Location')
-                                        print(f"DEBUG: Following redirect with session cookies...")
-                                        
-                                        # Follow redirect with session (preserves cookies)
-                                        final_resp = req_session.get(redirect_location, timeout=30)
-                                        print(f"DEBUG: Final response status: {final_resp.status_code}")
-                                        print(f"DEBUG: Final response URL: {final_resp.url}")
-                                        
-                                        if final_resp.status_code == 200:
-                                            print("DEBUG: Session approach worked!")
-                                            sellerboard_df = pd.read_csv(StringIO(final_resp.text))
-                                            print(f"DEBUG: Session success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                        else:
-                                            print(f"DEBUG: Session approach still failed with {final_resp.status_code}")
-                                            raise Exception("Session approach failed")
-                                    else:
-                                        raise Exception("No redirect in session approach")
-                                        
-                                except Exception as session_error:
-                                    print(f"DEBUG: Session approach failed: {session_error}")
-                                    
-                                    # Final approach: Use urllib3 to avoid requests' automatic URL encoding
-                                    print("DEBUG: Trying urllib3 to preserve spaces in URL...")
-                                    try:
-                                        import urllib3
-                                        
-                                        # Create a PoolManager
-                                        http = urllib3.PoolManager()
-                                        
-                                        # Make request with urllib3 - it handles spaces differently
-                                        print(f"DEBUG: urllib3 request to: {redirect_url}")
-                                        
-                                        urllib3_resp = http.request('GET', redirect_url,
-                                                                  headers={
-                                                                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                                                      'Accept': 'text/csv,application/csv,text/plain,*/*'
-                                                                  })
-                                        
-                                        print(f"DEBUG: urllib3 response status: {urllib3_resp.status}")
-                                        
-                                        if urllib3_resp.status == 200:
-                                            print("DEBUG: urllib3 approach worked!")
-                                            response_text = urllib3_resp.data.decode('utf-8')
-                                            sellerboard_df = pd.read_csv(StringIO(response_text))
-                                            print(f"DEBUG: urllib3 success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                        else:
-                                            print(f"DEBUG: urllib3 still failed with {urllib3_resp.status}")
-                                            
-                                            # If urllib3 also fails, try one more approach - manually encode just specific characters
-                                            print("DEBUG: Trying selective URL encoding (encode special chars but keep spaces)...")
-                                            
-                                            # Only encode characters that need encoding, but keep spaces as spaces
-                                            import urllib.parse
-                                            
-                                            # Parse URL
-                                            parsed = urllib.parse.urlparse(redirect_url)
-                                            
-                                            # Custom encoding: encode special characters but preserve spaces
-                                            safe_path = parsed.path
-                                            # Replace parentheses and other special chars but NOT spaces
-                                            safe_path = safe_path.replace('(', '%28').replace(')', '%29')
-                                            # You can add more replacements here for other special chars if needed
-                                            
-                                            safe_url = urllib.parse.urlunparse((
-                                                parsed.scheme,
-                                                parsed.netloc,
-                                                safe_path,
-                                                parsed.params,
-                                                parsed.query,
-                                                parsed.fragment
-                                            ))
-                                            
-                                            print(f"DEBUG: Selectively encoded URL: {safe_url}")
-                                            
-                                            selective_resp = http.request('GET', safe_url,
-                                                                        headers={
-                                                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                                                            'Accept': 'text/csv,application/csv,text/plain,*/*'
-                                                                        })
-                                            
-                                            print(f"DEBUG: Selective encoding response status: {selective_resp.status}")
-                                            
-                                            if selective_resp.status == 200:
-                                                print("DEBUG: Selective encoding worked!")
-                                                response_text = selective_resp.data.decode('utf-8')
-                                                sellerboard_df = pd.read_csv(StringIO(response_text))
-                                                print(f"DEBUG: Selective encoding success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                            else:
-                                                raise Exception("All urllib3 approaches failed")
-                                    
-                                    except Exception as urllib3_error:
-                                        print(f"DEBUG: urllib3 approach failed: {urllib3_error}")
-                                        
-                                        # Final attempt: Combine session cookies with urllib3 to preserve spaces
-                                        print("DEBUG: Trying urllib3 with session cookies...")
-                                        try:
-                                            # Get the session cookies we obtained earlier
-                                            req_session = requests.Session()
-                                            initial_resp = req_session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
-                                            
-                                            if initial_resp.status_code == 302 and req_session.cookies:
-                                                # Extract cookies for urllib3
-                                                cookie_header = '; '.join([f"{name}={value}" for name, value in req_session.cookies.items()])
-                                                print(f"DEBUG: Using cookies: {cookie_header}")
-                                                
-                                                # Try with urllib3 and cookies
-                                                http = urllib3.PoolManager()
-                                                urllib3_resp_with_cookies = http.request('GET', redirect_url,
-                                                                                       headers={
-                                                                                           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                                                                           'Accept': 'text/csv,application/csv,text/plain,*/*',
-                                                                                           'Cookie': cookie_header
-                                                                                       })
-                                                
-                                                print(f"DEBUG: urllib3 with cookies response status: {urllib3_resp_with_cookies.status}")
-                                                
-                                                if urllib3_resp_with_cookies.status == 200:
-                                                    print("DEBUG: urllib3 with cookies worked!")
-                                                    response_text = urllib3_resp_with_cookies.data.decode('utf-8')
-                                                    sellerboard_df = pd.read_csv(StringIO(response_text))
-                                                    print(f"DEBUG: urllib3 with cookies success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                                else:
-                                                    print("DEBUG: Even urllib3 with cookies failed")
-                                                    
-                                                    # LAST RESORT: Maybe we need to quote the URL properly
-                                                    print("DEBUG: Last resort - trying urllib3 with properly quoted URL...")
-                                                    
-                                                    import urllib.parse
-                                                    
-                                                    # Parse and properly quote the URL path
-                                                    parsed = urllib.parse.urlparse(redirect_url)
-                                                    
-                                                    # Use quote() which will encode spaces, but then replace %20 back to spaces
-                                                    properly_quoted_path = urllib.parse.quote(parsed.path, safe='/')
-                                                    # Replace %20 back to spaces (this is the key!)
-                                                    properly_quoted_path = properly_quoted_path.replace('%20', ' ')
-                                                    
-                                                    final_url = f"{parsed.scheme}://{parsed.netloc}{properly_quoted_path}"
-                                                    print(f"DEBUG: Final properly quoted URL: {final_url}")
-                                                    
-                                                    final_resp = http.request('GET', final_url,
-                                                                            headers={
-                                                                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                                                                'Accept': 'text/csv,application/csv,text/plain,*/*',
-                                                                                'Cookie': cookie_header
-                                                                            })
-                                                    
-                                                    print(f"DEBUG: Final attempt response status: {final_resp.status}")
-                                                    
-                                                    if final_resp.status == 200:
-                                                        print("DEBUG: Final attempt worked!")
-                                                        response_text = final_resp.data.decode('utf-8')
-                                                        sellerboard_df = pd.read_csv(StringIO(response_text))
-                                                        print(f"DEBUG: Final success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                                    else:
-                                                        raise Exception("All approaches exhausted")
-                                            else:
-                                                raise Exception("No cookies or redirect")
-                                                
-                                        except Exception as final_error:
-                                            print(f"DEBUG: Final urllib3 approach failed: {final_error}")
-                                            print("DEBUG: All manual approaches failed, trying token...")
+                    sellerboard_df = pd.read_csv(StringIO(response.text))
+                    print(f"DEBUG: Simple fallback worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                     
-                    # The redirect URL doesn't have the authentication token - let's add it
-                    print("DEBUG: Need to add token to redirect URL for authentication")
+                except Exception as simple_error:
+                    print(f"DEBUG: Simple fallback also failed: {simple_error}")
+                    raise Exception(f"All COGS download approaches failed. fetch_sellerboard_cogs_data error: {fetch_error}. Simple fallback error: {simple_error}")
                     
-                    # Extract token from original URL
-                    if 't=' in sellerboard_cogs_url:
-                        token_part = sellerboard_cogs_url.split('t=')[-1]
-                        if '&' in token_part:
-                            token = token_part.split('&')[0]
-                        else:
-                            token = token_part
-                        
-                        print(f"DEBUG: Extracted token: {token}")
-                        
-                        # Add token to redirect URL if it doesn't have it
-                        if 't=' not in redirect_url:
-                            separator = '&' if '?' in redirect_url else '?'
-                            redirect_with_token = f"{redirect_url}{separator}t={token}"
-                            print(f"DEBUG: Redirect URL with token: {redirect_with_token}")
-                            
-                            token_response = requests.get(redirect_with_token, timeout=30)
-                            print(f"DEBUG: Token response status: {token_response.status_code}")
-                            token_response.raise_for_status()
-                            
-                            sellerboard_df = pd.read_csv(StringIO(token_response.text))
-                            print(f"DEBUG: Token approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                        else:
-                            print("DEBUG: Redirect URL already has token, using as-is")
-                            token_response = requests.get(redirect_url, timeout=30)
-                            print(f"DEBUG: Direct redirect response status: {token_response.status_code}")
-                            token_response.raise_for_status()
-                            
-                            sellerboard_df = pd.read_csv(StringIO(token_response.text))
-                            print(f"DEBUG: Direct redirect worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                    else:
-                        raise Exception("Cannot extract token from original URL - no 't=' parameter found")
-                else:
-                    # No redirect, try to parse directly
-                    print("DEBUG: No redirect detected, parsing response directly")
-                    sellerboard_df = pd.read_csv(StringIO(initial_response.text))
-                    print(f"DEBUG: Direct parse worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                    
-            except Exception as cogs_error:
-                print(f"DEBUG: All COGS approaches failed: {cogs_error}")
+        except Exception as cogs_error:
+            print(f"DEBUG: All COGS approaches failed: {cogs_error}")
                 
                 # Additional diagnostic information
                 print("DEBUG: === PERMISSION ANALYSIS ===")

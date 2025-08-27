@@ -24,7 +24,8 @@ import {
   Package,
   Zap,
   TestTube,
-  ShoppingBag
+  ShoppingBag,
+  Mail
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -43,6 +44,7 @@ import MissingListings from './dashboard/MissingListings';
 import LambdaDeployment from './dashboard/LambdaDeployment';
 import EbayLister from './dashboard/EbayLister';
 import PurchaseManager from './dashboard/PurchaseManager';
+import EmailMonitoring from './EmailMonitoring';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
 
@@ -160,6 +162,14 @@ const Dashboard = () => {
       icon: ShoppingCart, 
       current: location.pathname === '/dashboard/purchases',
       beta: isFeatureBeta('purchase_manager')
+    }] : []),
+    
+    ...(hasFeatureAccess('email_monitoring') ? [{
+      name: 'Email Monitoring', 
+      href: '/dashboard/email-monitoring', 
+      icon: Mail, 
+      current: location.pathname === '/dashboard/email-monitoring',
+      beta: isFeatureBeta('email_monitoring')
     }] : []),
     
     // File Manager removed - using URL-based approach
@@ -551,6 +561,10 @@ const Dashboard = () => {
               
               {hasFeatureAccess('purchase_manager') && (
                 <Route path="/purchases" element={<PurchaseManager />} />
+              )}
+              
+              {hasFeatureAccess('email_monitoring') && (
+                <Route path="/email-monitoring" element={<EmailMonitoring />} />
               )}
               
               {/* File Manager route removed - using URL-based approach */}

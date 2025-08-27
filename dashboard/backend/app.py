@@ -24,6 +24,8 @@ from cryptography.fernet import Fernet
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from inventory_age_analysis import InventoryAgeAnalyzer
+import atexit
+from email_monitor import EmailMonitor, CHECK_INTERVAL
 
 def sanitize_for_json(obj):
     """
@@ -129,7 +131,50 @@ def invalidate_file_listing_cache(bucket, prefix=""):
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
+
+# Initialize encryption key for email credentials
+ENCRYPTION_KEY = os.getenv('EMAIL_ENCRYPTION_KEY')
+if not ENCRYPTION_KEY:
+    ENCRYPTION_KEY = Fernet.generate_key()
+    print("⚠️  Warning: Using auto-generated encryption key. Set EMAIL_ENCRYPTION_KEY environment variable for production.")
+
+email_cipher = Fernet(ENCRYPTION_KEY)
+
 # Flask app initialized
+
+# Start Email Monitoring Service in Background
+email_monitor_thread = None
+email_monitor_instance = None
+
+def start_email_monitoring():
+    """Start the email monitoring service in a background thread"""
+    global email_monitor_thread, email_monitor_instance
+    
+    try:
+        print("🚀 Starting Email Monitoring Service in background...")
+        email_monitor_instance = EmailMonitor()
+        
+        # Create and start the background thread
+        email_monitor_thread = threading.Thread(target=email_monitor_instance.start, daemon=True)
+        email_monitor_thread.start()
+        print("✅ Email Monitoring Service started successfully")
+    except Exception as e:
+        print(f"❌ Failed to start Email Monitoring Service: {e}")
+
+def stop_email_monitoring():
+    """Stop the email monitoring service"""
+    global email_monitor_instance
+    
+    if email_monitor_instance:
+        print("🛑 Stopping Email Monitoring Service...")
+        email_monitor_instance.stop()
+
+# Register cleanup function
+atexit.register(stop_email_monitoring)
+
+# Start email monitoring when app starts (only in production)
+if os.environ.get('FLASK_ENV') != 'development':
+    start_email_monitoring()
 
 # Configure session for cookies to work properly with cross-domain
 app.config['SESSION_COOKIE_SECURE'] = True  # Required for HTTPS cross-domain
@@ -5509,7 +5554,54 @@ def manual_sellerboard_update():
                                         
                         except Exception as e:
                             print(f"DEBUG: Raw socket with spaces failed: {e}")
-                            raise Exception(f"Cannot make HTTP request with literal spaces: {e}")
+                            
+                            # Last resort: Try alternative URL patterns that Sellerboard might accept
+                            print("DEBUG: Trying alternative URL patterns...")
+                            
+                            # Try different variations of the filename
+                            alternative_urls = []
+                            
+                            # Try replacing "Cost of Goods Sold" with different patterns
+                            base_url = redirect_url.split('TRS_TRADE_INC_')[0] + 'TRS_TRADE_INC_'
+                            suffix = redirect_url.split('Sold_')[1] if 'Sold_' in redirect_url else ''
+                            
+                            alternatives = [
+                                'COGS',  # Common abbreviation
+                                 'CostOfGoodsSold',  # No spaces
+                                'Cost_of_Goods_Sold',  # Underscores
+                                'Cost-of-Goods-Sold',  # Dashes
+                                'CoGS',  # Another abbreviation
+                                'cost_of_goods_sold',  # Lowercase with underscores
+                            ]
+                            
+                            for alt in alternatives:
+                                alt_url = f"{base_url}{alt}_{suffix}"
+                                alternative_urls.append(alt_url)
+                                
+                            # Try each alternative
+                            for i, alt_url in enumerate(alternative_urls):
+                                try:
+                                    print(f"DEBUG: Trying alternative {i+1}: {alt_url}")
+                                    response = req_session.get(alt_url, timeout=5)
+                                    if response.status_code == 200:
+                                        print(f"DEBUG: Alternative URL worked! Pattern: {alternatives[i]}")
+                                        
+                                        # Process the response
+                                        if 'format=xls' in cogs_url:
+                                            from io import BytesIO
+                                            sellerboard_df = pd.read_excel(BytesIO(response.content))
+                                        else:
+                                            sellerboard_df = pd.read_csv(StringIO(response.text))
+                                            
+                                        print(f"DEBUG: Alternative URL success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        break
+                                    else:
+                                        print(f"DEBUG: Alternative {i+1} failed with status {response.status_code}")
+                                except Exception as alt_e:
+                                    print(f"DEBUG: Alternative {i+1} error: {str(alt_e)[:50]}")
+                            else:
+                                # None of the alternatives worked
+                                raise Exception("All URL alternatives failed. The space encoding issue cannot be resolved with current Sellerboard API.")
                     else:
                         print("DEBUG: No spaces in redirect, processing normally")
                         response = req_session.get(redirect_url, timeout=30)
@@ -7580,6 +7672,56 @@ def init_feature_flags():
             )
         ''')
         
+        # Create email monitoring configuration table
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_monitoring (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                email_address TEXT NOT NULL,
+                imap_server TEXT NOT NULL,
+                imap_port INTEGER DEFAULT 993,
+                username TEXT NOT NULL,
+                password_encrypted TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                last_checked TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (discord_id, email_address)
+            )
+        ''')
+        
+        # Create email monitoring rules table
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_monitoring_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                rule_name TEXT NOT NULL,
+                sender_filter TEXT,
+                subject_filter TEXT,
+                content_filter TEXT,
+                webhook_url TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create email monitoring logs table
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_monitoring_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id TEXT NOT NULL,
+                rule_id INTEGER NOT NULL,
+                email_subject TEXT,
+                email_sender TEXT,
+                email_date TIMESTAMP,
+                webhook_sent BOOLEAN DEFAULT 0,
+                webhook_response TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (rule_id) REFERENCES email_monitoring_rules (id)
+            )
+        ''')
+        
         init_conn.commit()
         
         # Insert default features
@@ -7591,7 +7733,8 @@ def init_feature_flags():
             ('missing_listings', 'Missing Listings', 'Track expected arrivals and missing listings', False),
             ('purchase_manager', 'Purchase Manager', 'VA purchase tracking with live inventory integration', True),
             ('va_management', 'VA Management', 'Virtual assistant user management', False),
-            ('lambda_deployment', 'Lambda Deployment', 'AWS Lambda function deployment', True)
+            ('lambda_deployment', 'Lambda Deployment', 'AWS Lambda function deployment', True),
+            ('email_monitoring', 'Email Monitoring', 'Monitor emails for refunds and notifications', True)
         ]
         
         for feature_key, name, description, is_beta in default_features:
@@ -12984,6 +13127,409 @@ def revoke_group_feature_access(group_key, feature_key):
         return jsonify({'message': 'Group feature access revoked successfully'})
     except Exception as e:
         return jsonify({'error': f'Error revoking group feature access: {str(e)}'}), 500
+
+# ================================
+# Email Monitoring API Endpoints
+# ================================
+
+@app.route('/api/email-monitoring/config', methods=['GET'])
+@login_required
+def get_email_monitoring_config():
+    """Get user's email monitoring configuration"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Check if user has access to email monitoring feature
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            SELECT id, email_address, imap_server, imap_port, username, is_active, last_checked
+            FROM email_monitoring 
+            WHERE discord_id = ?
+        ''', (discord_id,))
+        
+        configs = []
+        for row in local_cursor.fetchall():
+            id_val, email, server, port, username, is_active, last_checked = row
+            configs.append({
+                'id': id_val,
+                'email_address': email,
+                'imap_server': server,
+                'imap_port': port,
+                'username': username,
+                'is_active': bool(is_active),
+                'last_checked': last_checked
+            })
+        
+        local_conn.close()
+        return jsonify({'configs': configs})
+        
+    except Exception as e:
+        print(f"Error fetching email monitoring config: {e}")
+        return jsonify({'error': 'Failed to fetch email monitoring configuration'}), 500
+
+@app.route('/api/email-monitoring/config', methods=['POST'])
+@login_required
+def add_email_monitoring_config():
+    """Add or update email monitoring configuration"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Check if user has access to email monitoring feature
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        required_fields = ['email_address', 'imap_server', 'username', 'password']
+        
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Encrypt password
+        encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            INSERT OR REPLACE INTO email_monitoring 
+            (discord_id, email_address, imap_server, imap_port, username, password_encrypted, is_active, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            discord_id,
+            data['email_address'],
+            data['imap_server'],
+            data.get('imap_port', 993),
+            data['username'],
+            encrypted_password,
+            data.get('is_active', True)
+        ))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Email monitoring configuration saved successfully'})
+        
+    except Exception as e:
+        print(f"Error saving email monitoring config: {e}")
+        return jsonify({'error': 'Failed to save email monitoring configuration'}), 500
+
+@app.route('/api/email-monitoring/rules', methods=['GET'])
+@login_required
+def get_email_monitoring_rules():
+    """Get user's email monitoring rules"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            SELECT id, rule_name, sender_filter, subject_filter, content_filter, 
+                   webhook_url, is_active, created_at
+            FROM email_monitoring_rules 
+            WHERE discord_id = ?
+            ORDER BY created_at DESC
+        ''', (discord_id,))
+        
+        rules = []
+        for row in local_cursor.fetchall():
+            id_val, name, sender, subject, content, webhook, is_active, created = row
+            rules.append({
+                'id': id_val,
+                'rule_name': name,
+                'sender_filter': sender,
+                'subject_filter': subject,
+                'content_filter': content,
+                'webhook_url': webhook,
+                'is_active': bool(is_active),
+                'created_at': created
+            })
+        
+        local_conn.close()
+        return jsonify({'rules': rules})
+        
+    except Exception as e:
+        print(f"Error fetching email monitoring rules: {e}")
+        return jsonify({'error': 'Failed to fetch email monitoring rules'}), 500
+
+@app.route('/api/email-monitoring/rules', methods=['POST'])
+@login_required
+def add_email_monitoring_rule():
+    """Add email monitoring rule"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        
+        if not data.get('rule_name'):
+            return jsonify({'error': 'Rule name is required'}), 400
+        
+        if not data.get('webhook_url'):
+            return jsonify({'error': 'Webhook URL is required'}), 400
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            INSERT INTO email_monitoring_rules 
+            (discord_id, rule_name, sender_filter, subject_filter, content_filter, webhook_url, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            discord_id,
+            data['rule_name'],
+            data.get('sender_filter'),
+            data.get('subject_filter'),
+            data.get('content_filter'),
+            data['webhook_url'],
+            data.get('is_active', True)
+        ))
+        
+        rule_id = local_cursor.lastrowid
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Email monitoring rule created successfully', 'rule_id': rule_id})
+        
+    except Exception as e:
+        print(f"Error creating email monitoring rule: {e}")
+        return jsonify({'error': 'Failed to create email monitoring rule'}), 500
+
+@app.route('/api/email-monitoring/rules/<int:rule_id>', methods=['DELETE'])
+@login_required
+def delete_email_monitoring_rule(rule_id):
+    """Delete email monitoring rule"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            DELETE FROM email_monitoring_rules 
+            WHERE id = ? AND discord_id = ?
+        ''', (rule_id, discord_id))
+        
+        if local_cursor.rowcount == 0:
+            local_conn.close()
+            return jsonify({'error': 'Rule not found or access denied'}), 404
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Email monitoring rule deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting email monitoring rule: {e}")
+        return jsonify({'error': 'Failed to delete email monitoring rule'}), 500
+
+@app.route('/api/email-monitoring/test', methods=['POST'])
+@login_required
+def test_email_connection():
+    """Test email connection"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        
+        # Import required modules for email testing
+        import imaplib
+        import email
+        
+        try:
+            # Test IMAP connection
+            mail = imaplib.IMAP4_SSL(data['imap_server'], data.get('imap_port', 993))
+            mail.login(data['username'], data['password'])
+            mail.select('inbox')
+            
+            # Test search functionality
+            result, messages = mail.search(None, 'ALL')
+            message_count = len(messages[0].split()) if messages[0] else 0
+            
+            mail.logout()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Connection successful! Found {message_count} messages in inbox.',
+                'message_count': message_count
+            })
+            
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Connection failed: {str(e)}'
+            }), 400
+            
+    except Exception as e:
+        print(f"Error testing email connection: {e}")
+        return jsonify({'error': 'Failed to test email connection'}), 500
+
+@app.route('/api/email-monitoring/status', methods=['GET'])
+@login_required
+def get_email_monitoring_status():
+    """Get email monitoring service status"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        # Check if there are any active configurations
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            SELECT COUNT(*) as config_count FROM email_monitoring WHERE discord_id = ? AND is_active = 1
+        ''', (discord_id,))
+        config_count = local_cursor.fetchone()[0]
+        
+        local_cursor.execute('''
+            SELECT COUNT(*) as rule_count FROM email_monitoring_rules WHERE discord_id = ? AND is_active = 1
+        ''', (discord_id,))
+        rule_count = local_cursor.fetchone()[0]
+        
+        # Get recent logs
+        local_cursor.execute('''
+            SELECT created_at, email_subject, email_sender, webhook_sent 
+            FROM email_monitoring_logs 
+            WHERE discord_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        ''', (discord_id,))
+        
+        recent_logs = []
+        for row in local_cursor.fetchall():
+            created_at, subject, sender, webhook_sent = row
+            recent_logs.append({
+                'timestamp': created_at,
+                'subject': subject,
+                'sender': sender,
+                'webhook_sent': bool(webhook_sent)
+            })
+        
+        local_conn.close()
+        
+        return jsonify({
+            'active_configs': config_count,
+            'active_rules': rule_count,
+            'recent_logs': recent_logs,
+            'service_running': config_count > 0 and rule_count > 0
+        })
+        
+    except Exception as e:
+        print(f"Error getting email monitoring status: {e}")
+        return jsonify({'error': 'Failed to get email monitoring status'}), 500
+
+@app.route('/api/email-monitoring/quick-setup', methods=['POST'])
+@login_required
+def quick_setup_yankee_candle():
+    """Quick setup for Yankee Candle refund monitoring"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        data = request.get_json()
+        webhook_url = data.get('webhook_url')
+        
+        if not webhook_url:
+            return jsonify({'error': 'Webhook URL is required'}), 400
+        
+        # Import the helper function
+        import sys
+        sys.path.append('.')
+        from email_monitor import create_yankee_candle_rule
+        
+        rule_id = create_yankee_candle_rule(discord_id, webhook_url)
+        
+        return jsonify({
+            'message': 'Yankee Candle refund monitoring rule created successfully',
+            'rule_id': rule_id,
+            'rule_details': {
+                'name': 'Yankee Candle Refund Alert',
+                'sender_filter': 'reply@e.yankeecandle.com',
+                'subject_filter': "Here's your refund!",
+                'webhook_url': webhook_url
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error creating Yankee Candle rule: {e}")
+        return jsonify({'error': 'Failed to create Yankee Candle monitoring rule'}), 500
+
+@app.route('/api/email-monitoring/check-now', methods=['POST'])
+@login_required
+def check_emails_now():
+    """Manually trigger email checking"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        # Check if monitoring is running
+        if not email_monitor_instance:
+            return jsonify({'error': 'Email monitoring service is not running'}), 503
+        
+        # Run a check cycle in a separate thread to avoid blocking
+        check_thread = threading.Thread(
+            target=email_monitor_instance.run_monitoring_cycle,
+            daemon=True
+        )
+        check_thread.start()
+        
+        return jsonify({
+            'message': 'Email check initiated. Results will appear in the activity log shortly.',
+            'check_interval_hours': CHECK_INTERVAL / 3600
+        })
+        
+    except Exception as e:
+        print(f"Error triggering email check: {e}")
+        return jsonify({'error': 'Failed to trigger email check'}), 500
+
+@app.route('/api/email-monitoring/service-control', methods=['POST'])
+@admin_required
+def control_email_monitoring_service():
+    """Admin endpoint to start/stop the email monitoring service"""
+    try:
+        data = request.get_json()
+        action = data.get('action')  # 'start' or 'stop'
+        
+        if action == 'start':
+            if email_monitor_thread and email_monitor_thread.is_alive():
+                return jsonify({'message': 'Email monitoring service is already running'})
+            
+            start_email_monitoring()
+            return jsonify({'message': 'Email monitoring service started'})
+            
+        elif action == 'stop':
+            stop_email_monitoring()
+            return jsonify({'message': 'Email monitoring service stopped'})
+            
+        else:
+            return jsonify({'error': 'Invalid action. Use "start" or "stop"'}), 400
+            
+    except Exception as e:
+        print(f"Error controlling email monitoring service: {e}")
+        return jsonify({'error': f'Failed to {action} email monitoring service'}), 500
 
 if __name__ == '__main__':
     try:

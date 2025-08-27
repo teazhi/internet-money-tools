@@ -264,17 +264,45 @@ const Settings = () => {
       console.log('Response received:', response.data);
 
       if (response.data.success) {
+        const emailCount = response.data.emails_sent || 0;
+        const details = response.data.details || '';
+        
         setSellerboardUpdate({ 
           loading: false, 
-          status: 'Update completed successfully!', 
+          status: `Update completed - ${emailCount} email(s) sent`, 
           fullUpdate: false 
         });
         setMessage({ 
           type: 'success', 
-          text: `Sellerboard ${fullUpdate ? 'full' : 'incremental'} update completed! Check your email for the updated file.` 
+          text: `${response.data.message} ${details ? details : 'Check your email for the updated file.'}` 
         });
       } else {
-        throw new Error(response.data.error || 'Update failed');
+        // Handle failed updates with detailed error information
+        const errors = response.data.errors || [];
+        const details = response.data.details || '';
+        const logsPreview = response.data.logs_preview || '';
+        
+        setSellerboardUpdate({ 
+          loading: false, 
+          status: 'Update completed but no emails sent', 
+          fullUpdate: false 
+        });
+        
+        let errorMessage = response.data.message || 'Update failed';
+        if (details) {
+          errorMessage += ` ${details}`;
+        }
+        if (errors.length > 0) {
+          errorMessage += ` Issues: ${errors.join(', ')}`;
+        }
+        if (logsPreview) {
+          errorMessage += ` (Latest logs: ${logsPreview})`;
+        }
+        
+        setMessage({ 
+          type: 'warning', 
+          text: errorMessage
+        });
       }
     } catch (error) {
       console.error('Manual sellerboard update error:', error);

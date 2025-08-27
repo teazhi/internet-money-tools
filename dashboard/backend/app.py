@@ -5540,19 +5540,19 @@ def manual_sellerboard_update():
                                 # One more approach: Use session with cookies from the initial redirect
                                 print("DEBUG: Trying session approach with cookies from redirect...")
                                 try:
-                                    session = requests.Session()
+                                    req_session = requests.Session()
                                     
                                     # Make the initial request to get any cookies
-                                    initial_resp = session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
+                                    initial_resp = req_session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
                                     print(f"DEBUG: Initial request status: {initial_resp.status_code}")
-                                    print(f"DEBUG: Cookies from initial request: {list(session.cookies.keys())}")
+                                    print(f"DEBUG: Cookies from initial request: {list(req_session.cookies.keys())}")
                                     
                                     if initial_resp.status_code == 302:
                                         redirect_location = initial_resp.headers.get('Location')
                                         print(f"DEBUG: Following redirect with session cookies...")
                                         
                                         # Follow redirect with session (preserves cookies)
-                                        final_resp = session.get(redirect_location, timeout=30)
+                                        final_resp = req_session.get(redirect_location, timeout=30)
                                         print(f"DEBUG: Final response status: {final_resp.status_code}")
                                         print(f"DEBUG: Final response URL: {final_resp.url}")
                                         

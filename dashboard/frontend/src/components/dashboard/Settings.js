@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye, TestTube } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye, TestTube, Play, RefreshCw, Database } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import axios from 'axios';
 
@@ -58,6 +58,11 @@ const Settings = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [amazonStatus, setAmazonStatus] = useState({ connected: false, loading: true });
   const [testingConnection, setTestingConnection] = useState(false);
+  const [sellerboardUpdate, setSellerboardUpdate] = useState({ 
+    loading: false, 
+    status: '', 
+    fullUpdate: false 
+  });
 
   useEffect(() => {
     if (user?.user_record) {
@@ -243,6 +248,41 @@ const Settings = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleManualSellerboardUpdate = async (fullUpdate = false) => {
+    setSellerboardUpdate({ loading: true, status: 'Initiating update...', fullUpdate });
+    setMessage({ type: '', text: '' });
+
+    try {
+      const response = await axios.post('/api/admin/manual-sellerboard-update', {
+        full_update: fullUpdate
+      }, { withCredentials: true });
+
+      if (response.data.success) {
+        setSellerboardUpdate({ 
+          loading: false, 
+          status: 'Update completed successfully!', 
+          fullUpdate: false 
+        });
+        setMessage({ 
+          type: 'success', 
+          text: `Sellerboard ${fullUpdate ? 'full' : 'incremental'} update completed! Check your email for the updated file.` 
+        });
+      } else {
+        throw new Error(response.data.error || 'Update failed');
+      }
+    } catch (error) {
+      setSellerboardUpdate({ 
+        loading: false, 
+        status: 'Update failed', 
+        fullUpdate: false 
+      });
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to trigger Sellerboard update' 
+      });
+    }
   };
 
 
@@ -793,6 +833,93 @@ const Settings = () => {
           </div>
         )}
       </div>
+
+      {/* Manual Sellerboard Update - Only show for non-subusers */}
+      {user?.user_type !== 'subuser' && (
+        <div className="card max-w-2xl border-green-200">
+          <div className="flex items-center space-x-3 mb-4">
+            <Database className="h-5 w-5 text-green-500" />
+            <h3 className="text-sm font-semibold text-green-900">Sellerboard Manual Update</h3>
+          </div>
+          
+          <div className="bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="flex items-start space-x-3">
+              <RefreshCw className="h-5 w-5 text-green-500 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-green-900">Manual COGS Update</h4>
+                <p className="text-sm text-green-700 mb-3">
+                  Manually trigger a Sellerboard Cost of Goods update using your latest purchase data. 
+                  The updated file will be sent to your email address.
+                </p>
+                
+                {sellerboardUpdate.status && (
+                  <div className={`text-sm p-2 rounded mb-3 ${
+                    sellerboardUpdate.status.includes('successfully') 
+                      ? 'bg-green-100 text-green-800' 
+                      : sellerboardUpdate.status.includes('failed')
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {sellerboardUpdate.status}
+                  </div>
+                )}
+                
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button 
+                    onClick={() => handleManualSellerboardUpdate(false)}
+                    disabled={sellerboardUpdate.loading}
+                    className="flex items-center space-x-2 text-sm bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-3 py-2 rounded-md transition-colors duration-200"
+                  >
+                    {sellerboardUpdate.loading && !sellerboardUpdate.fullUpdate ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" />
+                        <span>Quick Update</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleManualSellerboardUpdate(true)}
+                    disabled={sellerboardUpdate.loading}
+                    className="flex items-center space-x-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded-md transition-colors duration-200"
+                  >
+                    {sellerboardUpdate.loading && sellerboardUpdate.fullUpdate ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4" />
+                        <span>Full Update</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                <div className="text-xs text-green-600 mt-3 space-y-1">
+                  <p><strong>Quick Update:</strong> Processes purchases since last update (faster)</p>
+                  <p><strong>Full Update:</strong> Processes all purchase data regardless of date (thorough)</p>
+                  <p className="text-green-500">• Updated Sellerboard file will be emailed to you</p>
+                  <p className="text-green-500">• AI uploader template included for new products</p>
+                  <p className="text-green-500">• Uses your configured Sellerboard COGS URL</p>
+                </div>
+                
+                {!formData.sellerboard_cogs_url && (
+                  <div className="text-xs text-amber-600 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                    <strong>Note:</strong> Configure your Sellerboard COGS URL above to use this feature.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Demo Mode Controls */}
       <div className="card max-w-2xl border-blue-200">

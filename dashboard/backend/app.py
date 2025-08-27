@@ -5228,6 +5228,93 @@ def update_script_configs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/manual-sellerboard-update', methods=['POST'])
+@login_required
+def manual_sellerboard_update():
+    """Manually trigger Sellerboard COGS update for the current user"""
+    try:
+        data = request.json or {}
+        full_update = data.get('full_update', False)
+        discord_id = session['discord_id']
+        
+        # Get user configuration
+        s3_config = load_s3_config()
+        users = s3_config.get('users', [])
+        user_config = None
+        
+        for user in users:
+            if user.get('discord_id') == discord_id:
+                user_config = user
+                break
+        
+        if not user_config:
+            return jsonify({'error': 'User configuration not found'}), 404
+        
+        # Check if user has required settings
+        user_record = user_config.get('user_record', {})
+        if not user_record.get('sellerboard_stock_url'):
+            return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
+        
+        if not user_record.get('google_tokens', {}).get('refresh_token'):
+            return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
+        
+        if not user_record.get('sheet_id') or not user_record.get('worksheet_title'):
+            return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
+        
+        # Prepare Lambda payload
+        lambda_payload = {
+            'manual_trigger': True,
+            'target_user': discord_id,
+            'full_update': full_update,
+            'force_process_all_data': full_update  # For full update, ignore date filtering
+        }
+        
+        # Trigger the Cost Updater Lambda function
+        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+        aws_region = os.getenv('AWS_REGION', 'us-east-1')
+        lambda_name = os.getenv('COST_UPDATER_LAMBDA_NAME', 'amznAndSBUpload')
+        
+        if not aws_access_key:
+            return jsonify({'error': 'AWS configuration not available'}), 500
+            
+        try:
+            lambda_client = boto3.client(
+                'lambda',
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=aws_region
+            )
+            
+            # Verify function exists
+            try:
+                lambda_client.get_function(FunctionName=lambda_name)
+            except lambda_client.exceptions.ResourceNotFoundException:
+                return jsonify({'error': f'Cost Updater function ({lambda_name}) not found'}), 404
+            
+            # Invoke the function
+            response = lambda_client.invoke(
+                FunctionName=lambda_name,
+                InvocationType='Event',  # Async invocation
+                Payload=json.dumps(lambda_payload)
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': f'{"Full" if full_update else "Quick"} Sellerboard update initiated successfully',
+                'full_update': full_update,
+                'lambda_invoked': True,
+                'status_code': response.get('StatusCode'),
+                'note': 'The update is processing in the background. You will receive an email when complete.'
+            })
+            
+        except Exception as lambda_error:
+            return jsonify({'error': f'Failed to trigger update: {str(lambda_error)}'}), 500
+            
+    except Exception as e:
+        print(f"Error in manual sellerboard update: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/trigger-script', methods=['POST'])
 @admin_required

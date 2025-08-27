@@ -5261,13 +5261,19 @@ def manual_sellerboard_update():
             return jsonify({'error': 'User configuration not found'}), 404
         
         print("DEBUG: Found user config, checking requirements...")
+        print(f"DEBUG: Main user config keys: {list(user_config.keys())}")
         
         # Check if user has required settings
         user_record = user_config.get('user_record', {})
         print(f"DEBUG: User record keys: {list(user_record.keys()) if user_record else 'None'}")
         
-        if not user_record.get('sellerboard_stock_url'):
-            print("DEBUG: Missing sellerboard_stock_url")
+        # If user_record is empty, check if settings are at the top level
+        if not user_record:
+            print("DEBUG: user_record is empty, checking top-level config")
+            user_record = user_config  # Use the main config if no nested user_record
+        
+        if not user_record.get('sellerboard_cogs_url'):
+            print("DEBUG: Missing sellerboard_cogs_url")
             return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
         
         if not user_record.get('google_tokens', {}).get('refresh_token'):

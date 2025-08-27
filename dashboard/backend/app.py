@@ -5640,7 +5640,76 @@ def manual_sellerboard_update():
                                     
                                     except Exception as urllib3_error:
                                         print(f"DEBUG: urllib3 approach failed: {urllib3_error}")
-                                        print("DEBUG: All manual approaches failed, trying token...")
+                                        
+                                        # Final attempt: Combine session cookies with urllib3 to preserve spaces
+                                        print("DEBUG: Trying urllib3 with session cookies...")
+                                        try:
+                                            # Get the session cookies we obtained earlier
+                                            req_session = requests.Session()
+                                            initial_resp = req_session.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
+                                            
+                                            if initial_resp.status_code == 302 and req_session.cookies:
+                                                # Extract cookies for urllib3
+                                                cookie_header = '; '.join([f"{name}={value}" for name, value in req_session.cookies.items()])
+                                                print(f"DEBUG: Using cookies: {cookie_header}")
+                                                
+                                                # Try with urllib3 and cookies
+                                                http = urllib3.PoolManager()
+                                                urllib3_resp_with_cookies = http.request('GET', redirect_url,
+                                                                                       headers={
+                                                                                           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                                                           'Accept': 'text/csv,application/csv,text/plain,*/*',
+                                                                                           'Cookie': cookie_header
+                                                                                       })
+                                                
+                                                print(f"DEBUG: urllib3 with cookies response status: {urllib3_resp_with_cookies.status}")
+                                                
+                                                if urllib3_resp_with_cookies.status == 200:
+                                                    print("DEBUG: urllib3 with cookies worked!")
+                                                    response_text = urllib3_resp_with_cookies.data.decode('utf-8')
+                                                    sellerboard_df = pd.read_csv(StringIO(response_text))
+                                                    print(f"DEBUG: urllib3 with cookies success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                                else:
+                                                    print("DEBUG: Even urllib3 with cookies failed")
+                                                    
+                                                    # LAST RESORT: Maybe we need to quote the URL properly
+                                                    print("DEBUG: Last resort - trying urllib3 with properly quoted URL...")
+                                                    
+                                                    import urllib.parse
+                                                    
+                                                    # Parse and properly quote the URL path
+                                                    parsed = urllib.parse.urlparse(redirect_url)
+                                                    
+                                                    # Use quote() which will encode spaces, but then replace %20 back to spaces
+                                                    properly_quoted_path = urllib.parse.quote(parsed.path, safe='/')
+                                                    # Replace %20 back to spaces (this is the key!)
+                                                    properly_quoted_path = properly_quoted_path.replace('%20', ' ')
+                                                    
+                                                    final_url = f"{parsed.scheme}://{parsed.netloc}{properly_quoted_path}"
+                                                    print(f"DEBUG: Final properly quoted URL: {final_url}")
+                                                    
+                                                    final_resp = http.request('GET', final_url,
+                                                                            headers={
+                                                                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                                                                'Accept': 'text/csv,application/csv,text/plain,*/*',
+                                                                                'Cookie': cookie_header
+                                                                            })
+                                                    
+                                                    print(f"DEBUG: Final attempt response status: {final_resp.status}")
+                                                    
+                                                    if final_resp.status == 200:
+                                                        print("DEBUG: Final attempt worked!")
+                                                        response_text = final_resp.data.decode('utf-8')
+                                                        sellerboard_df = pd.read_csv(StringIO(response_text))
+                                                        print(f"DEBUG: Final success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                                    else:
+                                                        raise Exception("All approaches exhausted")
+                                            else:
+                                                raise Exception("No cookies or redirect")
+                                                
+                                        except Exception as final_error:
+                                            print(f"DEBUG: Final urllib3 approach failed: {final_error}")
+                                            print("DEBUG: All manual approaches failed, trying token...")
                     
                     # The redirect URL doesn't have the authentication token - let's add it
                     print("DEBUG: Need to add token to redirect URL for authentication")

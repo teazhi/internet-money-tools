@@ -5439,6 +5439,28 @@ def manual_sellerboard_update():
                 if initial_response.status_code == 302:
                     redirect_url = initial_response.headers.get('Location')
                     print(f"DEBUG: COGS URL redirects to: {redirect_url}")
+                    print(f"DEBUG: Redirect URL length: {len(redirect_url) if redirect_url else 0}")
+                    print(f"DEBUG: Redirect URL contains spaces: {'Cost of Goods' in redirect_url if redirect_url else False}")
+                    
+                    # Check if we can access the redirect URL directly first
+                    if redirect_url:
+                        print("DEBUG: Testing direct access to redirect URL (as extracted)...")
+                        try:
+                            direct_redirect_response = requests.get(redirect_url, timeout=30)
+                            print(f"DEBUG: Direct redirect response status: {direct_redirect_response.status_code}")
+                            print(f"DEBUG: Direct redirect final URL: {direct_redirect_response.url}")
+                            
+                            if direct_redirect_response.status_code == 200:
+                                print("DEBUG: Direct redirect works! Using this approach...")
+                                sellerboard_df = pd.read_csv(StringIO(direct_redirect_response.text))
+                                print(f"DEBUG: Direct redirect success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                            else:
+                                print(f"DEBUG: Direct redirect failed with {direct_redirect_response.status_code}, trying token approach...")
+                                raise Exception("Direct redirect failed, trying with token")
+                                
+                        except Exception as direct_error:
+                            print(f"DEBUG: Direct redirect failed: {direct_error}")
+                            print("DEBUG: Trying with token...")
                     
                     # The redirect URL doesn't have the authentication token - let's add it
                     print("DEBUG: Need to add token to redirect URL for authentication")

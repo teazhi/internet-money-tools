@@ -5348,8 +5348,30 @@ def manual_sellerboard_update():
             
             # Download Sellerboard COGS data using dashboard's working method
             print("DEBUG: Downloading Sellerboard COGS CSV...")
-            analyzer = EnhancedOrdersAnalysis("dummy", sellerboard_cogs_url)  # Use COGS URL as stock URL
-            sellerboard_df = analyzer.download_csv(sellerboard_cogs_url)
+            print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
+            
+            # Use EnhancedOrdersAnalysis like other working features
+            try:
+                print("DEBUG: Using EnhancedOrdersAnalysis download_csv method...")
+                
+                # Create analyzer instance (dummy orders URL since we only need CSV download)
+                analyzer = EnhancedOrdersAnalysis("dummy", sellerboard_cogs_url)
+                
+                # Download CSV using the proven working method
+                sellerboard_df = analyzer.download_csv(sellerboard_cogs_url)
+                print(f"DEBUG: EnhancedOrdersAnalysis approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                
+            except Exception as analyzer_error:
+                print(f"DEBUG: EnhancedOrdersAnalysis approach failed: {analyzer_error}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Update failed due to connection issues.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': [f'Failed to download Sellerboard data: {str(analyzer_error)}'],
+                    'details': f'Could not access Sellerboard COGS URL. Error: {str(analyzer_error)}'
+                })
             
             print(f"DEBUG: Downloaded Sellerboard CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
             print(f"DEBUG: Sellerboard columns: {list(sellerboard_df.columns)}")

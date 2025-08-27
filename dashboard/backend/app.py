@@ -5360,18 +5360,79 @@ def manual_sellerboard_update():
                     stock_response = requests.get(stock_url, timeout=30, allow_redirects=False)
                     print(f"DEBUG: Stock URL initial response: {stock_response.status_code}")
                     if stock_response.status_code == 302:
-                        print(f"DEBUG: Stock URL redirects to: {stock_response.headers.get('Location')}")
+                        stock_redirect = stock_response.headers.get('Location')
+                        print(f"DEBUG: Stock URL redirects to: {stock_redirect}")
+                        
+                        # Test if stock redirect works with same token approach
+                        if stock_redirect:
+                            print("DEBUG: Testing if stock redirect works with token...")
+                            stock_token = stock_url.split('t=')[-1].split('&')[0] if 't=' in stock_url else None
+                            if stock_token:
+                                stock_redirect_with_token = f"{stock_redirect}?t={stock_token}"
+                                print(f"DEBUG: Stock redirect with token: {stock_redirect_with_token}")
+                                
+                                stock_token_response = requests.get(stock_redirect_with_token, timeout=30)
+                                print(f"DEBUG: Stock token response status: {stock_token_response.status_code}")
+                                
+                                if stock_token_response.status_code == 200:
+                                    print("DEBUG: Stock works with token! This approach should work for COGS too...")
+                                else:
+                                    print("DEBUG: Stock also fails with token - this is a deeper authentication issue")
+                                    
+                                # Also test stock redirect without token
+                                stock_direct_response = requests.get(stock_redirect, timeout=30)
+                                print(f"DEBUG: Stock redirect without token status: {stock_direct_response.status_code}")
+                                
+                                # Test if stock URL works with normal redirect following (like other endpoints)
+                                print("DEBUG: Testing stock URL with normal redirect following...")
+                                stock_normal_response = requests.get(stock_url, timeout=30)  # allow_redirects=True by default
+                                print(f"DEBUG: Stock normal response status: {stock_normal_response.status_code}")
+                                print(f"DEBUG: Stock final URL: {stock_normal_response.url}")
+                                
+                                if stock_normal_response.status_code == 200:
+                                    print("DEBUG: Stock works with normal redirects! Let's try this for COGS...")
+                                    # Try COGS with normal redirects
+                                    print("DEBUG: Testing COGS with normal redirect following...")
+                                    cogs_normal_response = requests.get(sellerboard_cogs_url, timeout=30)
+                                    print(f"DEBUG: COGS normal response status: {cogs_normal_response.status_code}")
+                                    print(f"DEBUG: COGS final URL: {cogs_normal_response.url}")
+                                    
+                                    if cogs_normal_response.status_code == 200:
+                                        sellerboard_df = pd.read_csv(StringIO(cogs_normal_response.text))
+                                        print(f"DEBUG: COGS normal redirect worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                                        # Skip the complex redirect handling since this worked
+                                    else:
+                                        print(f"DEBUG: COGS normal redirect failed with {cogs_normal_response.status_code}")
+                                        # Continue with complex redirect handling
+                                        raise Exception("Normal redirect failed, trying complex handling")
+                            
                     else:
                         print("DEBUG: Stock URL doesn't redirect - that's the difference!")
                 except Exception as e:
                     print(f"DEBUG: Stock URL test failed: {e}")
             
-            # Now test COGS URL redirect behavior
+            # If we got here, either stock test failed or we need to try COGS independently
+            # First try the simple approach that works for other endpoints
+            sellerboard_df = None
+            
             try:
-                print("DEBUG: Testing COGS URL redirect behavior...")
-                print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
+                print("DEBUG: Trying simple approach for COGS (like other endpoints)...")
+                simple_response = requests.get(sellerboard_cogs_url, timeout=30)  # Normal redirect following
+                print(f"DEBUG: Simple COGS response status: {simple_response.status_code}")
+                print(f"DEBUG: Simple COGS final URL: {simple_response.url}")
                 
-                # First check without following redirects
+                if simple_response.status_code == 200:
+                    sellerboard_df = pd.read_csv(StringIO(simple_response.text))
+                    print(f"DEBUG: Simple COGS approach worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+                else:
+                    print("DEBUG: Simple approach failed, trying complex redirect handling...")
+                    raise Exception("Simple approach failed")
+                    
+            except Exception as simple_error:
+                print(f"DEBUG: Simple approach failed: {simple_error}")
+                print("DEBUG: Trying complex redirect handling...")
+                
+                # Complex redirect handling as fallback
                 initial_response = requests.get(sellerboard_cogs_url, timeout=30, allow_redirects=False)
                 print(f"DEBUG: COGS URL initial response: {initial_response.status_code}")
                 
@@ -5421,7 +5482,7 @@ def manual_sellerboard_update():
                     print(f"DEBUG: Direct parse worked! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
                     
             except Exception as cogs_error:
-                print(f"DEBUG: COGS URL approach failed: {cogs_error}")
+                print(f"DEBUG: All COGS approaches failed: {cogs_error}")
                 return jsonify({
                     'success': False,
                     'message': 'Update failed due to connection issues.',
@@ -5430,6 +5491,18 @@ def manual_sellerboard_update():
                     'users_processed': 0,
                     'errors': [f'Failed to download Sellerboard data: {str(cogs_error)}'],
                     'details': f'Could not access Sellerboard COGS URL. Error: {str(cogs_error)}'
+                })
+            
+            # Final check that we have the data
+            if sellerboard_df is None:
+                return jsonify({
+                    'success': False,
+                    'message': 'Update failed - no data retrieved.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': ['No Sellerboard data was successfully downloaded'],
+                    'details': 'All download approaches failed to retrieve Sellerboard data.'
                 })
             
             print(f"DEBUG: Downloaded Sellerboard CSV: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")

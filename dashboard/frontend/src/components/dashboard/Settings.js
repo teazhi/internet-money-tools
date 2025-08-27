@@ -255,9 +255,13 @@ const Settings = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await axios.post('/api/admin/manual-sellerboard-update', {
+      console.log('Triggering manual sellerboard update:', { fullUpdate });
+      
+      const response = await axios.post('/api/manual-sellerboard-update', {
         full_update: fullUpdate
       }, { withCredentials: true });
+
+      console.log('Response received:', response.data);
 
       if (response.data.success) {
         setSellerboardUpdate({ 
@@ -273,6 +277,7 @@ const Settings = () => {
         throw new Error(response.data.error || 'Update failed');
       }
     } catch (error) {
+      console.error('Manual sellerboard update error:', error);
       setSellerboardUpdate({ 
         loading: false, 
         status: 'Update failed', 
@@ -280,7 +285,7 @@ const Settings = () => {
       });
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.error || 'Failed to trigger Sellerboard update' 
+        text: error.response?.data?.error || error.message || 'Failed to trigger Sellerboard update' 
       });
     }
   };

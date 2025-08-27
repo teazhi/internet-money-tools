@@ -5228,14 +5228,22 @@ def update_script_configs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/admin/manual-sellerboard-update', methods=['POST'])
+@app.route('/api/manual-sellerboard-update', methods=['POST'])
 @login_required
 def manual_sellerboard_update():
     """Manually trigger Sellerboard COGS update for the current user"""
     try:
+        print("DEBUG: Manual Sellerboard update endpoint called")
         data = request.json or {}
         full_update = data.get('full_update', False)
-        discord_id = session['discord_id']
+        discord_id = session.get('discord_id')
+        
+        print(f"DEBUG: Request data: {data}")
+        print(f"DEBUG: Discord ID: {discord_id}")
+        print(f"DEBUG: Full update: {full_update}")
+        
+        if not discord_id:
+            return jsonify({'error': 'User not authenticated or discord_id not found'}), 401
         
         # Get user configuration
         users = get_users_config()

@@ -96,9 +96,38 @@ CACHE_EXPIRY_HOURS = 24
 config_cache = {}
 CONFIG_CACHE_EXPIRY_MINUTES = 30  # Cache configs for 30 minutes
 
+# Session-based user config cache to reduce S3 fetches during user sessions
+user_session_cache = {}
+USER_SESSION_CACHE_EXPIRY_MINUTES = 15  # Cache user config for 15 minutes per session
+
 # Cache for file listings to reduce S3 list operations
 file_listing_cache = {}
 FILE_LISTING_CACHE_EXPIRY_MINUTES = 15  # Cache file listings for 15 minutes
+
+def get_cached_user_config(user_id):
+    """Get user config from session cache if available"""
+    if not user_id:
+        return None
+    
+    cache_key = f"user_{user_id}"
+    if cache_key in user_session_cache:
+        cached_data, cached_time = user_session_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < USER_SESSION_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    return None
+
+def cache_user_config(user_id, user_data):
+    """Cache user config in session cache"""
+    if user_id and user_data:
+        cache_key = f"user_{user_id}"
+        user_session_cache[cache_key] = (user_data, datetime.now())
+
+def invalidate_user_cache(user_id):
+    """Invalidate cached user config when user data changes"""
+    if user_id:
+        cache_key = f"user_{user_id}"
+        if cache_key in user_session_cache:
+            del user_session_cache[cache_key]
 
 def get_cached_s3_list(bucket, prefix=""):
     """Get S3 object list with caching to reduce list_objects calls"""
@@ -1096,6 +1125,27 @@ def get_users_config():
         pass  # Error fetching users config
         return []
 
+def get_user_config(user_id):
+    """Get config for a specific user with session-based caching"""
+    if DEMO_MODE:
+        users = get_dummy_users()
+        return next((u for u in users if u.get("id") == user_id), None)
+    
+    # Check session cache first
+    cached_user = get_cached_user_config(user_id)
+    if cached_user:
+        return cached_user
+    
+    # Fallback to loading all users and finding the specific one
+    users = get_users_config()
+    user = next((u for u in users if u.get("id") == user_id), None)
+    
+    # Cache the user data for future requests in this session
+    if user:
+        cache_user_config(user_id, user)
+    
+    return user
+
 def update_users_config(users):
     s3_client = get_s3_client()
     config_data = json.dumps({"users": users}, indent=2)
@@ -1111,10 +1161,15 @@ def update_users_config(users):
         )
         # Users configuration updated successfully
         
-        # Invalidate cache after successful update to ensure consistency
+        # Invalidate global cache after successful update to ensure consistency
         cache_key = f"config_{USERS_CONFIG_KEY}"
         if cache_key in config_cache:
             del config_cache[cache_key]
+        
+        # Invalidate user session caches for all affected users
+        for user in users:
+            if user.get("id"):
+                invalidate_user_cache(user.get("id"))
         
         # Skip verification read to reduce S3 costs - put_object is reliable
         # Previous verification step removed to reduce S3 GET requests
@@ -1174,19 +1229,31 @@ def update_invitations_config(invitations):
         return False
 
 def get_discount_monitoring_config():
-    """Get discount monitoring configuration from S3"""
+    """Get discount monitoring configuration from S3 with caching"""
+    # Check cache first to reduce S3 reads
+    cache_key = f"config_{DISCOUNT_MONITORING_CONFIG_KEY}"
+    if cache_key in config_cache:
+        cached_data, cached_time = config_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
     s3_client = get_s3_client()
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=DISCOUNT_MONITORING_CONFIG_KEY)
         config_data = json.loads(response['Body'].read().decode('utf-8'))
+        
+        # Cache the result
+        config_cache[cache_key] = (config_data, datetime.now())
         return config_data
     except Exception as e:
-        # Return default config if not found
-        return {
+        # Return default config if not found and cache it
+        default_config = {
             'days_back': 7,  # Default to 7 days
             'enabled': bool(DISCOUNT_MONITOR_EMAIL),
             'last_updated': None
         }
+        config_cache[cache_key] = (default_config, datetime.now())
+        return default_config
 
 def update_discount_monitoring_config(config):
     """Update discount monitoring configuration in S3"""
@@ -1204,6 +1271,12 @@ def update_discount_monitoring_config(config):
             Body=json.dumps(config, indent=2),
             ContentType='application/json'
         )
+        
+        # Invalidate cache after successful update
+        cache_key = f"config_{DISCOUNT_MONITORING_CONFIG_KEY}"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+            
         return True
     except Exception as e:
         print(f"Error updating discount monitoring config: {e}")
@@ -1218,19 +1291,34 @@ def get_discount_email_days_back():
     return config.get('days_back', env_days)
 
 def get_purchases_config():
-    """Get purchases configuration from S3"""
+    """Get purchases configuration from S3 with caching"""
     if DEMO_MODE:
         return []
+    
+    # Check cache first to reduce S3 reads
+    cache_key = f"config_{PURCHASES_CONFIG_KEY}"
+    if cache_key in config_cache:
+        cached_data, cached_time = config_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
     
     s3_client = get_s3_client()
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=PURCHASES_CONFIG_KEY)
         data = json.loads(response['Body'].read().decode('utf-8'))
-        return data.get('purchases', [])
+        purchases = data.get('purchases', [])
+        
+        # Cache the result
+        config_cache[cache_key] = (purchases, datetime.now())
+        return purchases
     except s3_client.exceptions.NoSuchKey:
+        # Cache empty result too
+        config_cache[cache_key] = ([], datetime.now())
         return []
     except Exception as e:
         print(f"Error fetching purchases config: {e}")
+        # Cache empty result for error cases to reduce repeated failed requests
+        config_cache[cache_key] = ([], datetime.now())
         return []
 
 def update_purchases_config(purchases):
@@ -1247,6 +1335,12 @@ def update_purchases_config(purchases):
             Body=config_data,
             ContentType='application/json'
         )
+        
+        # Invalidate cache after successful update
+        cache_key = f"config_{PURCHASES_CONFIG_KEY}"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+            
         return True
     except Exception as e:
         print(f"Error updating purchases config: {e}")
@@ -1390,14 +1484,28 @@ def admin_required(f):
     return decorated_function
 
 def get_feature_config():
-    """Get feature launches configuration from S3"""
+    """Get feature launches configuration from S3 with caching"""
+    # Check cache first to reduce S3 reads
+    cache_key = "config_feature_config.json"
+    if cache_key in config_cache:
+        cached_data, cached_time = config_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
     s3_client = get_s3_client()
     try:
         response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='feature_config.json')
         config_data = json.loads(response['Body'].read().decode('utf-8'))
-        return config_data.get('feature_launches', {}), config_data.get('user_permissions', {})
+        result = (config_data.get('feature_launches', {}), config_data.get('user_permissions', {}))
+        
+        # Cache the result
+        config_cache[cache_key] = (result, datetime.now())
+        return result
     except Exception as e:
-        return {}, {}
+        # Cache empty result for error cases
+        result = ({}, {})
+        config_cache[cache_key] = (result, datetime.now())
+        return result
 
 def save_feature_config(feature_launches, user_permissions):
     """Save feature configuration to S3"""
@@ -1414,6 +1522,12 @@ def save_feature_config(feature_launches, user_permissions):
             Body=json.dumps(config_data, indent=2),
             ContentType='application/json'
         )
+        
+        # Invalidate cache after successful update
+        cache_key = "config_feature_config.json"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+            
         return True
     except Exception as e:
         print(f"Error saving feature config to S3: {e}")

@@ -64,17 +64,36 @@ if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
 
 PERMS_KEY = "command_permissions.json"
 
+# Simple cache for command permissions to reduce S3 reads
+perms_cache = {}
+PERMS_CACHE_EXPIRY_MINUTES = 30
+
 def get_command_perms():
+    # Check cache first to reduce S3 reads
+    cache_key = f"config_{PERMS_KEY}"
+    if cache_key in perms_cache:
+        cached_data, cached_time = perms_cache[cache_key]
+        if (datetime.now() - cached_time).total_seconds() < PERMS_CACHE_EXPIRY_MINUTES * 60:
+            return cached_data
+    
     s3 = boto3.client('s3',
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
     try:
         body = s3.get_object(Bucket=CONFIG_S3_BUCKET, Key=PERMS_KEY)["Body"].read().decode()
-        return json.loads(body)
+        perms = json.loads(body)
+        
+        # Cache the result
+        perms_cache[cache_key] = (perms, datetime.now())
+        return perms
     except s3.exceptions.NoSuchKey:
+        # Cache empty result
+        perms_cache[cache_key] = ({}, datetime.now())
         return {}
     except:
+        # Cache empty result for error cases
+        perms_cache[cache_key] = ({}, datetime.now())
         return {}
 
 def update_command_perms(perms):
@@ -83,6 +102,11 @@ def update_command_perms(perms):
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
     s3.put_object(Bucket=CONFIG_S3_BUCKET, Key=PERMS_KEY, Body=json.dumps(perms))
+    
+    # Invalidate cache after successful update
+    cache_key = f"config_{PERMS_KEY}"
+    if cache_key in perms_cache:
+        del perms_cache[cache_key]
 
 
 # Set up Discord bot

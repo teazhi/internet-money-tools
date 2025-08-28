@@ -235,14 +235,17 @@ const AllProductAnalytics = () => {
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
       asin,
-      product_name: analytics?.enhanced_analytics?.[asin]?.stock_info?.Title || analytics?.enhanced_analytics?.[asin]?.stock_info?.['Product Name'] || analytics?.enhanced_analytics?.[asin]?.stock_info?.Name || `Product ${asin}`,
+      product_name: allProductsData?.enhanced_analytics?.[asin]?.stock_info?.Title || 
+                   allProductsData?.enhanced_analytics?.[asin]?.stock_info?.['Product Name'] || 
+                   allProductsData?.enhanced_analytics?.[asin]?.stock_info?.Name || 
+                   `Product ${asin}`,
       age_info: ageInfo,
       estimated_age_days: ageInfo.estimated_age_days || 0,
       age_category: ageInfo.age_category || 'unknown',
       confidence_score: ageInfo.confidence_score || 0,
-      // Get real inventory data from enhanced analytics  
-      current_stock: analytics?.enhanced_analytics?.[asin]?.restock?.current_stock || 0,
-      velocity: analytics?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
+      // Get real inventory data - current_stock should come directly from FBA/FBM Stock column
+      current_stock: allProductsData?.enhanced_analytics?.[asin]?.stock_info?.['FBA/FBM Stock'] || 0,
+      velocity: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
       days_left: Math.floor(Math.random() * 180) + 5,
       reorder_point: Math.floor(Math.random() * 50) + 10,
       last_cogs: Math.random() * 50 + 10,

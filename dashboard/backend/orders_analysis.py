@@ -484,61 +484,36 @@ class EnhancedOrdersAnalysis:
         return seasonality_multipliers.get(month, 1.0)
 
     def extract_current_stock(self, stock_info: Dict, debug_asin: str = None) -> float:
-        """Extract current stock from Sellerboard data using multiple possible column names"""
+        """Extract current stock directly from FBA/FBM Stock column in Sellerboard CSV"""
         if not stock_info:
             return 0
         
-        # Try multiple stock column variations in order of preference
-        stock_fields = [
-            'FBA/FBM Stock', 'FBA stock', 'Inventory (FBA)', 'Stock', 'Current Stock',
-            'FBA Stock', 'FBM Stock', 'Total Stock', 'Available Stock', 'Qty Available',
-            'Inventory', 'Units Available', 'Available Quantity', 'Stock Quantity',
-            'FBA/FBM stock', 'FBA / FBM Stock'  # Additional variations
-        ]
-        
-        # Debug logging for first few products
-        if not hasattr(self, '_stock_extraction_logged'):
-            self._stock_extraction_logged = True
-            available_columns = list(stock_info.keys())
-            print(f"DEBUG - Stock extraction available columns: {available_columns}")
-            
-            # Show which stock-related columns are available
-            stock_related = [col for col in available_columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
-            print(f"DEBUG - Stock-related columns found: {stock_related}")
-        
-        # First, try to find FBA/FBM Stock specifically (highest priority)
+        # Primary method: Read directly from FBA/FBM Stock column (this is the correct stock value)
         if 'FBA/FBM Stock' in stock_info:
             try:
                 stock_val = str(stock_info['FBA/FBM Stock']).replace(',', '').strip()
-                if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null']:
+                if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null', '']:
                     current_stock = float(stock_val)
                     if current_stock >= 0:
-                        if debug_asin:
-                            print(f"DEBUG - Stock extraction for {debug_asin}: found {current_stock} in 'FBA/FBM Stock'")
                         return current_stock
             except (ValueError, TypeError):
                 pass
         
-        # Then try other fields
-        for field in stock_fields:
+        # Fallback methods only if FBA/FBM Stock is not available 
+        # (should rarely be needed with proper Sellerboard export)
+        fallback_fields = ['FBA/FBM stock', 'FBA / FBM Stock', 'FBA stock', 'FBA Stock']
+        for field in fallback_fields:
             if field in stock_info and stock_info[field] is not None:
                 try:
                     stock_val = str(stock_info[field]).replace(',', '').strip()
                     if stock_val and stock_val.lower() not in ['nan', 'none', '', 'null']:
                         current_stock = float(stock_val)
-                        if current_stock >= 0:  # Ensure non-negative stock
-                            if debug_asin:
-                                print(f"DEBUG - Stock extraction for {debug_asin}: found {current_stock} in column '{field}'")
+                        if current_stock >= 0:
                             return current_stock
-                except (ValueError, TypeError) as e:
-                    if debug_asin:
-                        print(f"DEBUG - Stock extraction for {debug_asin}: failed to parse '{field}' value '{stock_info[field]}': {e}")
+                except (ValueError, TypeError):
                     continue
         
-        # If no stock found, log available columns for debugging
-        if debug_asin:
-            print(f"DEBUG - Stock extraction for {debug_asin}: no valid stock found. Available columns: {list(stock_info.keys())}")
-        
+        # If FBA/FBM Stock column not found, return 0 (don't use other potentially incorrect columns)
         return 0
     
     def get_priority_score(self, asin: str, velocity_data: Dict, stock_info: Dict, current_sales: int) -> Dict:
@@ -667,13 +642,9 @@ class EnhancedOrdersAnalysis:
         if not stock_info or not velocity_data:
             return {'suggested_quantity': 0, 'reasoning': 'Insufficient data', 'monthly_purchase_adjustment': 0}
         
-        # Try direct extraction from stock DataFrame if available
-        if stock_df is not None:
-            current_stock = self.get_direct_stock_value(stock_df, asin)
-            if current_stock == 0:  # If not found, fallback to normal method
-                current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
-        else:
-            current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
+        # Simple stock extraction - just get the value from FBA/FBM Stock column
+        # No complex calculations needed - just read directly from Sellerboard CSV
+        current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
         
         # Base velocity with trend adjustment
         base_velocity = velocity_data.get('weighted_velocity', 0)

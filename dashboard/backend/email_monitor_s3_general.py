@@ -312,36 +312,7 @@ class EmailMonitorS3:
                 except Exception as e:
                     print(f"Error checking token expiry: {e}")
             
-            # Always check only the past day for daily runs
-            cutoff_date = datetime.now() - timedelta(days=1)
-            
-            # Build search query for refunds - search ALL emails in inbox
-            query = f'after:{cutoff_date.strftime("%Y/%m/%d")}'
-            
-            print(f"Gmail API email search query: {query}")
-            
-            # Search Gmail
-            search_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages"
-            headers = {"Authorization": f"Bearer {access_token}"}
-            params = {"q": query, "maxResults": 50}
-            
-            response = requests.get(search_url, headers=headers, params=params)
-            
-            if not response.ok:
-                print(f"Error searching Gmail messages: {response.status_code} {response.text}")
-                return
-            
-            search_results = response.json()
-            messages = search_results.get('messages', [])
-            
-            print(f"Found {len(messages)} messages for email monitoring")
-            
-            if not messages:
-                print(f"No emails found in Gmail for {email_address}")
-                self.monitor_update_last_checked(discord_id, email_address)
-                return
-            
-            # Get monitoring rules for this user
+            # Get monitoring rules for this user first
             rules = self.manager.get_monitoring_rules(discord_id)
             if not rules:
                 print(f"No email monitoring rules configured for user {discord_id}")
@@ -356,92 +327,144 @@ class EmailMonitorS3:
                 print(f"    - Content filter: '{rule.get('content_filter', '')}'")
                 print(f"    - Is active: {rule.get('is_active', True)}")
             
+            # Always check only the past day for daily runs
+            cutoff_date = datetime.now() - timedelta(days=1)
+            
+            # Build targeted search queries based on rules
+            all_messages = []
             matched_count = 0
             
-            # Check each message against rules
-            processed_count = 0
-            for message in messages:
-                try:
-                    message_id = message['id']
-                    processed_count += 1
-                    
-                    # Get full message details
-                    message_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
-                    msg_response = requests.get(message_url, headers=headers)
-                    
-                    if not msg_response.ok:
-                        print(f"❌ Failed to get message {message_id}: {msg_response.status_code}")
-                        continue
+            for rule in rules:
+                if not rule.get('is_active', True):
+                    print(f"⚠️  Skipping inactive rule: {rule.get('rule_name', 'Unknown')}")
+                    continue
+                
+                # Build Gmail search query for this rule
+                query_parts = [f'after:{cutoff_date.strftime("%Y/%m/%d")}']
+                
+                # Add sender filter if specified
+                sender_filter = rule.get('sender_filter', '').strip()
+                if sender_filter:
+                    query_parts.append(f'from:"{sender_filter}"')
+                
+                # Add subject filter if specified
+                subject_filter = rule.get('subject_filter', '').strip()
+                if subject_filter:
+                    query_parts.append(f'subject:"{subject_filter}"')
+                
+                # Note: Gmail API doesn't support body content search in the same way
+                # Content filter will still need to be checked after fetching
+                
+                query = ' '.join(query_parts)
+                print(f"🔍 Gmail API search query for rule '{rule.get('rule_name')}': {query}")
+                
+                # Search Gmail for this rule
+                search_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages"
+                headers = {"Authorization": f"Bearer {access_token}"}
+                params = {"q": query, "maxResults": 50}
+                
+                response = requests.get(search_url, headers=headers, params=params)
+                
+                if not response.ok:
+                    print(f"Error searching Gmail messages for rule '{rule.get('rule_name')}': {response.status_code} {response.text}")
+                    continue
+                
+                search_results = response.json()
+                messages = search_results.get('messages', [])
+                
+                print(f"Found {len(messages)} messages matching rule '{rule.get('rule_name')}'")
+                
+                if not messages:
+                    continue
+                
+                # Process each message for this specific rule
+                rule_processed_count = 0
+                for message in messages:
+                    try:
+                        message_id = message['id']
+                        rule_processed_count += 1
                         
-                    email_data = msg_response.json()
-                    
-                    # Extract email details
-                    headers_list = email_data.get('payload', {}).get('headers', [])
-                    subject = None
-                    sender = None
-                    date = None
-                    
-                    for header in headers_list:
-                        name = header.get('name', '').lower()
-                        value = header.get('value', '')
+                        # Check if we already processed this message (avoid duplicates across rules)
+                        if message_id in [msg.get('message_id') for msg in all_messages]:
+                            continue
                         
-                        if name == 'subject':
-                            subject = self.monitor_decode_email_header(value)
-                        elif name == 'from':
-                            sender = self.monitor_decode_email_header(value)
-                        elif name == 'date':
-                            date = value
-                    
-                    if not subject:
-                        print(f"⚠️  Skipping message {message_id}: No subject found")
-                        continue
+                        # Get full message details
+                        message_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
+                        msg_response = requests.get(message_url, headers=headers)
                         
-                    # Extract email content
-                    html_content = self.monitor_extract_email_content(email_data.get('payload', {}))
-                    content_length = len(html_content) if html_content else 0
-                    
-                    email_msg = {
-                        'subject': subject,
-                        'sender': sender,
-                        'date': date,
-                        'html_content': html_content or "",
-                        'message_id': message_id
-                    }
-                    
-                    # Debug first few emails in detail
-                    if processed_count <= 3:
-                        print(f"🔍 DEBUG Email {processed_count}/{len(messages)}:")
-                        print(f"  Message ID: {message_id}")
-                        print(f"  Subject: '{subject}'")
-                        print(f"  From: '{sender}'")
-                        print(f"  Date: '{date}'")
-                        print(f"  Content length: {content_length} chars")
-                        if html_content:
-                            # Show first 200 chars of content
-                            content_preview = html_content[:200].replace('\n', ' ').replace('\r', ' ')
-                            print(f"  Content preview: '{content_preview}...'")
-                    
-                    # Check against all active rules
-                    for rule in rules:
-                        if not rule.get('is_active', True):
-                            print(f"⚠️  Skipping inactive rule: {rule.get('rule_name', 'Unknown')}")
+                        if not msg_response.ok:
+                            print(f"❌ Failed to get message {message_id}: {msg_response.status_code}")
                             continue
                             
-                        # Debug the matching process for first few emails
-                        if processed_count <= 3:
-                            print(f"🔍 Checking email {processed_count} against rule '{rule.get('rule_name', 'Unknown')}':")
+                        email_data = msg_response.json()
                         
-                        match_result = self.monitor_matches_rule(email_msg, rule, debug=(processed_count <= 3))
+                        # Extract email details
+                        headers_list = email_data.get('payload', {}).get('headers', [])
+                        subject = None
+                        sender = None
+                        date = None
                         
-                        if processed_count <= 3:
-                            print(f"  Final match result: {match_result}")
+                        for header in headers_list:
+                            name = header.get('name', '').lower()
+                            value = header.get('value', '')
                             
-                        if match_result:
+                            if name == 'subject':
+                                subject = self.monitor_decode_email_header(value)
+                            elif name == 'from':
+                                sender = self.monitor_decode_email_header(value)
+                            elif name == 'date':
+                                date = value
+                        
+                        if not subject:
+                            print(f"⚠️  Skipping message {message_id}: No subject found")
+                            continue
+                            
+                        # Extract email content (only if rule has content filter)
+                        html_content = ""
+                        if rule.get('content_filter', '').strip():
+                            html_content = self.monitor_extract_email_content(email_data.get('payload', {}))
+                        
+                        email_msg = {
+                            'subject': subject,
+                            'sender': sender,
+                            'date': date,
+                            'html_content': html_content or "",
+                            'message_id': message_id
+                        }
+                        
+                        # Debug first few emails in detail
+                        if rule_processed_count <= 2:
+                            print(f"🔍 DEBUG Email {rule_processed_count} for rule '{rule.get('rule_name')}':")
+                            print(f"  Message ID: {message_id}")
+                            print(f"  Subject: '{subject}'")
+                            print(f"  From: '{sender}'")
+                            print(f"  Date: '{date}'")
+                            if html_content:
+                                content_preview = html_content[:200].replace('\n', ' ').replace('\r', ' ')
+                                print(f"  Content preview: '{content_preview}...'")
+                        
+                        # Check against this specific rule (content filter only, since Gmail already filtered sender/subject)
+                        content_filter = rule.get('content_filter', '').strip()
+                        content_matches = True
+                        
+                        if content_filter and html_content:
+                            content_matches = content_filter.lower() in html_content.lower()
+                            if rule_processed_count <= 2:
+                                print(f"  Content filter '{content_filter}': {'✅ PASS' if content_matches else '❌ FAIL'}")
+                        elif content_filter and not html_content:
+                            content_matches = False
+                            if rule_processed_count <= 2:
+                                print(f"  Content filter '{content_filter}': ❌ FAIL (no content)")
+                        
+                        if content_matches:
                             matched_count += 1
                             
-                            print(f"📧 Email email matched rule '{rule.get('rule_name', 'Unknown')}':")
+                            print(f"📧 Email matched rule '{rule.get('rule_name', 'Unknown')}':")
                             print(f"   Subject: {subject}")
                             print(f"   From: {sender}")
+                            
+                            # Add to processed messages to avoid duplicates
+                            all_messages.append(email_msg)
                             
                             # Send webhook notification (only if enabled)
                             webhook_sent = False
@@ -461,7 +484,7 @@ class EmailMonitorS3:
                                     }, discord_id, include_body)
                                     
                                     if webhook_sent:
-                                        print(f"✅ Webhook sent for email email")
+                                        print(f"✅ Webhook sent for email")
                                     else:
                                         print(f"❌ Webhook failed: {webhook_response}")
                             else:
@@ -475,10 +498,10 @@ class EmailMonitorS3:
                                 html_content if html_content else ""
                             )
                         
-                except Exception as e:
-                    print(f"Error processing email email message: {e}")
+                    except Exception as e:
+                        print(f"Error processing email message: {e}")
             
-            print(f"✅ Processed {len(messages)} messages, {matched_count} email matches found")
+            print(f"✅ Processed {len(all_messages)} unique messages across {len(rules)} rules, {matched_count} matches found")
             
             # Update last checked timestamp
             self.monitor_update_last_checked(discord_id, email_address)

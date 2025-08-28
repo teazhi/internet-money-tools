@@ -2362,7 +2362,11 @@ const Admin = () => {
 
         {/* Discount Tab */}
         {activeTab === 'discount' && (
-          <DiscountEmailFormatConfig />
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Discount Email Format Patterns</h3>
+            <p className="text-gray-600">This tab is working! The discount configuration will appear here.</p>
+            <DiscountEmailFormatConfig />
+          </div>
         )}
 
       </div>

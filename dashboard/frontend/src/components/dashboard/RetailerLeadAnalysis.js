@@ -10,7 +10,8 @@ import {
   ExternalLink,
   Download,
   RefreshCw,
-  Upload
+  Upload,
+  Eye
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
 

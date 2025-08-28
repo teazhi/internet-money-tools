@@ -294,7 +294,7 @@ class EmailMonitorS3:
             if token_expires_at:
                 try:
                     expires_at = datetime.fromisoformat(token_expires_at.replace('Z', '+00:00'))
-                    if datetime.now() >= expires_at - timedelta(minutes=5):
+                    if datetime.utcnow() >= expires_at - timedelta(minutes=5):
                         print(f"🔄 Refreshing token for {email_address}")
                         new_token = self.monitor_refresh_oauth_token(refresh_token)
                         if new_token:
@@ -328,7 +328,7 @@ class EmailMonitorS3:
                 print(f"    - Is active: {rule.get('is_active', True)}")
             
             # Always check only the past day for daily runs
-            cutoff_date = datetime.now() - timedelta(days=1)
+            cutoff_date = datetime.utcnow() - timedelta(days=1)
             
             # Build targeted search queries based on rules
             all_messages = []
@@ -566,7 +566,7 @@ class EmailMonitorS3:
             mail.select('inbox')
             
             # Always check only the past day for daily runs
-            cutoff_date = datetime.now() - timedelta(days=1)
+            cutoff_date = datetime.utcnow() - timedelta(days=1)
             
             # Search for emails from past day
             date_str = cutoff_date.strftime('%d-%b-%Y')
@@ -697,7 +697,7 @@ class EmailMonitorS3:
                 tokens = response.json()
                 access_token = tokens.get('access_token')
                 expires_in = tokens.get('expires_in', 3600)
-                expires_at = (datetime.now() + timedelta(seconds=expires_in)).isoformat()
+                expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
                 
                 return {
                     'access_token': access_token,

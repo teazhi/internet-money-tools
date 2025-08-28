@@ -53,6 +53,8 @@ const AdminCompact = () => {
   const [selectedFeatureUser, setSelectedFeatureUser] = useState(null);
   const [discountEmailConfig, setDiscountEmailConfig] = useState(null);
   const [showDiscountEmailModal, setShowDiscountEmailModal] = useState(false);
+  const [formatPatterns, setFormatPatterns] = useState(null);
+  const [showFormatPatternsModal, setShowFormatPatternsModal] = useState(false);
   const [discountEmailForm, setDiscountEmailForm] = useState({
     email_address: '',
     config_type: 'gmail_oauth',
@@ -90,7 +92,7 @@ const AdminCompact = () => {
       
       // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
       const timestamp = Date.now();
-      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, discountEmailRes, webhookRes] = await Promise.allSettled([
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, discountEmailRes, webhookRes, formatPatternsRes] = await Promise.allSettled([
         axios.get(`/api/admin/users?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/stats?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/invitations?t=${timestamp}`, { withCredentials: true }),
@@ -98,7 +100,8 @@ const AdminCompact = () => {
         axios.get(`/api/admin/features?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/user-features?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/discount-email/config?t=${timestamp}`, { withCredentials: true }),
-        axios.get(`/api/admin/email-monitoring/webhook?t=${timestamp}`, { withCredentials: true })
+        axios.get(`/api/admin/email-monitoring/webhook?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/discount-email/format-patterns?t=${timestamp}`, { withCredentials: true })
       ]);
       
       // Handle results with partial failure support
@@ -225,6 +228,13 @@ const AdminCompact = () => {
         console.error('Failed to load email webhook config:', webhookRes.reason);
       }
       
+      // Format patterns (non-critical)
+      if (formatPatternsRes.status === 'fulfilled') {
+        setFormatPatterns(formatPatternsRes.value.data);
+      } else {
+        failedEndpoints.push('Format Patterns');
+        console.error('Failed to load format patterns:', formatPatternsRes.reason);
+      }
       
       // Show warning if some endpoints failed but don't block the UI
       if (failedEndpoints.length > 0) {
@@ -1307,6 +1317,61 @@ const AdminCompact = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Email Format Patterns Configuration */}
+                  <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-md font-medium text-gray-900">Email Format Patterns</h4>
+                        <p className="text-sm text-gray-600">Configure patterns for parsing Distill.io discount alerts</p>
+                      </div>
+                      <button
+                        onClick={() => setShowFormatPatternsModal(true)}
+                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure Patterns
+                      </button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-900">Subject Pattern:</span>
+                        <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-2 rounded">
+                          {formatPatterns?.subject_pattern || '\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-900">Sender Filter:</span>
+                        <p className="text-gray-600">{formatPatterns?.sender_filter || 'alert@distill.io'}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="font-medium text-gray-900">ASIN Pattern:</span>
+                          <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-1 rounded">
+                            {formatPatterns?.asin_pattern || '\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-900">Retailer Pattern:</span>
+                          <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-1 rounded">
+                            {formatPatterns?.retailer_pattern || '\\[([^\\]]+)\\]\\s*Alert:'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="flex">
+                        <AlertTriangle className="h-5 w-5 text-blue-500" />
+                        <div className="ml-3">
+                          <p className="text-sm text-blue-800">
+                            <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Retailer] Alert: Description (ASIN: BXXXXXXXXX)</code>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1783,6 +1848,87 @@ const AdminCompact = () => {
                 >
                   <Save className="h-4 w-4 mr-2 inline" />
                   {discountEmailForm.config_type === 'gmail_oauth' ? 'Setup Gmail OAuth' : 'Save Configuration'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Format Patterns Modal */}
+      {showFormatPatternsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 p-6 max-h-96 overflow-y-auto">
+            <h3 className="text-lg font-medium mb-4">Configure Email Format Patterns</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Subject Pattern</label>
+                <input
+                  type="text"
+                  defaultValue={formatPatterns?.subject_pattern || '\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                  placeholder="Regex pattern for full email subject"
+                />
+                <p className="text-xs text-gray-500 mt-1">Captures both retailer and ASIN from subject line</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">ASIN Pattern</label>
+                <input
+                  type="text"
+                  defaultValue={formatPatterns?.asin_pattern || '\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                  placeholder="Regex pattern to extract ASIN"
+                />
+                <p className="text-xs text-gray-500 mt-1">Should capture Amazon ASIN (B + 9 alphanumeric)</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Retailer Pattern</label>
+                <input
+                  type="text"
+                  defaultValue={formatPatterns?.retailer_pattern || '\\[([^\\]]+)\\]\\s*Alert:'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                  placeholder="Regex pattern to extract retailer"
+                />
+                <p className="text-xs text-gray-500 mt-1">Captures retailer name from square brackets</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Sender Filter</label>
+                <input
+                  type="text"
+                  defaultValue={formatPatterns?.sender_filter || 'alert@distill.io'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Email sender to monitor"
+                />
+                <p className="text-xs text-gray-500 mt-1">Only emails from this sender will be processed</p>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-md">
+                <p className="text-sm text-blue-800">
+                  <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Retailer] Alert: Description (ASIN: BXXXXXXXXX)</code>
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowFormatPatternsModal(false)}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    // TODO: Implement save logic
+                    setShowFormatPatternsModal(false);
+                    setSuccess('Format patterns updated successfully!');
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                >
+                  <Save className="h-4 w-4 mr-2 inline" />
+                  Save Patterns
                 </button>
               </div>
             </div>

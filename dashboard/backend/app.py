@@ -7635,8 +7635,21 @@ def analyze_discount_opportunities():
                     print(f"DEBUG: ASIN {asin} global_purchase_analytics keys: {list(global_purchase_analytics.keys()) if global_purchase_analytics else 'None'}")
                     print(f"DEBUG: ASIN {asin} final recent_purchases: {recent_purchases}")
                 
-                # Determine if restocking is needed
-                needs_restock = suggested_quantity > 0
+                # Determine if restocking is needed - loosened criteria
+                # Show opportunities if:
+                # 1. System suggests restocking (suggested_quantity > 0), OR
+                # 2. Low stock (current_stock < 20), OR  
+                # 3. Running low based on velocity (days_left < 30 if available)
+                low_stock_threshold = 20
+                velocity_based_need = False
+                if days_left is not None and days_left < 30:
+                    velocity_based_need = True
+                
+                needs_restock = (
+                    suggested_quantity > 0 or 
+                    current_stock < low_stock_threshold or
+                    velocity_based_need
+                )
                 
                 # Fast lookup for source link using pre-processed dictionary
                 source_link = asin_to_source_link.get(asin.upper())
@@ -7647,10 +7660,16 @@ def analyze_discount_opportunities():
                     html_content = email_alert.get('html_content', '')
                     promo_message = extract_vitacost_promo_message(html_content)
                 
-                # Determine status based on restock need
-                if needs_restock:
+                # Determine status based on restock need with more granular categories
+                if suggested_quantity > 0:
                     status = 'Restock Needed'
                     priority_score = calculate_opportunity_priority(inventory_data, days_left, suggested_quantity)
+                elif current_stock < low_stock_threshold:
+                    status = 'Low Stock'
+                    priority_score = calculate_opportunity_priority(inventory_data, days_left, max(10, current_stock))
+                elif velocity_based_need:
+                    status = 'Running Low'
+                    priority_score = calculate_opportunity_priority(inventory_data, days_left, max(5, current_stock))
                 else:
                     status = 'Not Needed'
                     priority_score = 0  # Lower priority for items not needed

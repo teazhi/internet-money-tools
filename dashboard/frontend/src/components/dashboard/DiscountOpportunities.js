@@ -115,8 +115,8 @@ const DiscountOpportunities = () => {
           return;
         }
         
-        // Skip if doesn't need restocking
-        if (opportunity.status === 'Not Needed' || !opportunity.needs_restock) {
+        // Only skip if explicitly "Not Needed" - include Low Stock and Running Low
+        if (opportunity.status === 'Not Needed') {
           notNeededFiltered++;
           return;
         }
@@ -166,6 +166,10 @@ const DiscountOpportunities = () => {
     switch (status) {
       case 'Restock Needed':
         return 'text-red-700 bg-red-100';
+      case 'Low Stock':
+        return 'text-orange-700 bg-orange-100';
+      case 'Running Low':
+        return 'text-yellow-700 bg-yellow-100';
       case 'Not Needed':
         return 'text-green-700 bg-green-100';
       case 'Not Tracked':
@@ -246,11 +250,15 @@ const DiscountOpportunities = () => {
       defaultValue: 'all',
       options: [
         { value: 'restock_needed', label: 'Restock Needed' },
+        { value: 'low_stock', label: 'Low Stock' },
+        { value: 'running_low', label: 'Running Low' },
         { value: 'not_tracked', label: 'Not Tracked' }
       ],
       filterFn: (item, value) => {
         switch (value) {
           case 'restock_needed': return item.status === 'Restock Needed';
+          case 'low_stock': return item.status === 'Low Stock';
+          case 'running_low': return item.status === 'Running Low';
           case 'not_tracked': return item.status === 'Not Tracked';
           default: return true;
         }

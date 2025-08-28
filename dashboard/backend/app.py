@@ -26,7 +26,7 @@ import threading
 from inventory_age_analysis import InventoryAgeAnalyzer
 import atexit
 from email_monitor import EmailMonitor, CHECK_INTERVAL
-from email_monitor_s3 import EmailMonitorS3
+from refund_email_monitor_s3 import RefundEmailMonitorS3
 from email_monitoring_s3 import email_monitoring_manager
 
 def sanitize_for_json(obj):
@@ -178,26 +178,26 @@ email_monitor_thread = None
 email_monitor_instance = None
 
 def start_email_monitoring():
-    """Start the email monitoring service in a background thread"""
+    """Start the refund email monitoring service in a background thread"""
     global email_monitor_thread, email_monitor_instance
     
     try:
-        print("🚀 Starting Email Monitoring Service in background...")
-        email_monitor_instance = EmailMonitorS3()
+        print("🚀 Starting Refund Email Monitoring Service in background...")
+        email_monitor_instance = RefundEmailMonitorS3()
         
         # Create and start the background thread
         email_monitor_thread = threading.Thread(target=email_monitor_instance.start, daemon=True)
         email_monitor_thread.start()
-        print("✅ Email Monitoring Service started successfully")
+        print("✅ Refund Email Monitoring Service started successfully")
     except Exception as e:
-        print(f"❌ Failed to start Email Monitoring Service: {e}")
+        print(f"❌ Failed to start Refund Email Monitoring Service: {e}")
 
 def stop_email_monitoring():
-    """Stop the email monitoring service"""
+    """Stop the refund email monitoring service"""
     global email_monitor_instance
     
     if email_monitor_instance:
-        print("🛑 Stopping Email Monitoring Service...")
+        print("🛑 Stopping Refund Email Monitoring Service...")
         email_monitor_instance.stop()
 
 # Register cleanup function
@@ -13704,6 +13704,28 @@ def delete_email_monitoring_rule(rule_id):
         print(f"Error deleting email monitoring rule: {e}")
         return jsonify({'error': 'Failed to delete email monitoring rule'}), 500
 
+@app.route('/api/email-monitoring/quick-setup', methods=['POST'])
+@login_required
+def refund_email_quick_setup():
+    """Quick setup for Yankee Candle refund monitoring using S3"""
+    try:
+        discord_id = session['discord_id']
+        
+        if not has_feature_access(discord_id, 'email_monitoring'):
+            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
+        
+        from refund_email_monitor_s3 import create_yankee_candle_refund_rule
+        rule_id = create_yankee_candle_refund_rule(discord_id)
+        
+        if rule_id:
+            return jsonify({'message': 'Yankee Candle refund monitoring rule created successfully'})
+        else:
+            return jsonify({'error': 'Failed to create Yankee Candle rule'}), 500
+            
+    except Exception as e:
+        print(f"Error in refund quick setup: {e}")
+        return jsonify({'error': 'Failed to create Yankee Candle rule'}), 500
+
 @app.route('/api/email-monitoring/test', methods=['POST'])
 @login_required
 def test_email_connection():
@@ -13853,18 +13875,18 @@ def check_emails_now():
         
         # Check if monitoring is running
         if not email_monitor_instance:
-            return jsonify({'error': 'Email monitoring service is not running'}), 503
+            return jsonify({'error': 'Refund email monitoring service is not running'}), 503
         
-        # Run a check cycle in a separate thread to avoid blocking
+        # Run a refund email check cycle in a separate thread to avoid blocking
         check_thread = threading.Thread(
-            target=email_monitor_instance.run_monitoring_cycle,
+            target=email_monitor_instance.run_refund_email_check_cycle,
             daemon=True
         )
         check_thread.start()
         
         return jsonify({
-            'message': 'Email check initiated. Results will appear in the activity log shortly.',
-            'check_interval_hours': CHECK_INTERVAL / 3600
+            'message': 'Refund email check initiated. Results will appear in the activity log shortly.',
+            'check_interval_hours': email_monitor_instance.check_interval / 3600
         })
         
     except Exception as e:

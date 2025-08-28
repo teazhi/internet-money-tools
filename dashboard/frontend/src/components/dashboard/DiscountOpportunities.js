@@ -358,11 +358,9 @@ const DiscountOpportunities = () => {
                     <Package className="h-4 w-4 text-gray-500" />
                     <span>{opportunity.current_stock || 0} units</span>
                   </div>
-                  {opportunity.recent_purchases > 0 && (
-                    <div className="text-xs text-blue-600 mt-1">
-                      Recent: {opportunity.recent_purchases} units (2mo)
-                    </div>
-                  )}
+                  <div className="text-xs text-blue-600 mt-1">
+                    Recent: {opportunity.recent_purchases || 0} units (2mo)
+                  </div>
                   {opportunity.needs_restock && (
                     <div className="text-xs text-gray-500 mt-1">
                       Need: {opportunity.suggested_quantity || 0} • {typeof opportunity.days_left === 'number' ? opportunity.days_left.toFixed(1) : 'N/A'} days left

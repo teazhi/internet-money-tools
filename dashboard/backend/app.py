@@ -7470,6 +7470,9 @@ def analyze_discount_opportunities():
                     status = 'Not Needed'
                     priority_score = 0  # Lower priority for items not needed
                 
+                # Debug logging for recent purchases
+                print(f"DEBUG: ASIN {asin} - recent_purchases: {recent_purchases}, restock_data keys: {list(restock_data.keys())}")
+                
                 opportunity = {
                     'asin': asin,
                     'retailer': retailer,

@@ -7448,13 +7448,24 @@ def analyze_discount_opportunities():
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
                 days_left = restock_data.get('days_left', None)
-                recent_purchases = restock_data.get('monthly_purchase_adjustment', 0)
+                
+                # Use the SAME approach as Smart Restock Recommendations for recent purchases
+                monthly_purchase_adjustment = restock_data.get('monthly_purchase_adjustment', 0)
+                
+                # If monthly_purchase_adjustment has data, use it as recent_purchases
+                # Otherwise try to get it from the analysis purchase insights (same as Smart Restock does with global_purchase_analytics)
+                if monthly_purchase_adjustment > 0:
+                    recent_purchases = monthly_purchase_adjustment
+                else:
+                    # Get purchase insights from the same analysis result that was generated
+                    purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
+                    recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, purchase_insights)
                 
                 # Additional debugging for recent purchases
                 if asin == 'B0017TF1E8':
-                    print(f"DEBUG: ASIN {asin} detailed restock_data: {restock_data}")
-                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment value: {restock_data.get('monthly_purchase_adjustment')}")
-                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment type: {type(restock_data.get('monthly_purchase_adjustment'))}")
+                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment: {monthly_purchase_adjustment}")
+                    print(f"DEBUG: ASIN {asin} purchase_insights keys: {list(purchase_insights.keys()) if purchase_insights else 'None'}")
+                    print(f"DEBUG: ASIN {asin} final recent_purchases: {recent_purchases}")
                 
                 # Determine if restocking is needed
                 needs_restock = suggested_quantity > 0

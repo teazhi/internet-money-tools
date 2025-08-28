@@ -161,16 +161,31 @@ class EmailMonitor:
     def send_webhook(self, webhook_url, email_data):
         """Send webhook notification"""
         try:
-            payload = {
-                'type': 'email_notification',
-                'timestamp': datetime.now().isoformat(),
-                'email': {
-                    'sender': email_data['sender'],
-                    'subject': email_data['subject'],
-                    'date': email_data['date'],
-                    'preview': email_data['body'][:500] + "..." if len(email_data['body']) > 500 else email_data['body']
+            # Format payload for Discord webhooks
+            if 'discord.com/api/webhooks' in webhook_url.lower():
+                preview = email_data['body'][:500] + "..." if len(email_data['body']) > 500 else email_data['body']
+                payload = {
+                    'content': '📧 **New Email Match Found**',
+                    'embeds': [{
+                        'title': email_data['subject'],
+                        'description': f"**From:** {email_data['sender']}\n**Date:** {email_data['date']}\n\n**Preview:**\n{preview}",
+                        'color': 3066993,  # Green color
+                        'timestamp': datetime.now().isoformat(),
+                        'footer': {'text': 'Email Monitoring System'}
+                    }]
                 }
-            }
+            else:
+                # Generic payload for other webhook types (Slack, custom, etc.)
+                payload = {
+                    'type': 'email_notification',
+                    'timestamp': datetime.now().isoformat(),
+                    'email': {
+                        'sender': email_data['sender'],
+                        'subject': email_data['subject'],
+                        'date': email_data['date'],
+                        'preview': email_data['body'][:500] + "..." if len(email_data['body']) > 500 else email_data['body']
+                    }
+                }
             
             response = requests.post(webhook_url, json=payload, timeout=30)
             response.raise_for_status()

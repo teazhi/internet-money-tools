@@ -14029,13 +14029,26 @@ def test_email_monitoring_webhook():
         if not webhook_url:
             return jsonify({'error': 'Webhook URL is required'}), 400
             
-        # Send test payload
-        test_payload = {
-            'type': 'test_notification',
-            'message': 'This is a test notification from the email monitoring system',
-            'timestamp': datetime.now().isoformat(),
-            'test': True
-        }
+        # Send test payload - format for Discord webhooks
+        if 'discord.com/api/webhooks' in webhook_url.lower():
+            test_payload = {
+                'content': '🧪 **Email Monitoring Test**',
+                'embeds': [{
+                    'title': 'Webhook Test Successful',
+                    'description': 'This is a test notification from the email monitoring system',
+                    'color': 5763719,  # Blue color
+                    'timestamp': datetime.now().isoformat(),
+                    'footer': {'text': 'Email Monitoring System'}
+                }]
+            }
+        else:
+            # Generic payload for other webhook types (Slack, custom, etc.)
+            test_payload = {
+                'type': 'test_notification',
+                'message': 'This is a test notification from the email monitoring system',
+                'timestamp': datetime.now().isoformat(),
+                'test': True
+            }
         
         response = requests.post(webhook_url, json=test_payload, timeout=10)
         response.raise_for_status()

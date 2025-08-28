@@ -250,6 +250,7 @@ const RetailerLeadAnalysis = () => {
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              onClick={(e) => e.stopPropagation()}
             >
               {item.asin}
             </a>
@@ -265,6 +266,7 @@ const RetailerLeadAnalysis = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800"
+                onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink className="h-4 w-4" />
               </a>

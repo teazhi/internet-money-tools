@@ -1905,32 +1905,31 @@ const AdminCompact = () => {
               >
                 Cancel
               </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const formData = new FormData(document.querySelector('#format-patterns-form'));
-                      const patterns = {
-                        email_template: formData.get('email_template'),
-                        sender_filter: formData.get('sender_filter')
-                      };
-                      
-                      await axios.put('/api/admin/discount-email/format-patterns', patterns, { withCredentials: true });
-                      
-                      setShowFormatPatternsModal(false);
-                      setSuccess('Format patterns updated successfully!');
-                      
-                      // Refresh the patterns data
-                      fetchData();
-                    } catch (error) {
-                      setError('Failed to save format patterns: ' + (error.response?.data?.error || error.message));
-                    }
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-                >
-                  <Save className="h-4 w-4 mr-2 inline" />
-                  Save Patterns
-                </button>
-              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const formData = new FormData(document.querySelector('#format-patterns-form'));
+                    const patterns = {
+                      email_template: formData.get('email_template'),
+                      sender_filter: formData.get('sender_filter')
+                    };
+                    
+                    await axios.put('/api/admin/discount-email/format-patterns', patterns, { withCredentials: true });
+                    
+                    setShowFormatPatternsModal(false);
+                    setSuccess('Format patterns updated successfully!');
+                    
+                    // Refresh the patterns data
+                    fetchData();
+                  } catch (error) {
+                    setError('Failed to save format patterns: ' + (error.response?.data?.error || error.message));
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              >
+                <Save className="h-4 w-4 mr-2 inline" />
+                Save Patterns
+              </button>
             </div>
           </div>
         </div>

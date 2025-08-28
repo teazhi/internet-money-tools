@@ -1,0 +1,60 @@
+{
+  "version": "2.0",
+  "last_updated": "2025-01-XX",
+  "users": [
+    {
+      "id": "string-uuid",
+      "identity": {
+        "discord_id": "string",
+        "discord_username": "string",
+        "email": "string", 
+        "va_name": "string"
+      },
+      "account": {
+        "user_type": "main|subuser|admin",
+        "parent_user_id": "string-uuid|null",
+        "permissions": ["array"],
+        "status": "active|inactive|suspended",
+        "created_at": "iso-datetime",
+        "updated_at": "iso-datetime",
+        "last_activity": "iso-datetime"
+      },
+      "profile": {
+        "configured": false,
+        "setup_step": "initial|google_auth|sheet_setup|column_mapping|completed"
+      },
+      "integrations": {
+        "google": {
+          "linked": false,
+          "tokens": {
+            "access_token": "string",
+            "refresh_token": "string", 
+            "expires_at": "timestamp",
+            "token_uri": "string",
+            "client_id": "string",
+            "client_secret": "string"
+          },
+          "sheet_id": "string",
+          "worksheet_title": "string",
+          "column_mapping": {}
+        },
+        "sellerboard": {
+          "configured": false,
+          "orders_url": "string",
+          "stock_url": "string",
+          "file_key": "string"
+        },
+        "amazon": {
+          "configured": false,
+          "listing_loader_key": "string",
+          "sp_api_connected": false
+        }
+      },
+      "files": {
+        "uploaded_count": 0,
+        "storage_used_bytes": 0,
+        "recent_uploads": []
+      }
+    }
+  ]
+}

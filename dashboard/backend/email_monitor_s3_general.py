@@ -69,16 +69,65 @@ class EmailMonitorS3:
     def run_email_check_cycle(self, send_webhooks=True):
         """Run one complete cycle of email checking"""
         try:
-            # Get all active email configurations
-            active_configs = self.manager.get_all_active_configs()
-            print(f"Found {len(active_configs)} active email configurations")
+            # Check if we should run based on S3 status
+            status = self.manager.get_service_status()
+            last_run = status.get('last_check_run')
             
-            for config in active_configs:
+            # For manual checks (send_webhooks=False), always allow
+            if send_webhooks and last_run:
                 try:
-                    self.check_monitor_email_account(config, send_webhooks=send_webhooks)
-                except Exception as e:
-                    print(f"Error checking email account {config.get('email_address', 'Unknown')}: {e}")
+                    last_run_time = datetime.fromisoformat(last_run.replace('Z', '+00:00'))
+                    time_since_last = datetime.utcnow() - last_run_time
                     
+                    # Don't run if less than 23 hours since last automated run
+                    if time_since_last.total_seconds() < 82800:  # 23 hours
+                        hours_until_next = (82800 - time_since_last.total_seconds()) / 3600
+                        print(f"⏳ Skipping automated run - last run was {time_since_last.total_seconds()/3600:.1f} hours ago")
+                        print(f"   Next automated run in {hours_until_next:.1f} hours")
+                        return
+                except Exception as e:
+                    print(f"Error parsing last run time: {e}")
+            
+            # Update status to indicate check in progress
+            instance_id = f"{os.getenv('RAILWAY_REPLICA_ID', 'local')}_{os.getpid()}"
+            self.manager.update_service_status({
+                'check_in_progress': True,
+                'last_check_instance': instance_id,
+                'last_check_start': datetime.utcnow().isoformat()
+            })
+            
+            print(f"🔄 Starting email check cycle (instance: {instance_id})")
+            
+            try:
+                # Get all active email configurations
+                active_configs = self.manager.get_all_active_configs()
+                print(f"Found {len(active_configs)} active email configurations")
+                
+                for config in active_configs:
+                    try:
+                        self.check_monitor_email_account(config, send_webhooks=send_webhooks)
+                    except Exception as e:
+                        print(f"Error checking email account {config.get('email_address', 'Unknown')}: {e}")
+                
+                # Update status to indicate check completed
+                if send_webhooks:
+                    self.manager.update_service_status({
+                        'check_in_progress': False,
+                        'last_check_run': datetime.utcnow().isoformat(),
+                        'last_check_complete': datetime.utcnow().isoformat()
+                    })
+                
+                print(f"✅ Email check cycle completed")
+                
+            except Exception as e:
+                # Mark check as failed
+                self.manager.update_service_status({
+                    'check_in_progress': False,
+                    'last_check_error': str(e),
+                    'last_check_error_time': datetime.utcnow().isoformat()
+                })
+                raise
+                
         except Exception as e:
             print(f"Error in email check cycle: {e}")
     

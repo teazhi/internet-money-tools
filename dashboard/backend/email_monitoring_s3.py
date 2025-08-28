@@ -52,6 +52,11 @@ class EmailMonitoringS3Manager:
                 "created_by": None,
                 "created_at": None
             },
+            "service_status": {
+                "last_check_run": None,
+                "last_check_instance": None,
+                "check_in_progress": False
+            },
             "users": {}
         }
     
@@ -326,6 +331,29 @@ class EmailMonitoringS3Manager:
                 return self._save_data(data)
         
         return False
+    
+    def update_service_status(self, status_update: Dict) -> bool:
+        """Update service status in S3"""
+        data = self._load_data()
+        
+        if "service_status" not in data:
+            data["service_status"] = {
+                "last_check_run": None,
+                "last_check_instance": None,
+                "check_in_progress": False
+            }
+        
+        data["service_status"].update(status_update)
+        return self._save_data(data)
+    
+    def get_service_status(self) -> Dict:
+        """Get current service status"""
+        data = self._load_data()
+        return data.get("service_status", {
+            "last_check_run": None,
+            "last_check_instance": None,
+            "check_in_progress": False
+        })
     
     def get_stats(self) -> Dict:
         """Get email monitoring statistics"""

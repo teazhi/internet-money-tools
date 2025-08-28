@@ -357,76 +357,379 @@ def exchange_amazon_auth_code(auth_code):
         return None
 
 def get_dummy_users():
-    """Generate dummy users for demo purposes"""
+    """Generate dummy users for demo purposes with new organized schema"""
+    import uuid
+    
     return [
         {
-            "discord_id": "123456789012345678",
-            "discord_username": "DemoUser#1234",
-            "email": "demo@example.com",
-            "va_name": "Demo VA",
-            "user_type": "main",
-            "profile_configured": True,
-            "google_linked": True,
-            "sheet_configured": True,
-            "permissions": ["all"],
-            "sellerboard_orders_url": "https://demo.sellerboard.com/orders",
-            "sellerboard_stock_url": "https://demo.sellerboard.com/stock",
-            "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "google_tokens": {
-                "access_token": "dummy_access_token",
-                "refresh_token": "dummy_refresh_token",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "client_id": "dummy_client_id",
-                "client_secret": "dummy_client_secret"
+            "id": str(uuid.uuid4()),
+            "identity": {
+                "discord_id": "123456789012345678",
+                "discord_username": "DemoUser#1234",
+                "email": "demo@example.com",
+                "va_name": "Demo VA"
             },
-            "uploaded_files": [
-                {
-                    "filename": "orders_2024_01.csv",
-                    "upload_date": "2024-01-15T10:30:00Z",
-                    "file_size": 2048000,
-                    "s3_key": "demo/orders_2024_01.csv"
+            "account": {
+                "user_type": "main",
+                "parent_user_id": None,
+                "permissions": ["all"],
+                "status": "active",
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                "last_activity": (datetime.utcnow() - timedelta(hours=2)).isoformat()
+            },
+            "profile": {
+                "configured": True,
+                "setup_step": "completed"
+            },
+            "integrations": {
+                "google": {
+                    "linked": True,
+                    "tokens": {
+                        "access_token": "dummy_access_token",
+                        "refresh_token": "dummy_refresh_token",
+                        "expires_at": None,
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "client_id": "dummy_client_id",
+                        "client_secret": "dummy_client_secret"
+                    },
+                    "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "worksheet_title": "Demo Sheet",
+                    "column_mapping": {}
                 },
-                {
-                    "filename": "inventory_snapshot.xlsx",
-                    "upload_date": "2024-01-10T14:20:00Z",
-                    "file_size": 1024000,
-                    "s3_key": "demo/inventory_snapshot.xlsx"
+                "sellerboard": {
+                    "configured": True,
+                    "orders_url": "https://demo.sellerboard.com/orders",
+                    "stock_url": "https://demo.sellerboard.com/stock",
+                    "file_key": "demo_sellerboard.xlsx"
+                },
+                "amazon": {
+                    "configured": True,
+                    "listing_loader_key": "demo_listing.xlsm",
+                    "sp_api_connected": False
                 }
-            ],
-            "last_activity": (datetime.utcnow() - timedelta(hours=2)).isoformat(),
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": (datetime.utcnow() - timedelta(days=1)).isoformat()
+            },
+            "files": {
+                "uploaded_count": 2,
+                "storage_used_bytes": 3072000,
+                "recent_uploads": [
+                    {
+                        "filename": "orders_2024_01.csv",
+                        "upload_date": "2024-01-15T10:30:00Z",
+                        "file_size": 2048000,
+                        "s3_key": "demo/orders_2024_01.csv"
+                    }
+                ]
+            }
         },
         {
-            "discord_id": "234567890123456789",
-            "discord_username": "AdminDemo#5678",
-            "email": "admin@example.com",
-            "user_type": "admin",
-            "profile_configured": True,
-            "google_linked": True,
-            "sheet_configured": True,
-            "permissions": ["all"],
-            "sellerboard_orders_url": "https://demo.sellerboard.com/admin/orders",
-            "sellerboard_stock_url": "https://demo.sellerboard.com/admin/stock",
-            "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
-            "last_activity": (datetime.utcnow() - timedelta(minutes=30)).isoformat(),
-            "created_at": "2023-12-01T00:00:00Z",
-            "updated_at": datetime.utcnow().isoformat()
+            "id": str(uuid.uuid4()),
+            "identity": {
+                "discord_id": "234567890123456789",
+                "discord_username": "AdminDemo#5678",
+                "email": "admin@example.com",
+                "va_name": None
+            },
+            "account": {
+                "user_type": "admin", 
+                "parent_user_id": None,
+                "permissions": ["all"],
+                "status": "active",
+                "created_at": "2023-12-01T00:00:00Z",
+                "updated_at": datetime.utcnow().isoformat(),
+                "last_activity": (datetime.utcnow() - timedelta(minutes=30)).isoformat()
+            },
+            "profile": {
+                "configured": True,
+                "setup_step": "completed"
+            },
+            "integrations": {
+                "google": {
+                    "linked": True,
+                    "tokens": {},
+                    "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                    "worksheet_title": "Admin Sheet",
+                    "column_mapping": {}
+                },
+                "sellerboard": {
+                    "configured": True,
+                    "orders_url": "https://demo.sellerboard.com/admin/orders",
+                    "stock_url": "https://demo.sellerboard.com/admin/stock",
+                    "file_key": "admin_sellerboard.xlsx"
+                },
+                "amazon": {
+                    "configured": False,
+                    "listing_loader_key": None,
+                    "sp_api_connected": False
+                }
+            },
+            "files": {
+                "uploaded_count": 0,
+                "storage_used_bytes": 0,
+                "recent_uploads": []
+            }
         },
         {
-            "discord_id": "345678901234567890",
-            "discord_username": "VAUser#9012",
-            "email": "va@example.com",
-            "va_name": "Virtual Assistant",
-            "user_type": "subuser",
-            "parent_user_id": "123456789012345678",
-            "profile_configured": True,
-            "permissions": ["reimbursements_analysis"],
-            "last_activity": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
-            "created_at": "2024-01-05T00:00:00Z",
-            "updated_at": (datetime.utcnow() - timedelta(hours=6)).isoformat()
+            "id": str(uuid.uuid4()),
+            "identity": {
+                "discord_id": "345678901234567890",
+                "discord_username": "VAUser#9012",
+                "email": "va@example.com",
+                "va_name": "Virtual Assistant"
+            },
+            "account": {
+                "user_type": "subuser",
+                "parent_user_id": "123456789012345678",
+                "permissions": ["reimbursements_analysis"],
+                "status": "active",
+                "created_at": "2024-01-05T00:00:00Z",
+                "updated_at": (datetime.utcnow() - timedelta(hours=6)).isoformat(),
+                "last_activity": (datetime.utcnow() - timedelta(hours=1)).isoformat()
+            },
+            "profile": {
+                "configured": True,
+                "setup_step": "completed"
+            },
+            "integrations": {
+                "google": {
+                    "linked": False,
+                    "tokens": {},
+                    "sheet_id": None,
+                    "worksheet_title": None,
+                    "column_mapping": {}
+                },
+                "sellerboard": {
+                    "configured": False,
+                    "orders_url": None,
+                    "stock_url": None,
+                    "file_key": None
+                },
+                "amazon": {
+                    "configured": False,
+                    "listing_loader_key": None,
+                    "sp_api_connected": False
+                }
+            },
+            "files": {
+                "uploaded_count": 0,
+                "storage_used_bytes": 0,
+                "recent_uploads": []
+            }
         }
     ]
+
+def migrate_user_to_new_schema(old_user):
+    """Migrate a user from old flat schema to new organized schema"""
+    import uuid
+    
+    # Generate UUID if not exists
+    user_id = old_user.get('id', str(uuid.uuid4()))
+    
+    # Organize into new schema
+    new_user = {
+        "id": user_id,
+        "identity": {
+            "discord_id": str(old_user.get("discord_id", "")),
+            "discord_username": old_user.get("discord_username"),
+            "email": old_user.get("email"),
+            "va_name": old_user.get("va_name")
+        },
+        "account": {
+            "user_type": old_user.get("user_type", "main"),
+            "parent_user_id": old_user.get("parent_user_id"),
+            "permissions": old_user.get("permissions", []),
+            "status": old_user.get("status", "active"),
+            "created_at": old_user.get("created_at", datetime.utcnow().isoformat()),
+            "updated_at": old_user.get("updated_at", datetime.utcnow().isoformat()),
+            "last_activity": old_user.get("last_activity", datetime.utcnow().isoformat())
+        },
+        "profile": {
+            "configured": old_user.get("profile_configured", False),
+            "setup_step": "completed" if old_user.get("profile_configured") else "initial"
+        },
+        "integrations": {
+            "google": {
+                "linked": old_user.get("google_linked", False),
+                "tokens": old_user.get("google_tokens", {}),
+                "sheet_id": old_user.get("sheet_id"),
+                "worksheet_title": old_user.get("worksheet_title"),
+                "column_mapping": old_user.get("column_mapping", {})
+            },
+            "sellerboard": {
+                "configured": bool(old_user.get("sellerboard_orders_url") or old_user.get("sb_file_key")),
+                "orders_url": old_user.get("sellerboard_orders_url"),
+                "stock_url": old_user.get("sellerboard_stock_url"),
+                "file_key": old_user.get("sb_file_key")
+            },
+            "amazon": {
+                "configured": bool(old_user.get("listing_loader_key")),
+                "listing_loader_key": old_user.get("listing_loader_key"),
+                "sp_api_connected": old_user.get("sp_api_connected", False)
+            }
+        },
+        "files": {
+            "uploaded_count": len(old_user.get("uploaded_files", [])),
+            "storage_used_bytes": sum(f.get("file_size", 0) for f in old_user.get("uploaded_files", [])),
+            "recent_uploads": old_user.get("uploaded_files", [])[-5:]  # Keep last 5
+        }
+    }
+    
+    return new_user
+
+def is_new_schema(user):
+    """Check if user data is in new organized schema"""
+    return "identity" in user and "account" in user and "integrations" in user
+
+def normalize_user(user):
+    """Ensure user is in new schema format"""
+    if is_new_schema(user):
+        return user
+    return migrate_user_to_new_schema(user)
+
+def get_user_field(user, field_path):
+    """Get field from user using dot notation (e.g., 'identity.discord_id')"""
+    user = normalize_user(user)
+    
+    parts = field_path.split('.')
+    current = user
+    
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return None
+    
+    return current
+
+def set_user_field(user, field_path, value):
+    """Set field in user using dot notation"""
+    user = normalize_user(user)
+    
+    parts = field_path.split('.')
+    current = user
+    
+    for part in parts[:-1]:
+        if part not in current:
+            current[part] = {}
+        current = current[part]
+    
+    current[parts[-1]] = value
+    return user
+
+def migrate_all_users_to_new_schema():
+    """Migrate all users from old schema to new organized schema"""
+    if DEMO_MODE:
+        return True, "Demo mode - no migration needed"
+    
+    try:
+        # Load raw users data without schema normalization
+        s3_client = get_s3_client()
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        users = config_data.get("users", [])
+        
+        # Check if migration is needed
+        needs_migration = any(not is_new_schema(user) for user in users)
+        if not needs_migration:
+            return True, "All users already in new schema format"
+        
+        # Migrate users
+        migrated_users = []
+        for user in users:
+            if is_new_schema(user):
+                migrated_users.append(user)
+            else:
+                migrated_users.append(migrate_user_to_new_schema(user))
+        
+        # Create backup of old data
+        backup_key = f"{USERS_CONFIG_KEY}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=backup_key,
+            Body=json.dumps({"users": users}, indent=2),
+            ContentType='application/json'
+        )
+        
+        # Save migrated data
+        new_config = {
+            "version": "2.0",
+            "migrated_at": datetime.utcnow().isoformat(),
+            "users": migrated_users
+        }
+        
+        s3_client.put_object(
+            Bucket=CONFIG_S3_BUCKET,
+            Key=USERS_CONFIG_KEY,
+            Body=json.dumps(new_config, indent=2),
+            ContentType='application/json'
+        )
+        
+        # Clear cache to force reload
+        cache_key = f"config_{USERS_CONFIG_KEY}"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+        
+        # Clear user session caches
+        user_session_cache.clear()
+        
+        return True, f"Successfully migrated {len(migrated_users)} users to new schema. Backup saved as {backup_key}"
+        
+    except Exception as e:
+        return False, f"Migration failed: {str(e)}"
+
+# Convenience functions for common user field access patterns
+def get_user_discord_id(user):
+    """Get user's discord ID from any schema"""
+    return get_user_field(user, 'identity.discord_id') or user.get('discord_id')
+
+def get_user_email(user):
+    """Get user's email from any schema"""
+    return get_user_field(user, 'identity.email') or user.get('email')
+
+def get_user_type(user):
+    """Get user's type from any schema"""
+    return get_user_field(user, 'account.user_type') or user.get('user_type', 'main')
+
+def get_user_permissions(user):
+    """Get user's permissions from any schema"""
+    return get_user_field(user, 'account.permissions') or user.get('permissions', [])
+
+def get_user_google_tokens(user):
+    """Get user's Google tokens from any schema"""
+    return get_user_field(user, 'integrations.google.tokens') or user.get('google_tokens', {})
+
+def get_user_sheet_id(user):
+    """Get user's Google Sheet ID from any schema"""
+    return get_user_field(user, 'integrations.google.sheet_id') or user.get('sheet_id')
+
+def get_user_parent_id(user):
+    """Get user's parent ID from any schema"""
+    return get_user_field(user, 'account.parent_user_id') or user.get('parent_user_id')
+
+def is_user_configured(user):
+    """Check if user profile is configured"""
+    return get_user_field(user, 'profile.configured') or user.get('profile_configured', False)
+
+# Update user field convenience functions
+def set_user_google_tokens(user, tokens):
+    """Set user's Google tokens in correct schema location"""
+    return set_user_field(user, 'integrations.google.tokens', tokens)
+
+def set_user_sheet_config(user, sheet_id, worksheet_title=None, column_mapping=None):
+    """Set user's Google Sheet configuration"""
+    user = set_user_field(user, 'integrations.google.sheet_id', sheet_id)
+    if worksheet_title:
+        user = set_user_field(user, 'integrations.google.worksheet_title', worksheet_title)
+    if column_mapping:
+        user = set_user_field(user, 'integrations.google.column_mapping', column_mapping)
+    return user
+
+def mark_user_configured(user, configured=True):
+    """Mark user as configured or not"""
+    user = set_user_field(user, 'profile.configured', configured)
+    if configured:
+        user = set_user_field(user, 'profile.setup_step', 'completed')
+    return user
 
 def get_dummy_analytics_data(target_date):
     """Generate dummy analytics data for demo purposes"""
@@ -1115,14 +1418,22 @@ def get_users_config():
         config_data = json.loads(response['Body'].read().decode('utf-8'))
         users = config_data.get("users", [])
         
-        # Validate and fix token data for all users to prevent NoneType arithmetic errors
+        # Normalize all users to new schema and validate tokens
+        normalized_users = []
         for user in users:
-            if user.get("google_tokens"):
-                user["google_tokens"] = validate_and_fix_token_data(user["google_tokens"])
+            normalized_user = normalize_user(user)
+            
+            # Validate and fix token data in new schema location
+            google_tokens = get_user_field(normalized_user, 'integrations.google.tokens')
+            if google_tokens:
+                fixed_tokens = validate_and_fix_token_data(google_tokens)
+                set_user_field(normalized_user, 'integrations.google.tokens', fixed_tokens)
+            
+            normalized_users.append(normalized_user)
         
         # Cache the result to reduce future S3 reads
-        config_cache[cache_key] = (users, datetime.now())
-        return users
+        config_cache[cache_key] = (normalized_users, datetime.now())
+        return normalized_users
     except Exception as e:
         pass  # Error fetching users config
         return []
@@ -1150,7 +1461,18 @@ def get_user_config(user_id):
 
 def update_users_config(users):
     s3_client = get_s3_client()
-    config_data = json.dumps({"users": users}, indent=2)
+    
+    # Ensure all users are in new schema format
+    normalized_users = []
+    for user in users:
+        normalized_users.append(normalize_user(user))
+    
+    # Save in new organized format with version info
+    config_data = {
+        "version": "2.0",
+        "last_updated": datetime.utcnow().isoformat(),
+        "users": normalized_users
+    }
     
     # About to save users to S3
     
@@ -1158,7 +1480,7 @@ def update_users_config(users):
         result = s3_client.put_object(
             Bucket=CONFIG_S3_BUCKET, 
             Key=USERS_CONFIG_KEY, 
-            Body=config_data,
+            Body=json.dumps(config_data, indent=2),
             ContentType='application/json'
         )
         # Users configuration updated successfully
@@ -1169,9 +1491,13 @@ def update_users_config(users):
             del config_cache[cache_key]
         
         # Invalidate user session caches for all affected users
-        for user in users:
-            if user.get("id"):
-                invalidate_user_cache(user.get("id"))
+        for user in normalized_users:
+            user_id = get_user_field(user, 'id')
+            discord_id = get_user_field(user, 'identity.discord_id')
+            if user_id:
+                invalidate_user_cache(user_id)
+            if discord_id:
+                invalidate_user_cache(discord_id)
         
         # Skip verification read to reduce S3 costs - put_object is reliable
         # Previous verification step removed to reduce S3 GET requests
@@ -1601,14 +1927,22 @@ def get_user_record(discord_id):
     except (ValueError, TypeError):
         discord_id_int = None
     
-    # Try to find user with either string or integer ID
-    user = next((u for u in users if str(u.get("discord_id")) == discord_id_str), None)
-    if not user and discord_id_int is not None:
-        user = next((u for u in users if u.get("discord_id") == discord_id_int), None)
+    # Try to find user with either string or integer ID (works with both old and new schema)
+    user = None
+    for u in users:
+        user_discord_id = get_user_field(u, 'identity.discord_id') or u.get('discord_id')
+        if str(user_discord_id) == discord_id_str:
+            user = u
+            break
+        if discord_id_int is not None and user_discord_id == discord_id_int:
+            user = u
+            break
     
-    # If found, normalize the discord_id to string in the record
-    if user and str(user.get("discord_id")) != discord_id_str:
-        user["discord_id"] = discord_id_str
+    # Normalize the user to new schema and ensure discord_id is string
+    if user:
+        user = normalize_user(user)
+        # Ensure discord_id is consistently a string
+        set_user_field(user, 'identity.discord_id', discord_id_str)
     
     return user
 
@@ -4845,6 +5179,28 @@ def admin_delete_user(user_id):
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/migrate-users-schema', methods=['POST'])
+@admin_required 
+def admin_migrate_users_schema():
+    """Migrate all users from old flat schema to new organized schema"""
+    try:
+        success, message = migrate_all_users_to_new_schema()
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': message
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f"Migration error: {str(e)}"
+        }), 500
 
 @app.route('/api/admin/impersonate/<user_id>', methods=['POST'])
 @admin_required  
@@ -8111,9 +8467,9 @@ def init_feature_flags():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 -- Custom format patterns for email parsing
-                subject_pattern TEXT DEFAULT '\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
-                asin_pattern TEXT DEFAULT '\(ASIN:\s*([B0-9A-Z]{10})\)',
-                retailer_pattern TEXT DEFAULT '\[([^\]]+)\]\s*Alert:',
+                subject_pattern TEXT DEFAULT '\\[([^\\]]+)\\]\\s*Alert:\\s*[^\\(]*\\(ASIN:\\s*([B0-9A-Z]{10})\\)',
+                asin_pattern TEXT DEFAULT '\\(ASIN:\\s*([B0-9A-Z]{10})\\)',
+                retailer_pattern TEXT DEFAULT '\\[([^\\]]+)\\]\\s*Alert:',
                 sender_filter TEXT DEFAULT 'alert@distill.io'
             )
         ''')
@@ -8124,15 +8480,15 @@ def init_feature_flags():
             columns = [col[1] for col in init_cursor.fetchall()]
             
             if 'subject_pattern' not in columns:
-                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN subject_pattern TEXT DEFAULT \'\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)\'')
+                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN subject_pattern TEXT DEFAULT \'\\\\[([^\\\\]]+)\\\\]\\\\s*Alert:.*?\\\\(ASIN:\\\\s*([B0-9A-Z]{10})\\\\)\'')
                 print("Added subject_pattern column to discount_email_config")
             
             if 'asin_pattern' not in columns:
-                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN asin_pattern TEXT DEFAULT \'\\(ASIN:\\s*([B0-9A-Z]{10})\\)\'')
+                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN asin_pattern TEXT DEFAULT \'\\\\(ASIN:\\\\s*([B0-9A-Z]{10})\\\\)\'')
                 print("Added asin_pattern column to discount_email_config")
             
             if 'retailer_pattern' not in columns:
-                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN retailer_pattern TEXT DEFAULT \'\\[([^\\]]+)\\]\\s*Alert:\'')
+                init_cursor.execute('ALTER TABLE discount_email_config ADD COLUMN retailer_pattern TEXT DEFAULT \'\\\\[([^\\\\]]+)\\\\]\\\\s*Alert:\'')
                 print("Added retailer_pattern column to discount_email_config")
             
             if 'sender_filter' not in columns:

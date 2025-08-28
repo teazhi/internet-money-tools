@@ -124,28 +124,75 @@ class RefundEmailMonitorS3:
             print(f"Error decoding refund email header '{header}': {e}")
             return str(header) if header else ""
     
-    def refund_matches_rule(self, email_msg: Dict, rule: Dict) -> bool:
+    def refund_matches_rule(self, email_msg: Dict, rule: Dict, debug: bool = False) -> bool:
         """Check if refund email matches monitoring rule"""
         try:
             subject = email_msg.get('subject', '').lower()
             sender = email_msg.get('sender', '').lower() 
             content = email_msg.get('html_content', '').lower()
             
+            if debug:
+                print(f"    🔍 Rule matching debug:")
+                print(f"      Email subject (lowercase): '{subject}'")
+                print(f"      Email sender (lowercase): '{sender}'")
+                print(f"      Email content length: {len(content)} chars")
+                if content:
+                    print(f"      Email content preview: '{content[:100]}...'")
+            
             # Check sender filter
             sender_filter = rule.get('sender_filter', '').lower().strip()
+            if debug:
+                print(f"      Sender filter: '{sender_filter}' (empty = match all)")
+                
             if sender_filter and sender_filter not in sender:
+                if debug:
+                    print(f"      ❌ Sender filter failed: '{sender_filter}' not in '{sender}'")
                 return False
+            elif debug and sender_filter:
+                print(f"      ✅ Sender filter passed: '{sender_filter}' found in '{sender}'")
+            elif debug:
+                print(f"      ✅ Sender filter skipped (empty)")
             
             # Check subject filter
             subject_filter = rule.get('subject_filter', '').lower().strip()
+            if debug:
+                print(f"      Subject filter: '{subject_filter}' (empty = match all)")
+                
             if subject_filter and subject_filter not in subject:
+                if debug:
+                    print(f"      ❌ Subject filter failed: '{subject_filter}' not in '{subject}'")
                 return False
+            elif debug and subject_filter:
+                print(f"      ✅ Subject filter passed: '{subject_filter}' found in '{subject}'")
+            elif debug:
+                print(f"      ✅ Subject filter skipped (empty)")
                 
             # Check content filter
             content_filter = rule.get('content_filter', '').lower().strip()
+            if debug:
+                print(f"      Content filter: '{content_filter}' (empty = match all)")
+                
             if content_filter and content_filter not in content:
+                if debug:
+                    print(f"      ❌ Content filter failed: '{content_filter}' not found in content")
+                    # Show where we're looking for the content
+                    if content:
+                        if 'yankee' in content_filter and 'yankee' in content:
+                            yankee_pos = content.find('yankee')
+                            print(f"      📍 'yankee' found at position {yankee_pos}")
+                            print(f"      📍 Context: '{content[max(0, yankee_pos-50):yankee_pos+50]}'")
+                        if 'candle' in content_filter and 'candle' in content:
+                            candle_pos = content.find('candle')
+                            print(f"      📍 'candle' found at position {candle_pos}")  
+                            print(f"      📍 Context: '{content[max(0, candle_pos-50):candle_pos+50]}'")
                 return False
+            elif debug and content_filter:
+                print(f"      ✅ Content filter passed: '{content_filter}' found in content")
+            elif debug:
+                print(f"      ✅ Content filter skipped (empty)")
             
+            if debug:
+                print(f"    🎉 EMAIL MATCHES ALL RULE CONDITIONS!")
             return True
             
         except Exception as e:
@@ -281,18 +328,29 @@ class RefundEmailMonitorS3:
                 self.refund_update_last_checked(discord_id, email_address)
                 return
             
+            print(f"🔍 DEBUG: Found {len(rules)} rules for user {discord_id}")
+            for i, rule in enumerate(rules):
+                print(f"  Rule {i+1}: '{rule.get('rule_name', 'Unknown')}'")
+                print(f"    - Sender filter: '{rule.get('sender_filter', '')}'")
+                print(f"    - Subject filter: '{rule.get('subject_filter', '')}'")
+                print(f"    - Content filter: '{rule.get('content_filter', '')}'")
+                print(f"    - Is active: {rule.get('is_active', True)}")
+            
             matched_count = 0
             
             # Check each message against rules
+            processed_count = 0
             for message in messages:
                 try:
                     message_id = message['id']
+                    processed_count += 1
                     
                     # Get full message details
                     message_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
                     msg_response = requests.get(message_url, headers=headers)
                     
                     if not msg_response.ok:
+                        print(f"❌ Failed to get message {message_id}: {msg_response.status_code}")
                         continue
                         
                     email_data = msg_response.json()
@@ -315,10 +373,12 @@ class RefundEmailMonitorS3:
                             date = value
                     
                     if not subject:
+                        print(f"⚠️  Skipping message {message_id}: No subject found")
                         continue
                         
                     # Extract email content
                     html_content = self.refund_extract_email_content(email_data.get('payload', {}))
+                    content_length = len(html_content) if html_content else 0
                     
                     email_msg = {
                         'subject': subject,
@@ -328,12 +388,35 @@ class RefundEmailMonitorS3:
                         'message_id': message_id
                     }
                     
+                    # Debug first few emails in detail
+                    if processed_count <= 3:
+                        print(f"🔍 DEBUG Email {processed_count}/{len(messages)}:")
+                        print(f"  Message ID: {message_id}")
+                        print(f"  Subject: '{subject}'")
+                        print(f"  From: '{sender}'")
+                        print(f"  Date: '{date}'")
+                        print(f"  Content length: {content_length} chars")
+                        if html_content:
+                            # Show first 200 chars of content
+                            content_preview = html_content[:200].replace('\n', ' ').replace('\r', ' ')
+                            print(f"  Content preview: '{content_preview}...'")
+                    
                     # Check against all active rules
                     for rule in rules:
                         if not rule.get('is_active', True):
+                            print(f"⚠️  Skipping inactive rule: {rule.get('rule_name', 'Unknown')}")
                             continue
                             
-                        if self.refund_matches_rule(email_msg, rule):
+                        # Debug the matching process for first few emails
+                        if processed_count <= 3:
+                            print(f"🔍 Checking email {processed_count} against rule '{rule.get('rule_name', 'Unknown')}':")
+                        
+                        match_result = self.refund_matches_rule(email_msg, rule, debug=(processed_count <= 3))
+                        
+                        if processed_count <= 3:
+                            print(f"  Final match result: {match_result}")
+                            
+                        if match_result:
                             matched_count += 1
                             
                             print(f"📧 Refund email matched rule '{rule.get('rule_name', 'Unknown')}':")

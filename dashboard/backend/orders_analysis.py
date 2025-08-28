@@ -822,24 +822,47 @@ class EnhancedOrdersAnalysis:
     def get_recent_2_months_purchases(self, asin: str, purchase_analytics: Dict) -> int:
         """Get the quantity purchased for this ASIN in the last 2 months (from last 2 worksheets)"""
         if not purchase_analytics:
+            print(f"DEBUG: ASIN {asin} - No purchase analytics available")
             return 0
         
+        # Debug: Check what keys are available in purchase analytics
+        if asin == 'B0017TF1E8':
+            print(f"DEBUG: ASIN {asin} - Purchase analytics keys: {list(purchase_analytics.keys())}")
+            
         # First check the dedicated recent 2 months purchases data
         recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
+        if asin == 'B0017TF1E8':
+            print(f"DEBUG: ASIN {asin} - Recent 2 months data keys: {list(recent_2_months_data.keys())}")
+            print(f"DEBUG: ASIN {asin} - ASIN in recent_2_months_data: {asin in recent_2_months_data}")
+            
         if asin in recent_2_months_data:
             qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
+            if asin == 'B0017TF1E8':
+                print(f"DEBUG: ASIN {asin} - Found in recent_2_months_data, qty: {qty_purchased}")
             return qty_purchased
         
         # Fallback to velocity analysis approach
         velocity_analysis = purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
+        if asin == 'B0017TF1E8':
+            print(f"DEBUG: ASIN {asin} - Velocity analysis available: {bool(velocity_analysis)}")
+            if velocity_analysis:
+                print(f"DEBUG: ASIN {asin} - Velocity analysis data: {velocity_analysis}")
+                
         if velocity_analysis:
             days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
+            
+            if asin == 'B0017TF1E8':
+                print(f"DEBUG: ASIN {asin} - Days since last purchase: {days_since_last}")
             
             # If purchased within the last 2 months (last 60 days), return the last purchase quantity
             if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
+                if asin == 'B0017TF1E8':
+                    print(f"DEBUG: ASIN {asin} - Within 60 days, returning qty: {qty}")
                 return qty
         
+        if asin == 'B0017TF1E8':
+            print(f"DEBUG: ASIN {asin} - No recent purchases found, returning 0")
         return 0
     
     def get_direct_stock_value(self, stock_df: pd.DataFrame, asin: str) -> float:

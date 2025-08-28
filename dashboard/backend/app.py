@@ -7450,6 +7450,12 @@ def analyze_discount_opportunities():
                 days_left = restock_data.get('days_left', None)
                 recent_purchases = restock_data.get('monthly_purchase_adjustment', 0)
                 
+                # Additional debugging for recent purchases
+                if asin == 'B0017TF1E8':
+                    print(f"DEBUG: ASIN {asin} detailed restock_data: {restock_data}")
+                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment value: {restock_data.get('monthly_purchase_adjustment')}")
+                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment type: {type(restock_data.get('monthly_purchase_adjustment'))}")
+                
                 # Determine if restocking is needed
                 needs_restock = suggested_quantity > 0
                 

@@ -14417,7 +14417,7 @@ def control_email_monitoring_service():
 
 @app.route('/api/admin/discount-email/config', methods=['GET'])
 @admin_required
-def get_discount_email_config():
+def get_discount_email_config_status():
     """Get current discount opportunities email configuration"""
     try:
         local_conn = sqlite3.connect(DATABASE_FILE)
@@ -14721,30 +14721,37 @@ def complete_discount_gmail_oauth():
 def get_discount_email_format_patterns():
     """Get current discount email format patterns"""
     try:
-        admin_config = get_admin_gmail_config()
-        print(f"[DEBUG] admin_config type: {type(admin_config)}, value: {admin_config}")
+        # Get config directly from S3/database without circular dependency
+        discount_config = get_discount_email_config()
         
-        if not admin_config:
-            # Return default patterns if no config exists
-            patterns = {
-                'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
-                'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
-                'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
-                'sender_filter': 'alert@distill.io'
-            }
-        else:
-            patterns = {
-                'subject_pattern': admin_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)'),
-                'asin_pattern': admin_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)'),
-                'retailer_pattern': admin_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:'),
-                'sender_filter': admin_config.get('sender_filter', 'alert@distill.io')
-            }
+        # Return default patterns if no config exists
+        patterns = {
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
+            'sender_filter': 'alert@distill.io'
+        }
+        
+        # Override with saved patterns if config exists
+        if discount_config and isinstance(discount_config, dict):
+            patterns.update({
+                'subject_pattern': discount_config.get('subject_pattern', patterns['subject_pattern']),
+                'asin_pattern': discount_config.get('asin_pattern', patterns['asin_pattern']),
+                'retailer_pattern': discount_config.get('retailer_pattern', patterns['retailer_pattern']),
+                'sender_filter': discount_config.get('sender_filter', patterns['sender_filter'])
+            })
             
         return jsonify(patterns)
         
     except Exception as e:
         print(f"Error getting format patterns: {e}")
-        return jsonify({'error': 'Failed to get format patterns'}), 500
+        # Return defaults if there's an error
+        return jsonify({
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
+            'sender_filter': 'alert@distill.io'
+        })
 
 @app.route('/api/admin/discount-email/format-patterns', methods=['PUT'])
 @admin_required
@@ -14772,7 +14779,7 @@ def update_discount_email_format_patterns():
             return jsonify({'error': f'Invalid regex pattern: {str(e)}'}), 400
         
         # Get existing config or create new one
-        admin_config = get_admin_gmail_config()
+        existing_config = get_discount_email_config() or {}
         
         # Prepare config data
         config_data = {
@@ -14784,12 +14791,12 @@ def update_discount_email_format_patterns():
         }
         
         # Preserve existing email configuration if it exists
-        if admin_config:
+        if existing_config:
             config_data.update({
-                'email_address': admin_config.get('email_address'),
-                'gmail_email': admin_config.get('gmail_email'),
-                'connected_at': admin_config.get('connected_at'),
-                'tokens': admin_config.get('tokens')
+                'email_address': existing_config.get('email_address'),
+                'gmail_email': existing_config.get('gmail_email'),
+                'connected_at': existing_config.get('connected_at'),
+                'tokens': existing_config.get('tokens')
             })
         
         # Save to S3

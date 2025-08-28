@@ -134,26 +134,6 @@ const RetailerLeadAnalysis = () => {
     return passesRecommendationFilter && passesSearchFilter && passesKeywordFilter;
   }) || [];
 
-  const handleSyncLeads = async () => {
-    setSyncLoading(true);
-    setSyncResults(null);
-    setError('');
-
-    try {
-      // This now syncs leads from user's connected sheet to the target spreadsheet
-      const response = await axios.post('/api/retailer-leads/sync-to-sheets', {
-        default_worksheet: defaultWorksheetForNoSource
-      }, { 
-        withCredentials: true 
-      });
-
-      setSyncResults(response.data);
-    } catch (error) {
-      setError(error.response?.data?.message || error.response?.data?.error || 'Failed to sync leads to spreadsheet');
-    } finally {
-      setSyncLoading(false);
-    }
-  };
 
   // Table configuration for StandardTable
   const getTableColumns = () => {

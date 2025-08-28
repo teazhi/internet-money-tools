@@ -2814,7 +2814,7 @@ def get_discount_email_config():
             'gmail_email': 'demo@distill.io',
             'connected_at': '2024-01-01T00:00:00Z',
             'is_s3_config': True,
-            'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
             'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
             'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
             'sender_filter': 'alert@distill.io'
@@ -2839,7 +2839,7 @@ def get_discount_email_config():
             config_cache[cache_key] = (config_data, datetime.now())
             
             # Ensure required fields exist with defaults
-            config_data.setdefault('subject_pattern', r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)')
+            config_data.setdefault('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)')
             config_data.setdefault('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)')
             config_data.setdefault('retailer_pattern', r'\[([^\]]+)\]\s*Alert:')
             config_data.setdefault('sender_filter', 'alert@distill.io')
@@ -2921,7 +2921,7 @@ def get_admin_gmail_config():
                 'connected_at': last_updated,
                 'is_database_config': True,
                 # Add custom format patterns with fallback defaults
-                'subject_pattern': subject_pattern or r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+                'subject_pattern': subject_pattern or r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
                 'asin_pattern': asin_pattern or r'\(ASIN:\s*([B0-9A-Z]{10})\)',
                 'retailer_pattern': retailer_pattern or r'\[([^\]]+)\]\s*Alert:',
                 'sender_filter': sender_filter or 'alert@distill.io'
@@ -8111,7 +8111,7 @@ def init_feature_flags():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 -- Custom format patterns for email parsing
-                subject_pattern TEXT DEFAULT '\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+                subject_pattern TEXT DEFAULT '\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
                 asin_pattern TEXT DEFAULT '\(ASIN:\s*([B0-9A-Z]{10})\)',
                 retailer_pattern TEXT DEFAULT '\[([^\]]+)\]\s*Alert:',
                 sender_filter TEXT DEFAULT 'alert@distill.io'
@@ -10170,18 +10170,26 @@ def sync_leads_to_sheets():
 def fetch_discount_email_alerts():
     """Fetch recent email alerts from admin-configured email using IMAP or Gmail API"""
     try:
-        # Get admin email configuration - database first, then legacy Gmail
-        admin_gmail_config = get_admin_gmail_config()
+        # Get email configuration from S3 first to avoid reverting on redeploy
+        discount_email_config = get_discount_email_config()
         
-        if admin_gmail_config and admin_gmail_config.get('is_database_config'):
-            # Check configuration type from database
+        # If S3 config exists and has email settings, use it
+        if discount_email_config and discount_email_config.get('email_address'):
+            admin_gmail_config = discount_email_config
+            admin_gmail_config['is_s3_config'] = True
+        else:
+            # Fallback to legacy database configuration
+            admin_gmail_config = get_admin_gmail_config()
+        
+        if admin_gmail_config and (admin_gmail_config.get('is_database_config') or admin_gmail_config.get('is_s3_config')):
+            # Check configuration type from database or S3
             config_type = admin_gmail_config.get('config_type', 'gmail_oauth')
             if config_type == 'imap':
-                print(f"[DEBUG] ✅ Using IMAP configuration for discount email")
+                print(f"[DEBUG] ✅ Using IMAP configuration for discount email (S3: {admin_gmail_config.get('is_s3_config', False)})")
                 print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
                 return fetch_discount_alerts_from_imap(admin_gmail_config)
             else:  # gmail_oauth
-                print(f"[DEBUG] ✅ Using Gmail OAuth configuration for discount email")
+                print(f"[DEBUG] ✅ Using Gmail OAuth configuration for discount email (S3: {admin_gmail_config.get('is_s3_config', False)})")
                 print(f"[DEBUG] Email: {admin_gmail_config.get('email_address')}")
                 return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
@@ -10356,9 +10364,9 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         days_back = get_discount_email_days_back()
         from datetime import datetime, timedelta
         
-        # Get email format configuration from admin settings
-        admin_config = get_admin_gmail_config()
-        sender_filter = admin_config.get('sender_filter', 'alert@distill.io') if admin_config else 'alert@distill.io'
+        # Get email format configuration from S3-based discount config 
+        discount_config = get_discount_email_config()
+        sender_filter = discount_config.get('sender_filter', 'alert@distill.io') if discount_config else 'alert@distill.io'
         
         # Build search query using configurable sender filter
         query = f'from:{sender_filter}'
@@ -10433,8 +10441,8 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 # Extract ASIN using configurable pattern from admin settings
                 asin = None
                 
-                # Get custom patterns from admin config
-                asin_pattern = admin_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)') if admin_config else r'\(ASIN:\s*([B0-9A-Z]{10})\)'
+                # Get custom patterns from discount config (S3-based)
+                asin_pattern = discount_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)') if discount_config else r'\(ASIN:\s*([B0-9A-Z]{10})\)'
                 
                 # Extract ASIN from subject line using custom pattern
                 asin_match = re.search(asin_pattern, subject, re.IGNORECASE)
@@ -10470,8 +10478,8 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 # Extract retailer using configurable pattern from admin settings
                 retailer = 'Unknown'
                 
-                # Get custom retailer pattern from admin config
-                retailer_pattern = admin_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:') if admin_config else r'\[([^\]]+)\]\s*Alert:'
+                # Get custom retailer pattern from discount config (S3-based)
+                retailer_pattern = discount_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:') if discount_config else r'\[([^\]]+)\]\s*Alert:'
                 retailer_match = re.search(retailer_pattern, subject, re.IGNORECASE)
                 
                 if retailer_match:
@@ -14484,52 +14492,71 @@ def get_discount_email_config_status():
 @app.route('/api/admin/discount-email/config', methods=['POST'])
 @admin_required
 def update_discount_email_config():
-    """Update discount opportunities email configuration"""
+    """Update discount opportunities email configuration - now saves to S3"""
     try:
         data = request.get_json()
-        required_fields = ['email_address', 'imap_server', 'username', 'password']
+        
+        # Handle both IMAP and Gmail OAuth configurations
+        if data.get('config_type') == 'gmail_oauth':
+            required_fields = ['email_address', 'config_type']
+        else:
+            required_fields = ['email_address', 'imap_server', 'username', 'password', 'config_type']
         
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
-        # Encrypt password
-        encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
+        # Get existing configuration to preserve format patterns
+        existing_config = get_discount_email_config() or {}
         
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        # Prepare configuration data for S3
+        config_data = {
+            'email_address': data['email_address'],
+            'config_type': data.get('config_type', 'gmail_oauth'),
+            'is_active': True,
+            'created_by': session.get('discord_id'),
+            'created_at': datetime.now().isoformat(),
+            'last_updated': datetime.now().isoformat(),
+            # Preserve existing format patterns
+            'subject_pattern': existing_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)'),
+            'asin_pattern': existing_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)'),
+            'retailer_pattern': existing_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:'),
+            'sender_filter': existing_config.get('sender_filter', 'alert@distill.io')
+        }
         
-        # Deactivate any existing configurations
-        local_cursor.execute('''
-            UPDATE discount_email_config 
-            SET is_active = 0 
-            WHERE is_active = 1
-        ''')
+        if data.get('config_type') == 'imap':
+            # Encrypt password for IMAP
+            encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
+            config_data.update({
+                'imap_server': data['imap_server'],
+                'imap_port': data.get('imap_port', 993),
+                'username': data['username'],
+                'password_encrypted': encrypted_password
+            })
+        elif data.get('config_type') == 'gmail_oauth':
+            config_data.update({
+                'gmail_email': data['email_address'],
+                'tokens': data.get('tokens', {}),
+                'connected_at': data.get('connected_at', datetime.now().isoformat())
+            })
         
-        # Insert new configuration
-        local_cursor.execute('''
-            INSERT INTO discount_email_config 
-            (email_address, imap_server, imap_port, username, password_encrypted, is_active, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['email_address'],
-            data['imap_server'],
-            data.get('imap_port', 993),
-            data['username'],
-            encrypted_password,
-            1,
-            session['discord_id']
-        ))
+        # Save to S3
+        success = save_discount_email_config(config_data)
         
-        local_conn.commit()
-        local_conn.close()
+        if not success:
+            return jsonify({'error': 'Failed to save configuration to S3'}), 500
         
+        # Clear cache to force refresh
+        cache_key = f"config_discount_email_config"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+            
         # Clear discount opportunities cache to force refresh with new email
         if 'discount_opportunities_cache' in globals():
             global discount_opportunities_cache
             discount_opportunities_cache = {}
         
-        return jsonify({'message': 'Discount email configuration updated successfully'})
+        return jsonify({'message': 'Discount email configuration saved to S3 successfully'})
         
     except Exception as e:
         print(f"Error updating discount email config: {e}")
@@ -14726,7 +14753,7 @@ def get_discount_email_format_patterns():
         
         # Return default patterns if no config exists
         patterns = {
-            'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
             'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
             'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
             'sender_filter': 'alert@distill.io'
@@ -14747,11 +14774,49 @@ def get_discount_email_format_patterns():
         print(f"Error getting format patterns: {e}")
         # Return defaults if there's an error
         return jsonify({
-            'subject_pattern': r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
             'asin_pattern': r'\(ASIN:\s*([B0-9A-Z]{10})\)',
             'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
             'sender_filter': 'alert@distill.io'
         })
+
+def convert_template_to_regex(template):
+    """Convert user-friendly template to regex pattern"""
+    import re
+    
+    # Escape special regex characters except our placeholders
+    escaped = re.escape(template)
+    
+    # Replace escaped placeholders with regex patterns
+    replacements = {
+        r'\\\{RETAILER\\\}': r'([^\]\\(\\)]+)',  # Capture group for retailer
+        r'\\\{ASIN\\\}': r'([B0-9A-Z]{10})',     # Capture group for ASIN  
+        r'\\\{NOTE\\\}': r'([^\\)]+)',           # Capture group for note content
+        r'\\\{[^\\}]+\\\}': r'[^\\(\\)\\s]+'     # Any other placeholder becomes non-capturing
+    }
+    
+    for placeholder, regex in replacements.items():
+        escaped = re.sub(placeholder, regex, escaped)
+    
+    return escaped
+
+def extract_patterns_from_template(template):
+    """Extract individual patterns for ASIN and retailer from template"""
+    import re
+    
+    # Convert template to regex
+    subject_regex = convert_template_to_regex(template)
+    
+    # ASIN pattern is always the same
+    asin_pattern = r'\(ASIN:\s*([B0-9A-Z]{10})\)'
+    
+    # Retailer pattern based on template structure
+    if template.startswith('[{RETAILER}]'):
+        retailer_pattern = r'\[([^\]]+)\]'
+    else:
+        retailer_pattern = r'([^:\s\(\)]+)'
+    
+    return subject_regex, asin_pattern, retailer_pattern
 
 @app.route('/api/admin/discount-email/format-patterns', methods=['PUT'])
 @admin_required
@@ -14763,11 +14828,24 @@ def update_discount_email_format_patterns():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
             
-        # Extract pattern fields with defaults
-        subject_pattern = data.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)')
-        asin_pattern = data.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)')
-        retailer_pattern = data.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:')
-        sender_filter = data.get('sender_filter', 'alert@distill.io')
+        # Check if using template format or direct regex
+        if data.get('email_template'):
+            # Convert template to regex patterns
+            try:
+                subject_pattern, asin_pattern, retailer_pattern = extract_patterns_from_template(data['email_template'])
+                sender_filter = data.get('sender_filter', 'alert@distill.io')
+                
+                # Store the original template for display
+                template = data['email_template']
+            except Exception as e:
+                return jsonify({'error': f'Invalid template format: {str(e)}'}), 400
+        else:
+            # Use direct regex patterns (fallback for advanced users)
+            subject_pattern = data.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)')
+            asin_pattern = data.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)')
+            retailer_pattern = data.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:')
+            sender_filter = data.get('sender_filter', 'alert@distill.io')
+            template = None
         
         # Validate regex patterns
         import re
@@ -14789,6 +14867,10 @@ def update_discount_email_format_patterns():
             'sender_filter': sender_filter,
             'config_type': 'pattern_config'
         }
+        
+        # Add template if provided for user-friendly display
+        if template:
+            config_data['email_template'] = template
         
         # Preserve existing email configuration if it exists
         if existing_config:
@@ -14842,7 +14924,7 @@ def test_discount_email_patterns():
         if not patterns:
             admin_config = get_admin_gmail_config()
             patterns = {
-                'subject_pattern': admin_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:.*?\(ASIN:\s*([B0-9A-Z]{10})\)'),
+                'subject_pattern': admin_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)'),
                 'asin_pattern': admin_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)'),
                 'retailer_pattern': admin_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:'),
                 'sender_filter': admin_config.get('sender_filter', 'alert@distill.io')

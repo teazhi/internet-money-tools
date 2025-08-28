@@ -1336,28 +1336,15 @@ const AdminCompact = () => {
                     
                     <div className="grid grid-cols-1 gap-4 text-sm">
                       <div>
-                        <span className="font-medium text-gray-900">Subject Pattern:</span>
-                        <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-2 rounded">
-                          {formatPatterns?.subject_pattern || '\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
+                        <span className="font-medium text-gray-900">Email Template:</span>
+                        <p className="text-gray-600 mt-1 bg-gray-50 p-2 rounded">
+                          {formatPatterns?.email_template || '[{RETAILER}] Alert: {RETAILER} (ASIN: {ASIN}) (Note: {NOTE})'}
                         </p>
+                        <p className="text-xs text-gray-500 mt-1">User-friendly format using placeholders</p>
                       </div>
                       <div>
                         <span className="font-medium text-gray-900">Sender Filter:</span>
                         <p className="text-gray-600">{formatPatterns?.sender_filter || 'alert@distill.io'}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <span className="font-medium text-gray-900">ASIN Pattern:</span>
-                          <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-1 rounded">
-                            {formatPatterns?.asin_pattern || '\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-900">Retailer Pattern:</span>
-                          <p className="text-gray-600 font-mono text-xs mt-1 bg-gray-50 p-1 rounded">
-                            {formatPatterns?.retailer_pattern || '\\[([^\\]]+)\\]\\s*Alert:'}
-                          </p>
-                        </div>
                       </div>
                     </div>
 
@@ -1366,7 +1353,10 @@ const AdminCompact = () => {
                         <AlertTriangle className="h-5 w-5 text-blue-500" />
                         <div className="ml-3">
                           <p className="text-sm text-blue-800">
-                            <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Retailer] Alert: Description (ASIN: BXXXXXXXXX)</code>
+                            <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Lowes] Alert: Lowes (ASIN: B09V1M6SZL) (Note: TESTING)</code>
+                          </p>
+                          <p className="text-sm text-blue-700 mt-1">
+                            Pattern: <code className="bg-blue-100 px-1 rounded">[{`{RETAILER}`}] Alert: {`{RETAILER}`} (ASIN: {`{ASIN}`}) (Note: {`{NOTE}`})</code>
                           </p>
                         </div>
                       </div>
@@ -1861,69 +1851,79 @@ const AdminCompact = () => {
           <div className="bg-white rounded-lg max-w-2xl w-full mx-4 p-6 max-h-96 overflow-y-auto">
             <h3 className="text-lg font-medium mb-4">Configure Email Format Patterns</h3>
             
-            <div className="space-y-4">
+            <form id="format-patterns-form" className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Subject Pattern</label>
+                <label className="block text-sm font-medium mb-1">Email Template</label>
                 <input
                   type="text"
-                  defaultValue={formatPatterns?.subject_pattern || '\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
-                  placeholder="Regex pattern for full email subject"
+                  name="email_template"
+                  defaultValue={formatPatterns?.email_template || '[{RETAILER}] Alert: {RETAILER} (ASIN: {ASIN}) (Note: {NOTE})'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Use placeholders: {RETAILER}, {ASIN}, {NOTE}"
                 />
-                <p className="text-xs text-gray-500 mt-1">Captures both retailer and ASIN from subject line</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">ASIN Pattern</label>
-                <input
-                  type="text"
-                  defaultValue={formatPatterns?.asin_pattern || '\\(ASIN:\\s*([B0-9A-Z]{10})\\)'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
-                  placeholder="Regex pattern to extract ASIN"
-                />
-                <p className="text-xs text-gray-500 mt-1">Should capture Amazon ASIN (B + 9 alphanumeric)</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Retailer Pattern</label>
-                <input
-                  type="text"
-                  defaultValue={formatPatterns?.retailer_pattern || '\\[([^\\]]+)\\]\\s*Alert:'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
-                  placeholder="Regex pattern to extract retailer"
-                />
-                <p className="text-xs text-gray-500 mt-1">Captures retailer name from square brackets</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Use placeholders like <code className="bg-gray-100 px-1 rounded">{`{RETAILER}`}</code>, <code className="bg-gray-100 px-1 rounded">{`{ASIN}`}</code>, <code className="bg-gray-100 px-1 rounded">{`{NOTE}`}</code> - regex will be generated automatically
+                </p>
               </div>
               
               <div>
                 <label className="block text-sm font-medium mb-1">Sender Filter</label>
                 <input
                   type="text"
+                  name="sender_filter"
                   defaultValue={formatPatterns?.sender_filter || 'alert@distill.io'}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Email sender to monitor"
                 />
                 <p className="text-xs text-gray-500 mt-1">Only emails from this sender will be processed</p>
               </div>
+              
+              <div className="bg-gray-50 p-3 rounded-md">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Available Placeholders</h4>
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  <div><code className="bg-white px-1 rounded">{`{RETAILER}`}</code> - Retailer name (e.g., "Lowes")</div>
+                  <div><code className="bg-white px-1 rounded">{`{ASIN}`}</code> - Amazon ASIN (e.g., "B09V1M6SZL")</div>
+                  <div><code className="bg-white px-1 rounded">{`{NOTE}`}</code> - Additional note text (e.g., "TESTING")</div>
+                </div>
+              </div>
 
               <div className="bg-blue-50 p-3 rounded-md">
                 <p className="text-sm text-blue-800">
-                  <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Retailer] Alert: Description (ASIN: BXXXXXXXXX)</code>
+                  <strong>Expected format:</strong> <code className="bg-blue-100 px-1 rounded">[Lowes] Alert: Lowes (ASIN: B09V1M6SZL) (Note: TESTING)</code>
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Pattern: <code className="bg-blue-100 px-1 rounded">[{`{RETAILER}`}] Alert: {`{RETAILER}`} (ASIN: {`{ASIN}`}) (Note: {`{NOTE}`})</code>
                 </p>
               </div>
 
-              <div className="flex space-x-3 pt-4">
+            </form>
+            
+            <div className="flex space-x-3 pt-4">
+              <button
+                onClick={() => setShowFormatPatternsModal(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
                 <button
-                  onClick={() => setShowFormatPatternsModal(false)}
-                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    // TODO: Implement save logic
-                    setShowFormatPatternsModal(false);
-                    setSuccess('Format patterns updated successfully!');
+                  onClick={async () => {
+                    try {
+                      const formData = new FormData(document.querySelector('#format-patterns-form'));
+                      const patterns = {
+                        email_template: formData.get('email_template'),
+                        sender_filter: formData.get('sender_filter')
+                      };
+                      
+                      await axios.put('/api/admin/discount-email/format-patterns', patterns, { withCredentials: true });
+                      
+                      setShowFormatPatternsModal(false);
+                      setSuccess('Format patterns updated successfully!');
+                      
+                      // Refresh the patterns data
+                      fetchData();
+                    } catch (error) {
+                      setError('Failed to save format patterns: ' + (error.response?.data?.error || error.message));
+                    }
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                 >

@@ -1039,10 +1039,93 @@ const Settings = () => {
               </div>
               
               {syncResults && (
-                <div className="mb-3 text-xs text-green-800 bg-green-100 border border-green-200 rounded p-2">
-                  <strong>Last Sync Result:</strong> {syncResults.added || 0} leads added
-                  {syncResults.already_existed > 0 && <span>, {syncResults.already_existed} skipped</span>}
-                  {syncResults.errors > 0 && <span className="text-red-600">, {syncResults.errors} errors</span>}
+                <div className="mb-3 text-xs bg-gray-50 border border-gray-200 rounded p-3">
+                  <div className="font-medium text-gray-900 mb-2">Last Sync Results</div>
+                  
+                  {/* Summary */}
+                  <div className="mb-3 p-2 bg-green-100 border border-green-200 rounded">
+                    <div className="text-green-800">
+                      <strong>Summary:</strong> {syncResults.added || 0} leads added
+                      {syncResults.already_existed > 0 && <span>, {syncResults.already_existed} skipped (already existed)</span>}
+                      {syncResults.errors > 0 && <span className="text-red-600">, {syncResults.errors} errors</span>}
+                    </div>
+                  </div>
+
+                  {/* Detailed breakdown of added leads */}
+                  {syncResults.details && syncResults.details.length > 0 && (
+                    <div className="mb-3">
+                      <div className="font-medium text-gray-800 mb-1">Added to worksheets:</div>
+                      <div className="space-y-1">
+                        {syncResults.details.map((detail, index) => (
+                          <div key={index} className="text-gray-700 pl-2">
+                            • <strong>{detail.worksheet}:</strong> {detail.count} leads
+                            {detail.highlighted && (
+                              <span className="text-yellow-600 ml-1">(highlighted in yellow)</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No-source leads info */}
+                  {syncResults.no_source_count > 0 && (
+                    <div className="mb-3 p-2 bg-yellow-100 border border-yellow-200 rounded">
+                      <div className="text-yellow-800">
+                        <strong>{syncResults.no_source_count} leads without source URLs</strong>
+                        {syncResults.no_source_worksheet_missing && (
+                          <div className="mt-1">⚠️ Create "{syncResults.suggested_worksheet}" worksheet to sync these leads</div>
+                        )}
+                      </div>
+                      {syncResults.debug_info?.no_source_leads && (
+                        <div className="mt-2">
+                          <div className="text-xs text-yellow-700">Examples:</div>
+                          {syncResults.debug_info.no_source_leads.slice(0, 3).map((item, idx) => (
+                            <div key={idx} className="text-xs text-yellow-700 ml-2">• {item.asin}: {item.name || 'Unknown product'}</div>
+                          ))}
+                          {syncResults.debug_info.no_source_leads.length > 3 && (
+                            <div className="text-xs text-yellow-700 ml-2">... and {syncResults.debug_info.no_source_leads.length - 3} more</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Errors section */}
+                  {syncResults.errors > 0 && syncResults.debug_info?.worksheet_not_found && (
+                    <div className="mb-3 p-2 bg-red-100 border border-red-200 rounded">
+                      <div className="text-red-800">
+                        <div className="font-medium mb-1">❌ Errors ({syncResults.errors} total):</div>
+                        <div className="text-xs space-y-1">
+                          {syncResults.debug_info.worksheet_not_found.slice(0, 5).map((item, idx) => (
+                            <div key={idx} className="ml-2">
+                              • <strong>{item.asin}:</strong> Missing worksheet "{item.target_worksheet}" 
+                              {item.source && <span className="text-gray-600"> (source: {item.source})</span>}
+                            </div>
+                          ))}
+                          {syncResults.debug_info.worksheet_not_found.length > 5 && (
+                            <div className="ml-2 text-red-600">... and {syncResults.debug_info.worksheet_not_found.length - 5} more missing worksheets</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Debug info section (collapsible) */}
+                  {syncResults.debug_info && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-gray-600 hover:text-gray-800">
+                        🔍 Show detailed debug info
+                      </summary>
+                      <div className="mt-2 p-2 bg-gray-100 border border-gray-200 rounded text-xs text-gray-700 space-y-1">
+                        <div><strong>Total leads in your sheet:</strong> {syncResults.debug_info.total_user_leads}</div>
+                        <div><strong>Available target worksheets:</strong> {syncResults.debug_info.existing_worksheets?.join(', ') || 'None found'}</div>
+                        {syncResults.debug_info.processed_leads && (
+                          <div><strong>Leads processed:</strong> {syncResults.debug_info.processed_leads}</div>
+                        )}
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
               

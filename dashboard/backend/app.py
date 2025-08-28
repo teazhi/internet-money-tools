@@ -13909,7 +13909,7 @@ def setup_email_monitoring_oauth():
         expires_at = datetime.now() + timedelta(seconds=expires_in)
         
         # Save email monitoring configuration with OAuth
-        discord_id = session['user']['discord_id']
+        discord_id = session['discord_id']
         
         local_conn = sqlite3.connect(DATABASE_FILE)
         local_cursor = local_conn.cursor()

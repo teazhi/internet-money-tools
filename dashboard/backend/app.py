@@ -13307,23 +13307,31 @@ def get_email_monitoring_config():
         local_cursor = local_conn.cursor()
         
         local_cursor.execute('''
-            SELECT id, email_address, imap_server, imap_port, username, is_active, last_checked
+            SELECT id, email_address, auth_type, imap_server, imap_port, username, is_active, last_checked
             FROM email_monitoring 
             WHERE discord_id = ?
         ''', (discord_id,))
         
         configs = []
         for row in local_cursor.fetchall():
-            id_val, email, server, port, username, is_active, last_checked = row
-            configs.append({
+            id_val, email, auth_type, server, port, username, is_active, last_checked = row
+            config = {
                 'id': id_val,
                 'email_address': email,
-                'imap_server': server,
-                'imap_port': port,
-                'username': username,
+                'auth_type': auth_type or 'imap',  # Default to imap for older records
                 'is_active': bool(is_active),
                 'last_checked': last_checked
-            })
+            }
+            
+            # Add IMAP-specific fields only if it's an IMAP configuration
+            if auth_type != 'oauth':
+                config.update({
+                    'imap_server': server,
+                    'imap_port': port,
+                    'username': username
+                })
+            
+            configs.append(config)
         
         local_conn.close()
         return jsonify({'configs': configs})
@@ -13971,11 +13979,13 @@ def get_email_monitoring_webhook():
         if row:
             return jsonify({
                 'configured': True,
-                'webhook_url': row[0],
-                'webhook_name': row[1],
-                'is_active': bool(row[2]),
-                'created_at': row[3],
-                'updated_at': row[4]
+                'config': {
+                    'webhook_url': row[0],
+                    'description': row[1],  # Frontend expects 'description' not 'webhook_name'
+                    'is_active': bool(row[2]),
+                    'created_at': row[3],
+                    'updated_at': row[4]
+                }
             })
         else:
             return jsonify({'configured': False})
@@ -13991,7 +14001,8 @@ def set_email_monitoring_webhook():
     try:
         data = request.get_json()
         webhook_url = data.get('webhook_url')
-        webhook_name = data.get('webhook_name', 'Default Webhook')
+        webhook_name = data.get('description', 'Default Webhook')  # Frontend sends 'description'
+        is_active = data.get('is_active', True)
         
         if not webhook_url:
             return jsonify({'error': 'Webhook URL is required'}), 400
@@ -14007,11 +14018,12 @@ def set_email_monitoring_webhook():
             INSERT INTO email_monitoring_webhook_config 
             (webhook_url, webhook_name, is_active, created_by)
             VALUES (?, ?, ?, ?)
-        ''', (webhook_url, webhook_name, True, session.get('discord_id', 'admin')))
+        ''', (webhook_url, webhook_name, is_active, session.get('discord_id', 'admin')))
         
         local_conn.commit()
         local_conn.close()
         
+        print(f"✅ Webhook saved successfully: {webhook_url} (active: {is_active})")
         return jsonify({'message': 'Webhook configuration saved successfully'})
         
     except Exception as e:

@@ -916,6 +916,7 @@ def get_dummy_discount_opportunities():
                 'product_name': 'Demo Wireless Bluetooth Headphones',
                 'retailer': 'Walmart',
                 'current_stock': 8,
+                'recent_purchases': 25,
                 'suggested_quantity': 120,
                 'days_left': 3.2,
                 'velocity': 2.5,
@@ -933,6 +934,7 @@ def get_dummy_discount_opportunities():
                 'product_name': 'Premium Phone Case - Clear',
                 'retailer': 'Target',
                 'current_stock': 15,
+                'recent_purchases': 50,
                 'suggested_quantity': 75,
                 'days_left': 6.8,
                 'velocity': 2.2,
@@ -950,6 +952,7 @@ def get_dummy_discount_opportunities():
                 'product_name': 'Wireless Charging Pad',
                 'retailer': 'Lowes',
                 'current_stock': 25,
+                'recent_purchases': 0,
                 'suggested_quantity': 0,
                 'days_left': None,
                 'velocity': 3.0,
@@ -967,6 +970,7 @@ def get_dummy_discount_opportunities():
                 'product_name': 'Product not tracked',
                 'retailer': 'Home Depot',
                 'current_stock': 0,
+                'recent_purchases': 0,
                 'suggested_quantity': 0,
                 'days_left': None,
                 'velocity': 0,
@@ -7444,6 +7448,7 @@ def analyze_discount_opportunities():
                 current_stock = restock_data.get('current_stock', 0)
                 suggested_quantity = restock_data.get('suggested_quantity', 0)
                 days_left = restock_data.get('days_left', None)
+                recent_purchases = restock_data.get('monthly_purchase_adjustment', 0)
                 
                 # Determine if restocking is needed
                 needs_restock = suggested_quantity > 0
@@ -7470,6 +7475,7 @@ def analyze_discount_opportunities():
                     'retailer': retailer,
                     'product_name': inventory_data.get('product_name', ''),
                     'current_stock': current_stock,
+                    'recent_purchases': recent_purchases,
                     'suggested_quantity': suggested_quantity if needs_restock else 0,
                     'days_left': days_left if needs_restock else None,
                     'velocity': inventory_data.get('velocity', {}).get('weighted_velocity', 0),
@@ -7490,6 +7496,7 @@ def analyze_discount_opportunities():
                     'retailer': retailer,
                     'product_name': 'Product not tracked',
                     'current_stock': 0,
+                    'recent_purchases': 0,
                     'suggested_quantity': 0,
                     'days_left': None,
                     'velocity': 0,

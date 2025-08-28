@@ -575,28 +575,61 @@ class EmailMonitor:
 
 def create_yankee_candle_rule(discord_id, webhook_url=None):
     """Helper function to create the specific Yankee Candle refund rule"""
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
+    try:
+        print(f"📝 Creating Yankee Candle rule for {discord_id}")
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        
+        # Check if rule already exists
+        cursor.execute('''
+            SELECT id FROM email_monitoring_rules 
+            WHERE discord_id = ? AND rule_name = ?
+        ''', (discord_id, 'Yankee Candle Refund Alert'))
+        
+        existing_rule = cursor.fetchone()
+        
+        if existing_rule:
+            print(f"📝 Rule already exists with ID {existing_rule[0]}, updating...")
+            cursor.execute('''
+                UPDATE email_monitoring_rules 
+                SET sender_filter = ?, subject_filter = ?, content_filter = ?, is_active = ?
+                WHERE discord_id = ? AND rule_name = ?
+            ''', (
+                'reply@e.yankeecandle.com',
+                "Here's your refund!",
+                None,
+                True,
+                discord_id,
+                'Yankee Candle Refund Alert'
+            ))
+            rule_id = existing_rule[0]
+        else:
+            print(f"📝 Creating new rule...")
+            cursor.execute('''
+                INSERT INTO email_monitoring_rules 
+                (discord_id, rule_name, sender_filter, subject_filter, content_filter, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                discord_id,
+                'Yankee Candle Refund Alert',
+                'reply@e.yankeecandle.com',
+                "Here's your refund!",
+                None,  # No content filter needed
+                True
+            ))
+            rule_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Successfully created Yankee Candle rule with ID {rule_id}")
+        return rule_id
     
-    # Note: webhook_url parameter is ignored since we now use admin-only webhooks
-    cursor.execute('''
-        INSERT OR REPLACE INTO email_monitoring_rules 
-        (discord_id, rule_name, sender_filter, subject_filter, content_filter, is_active)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (
-        discord_id,
-        'Yankee Candle Refund Alert',
-        'reply@e.yankeecandle.com',
-        "Here's your refund!",
-        None,  # No content filter needed
-        True
-    ))
-    
-    conn.commit()
-    rule_id = cursor.lastrowid
-    conn.close()
-    
-    return rule_id
+    except Exception as e:
+        print(f"❌ Error creating Yankee Candle rule: {e}")
+        if 'conn' in locals():
+            conn.close()
+        raise e
 
 if __name__ == '__main__':
     # Create and start the email monitor

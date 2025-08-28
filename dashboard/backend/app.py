@@ -13708,7 +13708,9 @@ def quick_setup_yankee_candle():
         from email_monitor import create_yankee_candle_rule
         
         # Note: webhook_url is no longer needed since we use system-wide webhooks
+        print(f"🔧 Creating Yankee Candle rule for discord_id: {discord_id}")
         rule_id = create_yankee_candle_rule(discord_id)
+        print(f"✅ Yankee Candle rule created with ID: {rule_id}")
         
         return jsonify({
             'message': 'Yankee Candle refund monitoring rule created successfully',
@@ -13717,7 +13719,7 @@ def quick_setup_yankee_candle():
                 'name': 'Yankee Candle Refund Alert',
                 'sender_filter': 'reply@e.yankeecandle.com',
                 'subject_filter': "Here's your refund!",
-                'webhook_url': webhook_url
+                'webhook': 'Uses system-wide admin webhook'
             }
         })
         

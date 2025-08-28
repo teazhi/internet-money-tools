@@ -18,7 +18,6 @@ import {
 import StandardTable from '../common/StandardTable';
 
 const RetailerLeadAnalysis = () => {
-  const [activeTab, setActiveTab] = useState('analysis');
   const [selectedWorksheet, setSelectedWorksheet] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingWorksheets, setLoadingWorksheets] = useState(true);
@@ -397,11 +396,6 @@ const RetailerLeadAnalysis = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  const tabs = [
-    { id: 'analysis', name: 'Lead Analysis', icon: ShoppingCart },
-    { id: 'reports', name: 'Reports', icon: TrendingUp },
-    { id: 'history', name: 'History', icon: Eye }
-  ];
 
   return (
     <div className="space-y-6">
@@ -414,31 +408,7 @@ const RetailerLeadAnalysis = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                  activeTab === tab.id
-                    ? 'border-builders-500 text-builders-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{tab.name}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'analysis' && (
+      {/* Main Content */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -770,33 +740,6 @@ const RetailerLeadAnalysis = () => {
         </>
         )}
         </div>
-      )}
-
-      {/* Reports Tab */}
-      {activeTab === 'reports' && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center py-12">
-            <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Reports Coming Soon</h3>
-            <p className="text-gray-600">
-              Detailed reports and analytics will be available here.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* History Tab */}
-      {activeTab === 'history' && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center py-12">
-            <Eye className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">History Coming Soon</h3>
-            <p className="text-gray-600">
-              Analysis history and previous results will be available here.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

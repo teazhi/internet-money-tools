@@ -12850,6 +12850,9 @@ def get_inventory_age_analysis():
         age_analysis['action_items'] = action_items[:20]  # Top 20 items needing action
         age_analysis['total_action_items'] = len(action_items)
         
+        # CRITICAL: Include enhanced_analytics so frontend can access stock values and product names
+        age_analysis['enhanced_analytics'] = enhanced_analytics
+        
         # Debug: Log what we're returning
         print(f"DEBUG - Final response structure keys: {list(age_analysis.keys())}")
         print(f"DEBUG - Final response structure type: {type(age_analysis)}")
@@ -12932,6 +12935,7 @@ def get_inventory_age_analysis():
                     'age_categories': sanitized_age_analysis.get('age_categories'),
                     'generated_at': sanitized_age_analysis.get('generated_at'),
                     'total_action_items': sanitized_age_analysis.get('total_action_items'),
+                    'enhanced_analytics': sanitized_age_analysis.get('enhanced_analytics'),  # Include for stock/names
                     'reduced': True  # Flag to indicate reduced response
                 }
                 

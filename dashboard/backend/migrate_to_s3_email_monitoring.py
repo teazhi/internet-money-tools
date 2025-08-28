@@ -143,9 +143,9 @@ def migrate_sqlite_to_s3():
         print("\n📊 Migrating activity logs...")
         cursor.execute('''
             SELECT discord_id, rule_id, email_subject, email_sender, email_date,
-                   webhook_sent, webhook_response, timestamp
+                   webhook_sent, webhook_response, created_at
             FROM email_monitoring_logs
-            ORDER BY timestamp DESC
+            ORDER BY created_at DESC
             LIMIT 10000
         ''')
         
@@ -154,7 +154,7 @@ def migrate_sqlite_to_s3():
         
         for log_row in logs:
             (discord_id, rule_id, email_subject, email_sender, email_date,
-             webhook_sent, webhook_response, timestamp) = log_row
+             webhook_sent, webhook_response, created_at) = log_row
             
             success = email_monitoring_manager.log_email_match(
                 discord_id, str(rule_id), email_subject, email_sender,

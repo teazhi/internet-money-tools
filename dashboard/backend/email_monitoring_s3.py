@@ -29,6 +29,10 @@ class EmailMonitoringS3Manager:
     
     def _get_s3_client(self):
         """Get S3 client with credentials"""
+        # Load .env file if not already loaded
+        from dotenv import load_dotenv
+        load_dotenv()
+        
         return boto3.client(
             's3',
             aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),

@@ -26,8 +26,6 @@ import threading
 from inventory_age_analysis import InventoryAgeAnalyzer
 import atexit
 from email_monitor import EmailMonitor, CHECK_INTERVAL
-from email_monitor_s3 import EmailMonitorS3
-from email_monitoring_s3 import email_monitoring_manager
 
 def sanitize_for_json(obj):
     """
@@ -183,7 +181,7 @@ def start_email_monitoring():
     
     try:
         print("🚀 Starting Email Monitoring Service in background...")
-        email_monitor_instance = EmailMonitorS3()
+        email_monitor_instance = EmailMonitor()
         
         # Create and start the background thread
         email_monitor_thread = threading.Thread(target=email_monitor_instance.start, daemon=True)
@@ -10050,6 +10048,27 @@ def sync_leads_to_sheets():
 def fetch_discount_email_alerts():
     """Fetch recent email alerts from admin-configured email using IMAP or Gmail API"""
     try:
+        monitor_email = DISCOUNT_MONITOR_EMAIL
+        if not monitor_email:
+            # Return mock data if no email configured
+            return [
+                {
+                    'retailer': 'Vitacost',
+                    'asin': 'B07XVTRJKX',
+                    'subject': 'Vitacost Alert: B07XVTRJKX',
+                    'html_content': '''<div id="m_731648639157524744topPromoMessages">== $10 off orders $50+ ==</div>
+                                      <p id="m_7316486391575247445featuredDiscount">Free shipping on orders $49+</p>''',
+                    'alert_time': '2025-08-09T19:53:00Z'
+                },
+                {
+                    'retailer': 'Walmart', 
+                    'asin': 'B08NDRQR5K',
+                    'subject': 'Walmart Alert: B08NDRQR5K',
+                    'html_content': '<div>Special promotion available</div>',
+                    'alert_time': '2025-08-09T18:30:00Z'
+                }
+            ]
+        
         # Get admin email configuration - database first, then legacy Gmail
         admin_gmail_config = get_admin_gmail_config()
         
@@ -10072,16 +10091,9 @@ def fetch_discount_email_alerts():
             return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
         else:
-            # Check if DISCOUNT_MONITOR_EMAIL is configured as fallback
-            monitor_email = DISCOUNT_MONITOR_EMAIL
-            if monitor_email:
-                print(f"[DEBUG] Using DISCOUNT_MONITOR_EMAIL: {monitor_email}")
-                # TODO: Implement direct email monitoring if needed
-                return fetch_mock_discount_alerts()
-            else:
-                # Return mock data if no configuration available
-                print(f"[DEBUG] No email configuration found, returning mock data")
-                return fetch_mock_discount_alerts()
+            # Return mock data if no configuration available
+            print(f"[DEBUG] No email configuration found, returning mock data")
+            return fetch_mock_discount_alerts()
     
     except Exception as e:
         print(f"Error fetching discount email alerts: {e}")
@@ -13515,7 +13527,7 @@ def revoke_group_feature_access(group_key, feature_key):
 @app.route('/api/email-monitoring/config', methods=['GET'])
 @login_required
 def get_email_monitoring_config():
-    """Get user's email monitoring configuration from S3"""
+    """Get user's email monitoring configuration"""
     try:
         discord_id = session['discord_id']
         
@@ -13523,33 +13535,43 @@ def get_email_monitoring_config():
         if not has_feature_access(discord_id, 'email_monitoring'):
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
-        configs = email_monitoring_manager.get_email_configs(discord_id)
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
         
-        formatted_configs = []
-        for config in configs:
-            formatted_config = {
-                'id': config.get('id'),
-                'email_address': config.get('email_address'),
-                'auth_type': config.get('auth_type', 'imap'),
-                'is_active': config.get('is_active', True),
-                'last_checked': config.get('last_checked')
+        local_cursor.execute('''
+            SELECT id, email_address, auth_type, imap_server, imap_port, username, is_active, last_checked
+            FROM email_monitoring 
+            WHERE discord_id = ?
+        ''', (discord_id,))
+        
+        configs = []
+        for row in local_cursor.fetchall():
+            id_val, email, auth_type, server, port, username, is_active, last_checked = row
+            config = {
+                'id': id_val,
+                'email_address': email,
+                'auth_type': auth_type or 'imap',  # Default to imap for older records
+                'is_active': bool(is_active),
+                'last_checked': last_checked
             }
             
-            # Add auth-specific fields
-            if config.get('auth_type') != 'oauth':
-                formatted_config.update({
-                    'imap_server': config.get('imap_server'),
-                    'imap_port': config.get('imap_port'),
-                    'username': config.get('username')
+            # Add IMAP-specific fields only if it's an IMAP configuration
+            if auth_type != 'oauth':
+                config.update({
+                    'imap_server': server,
+                    'imap_port': port,
+                    'username': username
                 })
             
-            formatted_configs.append(formatted_config)
+            configs.append(config)
         
-        print(f"🔍 GET email configs for discord_id {discord_id}: found {len(formatted_configs)} configs")
-        for config in formatted_configs:
+        local_conn.close()
+        
+        print(f"🔍 GET email configs for discord_id {discord_id}: found {len(configs)} configs")
+        for config in configs:
             print(f"  - {config['email_address']} (auth_type: {config['auth_type']})")
         
-        return jsonify({'configs': formatted_configs})
+        return jsonify({'configs': configs})
         
     except Exception as e:
         print(f"Error fetching email monitoring config: {e}")
@@ -13785,7 +13807,7 @@ def quick_setup_yankee_candle():
         # Import the helper function
         import sys
         sys.path.append('.')
-        from email_monitor_s3 import create_yankee_candle_rule
+        from email_monitor import create_yankee_candle_rule
         
         # Note: webhook_url is no longer needed since we use system-wide webhooks
         print(f"🔧 Creating Yankee Candle rule for discord_id: {discord_id}")
@@ -13999,7 +14021,7 @@ def get_email_monitoring_oauth_url():
 @app.route('/api/email-monitoring/oauth-setup', methods=['POST'])
 @login_required
 def setup_email_monitoring_oauth():
-    """Complete OAuth setup for email monitoring and save to S3"""
+    """Complete OAuth setup for email monitoring"""
     try:
         data = request.get_json()
         email_address = data.get('email_address')
@@ -14034,27 +14056,45 @@ def setup_email_monitoring_oauth():
             
         # Calculate token expiry
         from datetime import datetime, timedelta
-        expires_at = (datetime.now() + timedelta(seconds=expires_in)).isoformat()
+        expires_at = datetime.now() + timedelta(seconds=expires_in)
         
-        # Save email monitoring configuration to S3
+        # Save email monitoring configuration with OAuth
         discord_id = session['discord_id']
         
-        email_config = {
-            'email_address': email_address,
-            'auth_type': 'oauth',
-            'oauth_access_token': access_token,
-            'oauth_refresh_token': refresh_token,
-            'oauth_token_expires_at': expires_at,
-            'is_active': True
-        }
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
         
-        success = email_monitoring_manager.add_email_config(discord_id, email_config)
+        # Check if configuration already exists
+        local_cursor.execute('''
+            SELECT id FROM email_monitoring 
+            WHERE discord_id = ? AND email_address = ?
+        ''', (discord_id, email_address))
         
-        if success:
-            print(f"✅ OAuth setup completed for {email_address} (discord_id: {discord_id})")
-            return jsonify({'message': 'OAuth setup completed successfully'})
+        if local_cursor.fetchone():
+            # Update existing
+            local_cursor.execute('''
+                UPDATE email_monitoring 
+                SET auth_type = 'oauth', 
+                    oauth_access_token = ?, 
+                    oauth_refresh_token = ?, 
+                    oauth_token_expires_at = ?,
+                    is_active = 1,
+                    last_checked = NULL
+                WHERE discord_id = ? AND email_address = ?
+            ''', (access_token, refresh_token, expires_at.isoformat(), discord_id, email_address))
         else:
-            return jsonify({'error': 'Failed to save email configuration'}), 500
+            # Create new
+            local_cursor.execute('''
+                INSERT INTO email_monitoring 
+                (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, oauth_token_expires_at, is_active)
+                VALUES (?, ?, 'oauth', ?, ?, ?, 1)
+            ''', (discord_id, email_address, access_token, refresh_token, expires_at.isoformat()))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        print(f"✅ OAuth setup completed for {email_address} (discord_id: {discord_id})")
+        return jsonify({'message': 'OAuth setup completed successfully'})
         
     except Exception as e:
         print(f"Error setting up OAuth: {e}")
@@ -14063,53 +14103,10 @@ def setup_email_monitoring_oauth():
 @app.route('/api/admin/email-monitoring/webhook', methods=['GET'])
 @admin_required
 def get_email_monitoring_webhook():
-    """Get system-wide email monitoring webhook configuration from S3"""
+    """Get system-wide email monitoring webhook configuration"""
     try:
-        webhook_config = email_monitoring_manager.get_system_webhook()
-        
-        if webhook_config:
-            return jsonify({
-                'configured': True,
-                'config': {
-                    'webhook_url': webhook_config['webhook_url'],
-                    'description': webhook_config['description'],
-                    'is_active': webhook_config['is_active'],
-                    'created_at': webhook_config['created_at'],
-                    'created_by': webhook_config['created_by']
-                }
-            })
-        else:
-            return jsonify({'configured': False})
-            
-    except Exception as e:
-        print(f"Error getting email monitoring webhook: {e}")
-        return jsonify({'error': 'Failed to get webhook configuration'}), 500
-
-@app.route('/api/admin/email-monitoring/webhook', methods=['POST'])
-@admin_required
-def set_email_monitoring_webhook():
-    """Set system-wide email monitoring webhook configuration in S3"""
-    try:
-        data = request.get_json()
-        webhook_url = data.get('webhook_url')
-        description = data.get('description', 'Default Webhook')
-        
-        if not webhook_url:
-            return jsonify({'error': 'Webhook URL is required'}), 400
-        
-        success = email_monitoring_manager.set_system_webhook(
-            webhook_url, description, session.get('discord_id', 'admin')
-        )
-        
-        if success:
-            print(f"✅ Webhook saved successfully: {webhook_url}")
-            return jsonify({'message': 'Webhook configuration saved successfully'})
-        else:
-            return jsonify({'error': 'Failed to save webhook'}), 500
-            
-    except Exception as e:
-        print(f"Error setting email monitoring webhook: {e}")
-        return jsonify({'error': 'Failed to save webhook configuration'}), 500
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
         
         local_cursor.execute('''
             SELECT webhook_url, webhook_name, is_active, created_at, updated_at
@@ -14140,7 +14137,41 @@ def set_email_monitoring_webhook():
         print(f"Error getting email monitoring webhook config: {e}")
         return jsonify({'error': 'Failed to get webhook configuration'}), 500
 
-# Duplicate webhook endpoint removed - using S3 version above
+@app.route('/api/admin/email-monitoring/webhook', methods=['POST'])
+@admin_required
+def set_email_monitoring_webhook():
+    """Set system-wide email monitoring webhook configuration"""
+    try:
+        data = request.get_json()
+        webhook_url = data.get('webhook_url')
+        webhook_name = data.get('description', 'Default Webhook')  # Frontend sends 'description'
+        is_active = data.get('is_active', True)
+        
+        if not webhook_url:
+            return jsonify({'error': 'Webhook URL is required'}), 400
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Deactivate existing webhooks
+        local_cursor.execute('UPDATE email_monitoring_webhook_config SET is_active = 0')
+        
+        # Insert new webhook configuration
+        local_cursor.execute('''
+            INSERT INTO email_monitoring_webhook_config 
+            (webhook_url, webhook_name, is_active, created_by)
+            VALUES (?, ?, ?, ?)
+        ''', (webhook_url, webhook_name, is_active, session.get('discord_id', 'admin')))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        print(f"✅ Webhook saved successfully: {webhook_url} (active: {is_active})")
+        return jsonify({'message': 'Webhook configuration saved successfully'})
+        
+    except Exception as e:
+        print(f"Error setting email monitoring webhook: {e}")
+        return jsonify({'error': 'Failed to save webhook configuration'}), 500
 
 @app.route('/api/admin/email-monitoring/webhook/test', methods=['POST'])
 @admin_required

@@ -573,22 +573,22 @@ class EmailMonitor:
         print("Stopping email monitoring service...")
         self.running = False
 
-def create_yankee_candle_rule(discord_id, webhook_url):
+def create_yankee_candle_rule(discord_id, webhook_url=None):
     """Helper function to create the specific Yankee Candle refund rule"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     
+    # Note: webhook_url parameter is ignored since we now use admin-only webhooks
     cursor.execute('''
         INSERT OR REPLACE INTO email_monitoring_rules 
-        (discord_id, rule_name, sender_filter, subject_filter, content_filter, webhook_url, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (discord_id, rule_name, sender_filter, subject_filter, content_filter, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)
     ''', (
         discord_id,
         'Yankee Candle Refund Alert',
         'reply@e.yankeecandle.com',
         "Here's your refund!",
         None,  # No content filter needed
-        webhook_url,
         True
     ))
     

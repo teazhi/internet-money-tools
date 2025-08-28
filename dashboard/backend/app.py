@@ -7633,6 +7633,7 @@ def check_stale_opportunities():
 
 def init_feature_flags():
     """Initialize feature flags database tables"""
+    print(f"🔧 Initializing database tables in {DATABASE_FILE}...")
     try:
         # Create a local connection for initialization
         init_conn = sqlite3.connect(DATABASE_FILE)
@@ -7874,6 +7875,7 @@ def init_feature_flags():
         # Sync S3 data to database to restore any lost data
         sync_s3_to_database()
         
+        print("✅ Email monitoring tables created successfully")
         print("[DEBUG] Feature flags system initialized with user groups")
         
     except Exception as e:
@@ -13334,6 +13336,11 @@ def get_email_monitoring_config():
             configs.append(config)
         
         local_conn.close()
+        
+        print(f"🔍 GET email configs for discord_id {discord_id}: found {len(configs)} configs")
+        for config in configs:
+            print(f"  - {config['email_address']} (auth_type: {config['auth_type']})")
+        
         return jsonify({'configs': configs})
         
     except Exception as e:
@@ -13402,7 +13409,7 @@ def get_email_monitoring_rules():
         
         local_cursor.execute('''
             SELECT id, rule_name, sender_filter, subject_filter, content_filter, 
-                   webhook_url, is_active, created_at
+                   is_active, created_at
             FROM email_monitoring_rules 
             WHERE discord_id = ?
             ORDER BY created_at DESC
@@ -13410,14 +13417,13 @@ def get_email_monitoring_rules():
         
         rules = []
         for row in local_cursor.fetchall():
-            id_val, name, sender, subject, content, webhook, is_active, created = row
+            id_val, name, sender, subject, content, is_active, created = row
             rules.append({
                 'id': id_val,
                 'rule_name': name,
                 'sender_filter': sender,
                 'subject_filter': subject,
                 'content_filter': content,
-                'webhook_url': webhook,
                 'is_active': bool(is_active),
                 'created_at': created
             })
@@ -13659,18 +13665,13 @@ def quick_setup_yankee_candle():
         if not has_feature_access(discord_id, 'email_monitoring'):
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
-        data = request.get_json()
-        webhook_url = data.get('webhook_url')
-        
-        if not webhook_url:
-            return jsonify({'error': 'Webhook URL is required'}), 400
-        
         # Import the helper function
         import sys
         sys.path.append('.')
         from email_monitor import create_yankee_candle_rule
         
-        rule_id = create_yankee_candle_rule(discord_id, webhook_url)
+        # Note: webhook_url is no longer needed since we use system-wide webhooks
+        rule_id = create_yankee_candle_rule(discord_id)
         
         return jsonify({
             'message': 'Yankee Candle refund monitoring rule created successfully',
@@ -13951,6 +13952,7 @@ def setup_email_monitoring_oauth():
         local_conn.commit()
         local_conn.close()
         
+        print(f"✅ OAuth setup completed for {email_address} (discord_id: {discord_id})")
         return jsonify({'message': 'OAuth setup completed successfully'})
         
     except Exception as e:

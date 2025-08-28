@@ -125,9 +125,9 @@ const EmailMonitoring = () => {
 
   // OAuth configs don't need connection testing - OAuth flow validates the connection
 
-  const handleQuickSetup = async (webhookUrl) => {
+  const handleQuickSetup = async () => {
     try {
-      await axios.post('/api/email-monitoring/quick-setup', { webhook_url: webhookUrl }, { withCredentials: true });
+      await axios.post('/api/email-monitoring/quick-setup', {}, { withCredentials: true });
       alert('Yankee Candle refund monitoring rule created successfully!');
       fetchData();
     } catch (error) {
@@ -225,33 +225,14 @@ const EmailMonitoring = () => {
         <h3 className="text-lg font-medium text-blue-900 mb-2">Quick Setup: Yankee Candle Refunds</h3>
         <p className="text-blue-700 mb-4">
           Quickly set up monitoring for Yankee Candle refund emails from "reply@e.yankeecandle.com" 
-          with subject "Here's your refund!"
+          with subject "Here's your refund!". Notifications will be sent to the admin-configured webhook.
         </p>
-        <div className="flex space-x-3">
-          <input
-            type="url"
-            placeholder="Enter your webhook URL"
-            className="flex-1 px-3 py-2 border border-blue-300 rounded-md text-sm"
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') {
-                handleQuickSetup(e.target.value);
-                e.target.value = '';
-              }
-            }}
-          />
-          <button
-            onClick={(e) => {
-              const input = e.target.parentElement.querySelector('input');
-              if (input.value) {
-                handleQuickSetup(input.value);
-                input.value = '';
-              }
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-          >
-            Create Rule
-          </button>
-        </div>
+        <button
+          onClick={handleQuickSetup}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+        >
+          Create Yankee Candle Rule
+        </button>
       </div>
 
       {/* Tabs */}

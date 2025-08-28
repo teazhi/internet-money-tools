@@ -7793,9 +7793,22 @@ def init_feature_flags():
             )
         ''')
         
+        # Create admin email monitoring webhook configuration table
+        init_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS email_monitoring_webhook_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                webhook_url TEXT NOT NULL,
+                webhook_name TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_by TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Add new columns to existing email_monitoring table if they don't exist
         try:
-            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN auth_type TEXT DEFAULT 'imap'")
+            init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN auth_type TEXT DEFAULT 'oauth'")
         except sqlite3.OperationalError:
             pass  # Column already exists
             
@@ -7811,6 +7824,12 @@ def init_feature_flags():
             
         try:
             init_cursor.execute("ALTER TABLE email_monitoring ADD COLUMN oauth_token_expires_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
+        
+        # Remove webhook_url from individual rules since it's now system-wide
+        try:
+            init_cursor.execute("ALTER TABLE email_monitoring_rules DROP COLUMN webhook_url")
         except sqlite3.OperationalError:
             pass
         
@@ -13417,23 +13436,19 @@ def add_email_monitoring_rule():
         if not data.get('rule_name'):
             return jsonify({'error': 'Rule name is required'}), 400
         
-        if not data.get('webhook_url'):
-            return jsonify({'error': 'Webhook URL is required'}), 400
-        
         local_conn = sqlite3.connect(DATABASE_FILE)
         local_cursor = local_conn.cursor()
         
         local_cursor.execute('''
             INSERT INTO email_monitoring_rules 
-            (discord_id, rule_name, sender_filter, subject_filter, content_filter, webhook_url, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (discord_id, rule_name, sender_filter, subject_filter, content_filter, is_active)
+            VALUES (?, ?, ?, ?, ?, ?)
         ''', (
             discord_id,
             data['rule_name'],
             data.get('sender_filter'),
             data.get('subject_filter'),
             data.get('content_filter'),
-            data['webhook_url'],
             data.get('is_active', True)
         ))
         
@@ -13533,55 +13548,33 @@ def create_email_monitoring_config():
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
         data = request.get_json()
-        auth_type = data.get('auth_type', 'imap')
         
+        # Use OAuth by default
         local_conn = sqlite3.connect(DATABASE_FILE)
         local_cursor = local_conn.cursor()
         
-        if auth_type == 'oauth':
-            # Use existing OAuth tokens from user's Google account
-            user_record = get_user_by_discord_id(discord_id)
-            if not user_record or not user_record.get('google_tokens'):
-                return jsonify({'error': 'Google account not linked. Please link your Google account first.'}), 400
-                
-            google_tokens = user_record['google_tokens']
+        # Use existing OAuth tokens from user's Google account
+        user_record = get_user_by_discord_id(discord_id)
+        if not user_record or not user_record.get('google_tokens'):
+            return jsonify({'error': 'Google account not linked. Please link your Google account first.'}), 400
             
-            # Insert or update configuration with OAuth
-            local_cursor.execute('''
-                INSERT OR REPLACE INTO email_monitoring 
-                (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, 
-                 oauth_token_expires_at, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                discord_id,
-                data['email_address'],
-                'oauth',
-                google_tokens.get('access_token'),
-                google_tokens.get('refresh_token'),
-                google_tokens.get('expires_at'),
-                data.get('is_active', True)
-            ))
-        else:
-            # Traditional IMAP configuration
-            from email_monitor import email_cipher
-            encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
-            
-            # Insert or update configuration
-            local_cursor.execute('''
-                INSERT OR REPLACE INTO email_monitoring 
-                (discord_id, email_address, auth_type, imap_server, imap_port, username, 
-                 password_encrypted, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                discord_id,
-                data['email_address'],
-                'imap',
-                data['imap_server'],
-                data.get('imap_port', 993),
-                data['username'],
-                encrypted_password,
-                data.get('is_active', True)
-            ))
+        google_tokens = user_record['google_tokens']
+        
+        # Insert or update configuration with OAuth
+        local_cursor.execute('''
+            INSERT OR REPLACE INTO email_monitoring 
+            (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, 
+             oauth_token_expires_at, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            discord_id,
+            data['email_address'],
+            'oauth',
+            google_tokens.get('access_token'),
+            google_tokens.get('refresh_token'),
+            google_tokens.get('expires_at'),
+            data.get('is_active', True)
+        ))
         
         local_conn.commit()
         local_conn.close()
@@ -13845,6 +13838,239 @@ def reset_email_monitoring_password():
     except Exception as e:
         print(f"Error resetting email monitoring password: {e}")
         return jsonify({'error': f'Failed to reset password: {str(e)}'}), 500
+
+@app.route('/api/email-monitoring/oauth-url', methods=['GET'])
+@login_required
+def get_email_monitoring_oauth_url():
+    """Get Gmail OAuth authorization URL for email monitoring"""
+    try:
+        # Generate state parameter for CSRF protection
+        state = str(uuid.uuid4())
+        session['email_oauth_state'] = state
+        
+        # Construct OAuth 2.0 authorization URL
+        auth_url = (
+            f"https://accounts.google.com/o/oauth2/v2/auth?"
+            f"client_id={GOOGLE_CLIENT_ID}&"
+            f"redirect_uri=urn:ietf:wg:oauth:2.0:oob&"
+            f"scope=https://www.googleapis.com/auth/gmail.readonly&"
+            f"response_type=code&"
+            f"access_type=offline&"
+            f"prompt=consent&"
+            f"state={state}"
+        )
+        
+        return jsonify({
+            'auth_url': auth_url,
+            'state': state
+        })
+    except Exception as e:
+        print(f"Error generating OAuth URL: {e}")
+        return jsonify({'error': 'Failed to generate authorization URL'}), 500
+
+@app.route('/api/email-monitoring/oauth-setup', methods=['POST'])
+@login_required
+def setup_email_monitoring_oauth():
+    """Complete OAuth setup for email monitoring"""
+    try:
+        data = request.get_json()
+        email_address = data.get('email_address')
+        auth_code = data.get('auth_code')
+        
+        if not email_address or not auth_code:
+            return jsonify({'error': 'Email address and authorization code are required'}), 400
+            
+        # Exchange authorization code for tokens
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': auth_code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'
+        }
+        
+        import requests
+        token_response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
+        
+        if not token_response.ok:
+            print(f"Token exchange failed: {token_response.text}")
+            return jsonify({'error': 'Failed to exchange authorization code for tokens'}), 400
+            
+        tokens = token_response.json()
+        access_token = tokens.get('access_token')
+        refresh_token = tokens.get('refresh_token')
+        expires_in = tokens.get('expires_in', 3600)
+        
+        if not access_token:
+            return jsonify({'error': 'No access token received'}), 400
+            
+        # Calculate token expiry
+        from datetime import datetime, timedelta
+        expires_at = datetime.now() + timedelta(seconds=expires_in)
+        
+        # Save email monitoring configuration with OAuth
+        discord_id = session['user']['discord_id']
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Check if configuration already exists
+        local_cursor.execute('''
+            SELECT id FROM email_monitoring 
+            WHERE discord_id = ? AND email_address = ?
+        ''', (discord_id, email_address))
+        
+        if local_cursor.fetchone():
+            # Update existing
+            local_cursor.execute('''
+                UPDATE email_monitoring 
+                SET auth_type = 'oauth', 
+                    oauth_access_token = ?, 
+                    oauth_refresh_token = ?, 
+                    oauth_token_expires_at = ?,
+                    is_active = 1,
+                    last_checked = NULL
+                WHERE discord_id = ? AND email_address = ?
+            ''', (access_token, refresh_token, expires_at.isoformat(), discord_id, email_address))
+        else:
+            # Create new
+            local_cursor.execute('''
+                INSERT INTO email_monitoring 
+                (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, oauth_token_expires_at, is_active)
+                VALUES (?, ?, 'oauth', ?, ?, ?, 1)
+            ''', (discord_id, email_address, access_token, refresh_token, expires_at.isoformat()))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'OAuth setup completed successfully'})
+        
+    except Exception as e:
+        print(f"Error setting up OAuth: {e}")
+        return jsonify({'error': f'Failed to setup OAuth: {str(e)}'}), 500
+
+@app.route('/api/admin/email-monitoring/webhook', methods=['GET'])
+@admin_required
+def get_email_monitoring_webhook():
+    """Get system-wide email monitoring webhook configuration"""
+    try:
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        local_cursor.execute('''
+            SELECT webhook_url, webhook_name, is_active, created_at, updated_at
+            FROM email_monitoring_webhook_config
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''')
+        
+        row = local_cursor.fetchone()
+        local_conn.close()
+        
+        if row:
+            return jsonify({
+                'configured': True,
+                'webhook_url': row[0],
+                'webhook_name': row[1],
+                'is_active': bool(row[2]),
+                'created_at': row[3],
+                'updated_at': row[4]
+            })
+        else:
+            return jsonify({'configured': False})
+            
+    except Exception as e:
+        print(f"Error getting email monitoring webhook config: {e}")
+        return jsonify({'error': 'Failed to get webhook configuration'}), 500
+
+@app.route('/api/admin/email-monitoring/webhook', methods=['POST'])
+@admin_required
+def set_email_monitoring_webhook():
+    """Set system-wide email monitoring webhook configuration"""
+    try:
+        data = request.get_json()
+        webhook_url = data.get('webhook_url')
+        webhook_name = data.get('webhook_name', 'Default Webhook')
+        
+        if not webhook_url:
+            return jsonify({'error': 'Webhook URL is required'}), 400
+        
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Deactivate existing webhooks
+        local_cursor.execute('UPDATE email_monitoring_webhook_config SET is_active = 0')
+        
+        # Insert new webhook configuration
+        local_cursor.execute('''
+            INSERT INTO email_monitoring_webhook_config 
+            (webhook_url, webhook_name, is_active, created_by)
+            VALUES (?, ?, ?, ?)
+        ''', (webhook_url, webhook_name, True, session.get('discord_id', 'admin')))
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Webhook configuration saved successfully'})
+        
+    except Exception as e:
+        print(f"Error setting email monitoring webhook: {e}")
+        return jsonify({'error': 'Failed to save webhook configuration'}), 500
+
+@app.route('/api/admin/email-monitoring/webhook/test', methods=['POST'])
+@admin_required
+def test_email_monitoring_webhook():
+    """Test the email monitoring webhook"""
+    try:
+        data = request.get_json()
+        webhook_url = data.get('webhook_url')
+        
+        if not webhook_url:
+            return jsonify({'error': 'Webhook URL is required'}), 400
+            
+        # Send test payload
+        test_payload = {
+            'type': 'test_notification',
+            'message': 'This is a test notification from the email monitoring system',
+            'timestamp': datetime.now().isoformat(),
+            'test': True
+        }
+        
+        response = requests.post(webhook_url, json=test_payload, timeout=10)
+        response.raise_for_status()
+        
+        return jsonify({
+            'message': f'Test successful! Webhook responded with status {response.status_code}'
+        })
+        
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Webhook test timed out'}), 400
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Webhook test failed: {str(e)}'}), 400
+    except Exception as e:
+        print(f"Error testing webhook: {e}")
+        return jsonify({'error': 'Failed to test webhook'}), 500
+
+@app.route('/api/admin/email-monitoring/webhook', methods=['DELETE'])
+@admin_required
+def delete_email_monitoring_webhook():
+    """Delete the system-wide email monitoring webhook configuration"""
+    try:
+        local_conn = sqlite3.connect(DATABASE_FILE)
+        local_cursor = local_conn.cursor()
+        
+        # Delete all webhook configurations
+        local_cursor.execute('DELETE FROM email_monitoring_webhook_config')
+        
+        local_conn.commit()
+        local_conn.close()
+        
+        return jsonify({'message': 'Webhook configuration deleted successfully'})
+        
+    except Exception as e:
+        print(f"Error deleting email monitoring webhook: {e}")
+        return jsonify({'error': 'Failed to delete webhook configuration'}), 500
 
 @app.route('/api/email-monitoring/service-control', methods=['POST'])
 @admin_required

@@ -69,6 +69,15 @@ const AdminCompact = () => {
   const [showGmailOAuthStep, setShowGmailOAuthStep] = useState(false);
   const [gmailAuthUrl, setGmailAuthUrl] = useState('');
   const [gmailAuthCode, setGmailAuthCode] = useState('');
+  const [emailWebhookConfig, setEmailWebhookConfig] = useState(null);
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+  const [webhookForm, setWebhookForm] = useState({
+    webhook_url: '',
+    description: '',
+    is_active: true
+  });
+  const [webhookTestResult, setWebhookTestResult] = useState(null);
+  const [testingWebhook, setTestingWebhook] = useState(false);
 
   const isAdmin = user?.discord_id === '712147636463075389';
 
@@ -81,14 +90,15 @@ const AdminCompact = () => {
       
       // Load data with resilient error handling - use Promise.allSettled instead of Promise.all
       const timestamp = Date.now();
-      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, discountEmailRes] = await Promise.allSettled([
+      const [usersRes, statsRes, invitesRes, discountRes, featuresRes, userFeaturesRes, discountEmailRes, webhookRes] = await Promise.allSettled([
         axios.get(`/api/admin/users?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/stats?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/invitations?t=${timestamp}`, { withCredentials: true }),
         axios.get(`${API_ENDPOINTS.DISCOUNT_MONITORING_STATUS}?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/features?t=${timestamp}`, { withCredentials: true }),
         axios.get(`/api/admin/user-features?t=${timestamp}`, { withCredentials: true }),
-        axios.get(`/api/admin/discount-email/config?t=${timestamp}`, { withCredentials: true })
+        axios.get(`/api/admin/discount-email/config?t=${timestamp}`, { withCredentials: true }),
+        axios.get(`/api/admin/email-monitoring/webhook?t=${timestamp}`, { withCredentials: true })
       ]);
       
       // Handle results with partial failure support
@@ -205,6 +215,14 @@ const AdminCompact = () => {
       } else {
         failedEndpoints.push('Discount Email');
         console.error('Failed to load discount email config:', discountEmailRes.reason);
+      }
+      
+      // Email webhook config (non-critical)
+      if (webhookRes.status === 'fulfilled') {
+        setEmailWebhookConfig(webhookRes.value.data);
+      } else {
+        failedEndpoints.push('Email Webhook Config');
+        console.error('Failed to load email webhook config:', webhookRes.reason);
       }
       
       
@@ -573,6 +591,50 @@ const AdminCompact = () => {
     }
   };
 
+  const handleSaveWebhook = async () => {
+    try {
+      await axios.post('/api/admin/email-monitoring/webhook', webhookForm, { withCredentials: true });
+      setSuccess('Email monitoring webhook saved successfully');
+      setShowWebhookModal(false);
+      setWebhookForm({
+        webhook_url: '',
+        description: '',
+        is_active: true
+      });
+      fetchData();
+    } catch (error) {
+      setError('Failed to save webhook configuration');
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    try {
+      setTestingWebhook(true);
+      setWebhookTestResult(null);
+      const response = await axios.post('/api/admin/email-monitoring/webhook/test', { webhook_url: webhookForm.webhook_url }, { withCredentials: true });
+      setWebhookTestResult({ success: true, message: response.data.message });
+    } catch (error) {
+      setWebhookTestResult({ 
+        success: false, 
+        message: error.response?.data?.error || 'Webhook test failed' 
+      });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
+  const handleDeleteWebhook = async () => {
+    if (!window.confirm('Are you sure you want to delete the webhook configuration?')) return;
+    
+    try {
+      await axios.delete('/api/admin/email-monitoring/webhook', { withCredentials: true });
+      setSuccess('Webhook configuration deleted successfully');
+      fetchData();
+    } catch (error) {
+      setError('Failed to delete webhook configuration');
+    }
+  };
+
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -588,7 +650,8 @@ const AdminCompact = () => {
   const tabs = [
     { id: 'users', name: 'Users', icon: Users, count: filteredUsers.length },
     { id: 'features', name: 'Features', icon: Settings, count: features.length },
-    { id: 'discount-email', name: 'Discount Email', icon: Mail, count: discountEmailConfig?.configured ? 1 : 0 }
+    { id: 'discount-email', name: 'Discount Email', icon: Mail, count: discountEmailConfig?.configured ? 1 : 0 },
+    { id: 'email-webhook', name: 'Email Webhooks', icon: Bell, count: emailWebhookConfig?.configured ? 1 : 0 }
   ];
 
   return (
@@ -1249,6 +1312,85 @@ const AdminCompact = () => {
 
             </>
           )}
+
+          {/* Email Webhook Tab */}
+          {activeTab === 'email-webhook' && (
+            <div className="space-y-6">
+              {/* Webhook Configuration Status */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Email Monitoring Webhook Configuration</h3>
+                    <p className="text-sm text-gray-600 mt-1">Configure the system-wide webhook for email monitoring notifications</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (emailWebhookConfig?.configured) {
+                        // Pre-fill form with existing config
+                        setWebhookForm({
+                          webhook_url: emailWebhookConfig.config?.webhook_url || '',
+                          description: emailWebhookConfig.config?.description || '',
+                          is_active: emailWebhookConfig.config?.is_active || true
+                        });
+                      }
+                      setShowWebhookModal(true);
+                    }}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-builders-600 hover:bg-builders-700"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    {emailWebhookConfig?.configured ? 'Edit Webhook' : 'Configure Webhook'}
+                  </button>
+                </div>
+
+                {emailWebhookConfig?.configured ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span className="text-sm text-gray-900">Webhook Configured</span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <strong>URL:</strong> {emailWebhookConfig.config?.webhook_url}
+                    </div>
+                    {emailWebhookConfig.config?.description && (
+                      <div className="text-sm text-gray-600">
+                        <strong>Description:</strong> {emailWebhookConfig.config?.description}
+                      </div>
+                    )}
+                    <div className="text-sm text-gray-600">
+                      <strong>Status:</strong> {emailWebhookConfig.config?.is_active ? 'Active' : 'Inactive'}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <strong>Created:</strong> {new Date(emailWebhookConfig.config?.created_at).toLocaleString()}
+                    </div>
+                    <div className="flex space-x-2 mt-2">
+                      <button
+                        onClick={handleDeleteWebhook}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Delete Configuration
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex items-center space-x-2">
+                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                    <span className="text-sm text-gray-600">No webhook configured. Email notifications will not be sent.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Usage Information */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">How Email Monitoring Webhooks Work</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• This webhook receives notifications for all users' email monitoring matches</li>
+                  <li>• Individual users cannot configure their own webhooks</li>
+                  <li>• The webhook URL should accept POST requests with JSON payload</li>
+                  <li>• Supports Discord webhooks, Slack webhooks, or custom endpoints</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1718,6 +1860,103 @@ const AdminCompact = () => {
               >
                 Complete Setup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Webhook Configuration Modal */}
+      {showWebhookModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Configure Email Monitoring Webhook</h3>
+              <button
+                onClick={() => {
+                  setShowWebhookModal(false);
+                  setWebhookTestResult(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Webhook URL *</label>
+                <input
+                  type="url"
+                  value={webhookForm.webhook_url}
+                  onChange={(e) => setWebhookForm({...webhookForm, webhook_url: e.target.value})}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                  placeholder="https://hooks.slack.com/services/..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Discord webhook, Slack webhook, or any URL that accepts POST requests
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Description (optional)</label>
+                <input
+                  type="text"
+                  value={webhookForm.description}
+                  onChange={(e) => setWebhookForm({...webhookForm, description: e.target.value})}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-builders-500"
+                  placeholder="e.g., Main Discord Channel"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  id="webhook_active"
+                  type="checkbox"
+                  checked={webhookForm.is_active}
+                  onChange={(e) => setWebhookForm({...webhookForm, is_active: e.target.checked})}
+                  className="h-4 w-4 text-builders-600 focus:ring-builders-500 border-gray-300 rounded"
+                />
+                <label htmlFor="webhook_active" className="ml-2 block text-sm text-gray-700">
+                  Active
+                </label>
+              </div>
+
+              {webhookTestResult && (
+                <div className={`p-3 rounded-md text-sm ${
+                  webhookTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}>
+                  {webhookTestResult.message}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={handleTestWebhook}
+                disabled={testingWebhook || !webhookForm.webhook_url}
+                className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 text-sm disabled:opacity-50"
+              >
+                {testingWebhook ? 'Testing...' : 'Test Webhook'}
+              </button>
+              <div className="space-x-3">
+                <button
+                  onClick={() => {
+                    setShowWebhookModal(false);
+                    setWebhookTestResult(null);
+                  }}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveWebhook}
+                  disabled={!webhookForm.webhook_url}
+                  className="px-4 py-2 bg-builders-600 text-white rounded-md hover:bg-builders-700 text-sm disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4 mr-2 inline" />
+                  Save Webhook
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -26,12 +26,10 @@ const EmailMonitoring = () => {
   // Form states
   const [showConfigForm, setShowConfigForm] = useState(false);
   const [showRuleForm, setShowRuleForm] = useState(false);
-  const [configForm, setConfigForm] = useState({
+  const [showOAuthForm, setShowOAuthForm] = useState(false);
+  const [oauthForm, setOauthForm] = useState({
     email_address: '',
-    imap_server: '',
-    imap_port: 993,
-    username: '',
-    password: '',
+    auth_code: '',
     is_active: true
   });
   const [ruleForm, setRuleForm] = useState({
@@ -39,9 +37,10 @@ const EmailMonitoring = () => {
     sender_filter: '',
     subject_filter: '',
     content_filter: '',
-    webhook_url: '',
     is_active: true
   });
+  const [oauthUrl, setOauthUrl] = useState(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
   
   const [testResult, setTestResult] = useState(null);
   const [testLoading, setTestLoading] = useState(false);
@@ -70,22 +69,34 @@ const EmailMonitoring = () => {
     }
   };
 
-  const handleSaveConfig = async () => {
+  const handleOAuthSetup = async () => {
     try {
-      await axios.post('/api/email-monitoring/config', configForm, { withCredentials: true });
-      setShowConfigForm(false);
-      setConfigForm({
+      setOauthLoading(true);
+      const response = await axios.post('/api/email-monitoring/oauth-setup', oauthForm, { withCredentials: true });
+      alert('OAuth setup completed successfully!');
+      setShowOAuthForm(false);
+      setOauthForm({
         email_address: '',
-        imap_server: '',
-        imap_port: 993,
-        username: '',
-        password: '',
+        auth_code: '',
         is_active: true
       });
+      setOauthUrl(null);
       fetchData();
     } catch (error) {
-      console.error('Error saving email config:', error);
-      alert('Failed to save email configuration');
+      console.error('Error setting up OAuth:', error);
+      alert(error.response?.data?.error || 'Failed to setup OAuth authentication');
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
+  const handleGetOAuthUrl = async () => {
+    try {
+      const response = await axios.get('/api/email-monitoring/oauth-url', { withCredentials: true });
+      setOauthUrl(response.data.auth_url);
+    } catch (error) {
+      console.error('Error getting OAuth URL:', error);
+      alert('Failed to get authorization URL');
     }
   };
 
@@ -98,7 +109,6 @@ const EmailMonitoring = () => {
         sender_filter: '',
         subject_filter: '',
         content_filter: '',
-        webhook_url: '',
         is_active: true
       });
       fetchData();
@@ -348,11 +358,11 @@ const EmailMonitoring = () => {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium">Email Configurations</h3>
                 <button
-                  onClick={() => setShowConfigForm(true)}
+                  onClick={() => setShowOAuthForm(true)}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Email Account
+                  Add Gmail Account (OAuth)
                 </button>
               </div>
 
@@ -361,10 +371,10 @@ const EmailMonitoring = () => {
                   <Mail className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500 mb-4">No email accounts configured</p>
                   <button
-                    onClick={() => setShowConfigForm(true)}
+                    onClick={() => setShowOAuthForm(true)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   >
-                    Add Your First Email Account
+                    Add Your First Gmail Account
                   </button>
                 </div>
               ) : (
@@ -375,7 +385,7 @@ const EmailMonitoring = () => {
                         <div>
                           <div className="font-medium">{config.email_address}</div>
                           <div className="text-sm text-gray-500">
-                            {config.imap_server}:{config.imap_port} • {config.username}
+                            {config.auth_type === 'oauth' ? 'Gmail OAuth' : `${config.imap_server}:${config.imap_port} • ${config.username}`}
                           </div>
                           {config.last_checked && (
                             <div className="text-xs text-gray-400 mt-1">
@@ -385,25 +395,33 @@ const EmailMonitoring = () => {
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className={`w-2 h-2 rounded-full ${config.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                          <button
-                            onClick={() => handleTestConnection(config)}
-                            disabled={testLoading}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                          >
-                            <TestTube className="h-3 w-3 mr-1 inline" />
-                            Test
-                          </button>
-                          <button
-                            onClick={() => {
-                              const newPassword = prompt(`Enter new password for ${config.email_address}:`);
-                              if (newPassword) {
-                                handleResetPassword(config.email_address, newPassword);
-                              }
-                            }}
-                            className="px-3 py-1 text-sm border border-orange-300 text-orange-600 rounded-md hover:bg-orange-50"
-                          >
-                            Reset Password
-                          </button>
+                          {config.auth_type === 'oauth' ? (
+                            <span className="px-3 py-1 text-sm text-green-600 bg-green-50 rounded-md">
+                              OAuth Configured
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleTestConnection(config)}
+                                disabled={testLoading}
+                                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                              >
+                                <TestTube className="h-3 w-3 mr-1 inline" />
+                                Test
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const newPassword = prompt(`Enter new password for ${config.email_address}:`);
+                                  if (newPassword) {
+                                    handleResetPassword(config.email_address, newPassword);
+                                  }
+                                }}
+                                className="px-3 py-1 text-sm border border-orange-300 text-orange-600 rounded-md hover:bg-orange-50"
+                              >
+                                Reset Password
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -411,127 +429,85 @@ const EmailMonitoring = () => {
                 </div>
               )}
 
-              {/* Email Configuration Form Modal */}
-              {showConfigForm && (
+              {/* OAuth Configuration Form Modal */}
+              {showOAuthForm && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                   <div className="bg-white rounded-lg max-w-md w-full mx-4 p-6">
-                    <h3 className="text-lg font-medium mb-4">Add Email Account</h3>
+                    <h3 className="text-lg font-medium mb-4">Add Gmail Account (OAuth)</h3>
                     
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium mb-1">Email Address</label>
+                        <label className="block text-sm font-medium mb-1">Gmail Address</label>
                         <input
                           type="email"
-                          value={configForm.email_address}
-                          onChange={(e) => setConfigForm({...configForm, email_address: e.target.value})}
+                          value={oauthForm.email_address}
+                          onChange={(e) => setOauthForm({...oauthForm, email_address: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          placeholder="your-email@example.com"
+                          placeholder="your-gmail@gmail.com"
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-1">IMAP Server</label>
-                        <select
-                          value={configForm.imap_server}
-                          onChange={(e) => {
-                            const server = getCommonEmailServers().find(s => s.server === e.target.value);
-                            setConfigForm({
-                              ...configForm, 
-                              imap_server: e.target.value,
-                              imap_port: server ? server.port : 993
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        <label className="block text-sm font-medium mb-2">Step 1: Authorize Access</label>
+                        <p className="text-sm text-gray-600 mb-3">
+                          Click the button below to get your authorization URL, then visit it to grant access.
+                        </p>
+                        <button
+                          onClick={handleGetOAuthUrl}
+                          disabled={!oauthForm.email_address}
+                          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
                         >
-                          <option value="">Select email provider or enter custom</option>
-                          {getCommonEmailServers().map((server, index) => (
-                            <option key={index} value={server.server}>
-                              {server.name} ({server.server})
-                            </option>
-                          ))}
-                        </select>
-                        {!getCommonEmailServers().find(s => s.server === configForm.imap_server) && (
-                          <input
-                            type="text"
-                            value={configForm.imap_server}
-                            onChange={(e) => setConfigForm({...configForm, imap_server: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mt-2"
-                            placeholder="imap.example.com"
-                          />
+                          Get Authorization URL
+                        </button>
+                        
+                        {oauthUrl && (
+                          <div className="mt-3 p-3 bg-blue-50 rounded-md">
+                            <p className="text-sm text-blue-700 mb-2">Visit this URL to authorize:</p>
+                            <a
+                              href={oauthUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 underline break-all hover:text-blue-800"
+                            >
+                              {oauthUrl}
+                            </a>
+                          </div>
                         )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-1">Port</label>
-                        <input
-                          type="number"
-                          value={configForm.imap_port}
-                          onChange={(e) => setConfigForm({...configForm, imap_port: parseInt(e.target.value)})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Username</label>
+                        <label className="block text-sm font-medium mb-1">Step 2: Authorization Code</label>
                         <input
                           type="text"
-                          value={configForm.username}
-                          onChange={(e) => setConfigForm({...configForm, username: e.target.value})}
+                          value={oauthForm.auth_code}
+                          onChange={(e) => setOauthForm({...oauthForm, auth_code: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          placeholder="Usually your email address"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Password</label>
-                        <input
-                          type="password"
-                          value={configForm.password}
-                          onChange={(e) => setConfigForm({...configForm, password: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          placeholder="Email password or app password"
+                          placeholder="Paste the authorization code here"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          For Gmail, use an App Password instead of your main password
+                          After authorizing, copy and paste the code from the success page
                         </p>
                       </div>
-                      
-                      {testResult && (
-                        <div className={`p-3 rounded-md text-sm ${
-                          testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                        }`}>
-                          {testResult.message}
-                        </div>
-                      )}
                     </div>
                     
-                    <div className="flex justify-between mt-6">
+                    <div className="flex justify-end space-x-3 mt-6">
                       <button
-                        onClick={() => handleTestConnection()}
-                        disabled={testLoading || !configForm.email_address || !configForm.imap_server || !configForm.password}
-                        className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 text-sm disabled:opacity-50"
+                        onClick={() => {
+                          setShowOAuthForm(false);
+                          setOauthUrl(null);
+                        }}
+                        className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
                       >
-                        {testLoading ? 'Testing...' : 'Test Connection'}
+                        Cancel
                       </button>
-                      <div className="space-x-3">
-                        <button
-                          onClick={() => {
-                            setShowConfigForm(false);
-                            setTestResult(null);
-                          }}
-                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 text-sm"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveConfig}
-                          disabled={!configForm.email_address || !configForm.imap_server || !configForm.password}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
-                        >
-                          <Save className="h-4 w-4 mr-2 inline" />
-                          Save
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleOAuthSetup}
+                        disabled={oauthLoading || !oauthForm.email_address || !oauthForm.auth_code}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
+                      >
+                        <Save className="h-4 w-4 mr-2 inline" />
+                        {oauthLoading ? 'Setting up...' : 'Complete Setup'}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -592,7 +568,7 @@ const EmailMonitoring = () => {
                         )}
                         <div className="flex items-center space-x-2 mt-2">
                           <Webhook className="h-3 w-3 text-gray-400" />
-                          <span className="text-xs text-gray-500 truncate">{rule.webhook_url}</span>
+                          <span className="text-xs text-gray-500">Uses system webhook configuration</span>
                         </div>
                       </div>
                     </div>
@@ -651,17 +627,10 @@ const EmailMonitoring = () => {
                         />
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Webhook URL *</label>
-                        <input
-                          type="url"
-                          value={ruleForm.webhook_url}
-                          onChange={(e) => setRuleForm({...ruleForm, webhook_url: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          placeholder="https://hooks.slack.com/..."
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Discord webhook, Slack webhook, or any URL that accepts POST requests
+                      <div className="p-3 bg-blue-50 rounded-md">
+                        <p className="text-sm text-blue-700">
+                          <strong>Note:</strong> Webhook notifications are configured by your administrator. 
+                          All matching emails will be sent to the system webhook.
                         </p>
                       </div>
                     </div>
@@ -675,7 +644,7 @@ const EmailMonitoring = () => {
                       </button>
                       <button
                         onClick={handleSaveRule}
-                        disabled={!ruleForm.rule_name || !ruleForm.webhook_url}
+                        disabled={!ruleForm.rule_name}
                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm disabled:opacity-50"
                       >
                         <Save className="h-4 w-4 mr-2 inline" />

@@ -13775,53 +13775,43 @@ def test_email_connection():
 @app.route('/api/email-monitoring/status', methods=['GET'])
 @login_required
 def get_email_monitoring_status():
-    """Get email monitoring service status"""
+    """Get refund email monitoring service status from S3"""
     try:
         discord_id = session['discord_id']
         
         if not has_feature_access(discord_id, 'email_monitoring'):
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
-        # Check if there are any active configurations
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        # Get configurations and rules from S3
+        configs = email_monitoring_manager.get_email_configs(discord_id)
+        rules = email_monitoring_manager.get_monitoring_rules(discord_id)
+        recent_logs = email_monitoring_manager.get_recent_logs(discord_id, 10)
         
-        local_cursor.execute('''
-            SELECT COUNT(*) as config_count FROM email_monitoring WHERE discord_id = ? AND is_active = 1
-        ''', (discord_id,))
-        config_count = local_cursor.fetchone()[0]
+        # Count active items
+        active_configs = len([c for c in configs if c.get('is_active')])
+        active_rules = len([r for r in rules if r.get('is_active')])
         
-        local_cursor.execute('''
-            SELECT COUNT(*) as rule_count FROM email_monitoring_rules WHERE discord_id = ? AND is_active = 1
-        ''', (discord_id,))
-        rule_count = local_cursor.fetchone()[0]
+        # Check if refund email monitoring service is running
+        service_running = (email_monitor_instance is not None and 
+                          email_monitor_instance.is_running and 
+                          active_configs > 0 and active_rules > 0)
         
-        # Get recent logs
-        local_cursor.execute('''
-            SELECT created_at, email_subject, email_sender, webhook_sent 
-            FROM email_monitoring_logs 
-            WHERE discord_id = ? 
-            ORDER BY created_at DESC 
-            LIMIT 10
-        ''', (discord_id,))
-        
-        recent_logs = []
-        for row in local_cursor.fetchall():
-            created_at, subject, sender, webhook_sent = row
-            recent_logs.append({
-                'timestamp': created_at,
-                'subject': subject,
-                'sender': sender,
-                'webhook_sent': bool(webhook_sent)
+        # Format recent logs
+        formatted_logs = []
+        for log in recent_logs:
+            formatted_logs.append({
+                'timestamp': log.get('timestamp'),
+                'subject': log.get('email_subject'),
+                'sender': log.get('email_sender'),
+                'webhook_sent': log.get('webhook_sent', False)
             })
         
-        local_conn.close()
-        
         return jsonify({
-            'active_configs': config_count,
-            'active_rules': rule_count,
-            'recent_logs': recent_logs,
-            'service_running': config_count > 0 and rule_count > 0
+            'active_configs': active_configs,
+            'active_rules': active_rules,
+            'recent_logs': formatted_logs,
+            'service_running': service_running,
+            'service_type': 'refund_email_monitoring_s3'
         })
         
     except Exception as e:

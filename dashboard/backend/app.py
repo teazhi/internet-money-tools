@@ -13848,16 +13848,16 @@ def get_email_monitoring_oauth_url():
         state = str(uuid.uuid4())
         session['email_oauth_state'] = state
         
-        # Construct OAuth 2.0 authorization URL
+        # Construct OAuth 2.0 authorization URL using the same redirect URI as other OAuth flows
         auth_url = (
             f"https://accounts.google.com/o/oauth2/v2/auth?"
             f"client_id={GOOGLE_CLIENT_ID}&"
-            f"redirect_uri=urn:ietf:wg:oauth:2.0:oob&"
+            f"redirect_uri={urllib.parse.quote(GOOGLE_REDIRECT_URI)}&"
             f"scope=https://www.googleapis.com/auth/gmail.readonly&"
             f"response_type=code&"
             f"access_type=offline&"
             f"prompt=consent&"
-            f"state={state}"
+            f"state=email_monitoring_{state}"
         )
         
         return jsonify({
@@ -13886,7 +13886,7 @@ def setup_email_monitoring_oauth():
             'client_secret': GOOGLE_CLIENT_SECRET,
             'code': auth_code,
             'grant_type': 'authorization_code',
-            'redirect_uri': 'urn:ietf:wg:oauth:2.0:oob'
+            'redirect_uri': GOOGLE_REDIRECT_URI
         }
         
         import requests

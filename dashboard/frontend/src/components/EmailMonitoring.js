@@ -395,30 +395,36 @@ const EmailMonitoring = () => {
                         
                         {oauthUrl && (
                           <div className="mt-3 p-3 bg-blue-50 rounded-md">
-                            <p className="text-sm text-blue-700 mb-2">Visit this URL to authorize:</p>
+                            <p className="text-sm text-blue-700 mb-2">
+                              <strong>Step 1:</strong> Click the link below to authorize Gmail access:
+                            </p>
                             <a
                               href={oauthUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-blue-600 underline break-all hover:text-blue-800"
+                              className="inline-block px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                             >
-                              {oauthUrl}
+                              Authorize Gmail Access
                             </a>
+                            <p className="text-xs text-blue-600 mt-2">
+                              <strong>Step 2:</strong> After authorizing, you'll be redirected to a page. 
+                              Copy the authorization code from the URL (after "code=") and paste it below.
+                            </p>
                           </div>
                         )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-1">Step 2: Authorization Code</label>
+                        <label className="block text-sm font-medium mb-1">Step 3: Authorization Code</label>
                         <input
                           type="text"
                           value={oauthForm.auth_code}
                           onChange={(e) => setOauthForm({...oauthForm, auth_code: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          placeholder="Paste the authorization code here"
+                          placeholder="Paste the authorization code from the URL here"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          After authorizing, copy and paste the code from the success page
+                          Look for "code=" in the URL and copy everything after it until the next "&" (if any)
                         </p>
                       </div>
                     </div>

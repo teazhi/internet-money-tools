@@ -14722,6 +14722,7 @@ def get_discount_email_format_patterns():
     """Get current discount email format patterns"""
     try:
         admin_config = get_admin_gmail_config()
+        print(f"[DEBUG] admin_config type: {type(admin_config)}, value: {admin_config}")
         
         if not admin_config:
             # Return default patterns if no config exists
@@ -14739,17 +14740,7 @@ def get_discount_email_format_patterns():
                 'sender_filter': admin_config.get('sender_filter', 'alert@distill.io')
             }
             
-        return jsonify({
-            'success': True,
-            'patterns': patterns,
-            'config_source': 's3' if admin_config and admin_config.get('is_s3_config') else ('database' if admin_config and admin_config.get('is_database_config') else 'default'),
-            'examples': {
-                'subject_example': '[Lowes] Alert: Lowes (ASIN: B0093OG4PE) (Note: Mobile)',
-                'asin_example': '(ASIN: B0093OG4PE)',
-                'retailer_example': '[Lowes] Alert:',
-                'sender_example': 'alert@distill.io'
-            }
-        })
+        return jsonify(patterns)
         
     except Exception as e:
         print(f"Error getting format patterns: {e}")

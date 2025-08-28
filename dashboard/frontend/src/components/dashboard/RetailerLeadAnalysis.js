@@ -27,6 +27,7 @@ const RetailerLeadAnalysis = () => {
   const [filterRecommendation, setFilterRecommendation] = useState('all');
   const [worksheets, setWorksheets] = useState([]);
   const [excludeKeywords, setExcludeKeywords] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
@@ -123,7 +124,24 @@ const RetailerLeadAnalysis = () => {
       passesRecommendationFilter = item.recommendation === filterRecommendation;
     }
     
-    // Filter by exclude keywords
+    // Filter by search query (inclusive search - find matching items)
+    let passesSearchFilter = true;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const searchableFields = [
+        item.asin,
+        item.product_name,
+        item.source_link,
+        item.recommendation,
+        item.reason,
+        item.retailer
+      ];
+      passesSearchFilter = searchableFields.some(field => 
+        field && String(field).toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by exclude keywords (exclusive filter - remove matching items)
     let passesKeywordFilter = true;
     if (excludeKeywords.trim()) {
       const keywords = excludeKeywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k);
@@ -131,7 +149,7 @@ const RetailerLeadAnalysis = () => {
       passesKeywordFilter = !keywords.some(keyword => productName.includes(keyword));
     }
     
-    return passesRecommendationFilter && passesKeywordFilter;
+    return passesRecommendationFilter && passesSearchFilter && passesKeywordFilter;
   }) || [];
 
   const handleSyncLeads = async () => {
@@ -657,6 +675,18 @@ const RetailerLeadAnalysis = () => {
                   </p>
                 </div>
                 <div className="flex items-center space-x-4">
+                  {/* Search Input */}
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      placeholder="Search products (ASIN, name, retailer...)"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="px-3 py-1 border border-gray-300 rounded-md text-sm w-64"
+                      title="Search for products by ASIN, product name, retailer, or recommendation"
+                    />
+                  </div>
+                  {/* Exclude Keywords Input */}
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
@@ -727,8 +757,11 @@ const RetailerLeadAnalysis = () => {
               <div className="px-6 py-3 bg-blue-50 border-t border-blue-200">
                 <div className="text-sm text-blue-800">
                   Showing {filteredRecommendations.length} of {analysis.recommendations.length} recommendations
+                  {searchQuery.trim() && (
+                    <span> (searched for: "{searchQuery}")</span>
+                  )}
                   {excludeKeywords.trim() && (
-                    <span> (filtered out products containing: {excludeKeywords})</span>
+                    <span> (excluded: {excludeKeywords})</span>
                   )}
                 </div>
               </div>

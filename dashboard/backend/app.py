@@ -3082,6 +3082,50 @@ def debug_stock_raw():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/current-stock-values')
+@login_required
+def debug_current_stock_values():
+    """Debug endpoint to examine current stock values in enhanced analytics"""
+    try:
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User record not found'}), 404
+            
+        # Get the enhanced analytics data to see what stock values are being used
+        orders_analyzer = OrdersAnalysis()
+        analytics = orders_analyzer.analyze(user_record, preserve_purchase_history=True)
+        
+        debug_info = {
+            'total_products': len(analytics.get('enhanced_analytics', {})),
+            'stock_analysis': {}
+        }
+        
+        # Check first 5 products
+        enhanced_analytics = analytics.get('enhanced_analytics', {})
+        for i, (asin, product_data) in enumerate(list(enhanced_analytics.items())[:5]):
+            restock_data = product_data.get('restock', {})
+            stock_info = product_data.get('stock_info', {})
+            
+            # Extract raw stock values from different potential sources
+            debug_info['stock_analysis'][asin] = {
+                'current_stock_from_restock': restock_data.get('current_stock'),
+                'raw_stock_info_keys': list(stock_info.keys())[:10],  # First 10 columns
+                'fba_fbm_stock_raw': stock_info.get('FBA/FBM Stock'),
+                'stock_raw': stock_info.get('Stock'),
+                'awd_stock_raw': stock_info.get('AWD Stock'),
+                'available_stock_raw': stock_info.get('Available Stock'),
+                'inventory_raw': stock_info.get('Inventory'),
+                'title': stock_info.get('Title', stock_info.get('Product Name', f'Product {asin}'))
+            }
+            
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        print(f"Error in debug current stock values: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/stock-columns')
 @login_required
 def debug_stock_columns():
@@ -13384,52 +13428,7 @@ def get_email_monitoring_config():
         print(f"Error fetching email monitoring config: {e}")
         return jsonify({'error': 'Failed to fetch email monitoring configuration'}), 500
 
-@app.route('/api/email-monitoring/config', methods=['POST'])
-@login_required
-def add_email_monitoring_config():
-    """Add or update email monitoring configuration"""
-    try:
-        discord_id = session['discord_id']
-        
-        # Check if user has access to email monitoring feature
-        if not has_feature_access(discord_id, 'email_monitoring'):
-            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
-        
-        data = request.get_json()
-        required_fields = ['email_address', 'imap_server', 'username', 'password']
-        
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Encrypt password
-        encrypted_password = email_cipher.encrypt(data['password'].encode()).decode()
-        
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
-        
-        local_cursor.execute('''
-            INSERT OR REPLACE INTO email_monitoring 
-            (discord_id, email_address, imap_server, imap_port, username, password_encrypted, is_active, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (
-            discord_id,
-            data['email_address'],
-            data['imap_server'],
-            data.get('imap_port', 993),
-            data['username'],
-            encrypted_password,
-            data.get('is_active', True)
-        ))
-        
-        local_conn.commit()
-        local_conn.close()
-        
-        return jsonify({'message': 'Email monitoring configuration saved successfully'})
-        
-    except Exception as e:
-        print(f"Error saving email monitoring config: {e}")
-        return jsonify({'error': 'Failed to save email monitoring configuration'}), 500
+# Old IMAP endpoint removed - OAuth is now the only supported method
 
 @app.route('/api/email-monitoring/rules', methods=['GET'])
 @login_required
@@ -13588,53 +13587,7 @@ def test_email_connection():
         print(f"Error testing email connection: {e}")
         return jsonify({'error': 'Failed to test email connection'}), 500
 
-@app.route('/api/email-monitoring/config', methods=['POST'])
-@login_required
-def create_email_monitoring_config():
-    """Create or update email monitoring configuration"""
-    try:
-        discord_id = session['discord_id']
-        
-        if not has_feature_access(discord_id, 'email_monitoring'):
-            return jsonify({'error': 'Access denied to email monitoring feature'}), 403
-        
-        data = request.get_json()
-        
-        # Use OAuth by default
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
-        
-        # Use existing OAuth tokens from user's Google account
-        user_record = get_user_by_discord_id(discord_id)
-        if not user_record or not user_record.get('google_tokens'):
-            return jsonify({'error': 'Google account not linked. Please link your Google account first.'}), 400
-            
-        google_tokens = user_record['google_tokens']
-        
-        # Insert or update configuration with OAuth
-        local_cursor.execute('''
-            INSERT OR REPLACE INTO email_monitoring 
-            (discord_id, email_address, auth_type, oauth_access_token, oauth_refresh_token, 
-             oauth_token_expires_at, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            discord_id,
-            data['email_address'],
-            'oauth',
-            google_tokens.get('access_token'),
-            google_tokens.get('refresh_token'),
-            google_tokens.get('expires_at'),
-            data.get('is_active', True)
-        ))
-        
-        local_conn.commit()
-        local_conn.close()
-        
-        return jsonify({'message': 'Email monitoring configuration saved successfully'})
-        
-    except Exception as e:
-        print(f"Error saving email monitoring config: {e}")
-        return jsonify({'error': 'Failed to save email monitoring configuration'}), 500
+# POST endpoint removed - only OAuth setup endpoint is used now
 
 @app.route('/api/email-monitoring/status', methods=['GET'])
 @login_required

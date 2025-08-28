@@ -866,7 +866,7 @@ class EnhancedOrdersAnalysis:
         return 0
     
     def get_direct_stock_value(self, stock_df: pd.DataFrame, asin: str) -> float:
-        """Get stock value directly from Sellerboard CSV for a specific ASIN"""
+        """Get stock value directly from Sellerboard CSV for a specific ASIN using same logic as extract_current_stock"""
         # Find ASIN column
         asin_col = None
         for col in stock_df.columns:
@@ -884,24 +884,11 @@ class EnhancedOrdersAnalysis:
             
         row = asin_rows.iloc[0]
         
-        # Look for stock value in common column names
-        stock_columns = ['FBA/FBM Stock', 'FBA stock', 'Stock', 'Inventory', 'Available']
-        for col in stock_columns:
-            if col in stock_df.columns and pd.notna(row[col]):
-                try:
-                    return float(str(row[col]).replace(',', ''))
-                except:
-                    continue
+        # Convert row to dict to reuse extract_current_stock logic
+        stock_info = row.to_dict()
         
-        # If no exact match, look for any column containing 'stock'
-        for col in stock_df.columns:
-            if 'stock' in col.lower() and pd.notna(row[col]):
-                try:
-                    return float(str(row[col]).replace(',', ''))
-                except:
-                    continue
-                    
-        return 0
+        # Use the exact same logic as extract_current_stock method
+        return self.extract_current_stock(stock_info, debug_asin=asin)
     
     def get_stock_info(self, stock_df: pd.DataFrame) -> Dict[str, dict]:
         """Extract stock information from stock report"""

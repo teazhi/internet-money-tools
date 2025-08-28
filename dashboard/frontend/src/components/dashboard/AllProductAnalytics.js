@@ -235,14 +235,14 @@ const AllProductAnalytics = () => {
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
       asin,
-      product_name: `Product ${asin}`, // This would come from enhanced analytics in real implementation
+      product_name: analytics?.enhanced_analytics?.[asin]?.stock_info?.Title || analytics?.enhanced_analytics?.[asin]?.stock_info?.['Product Name'] || analytics?.enhanced_analytics?.[asin]?.stock_info?.Name || `Product ${asin}`,
       age_info: ageInfo,
       estimated_age_days: ageInfo.estimated_age_days || 0,
       age_category: ageInfo.age_category || 'unknown',
       confidence_score: ageInfo.confidence_score || 0,
-      // Mock additional inventory data for demonstration
-      current_stock: Math.floor(Math.random() * 200) + 10,
-      velocity: Math.random() * 5 + 0.1,
+      // Get real inventory data from enhanced analytics  
+      current_stock: analytics?.enhanced_analytics?.[asin]?.restock?.current_stock || 0,
+      velocity: analytics?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
       days_left: Math.floor(Math.random() * 180) + 5,
       reorder_point: Math.floor(Math.random() * 50) + 10,
       last_cogs: Math.random() * 50 + 10,

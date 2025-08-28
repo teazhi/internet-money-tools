@@ -64,7 +64,7 @@ class EmailMonitor:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, rule_name, sender_filter, subject_filter, content_filter, webhook_url
+            SELECT id, rule_name, sender_filter, subject_filter, content_filter
             FROM email_monitoring_rules 
             WHERE discord_id = ? AND is_active = 1
         ''', (discord_id,))
@@ -125,7 +125,7 @@ class EmailMonitor:
     
     def matches_rule(self, email_msg, rule):
         """Check if an email matches a monitoring rule"""
-        _, rule_name, sender_filter, subject_filter, content_filter, webhook_url = rule
+        _, rule_name, sender_filter, subject_filter, content_filter = rule
         
         # Get email components
         sender = self.decode_email_header(email_msg.get('From', ''))
@@ -447,6 +447,12 @@ class EmailMonitor:
                 self.update_last_checked(discord_id, email_address)
                 return
             
+            # Get system webhook URL
+            webhook_url = self.get_system_webhook_url()
+            if not webhook_url:
+                print(f"No system webhook configured, skipping notifications")
+                return
+            
             # Check each email against rules
             matches_found = 0
             for email_id in email_ids[-BATCH_SIZE:]:  # Process latest emails first
@@ -470,8 +476,7 @@ class EmailMonitor:
                             if matches:
                                 print(f"🎯 Email match found! Rule: {rule[1]}, Subject: {subject}")
                                 
-                                # Send webhook
-                                webhook_url = rule[5]
+                                # Send webhook using system webhook
                                 email_data = {
                                     'sender': sender,
                                     'subject': subject,

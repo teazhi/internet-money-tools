@@ -66,6 +66,7 @@ const Settings = () => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
+  const [targetWorksheets, setTargetWorksheets] = useState([]);
 
   useEffect(() => {
     if (user?.user_record) {
@@ -87,7 +88,7 @@ const Settings = () => {
     }
   }, [user]);
 
-  // Check demo mode status
+  // Check demo mode status and load target worksheets
   useEffect(() => {
     const checkDemoMode = async () => {
       try {
@@ -97,7 +98,19 @@ const Settings = () => {
         // Failed to check demo mode - continue silently
       }
     };
+
+    const fetchTargetWorksheets = async () => {
+      try {
+        const response = await axios.get('/api/retailer-leads/target-worksheets', { withCredentials: true });
+        setTargetWorksheets(response.data.worksheets || []);
+      } catch (error) {
+        // Not critical - we'll use a default list
+        setTargetWorksheets(['Unknown', 'Other', 'Misc', 'No Source']);
+      }
+    };
+
     checkDemoMode();
+    fetchTargetWorksheets();
   }, []);
 
   // Toggle demo mode
@@ -327,8 +340,8 @@ const Settings = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      // This syncs leads from user's first worksheet to the target spreadsheet
-      const response = await axios.post('/api/retailer-leads/sync-first-worksheet', {
+      // This syncs leads from user's connected sheet to the target spreadsheet
+      const response = await axios.post('/api/retailer-leads/sync-to-sheets', {
         default_worksheet: defaultWorksheetForNoSource
       }, { 
         withCredentials: true 
@@ -997,8 +1010,9 @@ const Settings = () => {
             <div className="flex-1">
               <h4 className="text-sm font-medium text-green-900">Sync Leads to Retailer Worksheets</h4>
               <p className="text-sm text-green-700 mb-3">
-                Sync leads from your first connected Google Sheet worksheet to appropriate retailer worksheets 
-                (Walmart - Flat, Target - Flat, etc.) based on source URLs. This should only be done occasionally.
+                Sync leads from your connected Google Sheet to appropriate retailer worksheets 
+                (Walmart - Flat, Target - Flat, etc.) based on source URLs. This should only be done occasionally 
+                to organize leads by retailer.
               </p>
               
               <div className="flex items-center space-x-4 mb-3">
@@ -1014,6 +1028,12 @@ const Settings = () => {
                     <option value="Other">Other</option>
                     <option value="Misc">Misc</option>
                     <option value="No Source">No Source</option>
+                    {targetWorksheets
+                      .filter(ws => !['Unknown', 'Other', 'Misc', 'No Source'].includes(ws))
+                      .map(ws => (
+                        <option key={ws} value={ws}>{ws}</option>
+                      ))
+                    }
                   </select>
                 </div>
               </div>
@@ -1038,12 +1058,12 @@ const Settings = () => {
                 {syncLoading ? (
                   <>
                     <RefreshCw className="h-3 w-3 animate-spin" />
-                    <span>Syncing First Worksheet...</span>
+                    <span>Syncing Leads...</span>
                   </>
                 ) : (
                   <>
                     <Upload className="h-3 w-3" />
-                    <span>Sync First Worksheet to Retailer Sheets</span>
+                    <span>Sync Leads to Retailer Sheets</span>
                   </>
                 )}
               </button>

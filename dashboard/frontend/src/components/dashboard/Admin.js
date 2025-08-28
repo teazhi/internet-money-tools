@@ -2359,12 +2359,13 @@ const Admin = () => {
             </p>
           </div>
         )}
-      </div>
 
         {/* Discount Tab */}
         {activeTab === 'discount' && (
           <DiscountEmailFormatConfig />
         )}
+
+      </div>
 
       {/* Edit User Modal */}
       {editingUser && (

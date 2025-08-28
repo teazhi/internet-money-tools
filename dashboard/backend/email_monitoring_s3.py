@@ -232,7 +232,7 @@ class EmailMonitoringS3Manager:
         
         log_entry = {
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.utcnow().isoformat(),
             "rule_id": rule_id,
             "email_subject": email_subject,
             "email_sender": email_sender,

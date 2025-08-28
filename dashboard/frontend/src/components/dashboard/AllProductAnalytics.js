@@ -697,7 +697,6 @@ const AllProductAnalytics = () => {
             </div>
           )}
         </div>
-      )}
     </div>
   );
 };

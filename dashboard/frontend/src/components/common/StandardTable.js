@@ -484,7 +484,7 @@ const StandardTable = ({
                 <tr 
                   key={row.id || index} 
                   className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
-                  onClick={() => onRowClick && onRowClick(row)}
+                  {...(onRowClick && { onClick: () => onRowClick(row) })}
                 >
                   {columnOrder.map((columnKey) => 
                     renderCell(columnKey, row, index)

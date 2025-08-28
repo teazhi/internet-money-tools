@@ -13683,33 +13683,23 @@ def create_email_monitoring_rule():
         print(f"Error creating email monitoring rule: {e}")
         return jsonify({'error': 'Failed to create email monitoring rule'}), 500
 
-@app.route('/api/email-monitoring/rules/<int:rule_id>', methods=['DELETE'])
+@app.route('/api/email-monitoring/rules/<rule_id>', methods=['DELETE'])
 @login_required
 def delete_email_monitoring_rule(rule_id):
-    """Delete email monitoring rule"""
+    """Delete email monitoring rule from S3"""
     try:
         discord_id = session['discord_id']
         
         if not has_feature_access(discord_id, 'email_monitoring'):
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        success = email_monitoring_manager.delete_monitoring_rule(discord_id, rule_id)
         
-        local_cursor.execute('''
-            DELETE FROM email_monitoring_rules 
-            WHERE id = ? AND discord_id = ?
-        ''', (rule_id, discord_id))
-        
-        if local_cursor.rowcount == 0:
-            local_conn.close()
-            return jsonify({'error': 'Rule not found or access denied'}), 404
-        
-        local_conn.commit()
-        local_conn.close()
-        
-        return jsonify({'message': 'Email monitoring rule deleted successfully'})
-        
+        if success:
+            return jsonify({'message': 'Email monitoring rule deleted successfully'})
+        else:
+            return jsonify({'error': 'Rule not found'}), 404
+            
     except Exception as e:
         print(f"Error deleting email monitoring rule: {e}")
         return jsonify({'error': 'Failed to delete email monitoring rule'}), 500

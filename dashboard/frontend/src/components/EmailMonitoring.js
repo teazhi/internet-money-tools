@@ -4,14 +4,10 @@ import {
   Mail, 
   Plus, 
   Trash2, 
-  TestTube, 
   CheckCircle, 
   XCircle, 
   AlertCircle,
-  Settings,
   Webhook,
-  Clock,
-  Eye,
   Save,
   RefreshCw
 } from 'lucide-react';
@@ -24,7 +20,6 @@ const EmailMonitoring = () => {
   const [activeTab, setActiveTab] = useState('overview');
   
   // Form states
-  const [showConfigForm, setShowConfigForm] = useState(false);
   const [showRuleForm, setShowRuleForm] = useState(false);
   const [showOAuthForm, setShowOAuthForm] = useState(false);
   const [oauthForm, setOauthForm] = useState({
@@ -42,8 +37,6 @@ const EmailMonitoring = () => {
   const [oauthUrl, setOauthUrl] = useState(null);
   const [oauthLoading, setOauthLoading] = useState(false);
   
-  const [testResult, setTestResult] = useState(null);
-  const [testLoading, setTestLoading] = useState(false);
   const [checkingNow, setCheckingNow] = useState(false);
 
   useEffect(() => {
@@ -72,7 +65,7 @@ const EmailMonitoring = () => {
   const handleOAuthSetup = async () => {
     try {
       setOauthLoading(true);
-      const response = await axios.post('/api/email-monitoring/oauth-setup', oauthForm, { withCredentials: true });
+      await axios.post('/api/email-monitoring/oauth-setup', oauthForm, { withCredentials: true });
       alert('OAuth setup completed successfully!');
       setShowOAuthForm(false);
       setOauthForm({
@@ -130,27 +123,11 @@ const EmailMonitoring = () => {
     }
   };
 
-  const handleTestConnection = async (config = null) => {
-    const testConfig = config || configForm;
-    setTestLoading(true);
-    setTestResult(null);
-    
-    try {
-      const response = await axios.post('/api/email-monitoring/test', testConfig, { withCredentials: true });
-      setTestResult({ success: true, message: response.data.message });
-    } catch (error) {
-      setTestResult({ 
-        success: false, 
-        message: error.response?.data?.message || 'Connection test failed' 
-      });
-    } finally {
-      setTestLoading(false);
-    }
-  };
+  // OAuth configs don't need connection testing - OAuth flow validates the connection
 
   const handleQuickSetup = async (webhookUrl) => {
     try {
-      const response = await axios.post('/api/email-monitoring/quick-setup', { webhook_url: webhookUrl }, { withCredentials: true });
+      await axios.post('/api/email-monitoring/quick-setup', { webhook_url: webhookUrl }, { withCredentials: true });
       alert('Yankee Candle refund monitoring rule created successfully!');
       fetchData();
     } catch (error) {
@@ -174,27 +151,7 @@ const EmailMonitoring = () => {
     }
   };
 
-  const handleResetPassword = async (emailAddress, newPassword) => {
-    try {
-      const response = await axios.post('/api/email-monitoring/reset-password', {
-        email_address: emailAddress,
-        password: newPassword
-      }, { withCredentials: true });
-      
-      alert('Password updated successfully! You can now try checking emails again.');
-      fetchData(); // Refresh to show updated status
-    } catch (error) {
-      console.error('Error resetting password:', error);
-      alert(error.response?.data?.error || 'Failed to reset password');
-    }
-  };
 
-  const getCommonEmailServers = () => [
-    { name: 'Gmail', server: 'imap.gmail.com', port: 993 },
-    { name: 'Outlook/Hotmail', server: 'outlook.office365.com', port: 993 },
-    { name: 'Yahoo', server: 'imap.mail.yahoo.com', port: 993 },
-    { name: 'iCloud', server: 'imap.mail.me.com', port: 993 }
-  ];
 
   if (loading) {
     return (
@@ -395,33 +352,9 @@ const EmailMonitoring = () => {
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className={`w-2 h-2 rounded-full ${config.is_active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                          {config.auth_type === 'oauth' ? (
-                            <span className="px-3 py-1 text-sm text-green-600 bg-green-50 rounded-md">
-                              OAuth Configured
-                            </span>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleTestConnection(config)}
-                                disabled={testLoading}
-                                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                              >
-                                <TestTube className="h-3 w-3 mr-1 inline" />
-                                Test
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newPassword = prompt(`Enter new password for ${config.email_address}:`);
-                                  if (newPassword) {
-                                    handleResetPassword(config.email_address, newPassword);
-                                  }
-                                }}
-                                className="px-3 py-1 text-sm border border-orange-300 text-orange-600 rounded-md hover:bg-orange-50"
-                              >
-                                Reset Password
-                              </button>
-                            </>
-                          )}
+                          <span className="px-3 py-1 text-sm text-green-600 bg-green-50 rounded-md">
+                            OAuth Configured
+                          </span>
                         </div>
                       </div>
                     </div>

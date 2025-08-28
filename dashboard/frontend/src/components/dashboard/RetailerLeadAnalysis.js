@@ -5,12 +5,10 @@ import {
   Search, 
   Package, 
   AlertCircle, 
-  CheckCircle,
   XCircle,
   ExternalLink,
   Download,
   RefreshCw,
-  Upload,
   Eye
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
@@ -25,14 +23,9 @@ const RetailerLeadAnalysis = () => {
   const [worksheets, setWorksheets] = useState([]);
   const [excludeKeywords, setExcludeKeywords] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [syncLoading, setSyncLoading] = useState(false);
-  const [syncResults, setSyncResults] = useState(null);
-  const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
-  const [targetWorksheets, setTargetWorksheets] = useState([]);
 
   useEffect(() => {
     fetchWorksheets();
-    fetchTargetWorksheets();
   }, []);
 
   const fetchWorksheets = async () => {
@@ -47,15 +40,6 @@ const RetailerLeadAnalysis = () => {
     }
   };
 
-  const fetchTargetWorksheets = async () => {
-    try {
-      const response = await axios.get('/api/retailer-leads/target-worksheets', { withCredentials: true });
-      setTargetWorksheets(response.data.worksheets || []);
-    } catch (error) {
-      // Not critical - we'll use a default list
-      setTargetWorksheets(['Unknown', 'Other', 'Misc', 'No Source']);
-    }
-  };
 
   const handleAnalyze = async () => {
     if (!selectedWorksheet) {
@@ -84,6 +68,7 @@ const RetailerLeadAnalysis = () => {
       setLoading(false);
     }
   };
+
 
   const getRecommendationIcon = (recommendation) => {
     switch (recommendation) {
@@ -420,6 +405,7 @@ const RetailerLeadAnalysis = () => {
           </div>
 
 
+
         <div className="flex items-end space-x-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -475,18 +461,6 @@ const RetailerLeadAnalysis = () => {
           </div>
         )}
 
-        {syncResults && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-            <div className="flex items-center">
-              <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-              <div className="text-sm text-green-800">
-                <span className="font-medium">Sync completed!</span> {syncResults.added || 0} leads added
-                {syncResults.already_existed > 0 && <span>, {syncResults.already_existed} skipped</span>}
-                {syncResults.errors > 0 && <span className="text-red-600">, {syncResults.errors} errors</span>}
-              </div>
-            </div>
-          </div>
-        )}
 
         {analysis && (
         <>
@@ -562,33 +536,13 @@ const RetailerLeadAnalysis = () => {
                       <option value="SKIP">Skip Only</option>
                     </select>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleSyncLeads}
-                      disabled={syncLoading}
-                      className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                      title="Sync all leads to sheets"
-                    >
-                      {syncLoading ? (
-                        <>
-                          <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                          Syncing
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-3 w-3 mr-1" />
-                          Sync
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={exportToCSV}
-                      className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 flex items-center"
-                    >
-                      <Download className="h-3 w-3 mr-1" />
-                      Export
-                    </button>
-                  </div>
+                  <button
+                    onClick={exportToCSV}
+                    className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 flex items-center"
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    Export
+                  </button>
                 </div>
               </div>
             </div>

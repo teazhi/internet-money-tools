@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye, TestTube, Play, RefreshCw, Database } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Settings as SettingsIcon, Mail, FileText, ToggleLeft, ToggleRight, Link, Clock, ShoppingBag, ExternalLink, Eye, TestTube, Play, RefreshCw, Database, Upload } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import axios from 'axios';
 
@@ -63,6 +63,9 @@ const Settings = () => {
     status: '', 
     fullUpdate: false 
   });
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
+  const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
 
   useEffect(() => {
     if (user?.user_record) {
@@ -315,6 +318,34 @@ const Settings = () => {
         type: 'error', 
         text: error.response?.data?.error || error.message || 'Failed to trigger Sellerboard update' 
       });
+    }
+  };
+
+  const handleSyncLeads = async () => {
+    setSyncLoading(true);
+    setSyncResults(null);
+    setMessage({ type: '', text: '' });
+
+    try {
+      // This syncs leads from user's first worksheet to the target spreadsheet
+      const response = await axios.post('/api/retailer-leads/sync-first-worksheet', {
+        default_worksheet: defaultWorksheetForNoSource
+      }, { 
+        withCredentials: true 
+      });
+
+      setSyncResults(response.data);
+      setMessage({ 
+        type: 'success', 
+        text: `Successfully synced ${response.data.added || 0} leads from your first worksheet` 
+      });
+    } catch (error) {
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.message || error.response?.data?.error || 'Failed to sync leads to spreadsheet' 
+      });
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -953,6 +984,73 @@ const Settings = () => {
           </div>
         </div>
       )}
+
+      {/* Lead Sync Controls */}
+      <div className="card max-w-2xl border-green-200">
+        <h3 className="text-sm font-semibold text-green-900 mb-4 flex items-center space-x-2">
+          <Upload className="h-4 w-4" />
+          <span>Lead Management</span>
+        </h3>
+        <div className="bg-green-50 border border-green-200 rounded-md p-4">
+          <div className="flex items-start space-x-3">
+            <Database className="h-5 w-5 text-green-500 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-green-900">Sync Leads to Retailer Worksheets</h4>
+              <p className="text-sm text-green-700 mb-3">
+                Sync leads from your first connected Google Sheet worksheet to appropriate retailer worksheets 
+                (Walmart - Flat, Target - Flat, etc.) based on source URLs. This should only be done occasionally.
+              </p>
+              
+              <div className="flex items-center space-x-4 mb-3">
+                <div>
+                  <label className="text-xs text-green-700 block mb-1">Default worksheet for leads without source URLs:</label>
+                  <select
+                    value={defaultWorksheetForNoSource}
+                    onChange={(e) => setDefaultWorksheetForNoSource(e.target.value)}
+                    className="px-2 py-1 text-xs border border-green-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                    disabled={syncLoading}
+                  >
+                    <option value="Unknown">Unknown</option>
+                    <option value="Other">Other</option>
+                    <option value="Misc">Misc</option>
+                    <option value="No Source">No Source</option>
+                  </select>
+                </div>
+              </div>
+              
+              {syncResults && (
+                <div className="mb-3 text-xs text-green-800 bg-green-100 border border-green-200 rounded p-2">
+                  <strong>Last Sync Result:</strong> {syncResults.added || 0} leads added
+                  {syncResults.already_existed > 0 && <span>, {syncResults.already_existed} skipped</span>}
+                  {syncResults.errors > 0 && <span className="text-red-600">, {syncResults.errors} errors</span>}
+                </div>
+              )}
+              
+              <button 
+                onClick={handleSyncLeads}
+                disabled={syncLoading}
+                className={`text-sm px-3 py-1 rounded-md transition-colors duration-200 flex items-center space-x-2 ${
+                  syncLoading 
+                    ? "bg-gray-400 text-white cursor-not-allowed" 
+                    : "bg-green-600 hover:bg-green-700 text-white"
+                }`}
+              >
+                {syncLoading ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>Syncing First Worksheet...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-3 w-3" />
+                    <span>Sync First Worksheet to Retailer Sheets</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Demo Mode Controls */}
       <div className="card max-w-2xl border-blue-200">

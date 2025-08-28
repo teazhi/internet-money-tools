@@ -1726,6 +1726,11 @@ def send_invitation_email(email, invitation_token, invited_by):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # If demo mode is OFF but we have demo user session data, clear it
+        if (not DEMO_MODE and 
+            session.get('discord_id') == '123456789012345678'):
+            session.clear()
+        
         # In demo mode, automatically set demo user session for all requests
         if DEMO_MODE and 'discord_id' not in session:
             session.permanent = True
@@ -2448,6 +2453,12 @@ def debug_auth():
 
 @app.route('/api/user')
 def get_user():
+    # If demo mode is OFF but we have demo user session data, clear it
+    if (not DEMO_MODE and 
+        session.get('discord_id') == '123456789012345678'):
+        session.clear()
+        return jsonify({'error': 'Authentication required'}), 401
+    
     # In demo mode, return the demo user without requiring authentication
     if DEMO_MODE:
         # Set demo session for consistency
@@ -2455,18 +2466,20 @@ def get_user():
         session['discord_username'] = 'DemoUser#1234'
         demo_users = get_dummy_users()
         demo_user = demo_users[0]  # Use first demo user
+        
+        # Use new schema helper functions
         return jsonify({
-            'discord_id': demo_user['discord_id'],
-            'discord_username': demo_user['discord_username'],
-            'email': demo_user['email'],
-            'profile_configured': True,
-            'google_linked': True,
-            'sheet_configured': True,
-            'amazon_connected': True,
+            'discord_id': get_user_discord_id(demo_user),
+            'discord_username': get_user_field(demo_user, 'identity.discord_username'),
+            'email': get_user_email(demo_user),
+            'profile_configured': is_user_configured(demo_user),
+            'google_linked': get_user_field(demo_user, 'integrations.google.linked'),
+            'sheet_configured': bool(get_user_sheet_id(demo_user)),
+            'amazon_connected': get_user_field(demo_user, 'integrations.amazon.configured'),
             'demo_mode': True,
-            'user_type': demo_user.get('user_type', 'main'),
-            'permissions': demo_user.get('permissions', ['all']),
-            'last_activity': demo_user.get('last_activity'),
+            'user_type': get_user_type(demo_user),
+            'permissions': get_user_permissions(demo_user),
+            'last_activity': get_user_field(demo_user, 'account.last_activity'),
             'timezone': 'America/New_York'
         })
     
@@ -8588,7 +8601,16 @@ def init_feature_flags():
 def has_feature_access(discord_id, feature_key):
     """Check if user has access to a specific feature (individual or group-based)"""
     try:
-        # Admin always has access to everything
+        # In demo mode, block access to beta features
+        if DEMO_MODE:
+            # Check if this feature is beta
+            cursor.execute('SELECT is_beta FROM features WHERE feature_key = ?', (feature_key,))
+            beta_result = cursor.fetchone()
+            if beta_result and beta_result[0]:  # is_beta is True
+                print(f"[DEMO MODE] Blocking access to beta feature: {feature_key}")
+                return False
+        
+        # Admin always has access to everything (except beta features in demo mode)
         user = get_user_record(discord_id)
         if user and user.get('discord_id') == '712147636463075389':  # Admin discord ID
             return True
@@ -8663,6 +8685,11 @@ def get_user_features(discord_id):
         all_features = local_cursor.fetchall()
         
         for feature_key, name, description, is_beta in all_features:
+            # Skip beta features in demo mode
+            if DEMO_MODE and bool(is_beta):
+                print(f"[DEMO MODE] Hiding beta feature: {feature_key}")
+                continue
+            
             # has_feature_access already handles subuser logic
             has_access = has_feature_access(discord_id, feature_key)
             user_features[feature_key] = {
@@ -13256,6 +13283,23 @@ def demo_status():
         'test_restart': True  # This will confirm if restart picked up changes
     })
 
+def clear_all_caches_for_demo_toggle():
+    """Clear all caches when toggling demo mode to prevent stale data issues"""
+    # Clear user config cache
+    config_cache.clear()
+    
+    # Clear user session cache
+    user_session_cache.clear()
+    
+    # Clear analytics cache
+    analytics_cache.clear()
+    
+    # Clear file listing cache
+    file_listing_cache.clear()
+    
+    # Clear flask session data to force re-authentication
+    session.clear()
+
 @app.route('/api/demo/toggle', methods=['POST'])
 def toggle_demo_mode():
     """Toggle demo mode (for development/testing only)"""
@@ -13264,6 +13308,10 @@ def toggle_demo_mode():
     # Only allow toggling in development
     if os.getenv('FLASK_ENV') == 'development' or os.getenv('ENVIRONMENT') == 'development':
         DEMO_MODE = not DEMO_MODE
+        
+        # Clear all caches when switching modes to prevent stale data
+        clear_all_caches_for_demo_toggle()
+        
         return jsonify({
             'demo_mode': DEMO_MODE,
             'message': f'Demo mode {"enabled" if DEMO_MODE else "disabled"}'
@@ -13276,6 +13324,10 @@ def enable_demo_mode():
     """Enable demo mode for demos"""
     global DEMO_MODE
     DEMO_MODE = True
+    
+    # Clear all caches when enabling demo mode
+    clear_all_caches_for_demo_toggle()
+    
     return jsonify({
         'demo_mode': True,
         'message': 'Demo mode enabled - all data is now simulated for demonstration purposes'
@@ -13747,6 +13799,10 @@ def disable_demo_mode():
     """Disable demo mode"""
     global DEMO_MODE
     DEMO_MODE = False
+    
+    # Clear all caches when disabling demo mode
+    clear_all_caches_for_demo_toggle()
+    
     return jsonify({
         'demo_mode': False,
         'message': 'Demo mode disabled - using real data'

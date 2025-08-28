@@ -9044,6 +9044,37 @@ def fetch_sellerboard_cogs_data(cogs_url):
     except Exception as e:
         raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
+@app.route('/api/test/sellerboard-cogs', methods=['POST'])
+@login_required
+def test_sellerboard_cogs():
+    """Test endpoint for Sellerboard COGS URL processing"""
+    try:
+        data = request.get_json()
+        if not data or 'cogs_url' not in data:
+            return jsonify({'error': 'Missing cogs_url parameter'}), 400
+        
+        cogs_url = data['cogs_url']
+        print(f"[TEST] Testing Sellerboard COGS URL: {cogs_url[:100]}...")
+        
+        # Test the function
+        inventory_data = fetch_sellerboard_cogs_data(cogs_url)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sellerboard COGS data fetched successfully',
+            'data': {
+                'row_count': len(inventory_data),
+                'columns': list(inventory_data.columns) if hasattr(inventory_data, 'columns') else [],
+                'sample_data': inventory_data.head(3).to_dict('records') if hasattr(inventory_data, 'head') else str(inventory_data)[:500]
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
+
 @app.route('/api/missing-listings', methods=['GET'])
 @login_required
 def get_expected_arrivals():

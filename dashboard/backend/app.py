@@ -10198,6 +10198,29 @@ def fetch_discount_alerts_from_imap(email_config):
         print(f"[DEBUG] IMAP fetch error: {e}")
         return fetch_mock_discount_alerts()
 
+def is_valid_asin(asin):
+    """Validate if a string is a proper Amazon ASIN format"""
+    import re
+    if not asin or len(asin) != 10:
+        return False
+    
+    # Must start with B followed by 9 alphanumeric characters  
+    if not re.match(r'^B[0-9A-Z]{9}$', asin):
+        return False
+        
+    # Additional validation - avoid common false positives
+    false_positives = [
+        'BXT5V5XPNW',  # Seen in Stumptown coffee emails
+        'BOOPSS7GDF',  # Another false positive pattern
+        'BJZN9KFZ3K',  # Another false positive pattern  
+        'BGFZD1HP12',  # Another false positive pattern
+    ]
+    
+    if asin in false_positives:
+        return False
+        
+    return True
+
 def fetch_discount_alerts_from_gmail_api(gmail_config):
     """Fetch discount alerts using Gmail API configuration"""
     try:
@@ -10213,20 +10236,9 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         days_back = get_discount_email_days_back()
         from datetime import datetime, timedelta
         
-        # Build search query for discount emails
-        search_queries = []
-        
-        # Search for emails from specific sender if configured
-        if DISCOUNT_SENDER_EMAIL:
-            search_queries.append(f'from:{DISCOUNT_SENDER_EMAIL}')
-        
-        # Search for discount-related subjects
-        discount_keywords = ['discount', 'clearance', 'sale', 'alert', 'deal', 'promotion']
-        for keyword in discount_keywords:
-            search_queries.append(f'subject:{keyword}')
-        
-        # Combine queries with OR
-        query = ' OR '.join(search_queries)
+        # Build search query specifically for Distill.io discount alerts
+        # Focus on the specific email format: "[Retailer] Alert: Retailer (ASIN: BXXXXXXXXX)"
+        query = 'from:alert@distill.io'
         
         # Add date filter
         cutoff_date = datetime.now() - timedelta(days=days_back)
@@ -10288,28 +10300,77 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 # Extract ASIN from subject or content
                 import re
-                asin_match = re.search(r'B[0-9A-Z]{9}', subject + ' ' + html_content)
-                asin = asin_match.group() if asin_match else f'UNKNOWN_{len(alerts)}'
                 
-                # Determine retailer from sender or subject
+                # Debug: Log email content for ASIN extraction debugging
+                if len(alerts) < 3:  # Only debug first 3 emails to avoid spam
+                    print(f"[DEBUG] Email {len(alerts)+1} - Subject: {subject[:100]}")
+                    print(f"[DEBUG] Email {len(alerts)+1} - Content preview: {html_content[:200]}")
+                    print(f"[DEBUG] Email {len(alerts)+1} - Sender: {sender}")
+                
+                # Extract ASIN specifically from Distill.io format: "[Retailer] Alert: Retailer (ASIN: BXXXXXXXXX)"
+                asin = None
+                
+                # Distill.io format - extract from subject line
+                distill_pattern = r'\(ASIN:\s*([B0-9A-Z]{10})\)'
+                asin_match = re.search(distill_pattern, subject, re.IGNORECASE)
+                
+                if asin_match:
+                    potential_asin = asin_match.group(1)
+                    if is_valid_asin(potential_asin):
+                        asin = potential_asin
+                        print(f"[DEBUG] Extracted ASIN from Distill.io subject: {asin}")
+                
+                # Fallback: try to find ASIN in email content
+                if not asin:
+                    content_patterns = [
+                        r'\(ASIN:\s*([B0-9A-Z]{10})\)',  # (ASIN: B123456789)
+                        r'amazon\.com/[^/]*/dp/([B0-9A-Z]{10})',  # Amazon URL
+                        r'ASIN[:\s]*([B0-9A-Z]{10})',  # ASIN: B123456789
+                    ]
+                    
+                    for pattern in content_patterns:
+                        content_match = re.search(pattern, html_content, re.IGNORECASE)
+                        if content_match:
+                            potential_asin = content_match.group(1)
+                            if is_valid_asin(potential_asin):
+                                asin = potential_asin
+                                print(f"[DEBUG] Extracted ASIN from content: {asin}")
+                                break
+                
+                # Skip emails without valid ASINs (not discount opportunities)
+                if not asin:
+                    print(f"[DEBUG] Skipping Distill.io email - no valid ASIN found in subject: {subject}")
+                    continue
+                
+                # Extract retailer from Distill.io subject format: "[Retailer] Alert:"
                 retailer = 'Unknown'
-                sender_lower = sender.lower()
-                subject_lower = subject.lower()
                 
-                retailers_map = {
-                    'vitacost': 'Vitacost',
-                    'walmart': 'Walmart',
-                    'target': 'Target',
-                    'amazon': 'Amazon',
-                    'costco': 'Costco',
-                    'lowes': 'Lowes',
-                    'lowe': 'Lowes'
-                }
+                # First try to extract from Distill.io bracket format
+                retailer_pattern = r'\[([^\]]+)\]\s*Alert:'
+                retailer_match = re.search(retailer_pattern, subject, re.IGNORECASE)
                 
-                for key, name in retailers_map.items():
-                    if key in sender_lower or key in subject_lower:
-                        retailer = name
-                        break
+                if retailer_match:
+                    retailer = retailer_match.group(1).strip()
+                    print(f"[DEBUG] Extracted retailer from Distill.io format: {retailer}")
+                else:
+                    # Fallback: check sender and subject for retailer keywords
+                    sender_lower = sender.lower()
+                    subject_lower = subject.lower()
+                    
+                    retailers_map = {
+                        'vitacost': 'Vitacost',
+                        'walmart': 'Walmart',
+                        'target': 'Target',
+                        'amazon': 'Amazon',
+                        'costco': 'Costco',
+                        'lowes': 'Lowes',
+                        'lowe': 'Lowes'
+                    }
+                    
+                    for key, name in retailers_map.items():
+                        if key in sender_lower or key in subject_lower:
+                            retailer = name
+                            break
                 
                 # Convert Gmail date to ISO format
                 alert_time = convert_gmail_date_to_iso(date_received)
@@ -13560,39 +13621,32 @@ def get_email_monitoring_config():
 @app.route('/api/email-monitoring/rules', methods=['GET'])
 @login_required
 def get_email_monitoring_rules():
-    """Get user's email monitoring rules"""
+    """Get user's email monitoring rules from S3"""
     try:
         discord_id = session['discord_id']
         
         if not has_feature_access(discord_id, 'email_monitoring'):
             return jsonify({'error': 'Access denied to email monitoring feature'}), 403
         
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        rules = email_monitoring_manager.get_monitoring_rules(discord_id, active_only=False)
         
-        local_cursor.execute('''
-            SELECT id, rule_name, sender_filter, subject_filter, content_filter, 
-                   is_active, created_at
-            FROM email_monitoring_rules 
-            WHERE discord_id = ?
-            ORDER BY created_at DESC
-        ''', (discord_id,))
+        formatted_rules = []
+        for rule in rules:
+            formatted_rule = {
+                'id': rule.get('id'),
+                'rule_name': rule.get('rule_name'),
+                'sender_filter': rule.get('sender_filter'),
+                'subject_filter': rule.get('subject_filter'),
+                'content_filter': rule.get('content_filter'),
+                'is_active': rule.get('is_active', True)
+            }
+            formatted_rules.append(formatted_rule)
         
-        rules = []
-        for row in local_cursor.fetchall():
-            id_val, name, sender, subject, content, is_active, created = row
-            rules.append({
-                'id': id_val,
-                'rule_name': name,
-                'sender_filter': sender,
-                'subject_filter': subject,
-                'content_filter': content,
-                'is_active': bool(is_active),
-                'created_at': created
-            })
+        print(f"📋 GET rules for discord_id {discord_id}: found {len(formatted_rules)} rules")
+        for rule in formatted_rules:
+            print(f"  - {rule['rule_name']} (ID: {rule['id']})")
         
-        local_conn.close()
-        return jsonify({'rules': rules})
+        return jsonify({'rules': formatted_rules})
         
     except Exception as e:
         print(f"Error fetching email monitoring rules: {e}")
@@ -13600,8 +13654,8 @@ def get_email_monitoring_rules():
 
 @app.route('/api/email-monitoring/rules', methods=['POST'])
 @login_required
-def add_email_monitoring_rule():
-    """Add email monitoring rule"""
+def create_email_monitoring_rule():
+    """Create email monitoring rule in S3"""
     try:
         discord_id = session['discord_id']
         
@@ -13610,30 +13664,20 @@ def add_email_monitoring_rule():
         
         data = request.get_json()
         
-        if not data.get('rule_name'):
-            return jsonify({'error': 'Rule name is required'}), 400
+        rule = {
+            'rule_name': data.get('rule_name'),
+            'sender_filter': data.get('sender_filter'),
+            'subject_filter': data.get('subject_filter'),
+            'content_filter': data.get('content_filter'),
+            'is_active': data.get('is_active', True)
+        }
         
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        rule_id = email_monitoring_manager.add_monitoring_rule(discord_id, rule)
         
-        local_cursor.execute('''
-            INSERT INTO email_monitoring_rules 
-            (discord_id, rule_name, sender_filter, subject_filter, content_filter, is_active)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            discord_id,
-            data['rule_name'],
-            data.get('sender_filter'),
-            data.get('subject_filter'),
-            data.get('content_filter'),
-            data.get('is_active', True)
-        ))
-        
-        rule_id = local_cursor.lastrowid
-        local_conn.commit()
-        local_conn.close()
-        
-        return jsonify({'message': 'Email monitoring rule created successfully', 'rule_id': rule_id})
+        if rule_id:
+            return jsonify({'message': 'Email monitoring rule created successfully', 'rule_id': rule_id})
+        else:
+            return jsonify({'error': 'Failed to create rule'}), 500
         
     except Exception as e:
         print(f"Error creating email monitoring rule: {e}")

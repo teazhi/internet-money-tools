@@ -405,6 +405,303 @@ const ScriptConfigModal = ({ configs, onSave, onCancel, onTrigger, loading, lamb
   );
 };
 
+const DiscountEmailFormatConfig = () => {
+  const [config, setConfig] = useState({
+    subject_pattern: '',
+    asin_pattern: '',
+    retailer_pattern: '',
+    sender_filter: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+
+  // Sample test email
+  const [testEmail, setTestEmail] = useState('[Lowes] Alert: Lowes (ASIN: B0093OG4PE) (Note: Mobile)');
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const fetchConfig = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await axios.get('/api/admin/discount-email/format-patterns', { withCredentials: true });
+      setConfig(response.data);
+    } catch (error) {
+      setError('Failed to load configuration: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError('');
+      setSuccess('');
+      
+      await axios.put('/api/admin/discount-email/format-patterns', config, { withCredentials: true });
+      setSuccess('Configuration saved successfully!');
+    } catch (error) {
+      setError('Failed to save configuration: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestPatterns = async () => {
+    try {
+      setTestLoading(true);
+      setError('');
+      setTestResult(null);
+      
+      const response = await axios.post('/api/admin/discount-email/test-patterns', {
+        patterns: config,
+        test_email: testEmail
+      }, { withCredentials: true });
+      
+      setTestResult(response.data);
+    } catch (error) {
+      setError('Failed to test patterns: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const resetToDefaults = () => {
+    setConfig({
+      subject_pattern: '\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)',
+      asin_pattern: '\\(ASIN:\\s*([B0-9A-Z]{10})\\)',
+      retailer_pattern: '\\[([^\\]]+)\\]\\s*Alert:',
+      sender_filter: 'alert@distill.io'
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-builders-500 mx-auto mb-2"></div>
+            <p className="text-gray-600 text-sm">Loading email format configuration...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">Email Format Patterns</h3>
+            <p className="text-sm text-gray-500">Configure patterns for parsing Distill.io discount alerts</p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={resetToDefaults}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reset to Defaults
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center px-3 py-2 text-sm font-medium text-white bg-builders-600 border border-transparent rounded-md hover:bg-builders-700 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Saving...' : 'Save Configuration'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Configuration Form */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="space-y-6">
+          {/* Subject Pattern */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subject Pattern
+              <span className="text-gray-500 font-normal ml-2">(Regex to match entire email subject)</span>
+            </label>
+            <input
+              type="text"
+              value={config.subject_pattern}
+              onChange={(e) => setConfig(prev => ({ ...prev, subject_pattern: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 font-mono text-sm"
+              placeholder="\\[([^\\]]+)\\]\\s*Alert:.*?\\(ASIN:\\s*([B0-9A-Z]{10})\\)"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Captures both retailer and ASIN from full subject line
+            </p>
+          </div>
+
+          {/* ASIN Pattern */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              ASIN Pattern
+              <span className="text-gray-500 font-normal ml-2">(Regex to extract ASIN)</span>
+            </label>
+            <input
+              type="text"
+              value={config.asin_pattern}
+              onChange={(e) => setConfig(prev => ({ ...prev, asin_pattern: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 font-mono text-sm"
+              placeholder="\\(ASIN:\\s*([B0-9A-Z]{10})\\)"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Should capture Amazon ASIN (B followed by 9 alphanumeric characters)
+            </p>
+          </div>
+
+          {/* Retailer Pattern */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Retailer Pattern
+              <span className="text-gray-500 font-normal ml-2">(Regex to extract retailer name)</span>
+            </label>
+            <input
+              type="text"
+              value={config.retailer_pattern}
+              onChange={(e) => setConfig(prev => ({ ...prev, retailer_pattern: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500 font-mono text-sm"
+              placeholder="\\[([^\\]]+)\\]\\s*Alert:"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Captures retailer name from square brackets
+            </p>
+          </div>
+
+          {/* Sender Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sender Filter
+              <span className="text-gray-500 font-normal ml-2">(Email sender to monitor)</span>
+            </label>
+            <input
+              type="text"
+              value={config.sender_filter}
+              onChange={(e) => setConfig(prev => ({ ...prev, sender_filter: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+              placeholder="alert@distill.io"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Only emails from this sender will be processed for discount opportunities
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Test Section */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h4 className="text-md font-medium text-gray-900 mb-4">Test Patterns</h4>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Test Email Subject
+            </label>
+            <input
+              type="text"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-builders-500"
+              placeholder="[Lowes] Alert: Lowes (ASIN: B0093OG4PE) (Note: Mobile)"
+            />
+          </div>
+          
+          <button
+            onClick={handleTestPatterns}
+            disabled={testLoading}
+            className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            {testLoading ? 'Testing...' : 'Test Patterns'}
+          </button>
+
+          {/* Test Results */}
+          {testResult && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h5 className="text-sm font-medium text-gray-900 mb-3">Test Results</h5>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Subject Match:</span>
+                  <span className={`font-medium ${testResult.subject_match ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.subject_match ? '✓ Match' : '✗ No Match'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">ASIN Extracted:</span>
+                  <span className={`font-medium ${testResult.asin ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.asin || 'None'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Retailer Extracted:</span>
+                  <span className={`font-medium ${testResult.retailer ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.retailer || 'None'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Valid Format:</span>
+                  <span className={`font-medium ${testResult.valid ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.valid ? '✓ Valid' : '✗ Invalid'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start">
+          <AlertTriangle className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+          <div className="text-sm">
+            <p className="font-medium text-blue-900 mb-2">Distill.io Email Format Configuration</p>
+            <div className="text-blue-800 space-y-1">
+              <p>• <strong>Subject Pattern:</strong> Full regex to match the entire email subject and extract both retailer and ASIN</p>
+              <p>• <strong>ASIN Pattern:</strong> Specific regex to extract ASIN (must capture group 1)</p>
+              <p>• <strong>Retailer Pattern:</strong> Specific regex to extract retailer name (must capture group 1)</p>
+              <p>• <strong>Sender Filter:</strong> Only emails from this address will be processed</p>
+              <p>• Default format: <code className="bg-blue-100 px-1 rounded">[Retailer] Alert: Description (ASIN: BXXXXXXXXX)</code></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
+            <p className="ml-3 text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex">
+            <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
+            <p className="ml-3 text-sm text-green-700">{success}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Admin = () => {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -2063,6 +2360,11 @@ const Admin = () => {
           </div>
         )}
       </div>
+
+        {/* Discount Tab */}
+        {activeTab === 'discount' && (
+          <DiscountEmailFormatConfig />
+        )}
 
       {/* Edit User Modal */}
       {editingUser && (

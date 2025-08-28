@@ -9,7 +9,9 @@ import {
   AlertCircle,
   Webhook,
   Save,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const EmailMonitoring = () => {
@@ -18,6 +20,7 @@ const EmailMonitoring = () => {
   const [status, setStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [expandedLogs, setExpandedLogs] = useState(new Set()); // Track which logs are expanded
   
   // Form states
   const [showRuleForm, setShowRuleForm] = useState(false);
@@ -151,6 +154,16 @@ const EmailMonitoring = () => {
     }
   };
 
+  const toggleLogExpansion = (logId) => {
+    const newExpandedLogs = new Set(expandedLogs);
+    if (newExpandedLogs.has(logId)) {
+      newExpandedLogs.delete(logId);
+    } else {
+      newExpandedLogs.add(logId);
+    }
+    setExpandedLogs(newExpandedLogs);
+  };
+
 
 
   if (loading) {
@@ -265,24 +278,57 @@ const EmailMonitoring = () => {
                 <h3 className="text-lg font-medium mb-4">Recent Activity</h3>
                 {status.recent_logs && status.recent_logs.length > 0 ? (
                   <div className="space-y-2">
-                    {status.recent_logs.map((log, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                        <div className="flex items-center space-x-3">
-                          {log.webhook_sent ? (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-500" />
-                          )}
-                          <div>
-                            <div className="font-medium text-sm">{log.subject}</div>
-                            <div className="text-xs text-gray-500">{log.sender}</div>
+                    {status.recent_logs.map((log, index) => {
+                      const logId = log.id || index;
+                      const isExpanded = expandedLogs.has(logId);
+                      const hasBody = log.email_body && log.email_body.trim().length > 0;
+                      
+                      return (
+                        <div key={logId} className="bg-gray-50 rounded-md overflow-hidden">
+                          <div className="flex items-center justify-between p-3">
+                            <div className="flex items-center space-x-3 flex-1">
+                              {log.webhook_sent ? (
+                                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm truncate">{log.subject}</div>
+                                <div className="text-xs text-gray-500 truncate">{log.sender}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 flex-shrink-0">
+                              <div className="text-xs text-gray-500">
+                                {new Date(log.timestamp).toLocaleString()}
+                              </div>
+                              {hasBody && (
+                                <button
+                                  onClick={() => toggleLogExpansion(logId)}
+                                  className="p-1 hover:bg-gray-200 rounded text-gray-500 hover:text-gray-700"
+                                  title={isExpanded ? "Hide email body" : "Show email body"}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           </div>
+                          {hasBody && isExpanded && (
+                            <div className="px-3 pb-3">
+                              <div className="bg-white rounded-md p-3 border-t border-gray-200">
+                                <div className="text-sm font-medium text-gray-700 mb-2">Email Body:</div>
+                                <div className="text-sm text-gray-600 max-h-40 overflow-y-auto whitespace-pre-wrap">
+                                  {log.email_body}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-gray-500 text-center py-8">No recent activity</p>

@@ -225,7 +225,7 @@ class EmailMonitoringS3Manager:
     # Activity Logs Methods
     def log_email_match(self, discord_id: str, rule_id: str, email_subject: str, 
                        email_sender: str, email_date: str, webhook_sent: bool, 
-                       webhook_response: str) -> bool:
+                       webhook_response: str, email_body: str = "") -> bool:
         """Log email match activity"""
         data = self._load_data()
         self._ensure_user_structure(data, discord_id)
@@ -237,6 +237,7 @@ class EmailMonitoringS3Manager:
             "email_subject": email_subject,
             "email_sender": email_sender,
             "email_date": email_date,
+            "email_body": email_body[:2000] if email_body else "",  # Truncate body to 2000 chars
             "webhook_sent": webhook_sent,
             "webhook_response": webhook_response
         }
@@ -275,7 +276,7 @@ class EmailMonitoringS3Manager:
         return all_logs[:limit]
     
     # System Webhook Methods
-    def set_system_webhook(self, webhook_url: str, description: str, created_by: str) -> bool:
+    def set_system_webhook(self, webhook_url: str, description: str, created_by: str, include_body: bool = False) -> bool:
         """Set system-wide webhook configuration"""
         data = self._load_data()
         
@@ -284,7 +285,8 @@ class EmailMonitoringS3Manager:
             "description": description,
             "is_active": True,
             "created_by": created_by,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            "include_body": include_body
         }
         
         return self._save_data(data)

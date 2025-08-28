@@ -7303,10 +7303,12 @@ def analyze_discount_opportunities():
         analytics_cache_key = f"enhanced_analytics_{discord_id}_{today}"
         
         # Check for cached enhanced analytics (24 hour cache for discount opportunities)
+        analysis = None
         if analytics_cache_key in analytics_cache:
             cache_entry = analytics_cache[analytics_cache_key]
             if datetime.now() - cache_entry['timestamp'] < timedelta(hours=24):
                 enhanced_analytics = cache_entry['data']
+                analysis = cache_entry.get('analysis')
         
         if enhanced_analytics is None:
             try:
@@ -7334,7 +7336,12 @@ def analyze_discount_opportunities():
                         'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
                         'disable_sp_api': config_user_record.get('disable_sp_api', False),
                         'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
-                        'discord_id': discord_id
+                        'discord_id': discord_id,
+                        # Add Google Sheet settings for purchase analytics (same as Smart Restock)
+                        'sheet_id': config_user_record.get('sheet_id'),
+                        'worksheet_title': config_user_record.get('worksheet_title'), 
+                        'google_tokens': config_user_record.get('google_tokens', {}),
+                        'column_mapping': config_user_record.get('column_mapping', {})
                     }
                 )
                 
@@ -7346,9 +7353,10 @@ def analyze_discount_opportunities():
                     
                 enhanced_analytics = analysis['enhanced_analytics']
                 
-                # Cache the enhanced analytics
+                # Cache the enhanced analytics with the analysis object
                 analytics_cache[analytics_cache_key] = {
                     'data': enhanced_analytics,
+                    'analysis': analysis,  # Store the full analysis for purchase insights
                     'timestamp': datetime.now()
                 }
                 
@@ -7358,6 +7366,9 @@ def analyze_discount_opportunities():
                     'opportunities': [],
                     'message': f'Failed to generate analytics: {str(e)}'
                 }), 500
+        
+        # Get the global purchase analytics for recent purchase lookups (same as Smart Restock)
+        global_purchase_analytics = analysis.get('purchase_insights', {}) if analysis else {}
         
         # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
@@ -7457,14 +7468,13 @@ def analyze_discount_opportunities():
                 if monthly_purchase_adjustment > 0:
                     recent_purchases = monthly_purchase_adjustment
                 else:
-                    # Get purchase insights from the same analysis result that was generated
-                    purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
-                    recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, purchase_insights)
+                    # Use global_purchase_analytics exactly like Smart Restock does
+                    recent_purchases = get_recent_2_months_purchases_for_lead_analysis(asin, global_purchase_analytics)
                 
                 # Additional debugging for recent purchases
                 if asin == 'B0017TF1E8':
                     print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment: {monthly_purchase_adjustment}")
-                    print(f"DEBUG: ASIN {asin} purchase_insights keys: {list(purchase_insights.keys()) if purchase_insights else 'None'}")
+                    print(f"DEBUG: ASIN {asin} global_purchase_analytics keys: {list(global_purchase_analytics.keys()) if global_purchase_analytics else 'None'}")
                     print(f"DEBUG: ASIN {asin} final recent_purchases: {recent_purchases}")
                 
                 # Determine if restocking is needed

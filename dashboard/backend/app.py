@@ -1794,9 +1794,7 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
         </html>
         """
         
-        # Use Gmail as reply-to so responses come back to you
         from_email = f'DMS Dashboard <{RESEND_FROM_DOMAIN}>'
-        reply_to = SMTP_EMAIL if SMTP_EMAIL else 'catalystgvmain@gmail.com'
         
         response = requests.post(
             'https://api.resend.com/emails',
@@ -1807,7 +1805,6 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
             json={
                 'from': from_email,
                 'to': [email],
-                'reply_to': [reply_to],
                 'subject': "You're invited to DMS Dashboard",
                 'html': html_body
             }
@@ -1818,13 +1815,6 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
             return True
         else:
             print(f"[RESEND] Failed to send email. Status: {response.status_code}, Response: {response.text}")
-            
-            # If domain verification error, provide helpful message
-            if response.status_code == 403 and "verify a domain" in response.text:
-                print(f"[RESEND] Domain verification required. Either:")
-                print(f"[RESEND] 1. Add RESEND_FROM_DOMAIN=your-email@verified-domain.com to env")
-                print(f"[RESEND] 2. Only test with {SMTP_EMAIL or 'your own email'}")
-                
             return False
             
     except Exception as e:
@@ -1832,87 +1822,12 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
         return False
 
 def send_invitation_email(email, invitation_token, invited_by):
-    """Send invitation email to user"""
-    # Try Resend first (HTTP-based, works on Railway)
-    if RESEND_API_KEY:
-        print(f"[INVITATION] Using Resend API for email to {email}")
-        resend_result = send_invitation_email_via_resend(email, invitation_token, invited_by)
-        if resend_result:
-            return True
-        print(f"[INVITATION] Resend failed, trying SMTP fallback...")
-    
-    # Fallback to SMTP
-    if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print(f"Warning: No email service configured. RESEND_API_KEY={bool(RESEND_API_KEY)}, SMTP_EMAIL={bool(SMTP_EMAIL)}, SMTP_PASSWORD={bool(SMTP_PASSWORD)}")
+    """Send invitation email to user via Resend API"""
+    if not RESEND_API_KEY:
+        print(f"Warning: RESEND_API_KEY not configured")
         return False
-    
-    try:
-        print(f"[INVITATION] Attempting to send invitation email to {email}")
-        print(f"[INVITATION] SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
-        print(f"[INVITATION] From: {SMTP_EMAIL}")
         
-        msg = MIMEMultipart()
-        msg['From'] = SMTP_EMAIL
-        msg['To'] = email
-        msg['Subject'] = "You're invited to DMS Dashboard"
-        
-        invitation_url = f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
-        
-        body = f"""
-        <html>
-        <body>
-            <h2>You're invited to DMS Dashboard!</h2>
-            <p>Hi there!</p>
-            <p>{invited_by} has invited you to join the DMS Amazon Seller Dashboard.</p>
-            <p>This platform provides:</p>
-            <ul>
-                <li>Advanced analytics for your Amazon business</li>
-                <li>Smart restock recommendations</li>
-                <li>Inventory tracking and insights</li>
-            </ul>
-            <p><strong><a href="{invitation_url}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Accept Invitation</a></strong></p>
-            <p>Or copy and paste this link: {invitation_url}</p>
-            <p>This invitation will expire in 7 days.</p>
-            <br>
-            <p>Best regards,<br>DMS Team</p>
-        </body>
-        </html>
-        """
-        
-        msg.attach(MIMEText(body, 'html'))
-        
-        print(f"[INVITATION] Connecting to SMTP server...")
-        
-        # Use a shorter timeout to detect Railway blocking faster
-        import socket
-        socket.setdefaulttimeout(10)
-        
-        # Try SSL first (port 465), then fallback to TLS (port 587)
-        if SMTP_PORT == 465:
-            print(f"[INVITATION] Using SSL connection on port 465...")
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
-        else:
-            print(f"[INVITATION] Using TLS connection on port {SMTP_PORT}...")
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
-            print(f"[INVITATION] Starting TLS...")
-            server.starttls()
-        
-        print(f"[INVITATION] SSL/TLS connection established successfully")
-            
-        print(f"[INVITATION] Logging in...")
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        print(f"[INVITATION] Sending email...")
-        text = msg.as_string()
-        server.sendmail(SMTP_EMAIL, email, text)
-        server.quit()
-        print(f"[INVITATION] Email sent successfully to {email}")
-        
-        return True
-    except Exception as e:
-        print(f"Error sending invitation email to {email}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+    return send_invitation_email_via_resend(email, invitation_token, invited_by)
 
 def login_required(f):
     @wraps(f)
@@ -2281,8 +2196,6 @@ def discord_callback():
     
     # Check for invitation token from state parameter (runs for both new and existing users)
     invitation_token = request.args.get('state')  # Discord passes our state parameter back
-    print(f"[INVITATION_DEBUG] Discord callback - invitation_token: {invitation_token}")
-    print(f"[INVITATION_DEBUG] Existing user found: {bool(existing_user)}")
     
     # Initialize valid_invitation outside scope so it's available later
     valid_invitation = None
@@ -2310,7 +2223,6 @@ def discord_callback():
                     pass  # Check invitation expiry
                     if time_diff < timedelta(days=7):
                         valid_invitation = inv
-                        print(f"[INVITATION_DEBUG] Valid invitation found: {invitation_token}")
                         break
                     else:
                         pass  # Invitation expired
@@ -2349,7 +2261,6 @@ def discord_callback():
             user_record = {"discord_id": discord_id}
             
             # Check if this is a sub-user invitation
-            print(f"[INVITATION_DEBUG] Creating new user record, valid_invitation: {bool(valid_invitation)}")
             if valid_invitation:
                 if valid_invitation.get('user_type') == 'subuser':
                     set_user_field(user_record, 'account.user_type', 'subuser')
@@ -5405,6 +5316,15 @@ def admin_get_users():
             enhanced_user['profile_configured'] = is_user_configured(user)
             enhanced_user['google_linked'] = bool(get_user_google_tokens(user))
             enhanced_user['sheet_configured'] = bool(get_user_sheet_id(user))
+            
+            # Flatten key fields for frontend compatibility
+            enhanced_user['discord_username'] = get_user_field(user, 'identity.discord_username') or user.get('discord_username')
+            enhanced_user['email'] = get_user_field(user, 'identity.email') or user.get('email')
+            enhanced_user['discord_id'] = get_user_field(user, 'identity.discord_id') or user.get('discord_id')
+            enhanced_user['user_type'] = get_user_field(user, 'account.user_type') or user.get('user_type', 'main')
+            enhanced_user['va_name'] = get_user_field(user, 'identity.va_name') or user.get('va_name')
+            enhanced_user['parent_user_id'] = get_user_field(user, 'account.parent_user_id') or user.get('parent_user_id')
+            
             enhanced_users.append(enhanced_user)
             
         return jsonify({'users': enhanced_users})
@@ -5638,71 +5558,8 @@ def debug_session():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/debug/smtp-config', methods=['GET'])
-@admin_required
-def debug_smtp_config():
-    """Debug SMTP configuration for admin"""
-    try:
-        config_status = {
-            'smtp_server': SMTP_SERVER,
-            'smtp_port': SMTP_PORT,
-            'smtp_email_configured': bool(SMTP_EMAIL),
-            'smtp_password_configured': bool(SMTP_PASSWORD),
-            'smtp_email_value': SMTP_EMAIL[:5] + "***" if SMTP_EMAIL else "Not set"
-        }
-        return jsonify(config_status)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/debug/test-invitation', methods=['POST'])
-@admin_required
-def debug_test_invitation():
-    """Test invitation email sending with detailed logging"""
-    try:
-        data = request.json
-        test_email = data.get('email', 'test@example.com')
-        
-        # Test the email sending function directly
-        result = send_invitation_email(test_email, 'debug-token-123', 'Debug Test')
-        
-        return jsonify({
-            'email_sent': result,
-            'smtp_configured': bool(SMTP_EMAIL and SMTP_PASSWORD),
-            'test_email': test_email,
-            'smtp_server': SMTP_SERVER,
-            'smtp_port': SMTP_PORT
-        })
-    except Exception as e:
-        return jsonify({'error': str(e), 'traceback': str(e)}), 500
 
-@app.route('/api/debug/clear-invitation', methods=['POST'])
-@admin_required
-def debug_clear_invitation():
-    """Clear a pending invitation by email for testing"""
-    try:
-        data = request.json
-        email = data.get('email')
-        
-        if not email:
-            return jsonify({'error': 'Email is required'}), 400
-            
-        invitations = get_invitations_config()
-        original_count = len(invitations)
-        
-        # Remove invitation for this email
-        invitations = [inv for inv in invitations if inv.get('email') != email]
-        
-        if update_invitations_config(invitations):
-            removed_count = original_count - len(invitations)
-            return jsonify({
-                'message': f'Cleared {removed_count} invitation(s) for {email}',
-                'removed_count': removed_count
-            })
-        else:
-            return jsonify({'error': 'Failed to update invitations'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users/bulk', methods=['PUT'])
 @admin_required
@@ -5865,11 +5722,11 @@ def admin_create_invitation():
             # Send invitation email
             email_sent = send_invitation_email(email, invitation_token, session.get('discord_username', 'Admin'))
             
-            if not SMTP_EMAIL or not SMTP_PASSWORD:
+            if not RESEND_API_KEY:
                 return jsonify({
-                    'message': 'Invitation created successfully. Note: Email notifications are disabled (SMTP not configured).',
+                    'message': 'Invitation created successfully. Note: Email notifications are disabled (Resend not configured).',
                     'invitation': invitation,
-                    'warning': 'SMTP credentials not configured. Please share the invitation link manually.',
+                    'warning': 'Email service not configured. Please share the invitation link manually.',
                     'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
                 })
             elif email_sent:
@@ -5987,11 +5844,11 @@ def invite_subuser():
             inviter_name = current_user.get('username', session.get('discord_username', 'User'))
             email_sent = send_invitation_email(email, invitation_token, inviter_name)
             
-            if not SMTP_EMAIL or not SMTP_PASSWORD:
+            if not RESEND_API_KEY:
                 return jsonify({
-                    'message': 'Sub-user invitation created successfully. Note: Email notifications are disabled (SMTP not configured).',
+                    'message': 'Sub-user invitation created successfully. Note: Email notifications are disabled (Resend not configured).',
                     'invitation': invitation,
-                    'warning': 'SMTP credentials not configured. Please share the invitation link manually.',
+                    'warning': 'Email service not configured. Please share the invitation link manually.',
                     'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
                 })
             elif email_sent:

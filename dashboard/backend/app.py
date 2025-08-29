@@ -1802,9 +1802,17 @@ def send_invitation_email(email, invitation_token, invited_by):
         msg.attach(MIMEText(body, 'html'))
         
         print(f"[INVITATION] Connecting to SMTP server...")
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        print(f"[INVITATION] Starting TLS...")
-        server.starttls()
+        
+        # Try SSL first (port 465), then fallback to TLS (port 587)
+        if SMTP_PORT == 465:
+            print(f"[INVITATION] Using SSL connection on port 465...")
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        else:
+            print(f"[INVITATION] Using TLS connection on port {SMTP_PORT}...")
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+            print(f"[INVITATION] Starting TLS...")
+            server.starttls()
+            
         print(f"[INVITATION] Logging in...")
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         print(f"[INVITATION] Sending email...")

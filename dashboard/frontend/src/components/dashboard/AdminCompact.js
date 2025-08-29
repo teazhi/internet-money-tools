@@ -256,8 +256,15 @@ const AdminCompact = () => {
   const handleSendInvitation = async () => {
     if (!inviteEmail) return;
     
+    console.log('[DEBUG] Starting invitation send for email:', inviteEmail);
+    setError(''); // Clear any previous errors
+    setSuccess(''); // Clear any previous success messages
+    
     try {
+      console.log('[DEBUG] Making POST request to /api/admin/invitations');
       const response = await axios.post('/api/admin/invitations', { email: inviteEmail }, { withCredentials: true });
+      console.log('[DEBUG] Response received:', response.data);
+      
       const { message, warning, invitation_url } = response.data;
       
       if (warning) {
@@ -271,9 +278,12 @@ const AdminCompact = () => {
       setShowInviteModal(false);
       fetchData();
     } catch (error) {
+      console.error('[DEBUG] Invitation request failed:', error);
+      console.error('[DEBUG] Error response:', error.response?.data);
+      console.error('[DEBUG] Error status:', error.response?.status);
+      
       const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Failed to send invitation';
       setError(errorMessage);
-      console.error('Invitation error:', error.response?.data || error);
     }
   };
 

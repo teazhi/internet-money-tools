@@ -2645,7 +2645,16 @@ def update_profile():
     user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
     
     if user_record is None:
-        user_record = {"discord_id": discord_id}
+        # Create new user with proper schema
+        user_record = {
+            "user_id": f"user_{discord_id}_{datetime.now().strftime('%Y%m%d')}",
+            "identity": {"discord_id": discord_id, "email": None, "username": None, "avatar": None},
+            "account": {"access_token": None, "refresh_token": None, "is_admin": False, "parent_user": None, "created_at": datetime.now().isoformat(), "last_login": None},
+            "profile": {"configured": False, "timezone": "UTC"},
+            "integrations": {"amazon": {"refresh_token": None, "selling_partner_id": None, "access_token": None, "token_expires": None, "marketplace_id": None, "country_code": "US"}, "sellerboard": {"orders_url": None, "ppc_url": None, "inventory_url": None, "products_url": None, "refunds_url": None, "fba_returns_url": None, "reimbursements_url": None, "storage_fees_url": None}, "google": {"tokens": {}}},
+            "files": {"sheet_id": None},
+            "settings": {"email_notifications": True, "monitoring": {"enabled": True, "check_interval": 24}, "features": {}, "preferences": {}}
+        }
         users.append(user_record)
     
     # Check if user is a subuser - they can only update their timezone
@@ -2665,16 +2674,16 @@ def update_profile():
     # For main users, allow all updates
     # Always update Discord username and last activity from session when available
     if 'discord_username' in session:
-        user_record['discord_username'] = session['discord_username']
-    user_record['last_activity'] = datetime.now().isoformat()
+        set_user_field(user_record, 'identity.discord_username', session['discord_username'])
+    set_user_field(user_record, 'account.last_activity', datetime.now().isoformat())
     
     # Update user profile fields
     if 'email' in data:
         set_user_field(user_record, 'identity.email', data['email'])
     if 'run_scripts' in data:
-        user_record['run_scripts'] = data['run_scripts']
+        set_user_field(user_record, 'settings.run_scripts', data['run_scripts'])
     if 'run_prep_center' in data:
-        user_record['run_prep_center'] = data['run_prep_center']
+        set_user_field(user_record, 'settings.run_prep_center', data['run_prep_center'])
     # Note: listing_loader_key and sb_file_key are now deprecated
     # Files are automatically detected from uploaded_files array
     if 'sellerboard_orders_url' in data:
@@ -2757,7 +2766,16 @@ def complete_google_auth():
         user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
         
         if user_record is None:
-            user_record = {"discord_id": discord_id, "google_tokens": {}}
+            # Create new user with proper schema
+            user_record = {
+                "user_id": f"user_{discord_id}_{datetime.now().strftime('%Y%m%d')}",
+                "identity": {"discord_id": discord_id, "email": None, "username": None, "avatar": None},
+                "account": {"access_token": None, "refresh_token": None, "is_admin": False, "parent_user": None, "created_at": datetime.now().isoformat(), "last_login": None},
+                "profile": {"configured": False, "timezone": "UTC"},
+                "integrations": {"amazon": {"refresh_token": None, "selling_partner_id": None, "access_token": None, "token_expires": None, "marketplace_id": None, "country_code": "US"}, "sellerboard": {"orders_url": None, "ppc_url": None, "inventory_url": None, "products_url": None, "refunds_url": None, "fba_returns_url": None, "reimbursements_url": None, "storage_fees_url": None}, "google": {"tokens": {}}},
+                "files": {"sheet_id": None},
+                "settings": {"email_notifications": True, "monitoring": {"enabled": True, "check_interval": 24}, "features": {}, "preferences": {}}
+            }
             users.append(user_record)
         
         old_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
@@ -3926,12 +3944,12 @@ def debug_cogs_status():
         debug_info = {
             'enable_source_links': user_record.get('enable_source_links', False),
             'sheet_id': bool(get_user_field(user_record, 'files.sheet_id')),
-            'worksheet_title': bool(user_record.get('worksheet_title')),
+            'worksheet_title': bool(get_user_field(user_record, 'integrations.google.worksheet_title')),
             'google_tokens': bool((get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token')),
             'column_mapping': user_record.get('column_mapping', {}),
             'sellerboard_orders_url': bool(user_record.get('sellerboard_orders_url')),
             'sellerboard_stock_url': bool(user_record.get('sellerboard_stock_url')),
-            'user_configured': bool(get_user_field(user_record, 'files.sheet_id') and user_record.get('worksheet_title'))
+            'user_configured': bool(get_user_field(user_record, 'files.sheet_id') and get_user_field(user_record, 'integrations.google.worksheet_title'))
         }
         
         return jsonify({
@@ -4143,7 +4161,7 @@ def get_orders_analytics():
                     'enable_source_links': config_user_record.get('enable_source_links', False),
                     'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                    'worksheet_title': config_user_record.get('worksheet_title'),
+                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {}),
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
@@ -4200,7 +4218,7 @@ def get_orders_analytics():
                     'enable_source_links': config_user_record.get('enable_source_links', False),
                     'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                    'worksheet_title': config_user_record.get('worksheet_title'),
+                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {}),
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
@@ -6105,8 +6123,8 @@ def manual_sellerboard_update():
             print("DEBUG: Missing google refresh token")
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
         
-        if not get_user_field(user_record, 'files.sheet_id') or not user_record.get('worksheet_title'):
-            print(f"DEBUG: Missing sheet config - sheet_id: {bool(get_user_field(user_record, 'files.sheet_id'))}, worksheet_title: {bool(user_record.get('worksheet_title'))}")
+        if not get_user_field(user_record, 'files.sheet_id') or not get_user_field(user_record, 'integrations.google.worksheet_title'):
+            print(f"DEBUG: Missing sheet config - sheet_id: {bool(get_user_field(user_record, 'files.sheet_id'))}, worksheet_title: {bool(get_user_field(user_record, 'integrations.google.worksheet_title'))}")
             return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
         
         print("DEBUG: All requirements met, preparing Lambda payload...")
@@ -7355,8 +7373,8 @@ def get_asin_purchase_sources(asin):
             })
         
         # Get user's Google Sheet settings
-        sheet_id = user_record.get('sheet_id')
-        worksheet_title = user_record.get('worksheet_title')
+        sheet_id = get_user_field(user_record, 'files.sheet_id')
+        worksheet_title = get_user_field(user_record, 'integrations.google.worksheet_title')
         google_tokens = user_record.get('google_tokens', {})
         column_mapping = user_record.get('column_mapping', {})
         
@@ -8075,7 +8093,7 @@ def analyze_discount_opportunities():
                         'discord_id': discord_id,
                         # Add Google Sheet settings for purchase analytics (same as Smart Restock)
                         'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                        'worksheet_title': config_user_record.get('worksheet_title'), 
+                        'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                         'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                         'column_mapping': config_user_record.get('column_mapping', {})
                     }
@@ -8119,7 +8137,7 @@ def analyze_discount_opportunities():
         
         # Check if user has source links enabled and Google Sheet configured
         enable_source_links = config_user_record.get('enable_source_links', False)
-        sheet_id = config_user_record.get('sheet_id')
+        sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         search_all_worksheets = config_user_record.get('search_all_worksheets', True)
         column_mapping = config_user_record.get('column_mapping', {})
@@ -8156,7 +8174,7 @@ def analyze_discount_opportunities():
                                         asin_to_source_link[str(asin).upper()] = str(source_link)
                 else:
                     # Single worksheet mode
-                    worksheet_title = config_user_record.get('worksheet_title')
+                    worksheet_title = get_user_field(config_user_record, 'integrations.google.worksheet_title')
                     if worksheet_title:
                         cogs_data = analyzer.fetch_google_sheet_cogs_data(
                             google_tokens.get('access_token'),
@@ -9116,7 +9134,7 @@ def get_expected_arrivals():
                     config_user_record = parent_record
 
         # Get the Google Sheet settings for purchase data
-        sheet_id = config_user_record.get('sheet_id')
+        sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         column_mapping = config_user_record.get('column_mapping', {})
         
@@ -9714,7 +9732,7 @@ def analyze_retailer_leads():
                     'discord_id': discord_id,
                     # Add Google Sheet settings for purchase analytics (same as Smart Restock)
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                    'worksheet_title': config_user_record.get('worksheet_title'), 
+                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {})
                 }
@@ -10073,8 +10091,8 @@ def sync_leads_to_sheets():
                     config_user_record = parent_record
         
         # Check if user has configured their leads sheet
-        user_sheet_id = config_user_record.get('sheet_id')
-        user_worksheet_title = config_user_record.get('worksheet_title')
+        user_sheet_id = get_user_field(config_user_record, 'files.sheet_id')
+        user_worksheet_title = get_user_field(config_user_record, 'integrations.google.worksheet_title')
         
         if not user_sheet_id or not user_worksheet_title:
             return jsonify({
@@ -13506,8 +13524,8 @@ def get_inventory_age_analysis():
         user_settings = {
             'access_token': (get_user_field(user_record, 'integrations.google.tokens') or {}).get('access_token'),
             'google_tokens': user_record.get('google_tokens', {}),  # Add the full google_tokens dict
-            'sheet_id': user_record.get('sheet_id'),
-            'worksheet_title': user_record.get('worksheet_title'),
+            'sheet_id': get_user_field(user_record, 'files.sheet_id'),
+            'worksheet_title': get_user_field(user_record, 'integrations.google.worksheet_title'),
             'column_mapping': user_record.get('column_mapping', {}),
             'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
             'search_all_worksheets': True,  # Force all worksheets for inventory age analysis

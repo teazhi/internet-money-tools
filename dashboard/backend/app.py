@@ -2277,8 +2277,9 @@ def discord_callback():
                 
             users.append(user_record)
         
-        # Update Discord username and last activity in permanent record
+        # Update Discord username, avatar, and last activity in permanent record
         set_user_field(user_record, 'identity.discord_username', user_data['username'])
+        set_user_field(user_record, 'identity.avatar', user_data.get('avatar'))
         set_user_field(user_record, 'profile.last_activity', datetime.now().isoformat())
         update_users_config(users)
         # User record updated with Discord data
@@ -2757,6 +2758,8 @@ def update_profile():
         set_user_field(user_record, 'account.last_activity', datetime.now().isoformat())
         if 'discord_username' in session:
             set_user_field(user_record, 'identity.discord_username', session['discord_username'])
+        if 'discord_avatar' in session:
+            set_user_field(user_record, 'identity.avatar', session['discord_avatar'])
         
         if update_users_config(users):
             return jsonify({'message': 'Timezone updated successfully'})
@@ -2767,6 +2770,8 @@ def update_profile():
     # Always update Discord username and last activity from session when available
     if 'discord_username' in session:
         set_user_field(user_record, 'identity.discord_username', session['discord_username'])
+    if 'discord_avatar' in session:
+        set_user_field(user_record, 'identity.avatar', session['discord_avatar'])
     set_user_field(user_record, 'account.last_activity', datetime.now().isoformat())
     
     # Update user profile fields
@@ -4146,6 +4151,8 @@ def get_orders_analytics():
                             set_user_field(user, 'profile.last_activity', datetime.now().isoformat())
                             if 'discord_username' in session:
                                 set_user_field(user, 'identity.discord_username', session['discord_username'])
+                            if 'discord_avatar' in session:
+                                set_user_field(user, 'identity.avatar', session['discord_avatar'])
                             break
                     update_users_config(users)
             except Exception as e:

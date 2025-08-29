@@ -2703,6 +2703,11 @@ def update_profile():
         except (ValueError, TypeError):
             return jsonify({'error': 'Amazon lead time must be a valid number between 30 and 180 days'}), 400
     
+    # Check if user is now configured after profile updates
+    if is_user_configured(user_record):
+        set_user_field(user_record, 'profile.configured', True)
+        set_user_field(user_record, 'profile.setup_step', 'completed')
+    
     if update_users_config(users):
         return jsonify({'message': 'Profile updated successfully'})
     else:
@@ -3019,9 +3024,14 @@ def configure_sheet():
     if not user_record:
         return jsonify({'error': 'User profile not found'}), 404
     
-    set_user_field(user_record, 'integrations.google.sheet_id', spreadsheet_id)
+    set_user_field(user_record, 'files.sheet_id', spreadsheet_id)
     set_user_field(user_record, 'integrations.google.worksheet_title', worksheet_title)
     set_user_field(user_record, 'integrations.google.column_mapping', column_mapping)
+    
+    # Check if user is now configured and update their profile status
+    if is_user_configured(user_record):
+        set_user_field(user_record, 'profile.configured', True)
+        set_user_field(user_record, 'profile.setup_step', 'completed')
     
     if update_users_config(users):
         return jsonify({'message': 'Sheet configuration saved successfully'})

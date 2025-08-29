@@ -2587,7 +2587,20 @@ def get_user():
             'user_type': get_user_type(demo_user),
             'permissions': get_user_permissions(demo_user),
             'last_activity': get_user_field(demo_user, 'account.last_activity'),
-            'timezone': 'America/New_York'
+            'timezone': get_user_timezone(demo_user) or 'America/New_York',
+            
+            # Settings fields for demo compatibility
+            'enable_source_links': get_user_enable_source_links(demo_user),
+            'sellerboard_orders_url': get_user_sellerboard_orders_url(demo_user),
+            'sellerboard_stock_url': get_user_sellerboard_stock_url(demo_user),
+            'sellerboard_cogs_url': get_user_sellerboard_cogs_url(demo_user),
+            'disable_sp_api': get_user_field(demo_user, 'integrations.amazon.disable_sp_api') or False,
+            'search_all_worksheets': get_user_field(demo_user, 'integrations.google.search_all_worksheets') or False,
+            'amazon_lead_time_days': get_user_field(demo_user, 'integrations.amazon.lead_time_days') or 90,
+            'run_scripts': get_user_field(demo_user, 'settings.run_scripts') or False,
+            'run_prep_center': get_user_field(demo_user, 'settings.run_prep_center') or False,
+            
+            'user_record': demo_user
         })
     
     # For non-demo mode, require authentication
@@ -2643,6 +2656,22 @@ def get_user():
         'sheet_configured': sheet_configured,
         'amazon_connected': amazon_connected,
         'amazon_connected_at': amazon_connected_at,
+        
+        # Settings fields exposed for frontend compatibility (with old schema fallback)
+        'email': get_user_email(user_record) if user_record else None,
+        'timezone': get_user_timezone(user_record) if user_record else None,
+        'enable_source_links': get_user_enable_source_links(user_record) if user_record else False,
+        'sellerboard_orders_url': get_user_sellerboard_orders_url(user_record) if user_record else None,
+        'sellerboard_stock_url': get_user_sellerboard_stock_url(user_record) if user_record else None,
+        'sellerboard_cogs_url': get_user_sellerboard_cogs_url(user_record) if user_record else None,
+        
+        # Settings with fallback to old schema for compatibility
+        'disable_sp_api': (get_user_field(user_record, 'integrations.amazon.disable_sp_api') or user_record.get('disable_sp_api', False)) if user_record else False,
+        'search_all_worksheets': (get_user_field(user_record, 'integrations.google.search_all_worksheets') or user_record.get('search_all_worksheets', False)) if user_record else False,
+        'amazon_lead_time_days': (get_user_field(user_record, 'integrations.amazon.lead_time_days') or user_record.get('amazon_lead_time_days', 90)) if user_record else 90,
+        'run_scripts': (get_user_field(user_record, 'settings.run_scripts') or user_record.get('run_scripts', False)) if user_record else False,
+        'run_prep_center': (get_user_field(user_record, 'settings.run_prep_center') or user_record.get('run_prep_center', False)) if user_record else False,
+        
         'user_record': user_record if user_record else None
     }
     

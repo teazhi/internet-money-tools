@@ -545,8 +545,14 @@ def migrate_user_to_new_schema(old_user):
             "feature_permissions": old_user.get("feature_permissions", {})
         },
         "profile": {
-            "configured": old_user.get("profile_configured", False),
-            "setup_step": "completed" if old_user.get("profile_configured") else "initial",
+            "configured": old_user.get("profile_configured", False) or bool(
+                old_user.get("email") and 
+                (old_user.get("sellerboard_orders_url") or old_user.get("sheet_id"))
+            ),
+            "setup_step": "completed" if (old_user.get("profile_configured") or bool(
+                old_user.get("email") and 
+                (old_user.get("sellerboard_orders_url") or old_user.get("sheet_id"))
+            )) else "initial",
             "timezone": old_user.get("timezone")
         },
         "integrations": {
@@ -772,7 +778,16 @@ def get_user_enable_source_links(user):
 
 def is_user_configured(user):
     """Check if user profile is configured"""
-    return get_user_field(user, 'profile.configured') or user.get('profile_configured', False)
+    # First check the explicit configured flag
+    explicit_configured = get_user_field(user, 'profile.configured') or user.get('profile_configured', False)
+    if explicit_configured:
+        return True
+    
+    # If not explicitly set, check if user has essential configuration
+    has_email = bool(get_user_email(user))
+    has_integrations = bool(get_user_sheet_id(user) or get_user_sellerboard_orders_url(user))
+    
+    return has_email and has_integrations
 
 # Update user field convenience functions
 def set_user_google_tokens(user, tokens):
@@ -2561,30 +2576,30 @@ def get_user():
     if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
         parent_user = get_parent_user_record(discord_id)
         profile_configured = (parent_user is not None and 
-                            parent_user.get('email') and 
-                            parent_user.get('sellerboard_orders_url') and 
-                            parent_user.get('sellerboard_stock_url'))
-        google_linked = parent_user and parent_user.get('google_tokens') is not None
-        sheet_configured = parent_user and parent_user.get('sheet_id') is not None
+                            get_user_email(parent_user) and 
+                            get_user_sellerboard_orders_url(parent_user) and 
+                            get_user_sellerboard_stock_url(parent_user))
+        google_linked = parent_user and get_user_google_tokens(parent_user)
+        sheet_configured = parent_user and get_user_sheet_id(parent_user) is not None
     else:
         # For main users, check their own configuration
         profile_configured = (user_record is not None and 
-                            user_record.get('email') and 
-                            user_record.get('sellerboard_orders_url') and 
-                            user_record.get('sellerboard_stock_url'))
-        google_linked = user_record and user_record.get('google_tokens') is not None
-        sheet_configured = user_record and user_record.get('sheet_id') is not None
+                            get_user_email(user_record) and 
+                            get_user_sellerboard_orders_url(user_record) and 
+                            get_user_sellerboard_stock_url(user_record))
+        google_linked = user_record and get_user_google_tokens(user_record)
+        sheet_configured = user_record and get_user_sheet_id(user_record) is not None
 
     # Check Amazon connection status
     amazon_connected = False
     amazon_connected_at = None
     if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
         parent_user = get_parent_user_record(discord_id)
-        amazon_connected = parent_user and parent_user.get('amazon_refresh_token') is not None
-        amazon_connected_at = parent_user.get('amazon_connected_at') if parent_user else None
+        amazon_connected = parent_user and get_user_amazon_refresh_token(parent_user) is not None
+        amazon_connected_at = get_user_amazon_connected_at(parent_user) if parent_user else None
     else:
-        amazon_connected = user_record and user_record.get('amazon_refresh_token') is not None
-        amazon_connected_at = user_record.get('amazon_connected_at') if user_record else None
+        amazon_connected = user_record and get_user_amazon_refresh_token(user_record) is not None
+        amazon_connected_at = get_user_amazon_connected_at(user_record) if user_record else None
 
     response_data = {
         'discord_id': discord_id,
@@ -5149,9 +5164,9 @@ def admin_get_users():
         
         # Add derived status fields for each user
         for user in users:
-            user['profile_configured'] = bool(user.get('email'))
-            user['google_linked'] = bool(user.get('google_tokens'))
-            user['sheet_configured'] = bool(user.get('sheet_id'))
+            user['profile_configured'] = is_user_configured(user)
+            user['google_linked'] = bool(get_user_google_tokens(user))
+            user['sheet_configured'] = bool(get_user_sheet_id(user))
             
         return jsonify({'users': users})
     except Exception as e:

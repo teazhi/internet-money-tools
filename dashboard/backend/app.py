@@ -1985,7 +1985,7 @@ def sync_s3_to_database():
         users = get_users_config()
         for user in users:
             discord_id = get_user_field(user, 'identity.discord_id')
-            user_feature_perms = user.get('feature_permissions', {})
+            user_feature_perms = get_user_field(user, 'account.feature_permissions') or user.get('feature_permissions', {})
             
             for feature_key, perm_data in user_feature_perms.items():
                 if perm_data.get('has_access', False):
@@ -2255,8 +2255,8 @@ def discord_callback():
             users.append(user_record)
         
         # Update Discord username and last activity in permanent record
-        user_record['discord_username'] = user_data['username']
-        user_record['last_activity'] = datetime.now().isoformat()
+        set_user_field(user_record, 'identity.discord_username', user_data['username'])
+        set_user_field(user_record, 'profile.last_activity', datetime.now().isoformat())
         update_users_config(users)
         # User record updated with Discord data
     except Exception as e:
@@ -2401,14 +2401,14 @@ def amazon_seller_status():
         if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
-                amazon_connected = parent_user.get('amazon_refresh_token') is not None
-                amazon_connected_at = parent_user.get('amazon_connected_at')
-                selling_partner_id = parent_user.get('amazon_selling_partner_id')
+                amazon_connected = get_user_amazon_refresh_token(parent_user) is not None
+                amazon_connected_at = get_user_field(parent_user, 'integrations.amazon.connected_at') or parent_user.get('amazon_connected_at')
+                selling_partner_id = get_user_field(parent_user, 'integrations.amazon.selling_partner_id') or parent_user.get('amazon_selling_partner_id')
         else:
             if user_record:
-                amazon_connected = user_record.get('amazon_refresh_token') is not None
-                amazon_connected_at = user_record.get('amazon_connected_at')
-                selling_partner_id = user_record.get('amazon_selling_partner_id')
+                amazon_connected = get_user_amazon_refresh_token(user_record) is not None
+                amazon_connected_at = get_user_field(user_record, 'integrations.amazon.connected_at') or user_record.get('amazon_connected_at')
+                selling_partner_id = get_user_field(user_record, 'integrations.amazon.selling_partner_id') or user_record.get('amazon_selling_partner_id')
         
         # Check if environment credentials are available
         env_credentials_available = bool(os.getenv('SP_API_REFRESH_TOKEN') and 
@@ -2613,10 +2613,10 @@ def get_user():
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
         'discord_avatar': session.get('discord_avatar'),
-        'user_type': user_record.get('user_type', 'main') if user_record else 'main',
-        'permissions': user_record.get('permissions', ['all']) if user_record else ['all'],
-        'parent_user_id': user_record.get('parent_user_id') if user_record else None,
-        'va_name': user_record.get('va_name') if user_record else None,
+        'user_type': get_user_field(user_record, 'account.user_type') or 'main' if user_record else 'main',
+        'permissions': get_user_permissions(user_record) if user_record else ['all'],
+        'parent_user_id': get_user_parent_id(user_record) if user_record else None,
+        'va_name': get_user_field(user_record, 'identity.va_name') if user_record else None,
         'is_admin': is_admin_user(discord_id),
         'profile_configured': profile_configured,
         'google_linked': google_linked,
@@ -2804,10 +2804,10 @@ def disconnect_google():
         return jsonify({'error': 'User not found'}), 404
     
     # Remove Google tokens and sheet configuration
-    user_record.pop('google_tokens', None)
-    user_record.pop('sheet_id', None)
-    user_record.pop('worksheet_title', None)
-    user_record.pop('column_mapping', None)
+    set_user_field(user_record, 'integrations.google.tokens', {})
+    set_user_field(user_record, 'files.sheet_id', None)
+    set_user_field(user_record, 'integrations.google.worksheet_title', None)
+    set_user_field(user_record, 'integrations.google.column_mapping', {})
     
     if update_users_config(users):
         return jsonify({'message': 'Google account disconnected successfully'})
@@ -3215,7 +3215,7 @@ def extract_html_from_message_payload(payload):
 def get_discount_gmail_token(user_record):
     """Get Gmail access token for discount monitoring (uses separate tokens if available)"""
     # Priority 1: Use discount-specific tokens if available
-    if user_record.get('discount_gmail_tokens'):
+    if get_user_field(user_record, 'integrations.gmail.discount_tokens') or user_record.get('discount_gmail_tokens'):
         return refresh_discount_gmail_token(user_record)
     
     # Priority 2: Fall back to regular Google tokens
@@ -3228,7 +3228,7 @@ def get_discount_gmail_token(user_record):
 
 def refresh_discount_gmail_token(user_record):
     """Refresh discount monitoring specific Gmail tokens"""
-    discount_tokens = user_record.get('discount_gmail_tokens', {})
+    discount_tokens = get_user_field(user_record, 'integrations.gmail.discount_tokens') or user_record.get('discount_gmail_tokens', {})
     if not discount_tokens:
         return None
     
@@ -3253,7 +3253,7 @@ def refresh_discount_gmail_token(user_record):
             
             # Update the stored tokens with new access token
             discount_tokens['access_token'] = access_token
-            user_record['discount_gmail_tokens'] = discount_tokens
+            set_user_field(user_record, 'integrations.gmail.discount_tokens', discount_tokens)
             
             # Save updated user config
             update_user_config(user_record)
@@ -3575,7 +3575,7 @@ def debug_stock_direct(asin):
         if not user_record:
             return jsonify({'error': 'User record not found'}), 404
             
-        stock_url = user_record.get('sellerboard_stock_url')
+        stock_url = get_user_sellerboard_stock_url(user_record)
         if not stock_url:
             return jsonify({'error': 'Stock URL not configured'}), 400
             
@@ -3635,7 +3635,7 @@ def test_stock_simple():
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         
-        stock_url = user_record.get('sellerboard_stock_url')
+        stock_url = get_user_sellerboard_stock_url(user_record)
         if not stock_url:
             return jsonify({'error': 'Stock URL not configured'}), 400
         
@@ -3697,7 +3697,7 @@ def debug_stock_raw():
         if not user_record:
             return jsonify({'error': 'User record not found'}), 404
         
-        stock_url = user_record.get('sellerboard_stock_url')
+        stock_url = get_user_sellerboard_stock_url(user_record)
         if not stock_url:
             return jsonify({'error': 'Stock URL not configured'}), 400
         
@@ -3816,7 +3816,7 @@ def debug_stock_columns():
                 if parent_record:
                     config_user_record = parent_record
         
-        stock_url = config_user_record.get('sellerboard_stock_url')
+        stock_url = get_user_sellerboard_stock_url(config_user_record)
         if not stock_url:
             return jsonify({'error': 'Stock URL not configured'}), 400
         
@@ -3942,13 +3942,13 @@ def debug_cogs_status():
             return jsonify({'error': 'User record not found'}), 404
         
         debug_info = {
-            'enable_source_links': user_record.get('enable_source_links', False),
+            'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
             'sheet_id': bool(get_user_field(user_record, 'files.sheet_id')),
             'worksheet_title': bool(get_user_field(user_record, 'integrations.google.worksheet_title')),
             'google_tokens': bool((get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token')),
-            'column_mapping': user_record.get('column_mapping', {}),
-            'sellerboard_orders_url': bool(user_record.get('sellerboard_orders_url')),
-            'sellerboard_stock_url': bool(user_record.get('sellerboard_stock_url')),
+            'column_mapping': get_user_column_mapping(user_record),
+            'sellerboard_orders_url': bool(get_user_sellerboard_orders_url(user_record)),
+            'sellerboard_stock_url': bool(get_user_sellerboard_stock_url(user_record)),
             'user_configured': bool(get_user_field(user_record, 'files.sheet_id') and get_user_field(user_record, 'integrations.google.worksheet_title'))
         }
         
@@ -3978,7 +3978,7 @@ def get_orders_analytics():
         else:
             # Default logic for target date (moved up for caching)
             user_record = get_user_record(discord_id)
-            user_timezone = user_record.get('timezone') if user_record else None
+            user_timezone = get_user_field(user_record, 'profile.timezone') if user_record else None
             
             if user_timezone:
                 try:
@@ -4023,12 +4023,12 @@ def get_orders_analytics():
                 if parent_record:
                     config_user_record = parent_record
         
-        user_timezone = user_record.get('timezone') if user_record else None
+        user_timezone = get_user_field(user_record, 'profile.timezone') if user_record else None
         
         # Update last activity for analytics access (only if not updated recently)
         if user_record:
             try:
-                last_activity = user_record.get('last_activity')
+                last_activity = get_user_field(user_record, 'profile.last_activity') or user_record.get('last_activity')
                 should_update = True
                 
                 if last_activity:
@@ -4044,9 +4044,9 @@ def get_orders_analytics():
                     users = get_users_config()
                     for user in users:
                         if get_user_field(user, 'identity.discord_id') == discord_id:
-                            user['last_activity'] = datetime.now().isoformat()
+                            set_user_field(user, 'profile.last_activity', datetime.now().isoformat())
                             if 'discord_username' in session:
-                                user['discord_username'] = session['discord_username']
+                                set_user_field(user, 'identity.discord_username', session['discord_username'])
                             break
                     update_users_config(users)
             except Exception as e:
@@ -4067,7 +4067,7 @@ def get_orders_analytics():
                 from sp_api_analytics import create_sp_api_analytics
                 
                 # Try to get user's Amazon refresh token first, fallback to environment
-                encrypted_token = user_record.get('amazon_refresh_token') if user_record else None
+                encrypted_token = get_user_field(user_record, 'integrations.amazon.refresh_token') if user_record else None
                 refresh_token = None
                 
                 if encrypted_token:
@@ -4083,7 +4083,7 @@ def get_orders_analytics():
                         raise Exception("No Amazon refresh token available - user has not connected their Amazon Seller account and no environment token found")
                 
                 # Create SP-API client with token
-                marketplace_id = user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
+                marketplace_id = get_user_field(user_record, 'integrations.amazon.marketplace_id') or user_record.get('marketplace_id', 'ATVPDKIKX0DER')  # Default to US
                 sp_client = create_sp_api_client(refresh_token, marketplace_id)
                 
                 if not sp_client:
@@ -4108,8 +4108,8 @@ def get_orders_analytics():
                     from orders_analysis import OrdersAnalysis
                     
                     # Get user's configured Sellerboard URLs
-                    orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
-                    stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
+                    orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
+                    stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
                     
                     if not orders_url or not stock_url:
                         return jsonify({
@@ -4141,8 +4141,8 @@ def get_orders_analytics():
                 from orders_analysis import OrdersAnalysis
                 
                 # Get user's configured Sellerboard URLs
-                orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
-                stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
+                orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
+                stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -4158,13 +4158,13 @@ def get_orders_analytics():
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
-                    'enable_source_links': config_user_record.get('enable_source_links', False),
-                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'enable_source_links': config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_user_record.get('column_mapping', {}),
-                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
+                    'column_mapping': config_get_user_column_mapping(user_record),
+                    'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
@@ -4198,8 +4198,8 @@ def get_orders_analytics():
                 from orders_analysis import OrdersAnalysis
                 
                 # Get user's configured Sellerboard URLs
-                orders_url = config_user_record.get('sellerboard_orders_url') if config_user_record else None
-                stock_url = config_user_record.get('sellerboard_stock_url') if config_user_record else None
+                orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
+                stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -4215,13 +4215,13 @@ def get_orders_analytics():
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
-                    'enable_source_links': config_user_record.get('enable_source_links', False),
-                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'enable_source_links': config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_user_record.get('column_mapping', {}),
-                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
+                    'column_mapping': config_get_user_column_mapping(user_record),
+                    'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
                 analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
@@ -4700,8 +4700,8 @@ def migrate_all_user_files_old():
                         # Add to user's uploaded_files
                         for i, user in enumerate(users):
                             if get_user_field(user, 'identity.discord_id') == matched_user:
-                                if 'uploaded_files' not in user:
-                                    user['uploaded_files'] = []
+                                if not get_user_field(user, 'files.uploaded_files'):
+                                    set_user_field(user, 'files.uploaded_files', [])
                                 
                                 # Determine file type
                                 if '.xlsm' in filename or 'listing' in filename or 'loader' in filename:
@@ -4721,12 +4721,14 @@ def migrate_all_user_files_old():
                                 }
                                 
                                 # Remove any existing files of the same type
-                                user['uploaded_files'] = [
-                                    f for f in user['uploaded_files'] 
+                                get_user_field(user, 'files.uploaded_files') or [] = [
+                                    f for f in get_user_field(user, 'files.uploaded_files') or [] 
                                     if f.get('file_type_category') != file_type_category
                                 ]
                                 
-                                user['uploaded_files'].append(file_info)
+                                uploaded_files = get_user_field(user, 'files.uploaded_files') or []
+                                uploaded_files.append(file_info)
+                                set_user_field(user, 'files.uploaded_files', uploaded_files)
                                 users[i] = user
                                 break
                         
@@ -4765,15 +4767,17 @@ def admin_cleanup_all_updated_files():
         total_removed = 0
         
         for user in users:
-            if 'uploaded_files' not in user:
+            if not get_user_field(user, 'files.uploaded_files'):
                 continue
                 
-            original_count = len(user['uploaded_files'])
-            user['uploaded_files'] = [
-                f for f in user['uploaded_files'] 
+            uploaded_files = get_user_field(user, 'files.uploaded_files') or []
+            original_count = len(uploaded_files)
+            filtered_files = [
+                f for f in uploaded_files 
                 if '_updated.' not in f.get('filename', '') and '_updated.' not in f.get('s3_key', '')
             ]
-            removed_count = original_count - len(user['uploaded_files'])
+            set_user_field(user, 'files.uploaded_files', filtered_files)
+            removed_count = original_count - len(filtered_files)
             total_removed += removed_count
             
             if removed_count > 0:
@@ -4862,8 +4866,8 @@ def migrate_existing_files_old():
             return jsonify({'error': 'User not found'}), 404
         
         # Initialize uploaded_files if it doesn't exist
-        if 'uploaded_files' not in user_record:
-            user_record['uploaded_files'] = []
+        if not get_user_field(user_record, 'files.uploaded_files'):
+            set_user_field(user_record, 'files.uploaded_files', [])
         
         # Scan S3 for existing files for this user
         s3_client = get_s3_client()
@@ -4917,7 +4921,7 @@ def migrate_existing_files_old():
                                 all_objects.append(obj)
                         
                         # Also check deprecated listing_loader_key field
-                        if user_record_info.get('listing_loader_key'):
+                        if get_user_field(user_record_info, 'files.listing_loader_key'):
                             if user_record_info['listing_loader_key'].lower() in filename:
                                 all_objects.append(obj)
             
@@ -4940,7 +4944,7 @@ def migrate_existing_files_old():
                     original_filename = filename
                 
                 # Check if this file is already in uploaded_files
-                already_exists = any(f['s3_key'] == s3_key for f in user_record['uploaded_files'])
+                already_exists = any(f['s3_key'] == s3_key for f in get_user_field(user_record, 'files.uploaded_files') or [])
                 
                 if not already_exists:
                     # Determine file type category
@@ -5002,14 +5006,16 @@ def migrate_existing_files_old():
             
             # Remove existing files of the same types that we're migrating
             for file_type in files_by_type.keys():
-                user_record['uploaded_files'] = [
-                    f for f in user_record['uploaded_files'] 
+                get_user_field(user_record, 'files.uploaded_files') or [] = [
+                    f for f in get_user_field(user_record, 'files.uploaded_files') or [] 
                     if f.get('file_type_category') != file_type
                 ]
             
             # Add the most recent file of each type
+            uploaded_files = get_user_field(user_record, 'files.uploaded_files') or []
             for file_info in files_by_type.values():
-                user_record['uploaded_files'].append(file_info)
+                uploaded_files.append(file_info)
+            set_user_field(user_record, 'files.uploaded_files', uploaded_files)
             
             # Delete duplicate files from S3
             deleted_count = 0
@@ -5114,7 +5120,7 @@ def delete_sellerboard_file_old(file_key):
         
         # Strategy 3: Try partial match (in case of encoding differences)
         if not file_to_delete:
-            for i, file_info in enumerate(user_record['uploaded_files']):
+            for i, file_info in enumerate(get_user_field(user_record, 'files.uploaded_files') or []):
                 s3_key = file_info.get('s3_key', '')
                 if (file_key in s3_key or original_file_key in s3_key or 
                     s3_key in file_key or s3_key in original_file_key):
@@ -5198,13 +5204,16 @@ def admin_get_users():
     try:
         users = get_users_config()
         
-        # Add derived status fields for each user
+        # Add derived status fields for each user (temporary for response)
+        enhanced_users = []
         for user in users:
-            user['profile_configured'] = is_user_configured(user)
-            user['google_linked'] = bool(get_user_google_tokens(user))
-            user['sheet_configured'] = bool(get_user_sheet_id(user))
+            enhanced_user = user.copy()  # Create a copy to avoid modifying original
+            enhanced_user['profile_configured'] = is_user_configured(user)
+            enhanced_user['google_linked'] = bool(get_user_google_tokens(user))
+            enhanced_user['sheet_configured'] = bool(get_user_sheet_id(user))
+            enhanced_users.append(enhanced_user)
             
-        return jsonify({'users': users})
+        return jsonify({'users': enhanced_users})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -5219,7 +5228,7 @@ def admin_get_stats():
         
         # Calculate active users - subusers are always considered active since they inherit from parent
         active_users = sum(1 for u in users if 
-                          u.get('user_type') == 'subuser' or  # Subusers are always active
+                          get_user_field(u, 'account.user_type') == 'subuser' or  # Subusers are always active
                           (get_user_field(u, 'identity.email') and get_user_field(u, 'integrations.google.tokens') and get_user_field(u, 'files.sheet_id')))  # Main users need full setup
         
         pending_users = total_users - active_users
@@ -5258,17 +5267,22 @@ def admin_update_user(user_id):
         pass  # Debug print removed
         pass  # Debug print removed
         
-        # Update allowed fields directly in the users list
-        allowed_fields = [
-            'email', 'run_scripts', 'run_prep_center', 
-            'sellerboard_orders_url', 'sellerboard_stock_url',
-            'enable_source_links', 'search_all_worksheets'
-        ]
+        # Update allowed fields using new schema
+        field_mappings = {
+            'email': 'identity.email',
+            'run_scripts': 'permissions.run_scripts',
+            'run_prep_center': 'permissions.run_prep_center',
+            'sellerboard_orders_url': 'integrations.sellerboard.orders_url',
+            'sellerboard_stock_url': 'integrations.sellerboard.stock_url',
+            'enable_source_links': 'settings.enable_source_links',
+            'search_all_worksheets': 'settings.search_all_worksheets'
+        }
         
-        for field in allowed_fields:
+        for field, schema_path in field_mappings.items():
             if field in data:
-                old_value = user_record.get(field)
-                users[user_index][field] = data[field]
+                old_value = get_user_field(user_record, schema_path)
+                set_user_field(user_record, schema_path, data[field])
+                users[user_index] = user_record
         
         pass  # Debug print removed
         pass  # Debug print removed
@@ -5313,7 +5327,7 @@ def admin_delete_user(user_id):
         
         # Save changes
         if update_users_config(users):
-            return jsonify({'message': f'User {deleted_user.get("discord_username", user_id)} deleted successfully'})
+            return jsonify({'message': f'User {get_user_field(deleted_user, "identity.discord_username") or deleted_user.get("discord_username", user_id)} deleted successfully'})
         else:
             return jsonify({'error': 'Failed to delete user'}), 500
             
@@ -5366,16 +5380,16 @@ def admin_impersonate_user(user_id):
         }
         
         # Temporarily switch session to target user
-        session['discord_id'] = user_record['discord_id']
-        session['discord_username'] = user_record.get('discord_username', 'Unknown User')
+        session['discord_id'] = get_user_discord_id(user_record)
+        session['discord_username'] = get_user_field(user_record, 'identity.discord_username') or user_record.get('discord_username', 'Unknown User')
         
         
         return jsonify({
-            'message': f'Now viewing as {user_record.get("discord_username", "Unknown User")}',
+            'message': f'Now viewing as {get_user_field(user_record, "identity.discord_username") or user_record.get("discord_username", "Unknown User")}',
             'impersonating': True,
             'target_user': {
-                'discord_id': user_record['discord_id'],
-                'discord_username': user_record.get('discord_username', 'Unknown User')
+                'discord_id': get_user_discord_id(user_record),
+                'discord_username': get_user_field(user_record, 'identity.discord_username') or user_record.get('discord_username', 'Unknown User')
             }
         })
         
@@ -5424,8 +5438,8 @@ def debug_session():
             'is_impersonating': 'admin_impersonating' in session,
             'impersonation_data': session.get('admin_impersonating') if 'admin_impersonating' in session else None,
             'user_record_found': bool(user_record),
-            'user_has_cogs_url': bool(user_record and user_record.get('sellerboard_cogs_url')) if user_record else False,
-            'cogs_url_preview': user_record.get('sellerboard_cogs_url', '')[:50] + '...' if user_record and user_record.get('sellerboard_cogs_url') else None
+            'user_has_cogs_url': bool(user_record and get_user_field(user_record, 'integrations.sellerboard.cogs_url')) if user_record else False,
+            'cogs_url_preview': (get_user_field(user_record, 'integrations.sellerboard.cogs_url') or '')[:50] + '...' if user_record and get_user_field(user_record, 'integrations.sellerboard.cogs_url') else None
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -5847,10 +5861,10 @@ def edit_subuser(subuser_id):
                 'success': True, 
                 'message': 'Sub-user updated successfully',
                 'subuser': {
-                    'discord_id': users[subuser_index]['discord_id'],
-                    'va_name': users[subuser_index].get('va_name'),
-                    'permissions': users[subuser_index]['permissions'],
-                    'updated_at': users[subuser_index]['updated_at']
+                    'discord_id': get_user_discord_id(users[subuser_index]),
+                    'va_name': get_user_field(users[subuser_index], 'identity.va_name'),
+                    'permissions': get_user_permissions(users[subuser_index]),
+                    'updated_at': get_user_field(users[subuser_index], 'profile.updated_at') or users[subuser_index].get('updated_at')
                 }
             })
         else:
@@ -6115,7 +6129,7 @@ def manual_sellerboard_update():
             print("DEBUG: user_record is empty, checking top-level config")
             user_record = user_config  # Use the main config if no nested user_record
         
-        if not user_record.get('sellerboard_cogs_url'):
+        if not get_user_field(user_record, 'integrations.sellerboard.cogs_url'):
             print("DEBUG: Missing sellerboard_cogs_url")
             return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
         
@@ -6156,7 +6170,7 @@ def manual_sellerboard_update():
             import os
             
             # Get user's Sellerboard COGS URL
-            sellerboard_cogs_url = user_record.get('sellerboard_cogs_url')
+            sellerboard_cogs_url = get_user_field(user_record, 'integrations.sellerboard.cogs_url')
             if not sellerboard_cogs_url:
                 return jsonify({
                     'success': False,
@@ -6169,8 +6183,8 @@ def manual_sellerboard_update():
                 })
             
             # Get user's Google Sheet data for COGS processing
-            sheet_id = user_record.get('sheet_id')
-            worksheet_title = user_record.get('worksheet_title')
+            sheet_id = get_user_sheet_id(user_record)
+            worksheet_title = get_user_field(user_record, 'integrations.google.worksheet_title') or user_record.get('worksheet_title')
             google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
             refresh_token = google_tokens.get('refresh_token')
             
@@ -6194,7 +6208,7 @@ def manual_sellerboard_update():
             print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
             # Copy exact pattern from /api/test/stock-simple endpoint
-            cogs_url = user_record.get('sellerboard_cogs_url')
+            cogs_url = get_user_field(user_record, 'integrations.sellerboard.cogs_url')
             if not cogs_url:
                 return jsonify({
                     'success': False,
@@ -7366,7 +7380,7 @@ def get_asin_purchase_sources(asin):
             return jsonify({'error': 'User not found'}), 404
         
         # Check if source links are enabled
-        if not user_record.get('enable_source_links'):
+        if not (get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links')):
             return jsonify({
                 'sources': [],
                 'message': 'Source links are not enabled. Enable them in Settings to see purchase sources.'
@@ -7375,8 +7389,8 @@ def get_asin_purchase_sources(asin):
         # Get user's Google Sheet settings
         sheet_id = get_user_field(user_record, 'files.sheet_id')
         worksheet_title = get_user_field(user_record, 'integrations.google.worksheet_title')
-        google_tokens = user_record.get('google_tokens', {})
-        column_mapping = user_record.get('column_mapping', {})
+        google_tokens = get_user_google_tokens(user_record) or {}
+        column_mapping = get_user_column_mapping(user_record)
         
         if not all([sheet_id, google_tokens.get('access_token')]):
             return jsonify({
@@ -7391,7 +7405,7 @@ def get_asin_purchase_sources(asin):
         analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
         
         # Fetch COGS data (which includes all sources)
-        if user_record.get('search_all_worksheets'):
+        if get_user_field(user_record, 'settings.search_all_worksheets') or user_record.get('search_all_worksheets'):
             cogs_data, _ = analyzer.fetch_google_sheet_cogs_data_all_worksheets(
                 google_tokens.get('access_token'),
                 sheet_id,
@@ -8039,7 +8053,7 @@ def analyze_discount_opportunities():
                     config_user_record = parent_record
         
         # Get the user's timezone
-        user_timezone = user.get('timezone') if user else None
+        user_timezone = get_user_field(user, 'profile.timezone') if user else None
         
         # Use today's date for analysis
         if user_timezone:
@@ -8068,8 +8082,8 @@ def analyze_discount_opportunities():
             try:
                 from orders_analysis import EnhancedOrdersAnalysis
                 
-                orders_url = config_user_record.get('sellerboard_orders_url')
-                stock_url = config_user_record.get('sellerboard_stock_url')
+                orders_url = get_user_sellerboard_orders_url(config_user_record)
+                stock_url = get_user_sellerboard_stock_url(config_user_record)
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -8086,16 +8100,16 @@ def analyze_discount_opportunities():
                     for_date=today,
                     user_timezone=user_timezone,
                     user_settings={
-                        'enable_source_links': config_user_record.get('enable_source_links', False),
-                        'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                        'enable_source_links': config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                        'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                         'disable_sp_api': config_user_record.get('disable_sp_api', False),
-                        'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                        'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                         'discord_id': discord_id,
                         # Add Google Sheet settings for purchase analytics (same as Smart Restock)
                         'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                         'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                         'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                        'column_mapping': config_user_record.get('column_mapping', {})
+                        'column_mapping': config_get_user_column_mapping(user_record)
                     }
                 )
                 
@@ -8136,11 +8150,11 @@ def analyze_discount_opportunities():
         asin_to_source_link = {}
         
         # Check if user has source links enabled and Google Sheet configured
-        enable_source_links = config_user_record.get('enable_source_links', False)
+        enable_source_links = config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False)
         sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
-        search_all_worksheets = config_user_record.get('search_all_worksheets', True)
-        column_mapping = config_user_record.get('column_mapping', {})
+        search_all_worksheets = get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', True)
+        column_mapping = config_get_user_column_mapping(user_record)
         
         if enable_source_links and sheet_id and google_tokens.get('access_token'):
             try:
@@ -8783,8 +8797,9 @@ def has_feature_access(discord_id, feature_key):
         # Fallback to S3 user permissions
         if not has_user_access:
             user = get_user_record(discord_id)
-            if user and 'feature_permissions' in user:
-                user_perm = user['feature_permissions'].get(feature_key, {})
+            feature_perms = get_user_field(user, 'account.feature_permissions') or {}
+            if user and feature_perms:
+                user_perm = feature_perms.get(feature_key, {})
                 has_user_access = user_perm.get('has_access', False)
         
         if has_user_access:
@@ -9136,10 +9151,10 @@ def get_expected_arrivals():
         # Get the Google Sheet settings for purchase data
         sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
-        column_mapping = config_user_record.get('column_mapping', {})
+        column_mapping = config_get_user_column_mapping(user_record)
         
         # Check for Sellerboard COGS URL - prioritize this over Google Sheets for inventory data
-        sellerboard_cogs_url = config_user_record.get('sellerboard_cogs_url')
+        sellerboard_cogs_url = get_user_field(config_user_record, 'integrations.sellerboard.cogs_url')
         
         if sellerboard_cogs_url:
             # Try to use Sellerboard COGS data as the inventory source
@@ -9316,7 +9331,7 @@ def get_expected_arrivals():
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = config_user_record.get('sellerboard_stock_url')
+        sellerboard_url = config_get_user_sellerboard_stock_url(user_record)
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 
@@ -9628,8 +9643,8 @@ def test_inventory_analysis():
                 if parent_record:
                     config_user_record = parent_record
         
-        orders_url = config_user_record.get('sellerboard_orders_url')
-        stock_url = config_user_record.get('sellerboard_stock_url')
+        orders_url = get_user_sellerboard_orders_url(config_user_record)
+        stock_url = get_user_sellerboard_stock_url(config_user_record)
         
         if not orders_url or not stock_url:
             return jsonify({'error': 'Sellerboard URLs not configured'}), 400
@@ -9638,7 +9653,7 @@ def test_inventory_analysis():
         import pytz
         from orders_analysis import OrdersAnalysis
         
-        user_timezone = config_user_record.get('timezone', 'America/New_York')
+        user_timezone = get_user_field(config_user_record, 'profile.timezone') or 'America/New_York'
         tz = pytz.timezone(user_timezone)
         today = datetime.now(tz).date()
         
@@ -9647,10 +9662,10 @@ def test_inventory_analysis():
             for_date=today,
             user_timezone=user_timezone,
             user_settings={
-                'enable_source_links': config_user_record.get('enable_source_links', False),
-                'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                'enable_source_links': config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                 'disable_sp_api': config_user_record.get('disable_sp_api', False),
-                'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                 'discord_id': discord_id
             }
         )
@@ -9700,16 +9715,16 @@ def analyze_retailer_leads():
                     config_user_record = parent_record
         
         # Check if user has necessary configurations
-        if not config_user_record.get('sellerboard_orders_url') or not config_user_record.get('sellerboard_stock_url'):
+        if not config_get_user_sellerboard_orders_url(user_record) or not config_get_user_sellerboard_stock_url(user_record):
             return jsonify({
                 'error': 'Sellerboard URLs not configured',
                 'message': 'Please configure your Sellerboard URLs in Settings first'
             }), 400
         
         # Get current inventory analysis
-        orders_url = config_user_record.get('sellerboard_orders_url')
-        stock_url = config_user_record.get('sellerboard_stock_url')
-        user_timezone = config_user_record.get('timezone', 'America/New_York')
+        orders_url = get_user_sellerboard_orders_url(config_user_record)
+        stock_url = get_user_sellerboard_stock_url(config_user_record)
+        user_timezone = get_user_field(config_user_record, 'profile.timezone') or 'America/New_York'
         
         from datetime import datetime
         import pytz
@@ -9725,16 +9740,16 @@ def analyze_retailer_leads():
                 for_date=today,
                 user_timezone=user_timezone,
                 user_settings={
-                    'enable_source_links': config_user_record.get('enable_source_links', False),
-                    'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
+                    'enable_source_links': config_get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                     'disable_sp_api': config_user_record.get('disable_sp_api', False),
-                    'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
+                    'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                     'discord_id': discord_id,
                     # Add Google Sheet settings for purchase analytics (same as Smart Restock)
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_user_record.get('column_mapping', {})
+                    'column_mapping': config_get_user_column_mapping(user_record)
                 }
             )
             
@@ -10135,10 +10150,10 @@ def sync_leads_to_sheets():
         
         try:
             # Get column mapping
-            column_mapping = config_user_record.get('column_mapping', {})
+            column_mapping = config_get_user_column_mapping(user_record)
             
             # Check if user has search_all_worksheets enabled
-            search_all_worksheets = config_user_record.get('search_all_worksheets', True)  # Default to True
+            search_all_worksheets = get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', True)  # Default to True
             
             # If search_all_worksheets is enabled, first build a lookup of all ASINs and their sources
             if search_all_worksheets:
@@ -12610,8 +12625,8 @@ def get_product_by_asin(asin):
             }), 400
         
         # Get Sellerboard URLs
-        orders_url = user_record.get('sellerboard_orders_url')
-        stock_url = user_record.get('sellerboard_stock_url')
+        orders_url = get_user_sellerboard_orders_url(user_record)
+        stock_url = get_user_sellerboard_stock_url(user_record)
         
         print(f"eBay Lister: Orders URL configured: {bool(orders_url)}")
         print(f"eBay Lister: Stock URL configured: {bool(stock_url)}")
@@ -12629,7 +12644,7 @@ def get_product_by_asin(asin):
         import pytz
         
         # Get user timezone or default to UTC
-        user_timezone = user_record.get('timezone', 'UTC')
+        user_timezone = get_user_timezone(user_record) or 'UTC'
         target_date = date.today()
         
         # Define asin_upper outside the try block so it's available in except
@@ -13049,8 +13064,8 @@ def get_purchases():
                 config_user = parent_user
                 print(f"Using parent user's Sellerboard config for VA {discord_id}")
         
-        orders_url = config_user.get('sellerboard_orders_url')
-        stock_url = config_user.get('sellerboard_stock_url')
+        orders_url = get_user_sellerboard_orders_url(config_user)
+        stock_url = get_user_sellerboard_stock_url(config_user)
         
         if orders_url and stock_url:
             from orders_analysis import EnhancedOrdersAnalysis
@@ -13069,7 +13084,7 @@ def get_purchases():
                     orders_df, 
                     target_date - timedelta(days=30), 
                     target_date, 
-                    config_user.get('timezone', 'UTC')
+                    get_user_timezone(config_user) or 'UTC'
                 )
                 monthly_sales = analyzer.asin_sales_count(orders_for_month)
                 
@@ -13475,16 +13490,16 @@ def get_demo_user():
     demo_users = get_dummy_users()
     demo_user = demo_users[0]
     return jsonify({
-        'discord_id': demo_user['discord_id'],
-        'discord_username': demo_user['discord_username'],
-        'email': demo_user['email'],
+        'discord_id': get_user_discord_id(demo_user),
+        'discord_username': get_user_field(demo_user, 'identity.discord_username') or demo_user.get('discord_username'),
+        'email': get_user_field(demo_user, 'identity.email') or demo_user.get('email'),
         'profile_configured': True,
         'google_linked': True,
         'sheet_configured': True,
         'amazon_connected': True,
         'demo_mode': True,
-        'user_type': demo_user.get('user_type', 'main'),
-        'permissions': demo_user.get('permissions', ['all']),
+        'user_type': get_user_field(demo_user, 'account.user_type') or 'main',
+        'permissions': get_user_permissions(demo_user),
         'last_activity': demo_user.get('last_activity'),
         'timezone': 'America/New_York'
     })
@@ -13503,8 +13518,8 @@ def get_inventory_age_analysis():
         # Get current analytics data
         from orders_analysis import EnhancedOrdersAnalysis
         
-        orders_url = user_record.get('sellerboard_orders_url')
-        stock_url = user_record.get('sellerboard_stock_url')
+        orders_url = get_user_sellerboard_orders_url(user_record)
+        stock_url = get_user_sellerboard_stock_url(user_record)
         
         if not orders_url or not stock_url:
             return jsonify({
@@ -13517,17 +13532,17 @@ def get_inventory_age_analysis():
         target_date = date.today() - timedelta(days=1)  # Use yesterday's date for most recent complete data
         
         # Extract user timezone
-        user_timezone = user_record.get('timezone')
+        user_timezone = get_user_field(user_record, 'profile.timezone')
         
         # Debug: Check what settings we're passing
         # Force search_all_worksheets for inventory age analysis to get complete purchase history
         user_settings = {
             'access_token': (get_user_field(user_record, 'integrations.google.tokens') or {}).get('access_token'),
-            'google_tokens': user_record.get('google_tokens', {}),  # Add the full google_tokens dict
+            'google_tokens': get_user_google_tokens(user_record) or {},  # Add the full google_tokens dict
             'sheet_id': get_user_field(user_record, 'files.sheet_id'),
             'worksheet_title': get_user_field(user_record, 'integrations.google.worksheet_title'),
-            'column_mapping': user_record.get('column_mapping', {}),
-            'amazon_lead_time_days': user_record.get('amazon_lead_time_days', 90),
+            'column_mapping': get_user_column_mapping(user_record),
+            'amazon_lead_time_days': get_user_field(user_record, 'settings.amazon_lead_time_days') or user_record.get('amazon_lead_time_days', 90),
             'search_all_worksheets': True,  # Force all worksheets for inventory age analysis
             'enable_source_links': True,  # Enable Google Sheets integration
             'discord_id': discord_id
@@ -13960,7 +13975,7 @@ def get_all_user_features():
         
         user_features = {}
         for user in users:
-            user_features[user['discord_id']] = {}
+            user_features[get_user_discord_id(user)] = {}
             
         for row in cursor.fetchall():
             discord_id, feature_key, has_access = row
@@ -14000,13 +14015,13 @@ def grant_user_feature_access():
         users = get_users_config()
         for user in users:
             if get_user_field(user, 'identity.discord_id') == user_id:
-                if 'feature_permissions' not in user:
-                    user['feature_permissions'] = {}
-                user['feature_permissions'][feature_key] = {
+                feature_perms = get_user_field(user, 'account.feature_permissions') or {}
+                feature_perms[feature_key] = {
                     'has_access': True,
                     'granted_by': discord_id,
                     'granted_at': datetime.utcnow().isoformat()
                 }
+                set_user_field(user, 'account.feature_permissions', feature_perms)
                 update_users_config(users)
                 break
         
@@ -14030,8 +14045,10 @@ def revoke_user_feature_access(user_id, feature_key):
         users = get_users_config()
         for user in users:
             if get_user_field(user, 'identity.discord_id') == user_id:
-                if 'feature_permissions' in user and feature_key in user['feature_permissions']:
-                    del user['feature_permissions'][feature_key]
+                feature_perms = get_user_field(user, 'account.feature_permissions') or {}
+                if feature_key in feature_perms:
+                    del feature_perms[feature_key]
+                    set_user_field(user, 'account.feature_permissions', feature_perms)
                     update_users_config(users)
                 break
         
@@ -14124,7 +14141,7 @@ def get_group_members(group_key):
     try:
         # Get all users from config
         users = get_users_config()
-        users_dict = {user['discord_id']: user for user in users}
+        users_dict = {get_user_discord_id(user): user for user in users}
         
         # Get group members from database
         cursor.execute('''

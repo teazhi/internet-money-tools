@@ -1980,7 +1980,7 @@ def sync_s3_to_database():
         # Sync user permissions from S3 users.json
         users = get_users_config()
         for user in users:
-            discord_id = user.get('discord_id')
+            discord_id = get_user_field(user, 'identity.discord_id')
             user_feature_perms = user.get('feature_permissions', {})
             
             for feature_key, perm_data in user_feature_perms.items():
@@ -2747,7 +2747,7 @@ def complete_google_auth():
             user_record = {"discord_id": discord_id, "google_tokens": {}}
             users.append(user_record)
         
-        old_tokens = user_record.get("google_tokens", {})
+        old_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
         if "refresh_token" not in tokens and "refresh_token" in old_tokens:
             tokens["refresh_token"] = old_tokens["refresh_token"]
         
@@ -2928,7 +2928,7 @@ def list_spreadsheets():
             if parent_record:
                 config_user_record = parent_record
     
-    if not config_user_record.get('google_tokens'):
+    if not get_user_field(config_user_record, 'integrations.google.tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -2974,7 +2974,7 @@ def list_worksheets(spreadsheet_id):
             if parent_record:
                 config_user_record = parent_record
     
-    if not config_user_record.get('google_tokens'):
+    if not get_user_field(config_user_record, 'integrations.google.tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -3038,7 +3038,7 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
             if parent_record:
                 config_user_record = parent_record
     
-    if not config_user_record.get('google_tokens'):
+    if not get_user_field(config_user_record, 'integrations.google.tokens'):
         return jsonify({'error': 'Google account not linked'}), 400
     
     try:
@@ -3183,7 +3183,7 @@ def get_discount_gmail_token(user_record):
         return refresh_discount_gmail_token(user_record)
     
     # Priority 2: Fall back to regular Google tokens
-    if user_record.get('google_tokens'):
+    if get_user_field(user_record, 'integrations.google.tokens'):
         print("[DEBUG] Using regular Google tokens as fallback")
         return refresh_google_token(user_record)
     
@@ -3907,13 +3907,13 @@ def debug_cogs_status():
         
         debug_info = {
             'enable_source_links': user_record.get('enable_source_links', False),
-            'sheet_id': bool(user_record.get('sheet_id')),
+            'sheet_id': bool(get_user_field(user_record, 'files.sheet_id')),
             'worksheet_title': bool(user_record.get('worksheet_title')),
-            'google_tokens': bool(user_record.get('google_tokens', {}).get('refresh_token')),
+            'google_tokens': bool((get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token')),
             'column_mapping': user_record.get('column_mapping', {}),
             'sellerboard_orders_url': bool(user_record.get('sellerboard_orders_url')),
             'sellerboard_stock_url': bool(user_record.get('sellerboard_stock_url')),
-            'user_configured': bool(user_record.get('sheet_id') and user_record.get('worksheet_title'))
+            'user_configured': bool(get_user_field(user_record, 'files.sheet_id') and user_record.get('worksheet_title'))
         }
         
         return jsonify({
@@ -4124,9 +4124,9 @@ def get_orders_analytics():
                 user_settings = {
                     'enable_source_links': config_user_record.get('enable_source_links', False),
                     'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
-                    'sheet_id': config_user_record.get('sheet_id'),
+                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': config_user_record.get('worksheet_title'),
-                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {}),
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
                 }
@@ -4181,9 +4181,9 @@ def get_orders_analytics():
                 user_settings = {
                     'enable_source_links': config_user_record.get('enable_source_links', False),
                     'search_all_worksheets': config_user_record.get('search_all_worksheets', False),
-                    'sheet_id': config_user_record.get('sheet_id'),
+                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': config_user_record.get('worksheet_title'),
-                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {}),
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90)
                 }
@@ -4875,7 +4875,7 @@ def migrate_existing_files_old():
                             break
                     else:
                         # Try to match by email username or listing_loader_key
-                        if user_record_info.get('email'):
+                        if get_user_field(user_record_info, 'identity.email'):
                             email_username = user_record_info['email'].split('@')[0].lower()
                             if email_username in filename:
                                 all_objects.append(obj)
@@ -4988,7 +4988,7 @@ def migrate_existing_files_old():
             # Update users config
             users = get_users_config()
             for i, user in enumerate(users):
-                if user.get('discord_id') == discord_id:
+                if get_user_field(user, 'identity.discord_id') == discord_id:
                     users[i] = user_record
                     break
             
@@ -5184,7 +5184,7 @@ def admin_get_stats():
         # Calculate active users - subusers are always considered active since they inherit from parent
         active_users = sum(1 for u in users if 
                           u.get('user_type') == 'subuser' or  # Subusers are always active
-                          (u.get('email') and u.get('google_tokens') and u.get('sheet_id')))  # Main users need full setup
+                          (get_user_field(u, 'identity.email') and get_user_field(u, 'integrations.google.tokens') and get_user_field(u, 'files.sheet_id')))  # Main users need full setup
         
         pending_users = total_users - active_users
         
@@ -5408,7 +5408,7 @@ def admin_bulk_update():
         
         # Basic validation - ensure each user has a discord_id
         for user in new_users:
-            if not user.get('discord_id'):
+            if not get_user_field(user, 'identity.discord_id'):
                 return jsonify({'error': 'Each user must have a discord_id'}), 400
         
         # Replace the entire users array
@@ -5533,7 +5533,7 @@ def admin_create_invitation():
         
         # Check if user already exists
         users = get_users_config()
-        existing_user = next((u for u in users if u.get('email') == email), None)
+        existing_user = next((u for u in users if get_user_field(u, 'identity.email') == email), None)
         
         if existing_user:
             return jsonify({'error': 'User with this email already exists'}), 400
@@ -5635,7 +5635,7 @@ def invite_subuser():
             return jsonify({'error': 'Email already has a pending invitation'}), 400
         
         # Check if user already exists
-        existing_user = next((u for u in users if u.get('email') == email), None)
+        existing_user = next((u for u in users if get_user_field(u, 'identity.email') == email), None)
         
         if existing_user:
             return jsonify({'error': 'User with this email already exists'}), 400
@@ -5715,7 +5715,7 @@ def get_my_invitations():
         for inv in invitations:
             if inv.get('status') == 'accepted':
                 # Check if user with this email actually exists
-                user_exists = any(u.get('email') == inv.get('email') for u in users)
+                user_exists = any(get_user_field(u, 'identity.email') == inv.get('email') for u in users)
                 if user_exists:
                     pass  # Debug print removed
                     continue  # Skip this invitation (remove it)
@@ -6059,7 +6059,7 @@ def manual_sellerboard_update():
         user_config = None
         
         for user in users:
-            if user.get('discord_id') == discord_id:
+            if get_user_field(user, 'identity.discord_id') == discord_id:
                 user_config = user
                 break
         
@@ -6083,12 +6083,12 @@ def manual_sellerboard_update():
             print("DEBUG: Missing sellerboard_cogs_url")
             return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
         
-        if not user_record.get('google_tokens', {}).get('refresh_token'):
+        if not (get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token'):
             print("DEBUG: Missing google refresh token")
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
         
-        if not user_record.get('sheet_id') or not user_record.get('worksheet_title'):
-            print(f"DEBUG: Missing sheet config - sheet_id: {bool(user_record.get('sheet_id'))}, worksheet_title: {bool(user_record.get('worksheet_title'))}")
+        if not get_user_field(user_record, 'files.sheet_id') or not user_record.get('worksheet_title'):
+            print(f"DEBUG: Missing sheet config - sheet_id: {bool(get_user_field(user_record, 'files.sheet_id'))}, worksheet_title: {bool(user_record.get('worksheet_title'))}")
             return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
         
         print("DEBUG: All requirements met, preparing Lambda payload...")
@@ -6135,7 +6135,7 @@ def manual_sellerboard_update():
             # Get user's Google Sheet data for COGS processing
             sheet_id = user_record.get('sheet_id')
             worksheet_title = user_record.get('worksheet_title')
-            google_tokens = user_record.get('google_tokens', {})
+            google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
             refresh_token = google_tokens.get('refresh_token')
             
             if not (sheet_id and worksheet_title and refresh_token):
@@ -6149,7 +6149,7 @@ def manual_sellerboard_update():
                     'details': 'Reasons: Missing Google Sheet ID, worksheet title, or authentication. Please complete your Google Sheet setup.'
                 })
             
-            print(f"DEBUG: Starting COGS update for user: {user_record.get('email')}")
+            print(f"DEBUG: Starting COGS update for user: {get_user_field(user_record, 'identity.email')}")
             print(f"DEBUG: COGS URL configured: {bool(sellerboard_cogs_url)}")
             print(f"DEBUG: Google Sheet configured: {bool(sheet_id and worksheet_title)}")
             
@@ -6418,7 +6418,7 @@ def manual_sellerboard_update():
             
             # Send email with updated file
             print("DEBUG: Sending email with updated Sellerboard file...")
-            user_email = user_record.get('email')
+            user_email = get_user_field(user_record, 'identity.email')
             if not user_email:
                 return jsonify({
                     'success': False,
@@ -7694,7 +7694,7 @@ def refresh_google_token(user_record):
     # Update the users config
     users = get_users_config()
     for i, user in enumerate(users):
-        if user.get("discord_id") == user_record.get("discord_id"):
+        if get_user_field(user, 'identity.discord_id') == get_user_field(user_record, 'identity.discord_id'):
             users[i] = user_record
             break
     update_users_config(users)
@@ -7731,7 +7731,7 @@ def analyze_underpaid_reimbursements():
             config_user = user_record
         
         # Check if Google Sheet is configured
-        if not config_user.get('sheet_id') or not config_user.get('google_tokens'):
+        if not get_user_field(config_user, 'files.sheet_id') or not get_user_field(config_user, 'integrations.google.tokens'):
             return jsonify({
                 'error': 'No Google Sheet configured. Please complete setup first.',
                 'setup_required': True
@@ -8050,9 +8050,9 @@ def analyze_discount_opportunities():
                         'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
                         'discord_id': discord_id,
                         # Add Google Sheet settings for purchase analytics (same as Smart Restock)
-                        'sheet_id': config_user_record.get('sheet_id'),
+                        'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                         'worksheet_title': config_user_record.get('worksheet_title'), 
-                        'google_tokens': config_user_record.get('google_tokens', {}),
+                        'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                         'column_mapping': config_user_record.get('column_mapping', {})
                     }
                 )
@@ -8096,7 +8096,7 @@ def analyze_discount_opportunities():
         # Check if user has source links enabled and Google Sheet configured
         enable_source_links = config_user_record.get('enable_source_links', False)
         sheet_id = config_user_record.get('sheet_id')
-        google_tokens = config_user_record.get('google_tokens', {})
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         search_all_worksheets = config_user_record.get('search_all_worksheets', True)
         column_mapping = config_user_record.get('column_mapping', {})
         
@@ -8703,7 +8703,7 @@ def has_feature_access(discord_id, feature_key):
         
         # Admin always has access to everything (except beta features in demo mode)
         user = get_user_record(discord_id)
-        if user and user.get('discord_id') == '712147636463075389':  # Admin discord ID
+        if user and get_user_field(user, 'identity.discord_id') == '712147636463075389':  # Admin discord ID
             return True
             
         # If user is a subuser, check parent's access instead
@@ -9093,7 +9093,7 @@ def get_expected_arrivals():
 
         # Get the Google Sheet settings for purchase data
         sheet_id = config_user_record.get('sheet_id')
-        google_tokens = config_user_record.get('google_tokens', {})
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         column_mapping = config_user_record.get('column_mapping', {})
         
         # Check for Sellerboard COGS URL - prioritize this over Google Sheets for inventory data
@@ -9405,12 +9405,12 @@ def get_target_worksheets():
                     config_user_record = parent_record
         
         # Check if user has Google tokens
-        if not config_user_record.get('google_tokens'):
+        if not get_user_field(config_user_record, 'integrations.google.tokens'):
             return jsonify({'worksheets': ['Unknown', 'Other', 'Misc', 'No Source']})
         
         try:
             # Get Google access token
-            google_tokens = config_user_record.get('google_tokens', {})
+            google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
             
             import requests as req
             refresh_data = {
@@ -9466,7 +9466,7 @@ def get_available_worksheets():
                     config_user_record = parent_record
         
         # Check if user has Google tokens
-        if not config_user_record.get('google_tokens'):
+        if not get_user_field(config_user_record, 'integrations.google.tokens'):
             return jsonify({
                 'error': 'Google account not linked',
                 'worksheets': ['All Leads']  # Fallback option
@@ -9475,7 +9475,7 @@ def get_available_worksheets():
         sheet_id = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'  # Your leads sheet ID
         
         # Get Google access token
-        google_tokens = config_user_record.get('google_tokens', {})
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         
         # Create a simple access token refresh
         refresh_data = {
@@ -9689,9 +9689,9 @@ def analyze_retailer_leads():
                     'amazon_lead_time_days': config_user_record.get('amazon_lead_time_days', 90),
                     'discord_id': discord_id,
                     # Add Google Sheet settings for purchase analytics (same as Smart Restock)
-                    'sheet_id': config_user_record.get('sheet_id'),
+                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': config_user_record.get('worksheet_title'), 
-                    'google_tokens': config_user_record.get('google_tokens', {}),
+                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
                     'column_mapping': config_user_record.get('column_mapping', {})
                 }
             )
@@ -9717,7 +9717,7 @@ def analyze_retailer_leads():
         sheet_id = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'  # Your leads sheet ID
         
         # Check if user has Google tokens for API access
-        if not config_user_record.get('google_tokens'):
+        if not get_user_field(config_user_record, 'integrations.google.tokens'):
             return jsonify({
                 'error': 'Google account not linked',
                 'message': 'Please link your Google account in Settings to access the leads sheet'
@@ -9726,7 +9726,7 @@ def analyze_retailer_leads():
         try:
             # Get Google access token - use the refresh_google_token function from app.py
             discord_id_temp = discord_id  # Store temporarily
-            google_tokens = config_user_record.get('google_tokens', {})
+            google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
             
             # Create a simple access token refresh
             import requests as req
@@ -10059,14 +10059,14 @@ def sync_leads_to_sheets():
             }), 400
         
         # Check if user has Google tokens for API access
-        if not config_user_record.get('google_tokens'):
+        if not get_user_field(config_user_record, 'integrations.google.tokens'):
             return jsonify({
                 'error': 'Google account not linked',
                 'message': 'Please link your Google account in Settings to access the leads sheet'
             }), 400
         
         # Get Google access token
-        google_tokens = config_user_record.get('google_tokens', {})
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         
         import requests as req
         refresh_data = {
@@ -11219,20 +11219,20 @@ def debug_discount_opportunities():
             users = get_users_config()
             admin_user = None
             for user in users:
-                if user.get('email') == DISCOUNT_MONITOR_EMAIL:
+                if get_user_field(user, 'identity.email') == DISCOUNT_MONITOR_EMAIL:
                     admin_user = user
                     break
             
             if admin_user:
                 debug_info['gmail_access'] = {
                     'user_found': True,
-                    'has_google_tokens': bool(admin_user.get('google_tokens')),
+                    'has_google_tokens': bool(get_user_field(admin_user, 'integrations.google.tokens')),
                     'google_linked': admin_user.get('google_linked', False),
-                    'tokens_keys': list(admin_user.get('google_tokens', {}).keys()) if admin_user.get('google_tokens') else []
+                    'tokens_keys': list((get_user_field(admin_user, 'integrations.google.tokens') or {}).keys()) if get_user_field(admin_user, 'integrations.google.tokens') else []
                 }
                 
                 # Try Gmail search
-                if admin_user.get('google_tokens'):
+                if get_user_field(admin_user, 'integrations.google.tokens'):
                     try:
                         from datetime import datetime, timedelta
                         import pytz
@@ -11350,7 +11350,7 @@ def get_discount_monitoring_status():
         if DISCOUNT_MONITOR_EMAIL:
             users = get_users_config()
             for user in users:
-                if user.get('email') == DISCOUNT_MONITOR_EMAIL and user.get('google_tokens'):
+                if get_user_field(user, 'identity.email') == DISCOUNT_MONITOR_EMAIL and get_user_field(user, 'integrations.google.tokens'):
                     admin_user_record = user
                     gmail_configured = True
                     break
@@ -11398,7 +11398,7 @@ def test_discount_monitoring():
         admin_user_record = None
         users = get_users_config()
         for user in users:
-            if user.get('email') == DISCOUNT_MONITOR_EMAIL and user.get('google_tokens'):
+            if get_user_field(user, 'identity.email') == DISCOUNT_MONITOR_EMAIL and get_user_field(user, 'integrations.google.tokens'):
                 admin_user_record = user
                 break
         
@@ -11545,11 +11545,11 @@ def test_discount_email_endpoint():
     user_has_tokens = False
     
     for user in users:
-        if user.get('email') == monitor_email:
+        if get_user_field(user, 'identity.email') == monitor_email:
             user_found = True
-            user_has_tokens = bool(user.get('google_tokens'))
+            user_has_tokens = bool(get_user_field(user, 'integrations.google.tokens'))
             results['user_info'] = {
-                'discord_id': user.get('discord_id'),
+                'discord_id': get_user_field(user, 'identity.discord_id'),
                 'has_google_tokens': user_has_tokens,
                 'google_linked': user.get('google_linked', False)
             }
@@ -11583,7 +11583,7 @@ def test_discount_email_endpoint():
         # Show available emails (masked for privacy)
         results['available_users'] = [
             f"{email[:3]}***{email[-10:]}" if email and len(email) > 13 else email
-            for email in [u.get('email', 'No email') for u in users]
+            for email in [get_user_field(u, 'identity.email') or 'No email' for u in users]
         ]
     
     return jsonify(results), 200
@@ -12980,7 +12980,7 @@ def get_purchases():
             # This is a VA/sub-user - get their parent's purchases
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
-                target_user_id = parent_user.get('discord_id', discord_id)
+                target_user_id = get_user_field(parent_user, 'identity.discord_id') or discord_id
                 print(f"VA user {discord_id} fetching purchases for parent user {target_user_id}")
             else:
                 print(f"Warning: VA user {discord_id} has no parent user found")
@@ -13140,7 +13140,7 @@ def update_purchase(purchase_id):
         if get_user_field(user_record, 'account.user_type') == 'subuser':
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
-                target_user_id = parent_user.get('discord_id', discord_id)
+                target_user_id = get_user_field(parent_user, 'identity.discord_id') or discord_id
         
         # Get all purchases from S3
         all_purchases = get_purchases_config()
@@ -13480,7 +13480,7 @@ def get_inventory_age_analysis():
         # Debug: Check what settings we're passing
         # Force search_all_worksheets for inventory age analysis to get complete purchase history
         user_settings = {
-            'access_token': user_record.get('google_tokens', {}).get('access_token'),
+            'access_token': (get_user_field(user_record, 'integrations.google.tokens') or {}).get('access_token'),
             'google_tokens': user_record.get('google_tokens', {}),  # Add the full google_tokens dict
             'sheet_id': user_record.get('sheet_id'),
             'worksheet_title': user_record.get('worksheet_title'),
@@ -13957,7 +13957,7 @@ def grant_user_feature_access():
         # Also store in S3 users.json for persistence
         users = get_users_config()
         for user in users:
-            if user.get('discord_id') == user_id:
+            if get_user_field(user, 'identity.discord_id') == user_id:
                 if 'feature_permissions' not in user:
                     user['feature_permissions'] = {}
                 user['feature_permissions'][feature_key] = {
@@ -13987,7 +13987,7 @@ def revoke_user_feature_access(user_id, feature_key):
         # Also remove from S3 users.json for persistence
         users = get_users_config()
         for user in users:
-            if user.get('discord_id') == user_id:
+            if get_user_field(user, 'identity.discord_id') == user_id:
                 if 'feature_permissions' in user and feature_key in user['feature_permissions']:
                     del user['feature_permissions'][feature_key]
                     update_users_config(users)
@@ -14099,7 +14099,7 @@ def get_group_members(group_key):
                 members.append({
                     'discord_id': discord_id,
                     'discord_username': user.get('discord_username', 'Unknown'),
-                    'email': user.get('email', ''),
+                    'email': get_user_field(user, 'identity.email') or '',
                     'added_at': added_at
                 })
         

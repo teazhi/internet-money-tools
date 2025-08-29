@@ -269,6 +269,7 @@ SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
 
 # Alternative HTTP-based email service (Resend)
 RESEND_API_KEY = os.getenv('RESEND_API_KEY')
+RESEND_FROM_DOMAIN = os.getenv('RESEND_FROM_DOMAIN', 'onboarding@resend.dev')
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -1794,7 +1795,7 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
         """
         
         # Use Gmail as reply-to so responses come back to you
-        from_email = 'DMS Dashboard <onboarding@resend.dev>'
+        from_email = f'DMS Dashboard <{RESEND_FROM_DOMAIN}>'
         reply_to = SMTP_EMAIL if SMTP_EMAIL else 'catalystgvmain@gmail.com'
         
         response = requests.post(
@@ -1817,6 +1818,13 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
             return True
         else:
             print(f"[RESEND] Failed to send email. Status: {response.status_code}, Response: {response.text}")
+            
+            # If domain verification error, provide helpful message
+            if response.status_code == 403 and "verify a domain" in response.text:
+                print(f"[RESEND] Domain verification required. Either:")
+                print(f"[RESEND] 1. Add RESEND_FROM_DOMAIN=your-email@verified-domain.com to env")
+                print(f"[RESEND] 2. Only test with {SMTP_EMAIL or 'your own email'}")
+                
             return False
             
     except Exception as e:

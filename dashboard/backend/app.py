@@ -1767,6 +1767,10 @@ def send_invitation_email(email, invitation_token, invited_by):
         return False
     
     try:
+        print(f"[INVITATION] Attempting to send invitation email to {email}")
+        print(f"[INVITATION] SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
+        print(f"[INVITATION] From: {SMTP_EMAIL}")
+        
         msg = MIMEMultipart()
         msg['From'] = SMTP_EMAIL
         msg['To'] = email
@@ -1797,12 +1801,17 @@ def send_invitation_email(email, invitation_token, invited_by):
         
         msg.attach(MIMEText(body, 'html'))
         
+        print(f"[INVITATION] Connecting to SMTP server...")
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        print(f"[INVITATION] Starting TLS...")
         server.starttls()
+        print(f"[INVITATION] Logging in...")
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        print(f"[INVITATION] Sending email...")
         text = msg.as_string()
         server.sendmail(SMTP_EMAIL, email, text)
         server.quit()
+        print(f"[INVITATION] Email sent successfully to {email}")
         
         return True
     except Exception as e:
@@ -5567,6 +5576,35 @@ def debug_test_invitation():
         })
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': str(e)}), 500
+
+@app.route('/api/debug/clear-invitation', methods=['POST'])
+@admin_required
+def debug_clear_invitation():
+    """Clear a pending invitation by email for testing"""
+    try:
+        data = request.json
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+            
+        invitations = get_invitations_config()
+        original_count = len(invitations)
+        
+        # Remove invitation for this email
+        invitations = [inv for inv in invitations if inv.get('email') != email]
+        
+        if update_invitations_config(invitations):
+            removed_count = original_count - len(invitations)
+            return jsonify({
+                'message': f'Cleared {removed_count} invitation(s) for {email}',
+                'removed_count': removed_count
+            })
+        else:
+            return jsonify({'error': 'Failed to update invitations'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/users/bulk', methods=['PUT'])
 @admin_required

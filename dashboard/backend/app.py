@@ -525,7 +525,7 @@ def migrate_user_to_new_schema(old_user):
     # Generate UUID if not exists
     user_id = old_user.get('id', str(uuid.uuid4()))
     
-    # Organize into new schema
+    # Organize into new schema with ALL user data
     new_user = {
         "id": user_id,
         "identity": {
@@ -541,11 +541,13 @@ def migrate_user_to_new_schema(old_user):
             "status": old_user.get("status", "active"),
             "created_at": old_user.get("created_at", datetime.utcnow().isoformat()),
             "updated_at": old_user.get("updated_at", datetime.utcnow().isoformat()),
-            "last_activity": old_user.get("last_activity", datetime.utcnow().isoformat())
+            "last_activity": old_user.get("last_activity", datetime.utcnow().isoformat()),
+            "feature_permissions": old_user.get("feature_permissions", {})
         },
         "profile": {
             "configured": old_user.get("profile_configured", False),
-            "setup_step": "completed" if old_user.get("profile_configured") else "initial"
+            "setup_step": "completed" if old_user.get("profile_configured") else "initial",
+            "timezone": old_user.get("timezone")
         },
         "integrations": {
             "google": {
@@ -553,23 +555,37 @@ def migrate_user_to_new_schema(old_user):
                 "tokens": old_user.get("google_tokens", {}),
                 "sheet_id": old_user.get("sheet_id"),
                 "worksheet_title": old_user.get("worksheet_title"),
-                "column_mapping": old_user.get("column_mapping", {})
+                "column_mapping": old_user.get("column_mapping", {}),
+                "sheet_configured": old_user.get("sheet_configured", False),
+                "search_all_worksheets": old_user.get("search_all_worksheets", False),
+                "discount_gmail_tokens": old_user.get("discount_gmail_tokens", {})
             },
             "sellerboard": {
                 "configured": bool(old_user.get("sellerboard_orders_url") or old_user.get("sb_file_key")),
                 "orders_url": old_user.get("sellerboard_orders_url"),
                 "stock_url": old_user.get("sellerboard_stock_url"),
+                "cogs_url": old_user.get("sellerboard_cogs_url"),
                 "file_key": old_user.get("sb_file_key")
             },
             "amazon": {
-                "configured": bool(old_user.get("listing_loader_key")),
+                "configured": bool(old_user.get("listing_loader_key") or old_user.get("amazon_refresh_token")),
                 "listing_loader_key": old_user.get("listing_loader_key"),
-                "sp_api_connected": old_user.get("sp_api_connected", False)
+                "sp_api_connected": old_user.get("sp_api_connected", False),
+                "refresh_token": old_user.get("amazon_refresh_token"),
+                "selling_partner_id": old_user.get("amazon_selling_partner_id"),
+                "connected_at": old_user.get("amazon_connected_at"),
+                "marketplace_id": old_user.get("marketplace_id"),
+                "disable_sp_api": old_user.get("disable_sp_api", False),
+                "lead_time_days": old_user.get("amazon_lead_time_days")
             }
+        },
+        "settings": {
+            "enable_source_links": old_user.get("enable_source_links", False)
         },
         "files": {
             "uploaded_count": len(old_user.get("uploaded_files", [])),
             "storage_used_bytes": sum(f.get("file_size", 0) for f in old_user.get("uploaded_files", [])),
+            "uploaded_files": old_user.get("uploaded_files", []),  # Keep all uploaded files
             "recent_uploads": old_user.get("uploaded_files", [])[-5:]  # Keep last 5
         }
     }
@@ -705,6 +721,54 @@ def get_user_sheet_id(user):
 def get_user_parent_id(user):
     """Get user's parent ID from any schema"""
     return get_user_field(user, 'account.parent_user_id') or user.get('parent_user_id')
+
+def get_user_timezone(user):
+    """Get user's timezone from any schema"""
+    return get_user_field(user, 'profile.timezone') or user.get('timezone')
+
+def get_user_amazon_refresh_token(user):
+    """Get user's Amazon refresh token from any schema"""
+    return get_user_field(user, 'integrations.amazon.refresh_token') or user.get('amazon_refresh_token')
+
+def get_user_amazon_selling_partner_id(user):
+    """Get user's Amazon selling partner ID from any schema"""
+    return get_user_field(user, 'integrations.amazon.selling_partner_id') or user.get('amazon_selling_partner_id')
+
+def get_user_amazon_connected_at(user):
+    """Get user's Amazon connection timestamp from any schema"""
+    return get_user_field(user, 'integrations.amazon.connected_at') or user.get('amazon_connected_at')
+
+def get_user_sellerboard_orders_url(user):
+    """Get user's Sellerboard orders URL from any schema"""
+    return get_user_field(user, 'integrations.sellerboard.orders_url') or user.get('sellerboard_orders_url')
+
+def get_user_sellerboard_stock_url(user):
+    """Get user's Sellerboard stock URL from any schema"""
+    return get_user_field(user, 'integrations.sellerboard.stock_url') or user.get('sellerboard_stock_url')
+
+def get_user_sellerboard_cogs_url(user):
+    """Get user's Sellerboard COGS URL from any schema"""
+    return get_user_field(user, 'integrations.sellerboard.cogs_url') or user.get('sellerboard_cogs_url')
+
+def get_user_column_mapping(user):
+    """Get user's column mapping from any schema"""
+    return get_user_field(user, 'integrations.google.column_mapping') or user.get('column_mapping', {})
+
+def get_user_worksheet_title(user):
+    """Get user's worksheet title from any schema"""
+    return get_user_field(user, 'integrations.google.worksheet_title') or user.get('worksheet_title')
+
+def get_user_feature_permissions(user):
+    """Get user's feature permissions from any schema"""
+    return get_user_field(user, 'account.feature_permissions') or user.get('feature_permissions', {})
+
+def get_user_marketplace_id(user):
+    """Get user's marketplace ID from any schema"""
+    return get_user_field(user, 'integrations.amazon.marketplace_id') or user.get('marketplace_id')
+
+def get_user_enable_source_links(user):
+    """Get user's enable source links setting from any schema"""
+    return get_user_field(user, 'settings.enable_source_links') or user.get('enable_source_links', False)
 
 def is_user_configured(user):
     """Check if user profile is configured"""
@@ -1761,8 +1825,8 @@ def has_permission(discord_id, permission):
     if not user_record:
         return False
     
-    user_permissions = user_record.get('permissions', [])
-    user_type = user_record.get('user_type', 'main')
+    user_permissions = get_user_field(user_record, 'account.permissions') or []
+    user_type = get_user_field(user_record, 'account.user_type') or 'main'
     
     # Main users and admin have all permissions
     if user_type == 'main' or 'all' in user_permissions or is_admin_user(discord_id):
@@ -1779,10 +1843,10 @@ def has_permission(discord_id, permission):
 def get_parent_user_record(sub_user_discord_id):
     """Get parent user record for a sub-user"""
     sub_user = get_user_record(sub_user_discord_id)
-    if not sub_user or sub_user.get('user_type') != 'subuser':
+    if not sub_user or get_user_field(sub_user, 'account.user_type') != 'subuser':
         return None
     
-    parent_id = sub_user.get('parent_user_id')
+    parent_id = get_user_field(sub_user, 'account.parent_user_id')
     if not parent_id:
         return None
     
@@ -2153,17 +2217,17 @@ def discord_callback():
             # Check if this is a sub-user invitation
             if 'valid_invitation' in locals() and valid_invitation:
                 if valid_invitation.get('user_type') == 'subuser':
-                    user_record['user_type'] = 'subuser'
-                    user_record['parent_user_id'] = valid_invitation.get('parent_user_id')
-                    user_record['permissions'] = valid_invitation.get('permissions', ['reimbursements_analysis'])
-                    user_record['va_name'] = valid_invitation.get('va_name', '')
-                    user_record['email'] = valid_invitation.get('email')
+                    set_user_field(user_record, 'account.user_type', 'subuser')
+                    set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))
+                    set_user_field(user_record, 'account.permissions', valid_invitation.get('permissions', ['reimbursements_analysis']))
+                    set_user_field(user_record, 'identity.va_name', valid_invitation.get('va_name', ''))
+                    set_user_field(user_record, 'identity.email', valid_invitation.get('email'))
                 else:
-                    user_record['user_type'] = 'main'
-                    user_record['permissions'] = ['all']  # Main users have all permissions
+                    set_user_field(user_record, 'account.user_type', 'main')
+                    set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
             else:
-                user_record['user_type'] = 'main'
-                user_record['permissions'] = ['all']  # Main users have all permissions
+                set_user_field(user_record, 'account.user_type', 'main')
+                set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
                 
             users.append(user_record)
         
@@ -2259,9 +2323,9 @@ def amazon_seller_callback():
         
         for user in users:
             if get_user_field(user, 'identity.discord_id') == discord_id:
-                user['amazon_refresh_token'] = encrypted_token
-                user['amazon_selling_partner_id'] = selling_partner_id
-                user['amazon_connected_at'] = datetime.now().isoformat()
+                set_user_field(user, 'integrations.amazon.refresh_token', encrypted_token)
+                set_user_field(user, 'integrations.amazon.selling_partner_id', selling_partner_id)
+                set_user_field(user, 'integrations.amazon.connected_at', datetime.now().isoformat())
                 break
         
         save_users_config(users)
@@ -2284,9 +2348,9 @@ def disconnect_amazon_seller():
         for user in users:
             if get_user_field(user, 'identity.discord_id') == discord_id:
                 # Remove Amazon credentials
-                user.pop('amazon_refresh_token', None)
-                user.pop('amazon_selling_partner_id', None)
-                user.pop('amazon_connected_at', None)
+                set_user_field(user, 'integrations.amazon.refresh_token', None)
+                set_user_field(user, 'integrations.amazon.selling_partner_id', None)
+                set_user_field(user, 'integrations.amazon.connected_at', None)
                 break
         
         save_users_config(users)
@@ -2311,7 +2375,7 @@ def amazon_seller_status():
         amazon_connected_at = None
         selling_partner_id = None
         
-        if user_record and user_record.get('user_type') == 'subuser':
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
                 amazon_connected = parent_user.get('amazon_refresh_token') is not None
@@ -2494,7 +2558,7 @@ def get_user():
     admin_impersonating = session.get('admin_impersonating')
     
     # For subusers, check parent's configuration status
-    if user_record and user_record.get('user_type') == 'subuser':
+    if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
         parent_user = get_parent_user_record(discord_id)
         profile_configured = (parent_user is not None and 
                             parent_user.get('email') and 
@@ -2514,7 +2578,7 @@ def get_user():
     # Check Amazon connection status
     amazon_connected = False
     amazon_connected_at = None
-    if user_record and user_record.get('user_type') == 'subuser':
+    if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
         parent_user = get_parent_user_record(discord_id)
         amazon_connected = parent_user and parent_user.get('amazon_refresh_token') is not None
         amazon_connected_at = parent_user.get('amazon_connected_at') if parent_user else None
@@ -2562,13 +2626,13 @@ def update_profile():
         users.append(user_record)
     
     # Check if user is a subuser - they can only update their timezone
-    if user_record.get('user_type') == 'subuser':
+    if get_user_field(user_record, 'account.user_type') == 'subuser':
         # Only allow timezone updates for subusers
         if 'timezone' in data:
-            user_record['timezone'] = data['timezone']
-        user_record['last_activity'] = datetime.now().isoformat()
+            set_user_field(user_record, 'profile.timezone', data['timezone'])
+        set_user_field(user_record, 'account.last_activity', datetime.now().isoformat())
         if 'discord_username' in session:
-            user_record['discord_username'] = session['discord_username']
+            set_user_field(user_record, 'identity.discord_username', session['discord_username'])
         
         if update_users_config(users):
             return jsonify({'message': 'Timezone updated successfully'})
@@ -2583,7 +2647,7 @@ def update_profile():
     
     # Update user profile fields
     if 'email' in data:
-        user_record['email'] = data['email']
+        set_user_field(user_record, 'identity.email', data['email'])
     if 'run_scripts' in data:
         user_record['run_scripts'] = data['run_scripts']
     if 'run_prep_center' in data:
@@ -2591,26 +2655,26 @@ def update_profile():
     # Note: listing_loader_key and sb_file_key are now deprecated
     # Files are automatically detected from uploaded_files array
     if 'sellerboard_orders_url' in data:
-        user_record['sellerboard_orders_url'] = data['sellerboard_orders_url']
+        set_user_field(user_record, 'integrations.sellerboard.orders_url', data['sellerboard_orders_url'])
     if 'sellerboard_stock_url' in data:
-        user_record['sellerboard_stock_url'] = data['sellerboard_stock_url']
+        set_user_field(user_record, 'integrations.sellerboard.stock_url', data['sellerboard_stock_url'])
     if 'sellerboard_cogs_url' in data:
-        user_record['sellerboard_cogs_url'] = data['sellerboard_cogs_url']
+        set_user_field(user_record, 'integrations.sellerboard.cogs_url', data['sellerboard_cogs_url'])
     if 'timezone' in data:
-        user_record['timezone'] = data['timezone']
+        set_user_field(user_record, 'profile.timezone', data['timezone'])
     if 'enable_source_links' in data:
-        user_record['enable_source_links'] = data['enable_source_links']
+        set_user_field(user_record, 'settings.enable_source_links', data['enable_source_links'])
     if 'search_all_worksheets' in data:
-        user_record['search_all_worksheets'] = data['search_all_worksheets']
+        set_user_field(user_record, 'integrations.google.search_all_worksheets', data['search_all_worksheets'])
     if 'disable_sp_api' in data:
-        user_record['disable_sp_api'] = data['disable_sp_api']
+        set_user_field(user_record, 'integrations.amazon.disable_sp_api', data['disable_sp_api'])
     if 'amazon_lead_time_days' in data:
         # Validate lead time is within reasonable bounds
         lead_time = data['amazon_lead_time_days']
         try:
             lead_time_int = int(lead_time)
             if 30 <= lead_time_int <= 180:
-                user_record['amazon_lead_time_days'] = lead_time_int
+                set_user_field(user_record, 'integrations.amazon.lead_time_days', lead_time_int)
             else:
                 return jsonify({'error': 'Amazon lead time must be between 30 and 180 days'}), 400
         except (ValueError, TypeError):
@@ -2842,8 +2906,8 @@ def list_spreadsheets():
     
     # Get user config for Google access (use parent config for subusers)
     config_user_record = user_record
-    if user_record and user_record.get('user_type') == 'subuser':
-        parent_user_id = user_record.get('parent_user_id')
+    if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+        parent_user_id = get_user_field(user_record, 'account.parent_user_id')
         if parent_user_id:
             parent_record = get_user_record(parent_user_id)
             if parent_record:
@@ -2888,8 +2952,8 @@ def list_worksheets(spreadsheet_id):
     
     # Get user config for Google access (use parent config for subusers)
     config_user_record = user_record
-    if user_record and user_record.get('user_type') == 'subuser':
-        parent_user_id = user_record.get('parent_user_id')
+    if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+        parent_user_id = get_user_field(user_record, 'account.parent_user_id')
         if parent_user_id:
             parent_record = get_user_record(parent_user_id)
             if parent_record:
@@ -2932,9 +2996,9 @@ def configure_sheet():
     if not user_record:
         return jsonify({'error': 'User profile not found'}), 404
     
-    user_record['sheet_id'] = spreadsheet_id
-    user_record['worksheet_title'] = worksheet_title
-    user_record['column_mapping'] = column_mapping
+    set_user_field(user_record, 'integrations.google.sheet_id', spreadsheet_id)
+    set_user_field(user_record, 'integrations.google.worksheet_title', worksheet_title)
+    set_user_field(user_record, 'integrations.google.column_mapping', column_mapping)
     
     if update_users_config(users):
         return jsonify({'message': 'Sheet configuration saved successfully'})
@@ -2952,8 +3016,8 @@ def get_sheet_headers(spreadsheet_id, worksheet_title):
     
     # Get user config for Google access (use parent config for subusers)
     config_user_record = user_record
-    if user_record and user_record.get('user_type') == 'subuser':
-        parent_user_id = user_record.get('parent_user_id')
+    if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+        parent_user_id = get_user_field(user_record, 'account.parent_user_id')
         if parent_user_id:
             parent_record = get_user_record(parent_user_id)
             if parent_record:
@@ -3694,8 +3758,8 @@ def debug_stock_columns():
         
         # Get user config for Sellerboard access (use parent config for subusers)
         config_user_record = user_record
-        if user_record and user_record.get('user_type') == 'subuser':
-            parent_user_id = user_record.get('parent_user_id')
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -3901,8 +3965,8 @@ def get_orders_analytics():
         # For subusers, we need to check their parent's configuration for Sellerboard URLs
         # but keep their own timezone preference
         config_user_record = user_record
-        if user_record and user_record.get('user_type') == 'subuser':
-            parent_user_id = user_record.get('parent_user_id')
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -4691,7 +4755,7 @@ def cleanup_updated_files_old():
         user_record = None
         user_index = None
         for i, user in enumerate(users):
-            if user.get("discord_id") == discord_id:
+            if get_user_field(user, 'identity.discord_id') == discord_id:
                 user_record = user
                 user_index = i
                 break
@@ -4699,16 +4763,22 @@ def cleanup_updated_files_old():
         if not user_record:
             return jsonify({'error': 'User not found'}), 404
         
-        if 'uploaded_files' not in user_record:
+        uploaded_files = get_user_field(user_record, 'files.uploaded_files') or []
+        if not uploaded_files:
             return jsonify({'message': 'No files to clean up', 'removed_count': 0})
         
         # Remove _updated files from uploaded_files
-        original_count = len(user_record['uploaded_files'])
-        user_record['uploaded_files'] = [
-            f for f in user_record['uploaded_files'] 
+        original_count = len(uploaded_files)
+        cleaned_files = [
+            f for f in uploaded_files 
             if '_updated.' not in f.get('filename', '') and '_updated.' not in f.get('s3_key', '')
         ]
-        removed_count = original_count - len(user_record['uploaded_files'])
+        removed_count = original_count - len(cleaned_files)
+        
+        # Update the user record with cleaned files
+        set_user_field(user_record, 'files.uploaded_files', cleaned_files)
+        set_user_field(user_record, 'files.uploaded_count', len(cleaned_files))
+        set_user_field(user_record, 'files.recent_uploads', cleaned_files[-5:])  # Update recent uploads
         
         # Update the users config
         users[user_index] = user_record
@@ -4960,9 +5030,10 @@ def delete_sellerboard_file_old(file_key):
         pass  # Debug print removed
         
         users = get_users_config()
-        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
         
-        if not user_record or 'uploaded_files' not in user_record:
+        uploaded_files = get_user_field(user_record, 'files.uploaded_files') or []
+        if not user_record or not uploaded_files:
             pass  # Debug print removed
             return jsonify({'error': 'User record not found'}), 404
         
@@ -4973,7 +5044,7 @@ def delete_sellerboard_file_old(file_key):
         file_index = None
         
         # Strategy 1: Exact match
-        for i, file_info in enumerate(user_record['uploaded_files']):
+        for i, file_info in enumerate(uploaded_files):
             if file_info.get('s3_key') == file_key:
                 file_to_delete = file_info
                 file_index = i
@@ -4982,7 +5053,7 @@ def delete_sellerboard_file_old(file_key):
         
         # Strategy 2: Try without URL decoding if exact match failed
         if not file_to_delete:
-            for i, file_info in enumerate(user_record['uploaded_files']):
+            for i, file_info in enumerate(uploaded_files):
                 if file_info.get('s3_key') == original_file_key:
                     file_to_delete = file_info
                     file_index = i
@@ -5009,12 +5080,17 @@ def delete_sellerboard_file_old(file_key):
                 'debug': {
                     'requested_key': file_key,
                     'original_key': original_file_key,
-                    'available_keys': [f.get('s3_key') for f in user_record['uploaded_files']]
+                    'available_keys': [f.get('s3_key') for f in uploaded_files]
                 }
             }), 404
         
         # Remove file from user record
-        user_record['uploaded_files'].pop(file_index)
+        uploaded_files.pop(file_index)
+        
+        # Update user record with modified files list
+        set_user_field(user_record, 'files.uploaded_files', uploaded_files)
+        set_user_field(user_record, 'files.uploaded_count', len(uploaded_files))
+        set_user_field(user_record, 'files.recent_uploads', uploaded_files[-5:])  # Update recent uploads
         
         # Delete from S3 (S3 delete_object is idempotent - no need to check if file exists first)
         s3_client = get_s3_client()
@@ -5119,7 +5195,7 @@ def admin_update_user(user_id):
         # Find user in the users list (not just get a reference)
         user_index = None
         for i, u in enumerate(users):
-            if str(u.get("discord_id")) == str(user_id):
+            if str(get_user_field(u, 'identity.discord_id')) == str(user_id):
                 user_index = i
                 break
         
@@ -5171,7 +5247,7 @@ def admin_delete_user(user_id):
         user_index = None
         user_id_str = str(user_id)
         for i, user in enumerate(users):
-            if str(user.get("discord_id")) == user_id_str:
+            if str(get_user_field(user, 'identity.discord_id')) == user_id_str:
                 user_index = i
                 break
         
@@ -5591,16 +5667,16 @@ def get_my_subusers():
         # Find all sub-users for this parent
         subusers = [
             {
-                'discord_id': user.get('discord_id'),
-                'discord_username': user.get('discord_username'),
-                'va_name': user.get('va_name'),
-                'email': user.get('email'),
-                'permissions': user.get('permissions', []),
-                'last_activity': user.get('last_activity'),
-                'user_type': user.get('user_type')
+                'discord_id': get_user_field(user, 'identity.discord_id'),
+                'discord_username': get_user_field(user, 'identity.discord_username'),
+                'va_name': get_user_field(user, 'identity.va_name'),
+                'email': get_user_field(user, 'identity.email'),
+                'permissions': get_user_field(user, 'account.permissions') or [],
+                'last_activity': get_user_field(user, 'account.last_activity'),
+                'user_type': get_user_field(user, 'account.user_type')
             }
             for user in users 
-            if user.get('user_type') == 'subuser' and user.get('parent_user_id') == discord_id
+            if get_user_field(user, 'account.user_type') == 'subuser' and get_user_field(user, 'account.parent_user_id') == discord_id
         ]
         
         return jsonify({'subusers': subusers})
@@ -5688,7 +5764,7 @@ def edit_subuser(subuser_id):
         # Find the sub-user
         subuser_index = None
         for i, user in enumerate(users):
-            if user.get('discord_id') == subuser_id and user.get('parent_user_id') == discord_id:
+            if get_user_field(user, 'identity.discord_id') == subuser_id and get_user_field(user, 'account.parent_user_id') == discord_id:
                 subuser_index = i
                 break
         
@@ -5697,7 +5773,7 @@ def edit_subuser(subuser_id):
         
         # Update the sub-user's information
         if 'va_name' in data:
-            users[subuser_index]['va_name'] = data['va_name']
+            set_user_field(users[subuser_index], 'identity.va_name', data['va_name'])
         
         if 'permissions' in data:
             # Validate permissions - include all feature keys the main user has access to
@@ -5710,10 +5786,10 @@ def edit_subuser(subuser_id):
             
             # Filter to only valid permissions
             permissions = [p for p in data['permissions'] if p in valid_permissions]
-            users[subuser_index]['permissions'] = permissions
+            set_user_field(users[subuser_index], 'account.permissions', permissions)
         
         # Update last modified timestamp
-        users[subuser_index]['updated_at'] = datetime.utcnow().isoformat()
+        set_user_field(users[subuser_index], 'account.updated_at', datetime.utcnow().isoformat())
         
         if update_users_config(users):
             return jsonify({
@@ -5740,13 +5816,13 @@ def revoke_subuser_access(subuser_id):
         users = get_users_config()
         
         # Find the sub-user
-        subuser = next((u for u in users if u.get('discord_id') == subuser_id and u.get('parent_user_id') == discord_id), None)
+        subuser = next((u for u in users if get_user_field(u, 'identity.discord_id') == subuser_id and get_user_field(u, 'account.parent_user_id') == discord_id), None)
         
         if not subuser:
             return jsonify({'error': 'Sub-user not found or not authorized'}), 404
         
         # Remove the sub-user
-        users = [u for u in users if not (u.get('discord_id') == subuser_id and u.get('parent_user_id') == discord_id)]
+        users = [u for u in users if not (get_user_field(u, 'identity.discord_id') == subuser_id and get_user_field(u, 'account.parent_user_id') == discord_id)]
         
         if update_users_config(users):
             return jsonify({'message': 'Sub-user access revoked successfully'})
@@ -7632,7 +7708,7 @@ def analyze_underpaid_reimbursements():
             return jsonify({'error': 'User not found'}), 404
         
         # For subusers, use parent's configuration
-        if user_record.get('user_type') == 'subuser':
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
             config_user = get_parent_user_record(discord_id)
             if not config_user:
                 return jsonify({'error': 'Parent user not found'}), 404
@@ -7898,8 +7974,8 @@ def analyze_discount_opportunities():
         
         # Get user config for analytics
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -8616,8 +8692,8 @@ def has_feature_access(discord_id, feature_key):
             return True
             
         # If user is a subuser, check parent's access instead
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 return has_feature_access(parent_user_id, feature_key)
             
@@ -8993,8 +9069,8 @@ def get_expected_arrivals():
 
         # Get user config for Google access (use parent config for subusers)
         config_user_record = user_record
-        if user_record and user_record.get('user_type') == 'subuser':
-            parent_user_id = user_record.get('parent_user_id')
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -9306,8 +9382,8 @@ def get_target_worksheets():
         
         # Get user config
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -9367,8 +9443,8 @@ def get_available_worksheets():
         
         # Get user config for Google access
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -9488,8 +9564,8 @@ def test_inventory_analysis():
             return jsonify({'error': 'User not found'}), 404
         
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -9559,8 +9635,8 @@ def analyze_retailer_leads():
         
         # Get user config for analytics
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -9950,8 +10026,8 @@ def sync_leads_to_sheets():
         
         # Get user config
         config_user_record = user
-        if user and user.get('user_type') == 'subuser':
-            parent_user_id = user.get('parent_user_id')
+        if user and get_user_field(user, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user, 'account.parent_user_id')
             if parent_user_id:
                 parent_record = get_user_record(parent_user_id)
                 if parent_record:
@@ -12885,7 +12961,7 @@ def get_purchases():
         # For main users: show their own purchases
         target_user_id = discord_id
         
-        if user_record.get('user_type') == 'subuser':
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
             # This is a VA/sub-user - get their parent's purchases
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
@@ -12910,7 +12986,7 @@ def get_purchases():
         # Enrich with live Sellerboard data
         # For VAs, use parent user's Sellerboard configuration
         config_user = user_record
-        if user_record.get('user_type') == 'subuser':
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
                 config_user = parent_user
@@ -13046,7 +13122,7 @@ def update_purchase(purchase_id):
         # Determine which user owns the purchase we're updating
         # For VAs: they can update their parent user's purchases
         target_user_id = discord_id
-        if user_record.get('user_type') == 'subuser':
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
             parent_user = get_parent_user_record(discord_id)
             if parent_user:
                 target_user_id = parent_user.get('discord_id', discord_id)

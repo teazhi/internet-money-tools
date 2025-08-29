@@ -717,12 +717,16 @@ def get_user_permissions(user):
     return get_user_field(user, 'account.permissions') or user.get('permissions', [])
 
 def get_user_google_tokens(user):
-    """Get user's Google tokens from any schema"""
-    return get_user_field(user, 'integrations.google.tokens') or user.get('google_tokens', {})
+    """Get user's Google tokens from any schema - returns tokens dict or None if no valid tokens"""
+    tokens = get_user_field(user, 'integrations.google.tokens') or user.get('google_tokens', {})
+    # Return None if tokens dict is empty or doesn't have access_token
+    if not tokens or not tokens.get('access_token'):
+        return None
+    return tokens
 
 def get_user_sheet_id(user):
     """Get user's Google Sheet ID from any schema"""
-    return get_user_field(user, 'integrations.google.sheet_id') or user.get('sheet_id')
+    return get_user_field(user, 'files.sheet_id') or user.get('sheet_id')
 
 def get_user_parent_id(user):
     """Get user's parent ID from any schema"""

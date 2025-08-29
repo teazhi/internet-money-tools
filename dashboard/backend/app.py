@@ -2246,8 +2246,13 @@ def discord_callback():
         # Removed accepted invitation from list
     
     session['discord_id'] = discord_id
-    session['discord_username'] = discord_username
+    session['discord_username'] = discord_username  
     session['discord_avatar'] = user_data.get('avatar')
+    
+    # Debug: Check what Discord actually provides
+    print(f"DEBUG: Full Discord user data: {user_data}")
+    print(f"DEBUG: Available keys: {list(user_data.keys())}")
+    print(f"DEBUG: Avatar hash: {user_data.get('avatar')}")
     
     # Session configured with Discord ID
     
@@ -2262,18 +2267,22 @@ def discord_callback():
             
             # Check if this is a sub-user invitation
             if valid_invitation:
+                print(f"[USER_CREATE] Processing invitation: {valid_invitation.get('user_type', 'main')}")
                 if valid_invitation.get('user_type') == 'subuser':
                     set_user_field(user_record, 'account.user_type', 'subuser')
                     set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))
                     set_user_field(user_record, 'account.permissions', valid_invitation.get('permissions', ['reimbursements_analysis']))
                     set_user_field(user_record, 'identity.va_name', valid_invitation.get('va_name', ''))
                     set_user_field(user_record, 'identity.email', valid_invitation.get('email'))
+                    print(f"[USER_CREATE] Created subuser with parent: {valid_invitation.get('parent_user_id')}")
                 else:
                     set_user_field(user_record, 'account.user_type', 'main')
                     set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
+                    print(f"[USER_CREATE] Created main user")
             else:
                 set_user_field(user_record, 'account.user_type', 'main')
                 set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
+                print(f"[USER_CREATE] Created main user (no invitation)")
                 
             users.append(user_record)
         
@@ -2644,6 +2653,23 @@ def get_user():
         
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
+    
+    # Debug: log what we're finding
+    print(f"[USER_API] discord_id: {discord_id}")
+    print(f"[USER_API] user_record found: {bool(user_record)}")
+    if user_record:
+        print(f"[USER_API] user_record structure: {user_record}")
+        print(f"[USER_API] email: {get_user_email(user_record)}")
+        print(f"[USER_API] sellerboard_orders_url: {get_user_sellerboard_orders_url(user_record)}")
+        print(f"[USER_API] sellerboard_stock_url: {get_user_sellerboard_stock_url(user_record)}")
+        
+        # Check if it's a subuser and if so, check parent
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user = get_parent_user_record(discord_id)
+            print(f"[USER_API] Is subuser, parent found: {bool(parent_user)}")
+            if parent_user:
+                print(f"[USER_API] Parent email: {get_user_email(parent_user)}")
+                print(f"[USER_API] Parent sellerboard_orders_url: {get_user_sellerboard_orders_url(parent_user)}")
     
     # Check if we're in admin impersonation mode
     admin_impersonating = session.get('admin_impersonating')
@@ -5882,21 +5908,31 @@ def get_my_subusers():
         discord_id = session['discord_id']
         users = get_users_config()
         
-        # Find all sub-users for this parent
-        subusers = [
-            {
-                'discord_id': get_user_field(user, 'identity.discord_id'),
-                'discord_username': get_user_field(user, 'identity.discord_username'),
-                'va_name': get_user_field(user, 'identity.va_name'),
-                'email': get_user_field(user, 'identity.email'),
-                'permissions': get_user_field(user, 'account.permissions') or [],
-                'last_activity': get_user_field(user, 'account.last_activity'),
-                'user_type': get_user_field(user, 'account.user_type')
-            }
-            for user in users 
-            if get_user_field(user, 'account.user_type') == 'subuser' and get_user_field(user, 'account.parent_user_id') == discord_id
-        ]
+        print(f"[SUBUSERS] Looking for subusers with parent_id: {discord_id}")
+        print(f"[SUBUSERS] Total users in config: {len(users)}")
         
+        # Find all sub-users for this parent
+        subusers = []
+        for user in users:
+            user_type = get_user_field(user, 'account.user_type')
+            parent_id = get_user_field(user, 'account.parent_user_id')
+            
+            print(f"[SUBUSERS] User {get_user_field(user, 'identity.discord_id')} - type: {user_type}, parent: {parent_id}")
+            
+            if user_type == 'subuser' and parent_id == discord_id:
+                subuser_data = {
+                    'discord_id': get_user_field(user, 'identity.discord_id'),
+                    'discord_username': get_user_field(user, 'identity.discord_username'),
+                    'va_name': get_user_field(user, 'identity.va_name'),
+                    'email': get_user_field(user, 'identity.email'),
+                    'permissions': get_user_field(user, 'account.permissions') or [],
+                    'last_activity': get_user_field(user, 'account.last_activity'),
+                    'user_type': get_user_field(user, 'account.user_type')
+                }
+                print(f"[SUBUSERS] Found subuser: {subuser_data}")
+                subusers.append(subuser_data)
+        
+        print(f"[SUBUSERS] Returning {len(subusers)} subusers")
         return jsonify({'subusers': subusers})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -931,7 +931,9 @@ const AdminCompact = () => {
                                       alt=""
                                     />
                                   ) : (
-                                    <div className="h-6 w-6 bg-gray-300 rounded-full mr-2"></div>
+                                    <div className="h-6 w-6 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full mr-2 flex items-center justify-center">
+                                      <Users className="h-3 w-3 text-white" />
+                                    </div>
                                   )}
                                   <div>
                                     <div className="flex items-center">
@@ -1175,7 +1177,9 @@ const AdminCompact = () => {
                                                 alt=""
                                               />
                                             ) : (
-                                              <div className="h-4 w-4 bg-gray-300 rounded-full mr-2"></div>
+                                              <div className="h-4 w-4 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full mr-2 flex items-center justify-center">
+                                <Users className="h-2 w-2 text-white" />
+                              </div>
                                             )}
                                             <span className="text-xs">{user.discord_username}</span>
                                           </div>
@@ -1674,7 +1678,9 @@ const AdminCompact = () => {
                                   alt=""
                                 />
                               ) : (
-                                <div className="h-8 w-8 bg-gray-300 rounded-full mr-3"></div>
+                                <div className="h-8 w-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full mr-3 flex items-center justify-center">
+                                  <Users className="h-4 w-4 text-white" />
+                                </div>
                               )}
                               <div>
                                 <div className="text-sm font-medium text-gray-900">{user.discord_username}</div>

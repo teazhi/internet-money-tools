@@ -2538,6 +2538,26 @@ def debug_auth():
         'has_auth': 'discord_id' in session
     })
 
+@app.route('/api/user/debug-settings')
+@login_required 
+def debug_user_settings():
+    """Debug endpoint to check current user settings"""
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    if not user_record:
+        return jsonify({'error': 'User not found'})
+    
+    return jsonify({
+        'discord_id': discord_id,
+        'is_admin': is_admin_user(discord_id),
+        'raw_user_record': user_record,
+        'disable_sp_api_new_schema': get_user_field(user_record, 'integrations.amazon.disable_sp_api'),
+        'disable_sp_api_old_schema': user_record.get('disable_sp_api'),
+        'has_integrations': 'integrations' in user_record if user_record else False,
+        'has_amazon': 'amazon' in user_record.get('integrations', {}) if user_record and 'integrations' in user_record else False
+    })
+
 @app.route('/api/user')
 def get_user():
     # If demo mode is OFF but we have demo user session data, clear it
@@ -4058,7 +4078,14 @@ def get_orders_analytics():
         
         # Check if user is admin and SP-API should be attempted
         is_admin = is_admin_user(discord_id)
-        disable_sp_api = config_user_record.get('disable_sp_api', False) if config_user_record else False
+        disable_sp_api = get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False) if config_user_record else False
+        
+        # Debug logging to help diagnose SP-API issues
+        print(f"DEBUG: Analytics request - discord_id: {discord_id}, is_admin: {is_admin}, disable_sp_api: {disable_sp_api}")
+        if config_user_record:
+            print(f"DEBUG: User record keys: {list(config_user_record.keys()) if config_user_record else 'None'}")
+            print(f"DEBUG: Raw disable_sp_api value: {config_user_record.get('disable_sp_api', 'NOT_FOUND')}")
+            print(f"DEBUG: New schema disable_sp_api: {get_user_field(config_user_record, 'integrations.amazon.disable_sp_api')}")
         
         if is_admin and not disable_sp_api:
             pass  # Debug print removed
@@ -8102,7 +8129,7 @@ def analyze_discount_opportunities():
                     user_settings={
                         'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
                         'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
-                        'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                        'disable_sp_api': get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False),
                         'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                         'discord_id': discord_id,
                         # Add Google Sheet settings for purchase analytics (same as Smart Restock)
@@ -9664,7 +9691,7 @@ def test_inventory_analysis():
             user_settings={
                 'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
                 'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
-                'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                'disable_sp_api': get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False),
                 'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                 'discord_id': discord_id
             }
@@ -9742,7 +9769,7 @@ def analyze_retailer_leads():
                 user_settings={
                     'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
                     'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
-                    'disable_sp_api': config_user_record.get('disable_sp_api', False),
+                    'disable_sp_api': get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False),
                     'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
                     'discord_id': discord_id,
                     # Add Google Sheet settings for purchase analytics (same as Smart Restock)

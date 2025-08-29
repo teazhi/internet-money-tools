@@ -610,7 +610,10 @@ def normalize_user(user):
 
 def get_user_field(user, field_path):
     """Get field from user using dot notation (e.g., 'identity.discord_id')"""
-    user = normalize_user(user)
+    # Note: User should already be normalized when passed to this function
+    # Normalize here only as safety fallback, but avoid for performance
+    if not is_new_schema(user):
+        user = normalize_user(user)
     
     parts = field_path.split('.')
     current = user
@@ -2437,6 +2440,17 @@ def test_amazon_connection():
         discord_id = session.get('discord_id')
         if not is_admin_user(discord_id):
             return jsonify({'error': 'SP-API testing is restricted to admin users'}), 403
+        
+        # Check if SP-API is disabled for this user
+        user_record = get_user_record(discord_id)
+        disable_sp_api = get_user_field(user_record, 'integrations.amazon.disable_sp_api') or user_record.get('disable_sp_api', False) if user_record else False
+        
+        if disable_sp_api:
+            return jsonify({
+                'error': 'SP-API is disabled',
+                'message': 'SP-API testing is disabled in your settings. Enable it in Settings to test the connection.',
+                'disabled': True
+            }), 403
         from sp_api_client import create_sp_api_client
         
         # Get environment refresh token
@@ -2691,7 +2705,16 @@ def update_profile():
     data = request.json
     
     users = get_users_config()
-    user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
+    
+    # Find the user and normalize it immediately to avoid reference issues
+    user_index = None
+    for i, u in enumerate(users):
+        if get_user_discord_id(u) == discord_id:
+            users[i] = normalize_user(u)  # Normalize in place
+            user_index = i
+            break
+    
+    user_record = users[user_index] if user_index is not None else None
     
     if user_record is None:
         # Create new user with proper schema
@@ -2766,9 +2789,16 @@ def update_profile():
         set_user_field(user_record, 'profile.configured', True)
         set_user_field(user_record, 'profile.setup_step', 'completed')
     
+    # Debug logging to check if settings are being saved
+    print(f"DEBUG: Saving profile for user {discord_id}")
+    print(f"DEBUG: disable_sp_api after save: {get_user_field(user_record, 'integrations.amazon.disable_sp_api')}")
+    print(f"DEBUG: enable_source_links after save: {get_user_field(user_record, 'settings.enable_source_links')}")
+    
     if update_users_config(users):
+        print(f"DEBUG: Successfully saved users config to S3")
         return jsonify({'message': 'Profile updated successfully'})
     else:
+        print(f"DEBUG: FAILED to save users config to S3")
         return jsonify({'error': 'Failed to update profile'}), 500
 
 @app.route('/api/google/auth-url')
@@ -4109,12 +4139,11 @@ def get_orders_analytics():
         is_admin = is_admin_user(discord_id)
         disable_sp_api = get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False) if config_user_record else False
         
-        # Debug logging to help diagnose SP-API issues
-        print(f"DEBUG: Analytics request - discord_id: {discord_id}, is_admin: {is_admin}, disable_sp_api: {disable_sp_api}")
-        if config_user_record:
-            print(f"DEBUG: User record keys: {list(config_user_record.keys()) if config_user_record else 'None'}")
-            print(f"DEBUG: Raw disable_sp_api value: {config_user_record.get('disable_sp_api', 'NOT_FOUND')}")
-            print(f"DEBUG: New schema disable_sp_api: {get_user_field(config_user_record, 'integrations.amazon.disable_sp_api')}")
+        # Log SP-API usage decisions for clarity
+        if is_admin and disable_sp_api:
+            print(f"✅ SP-API DISABLED: Admin user {discord_id} has SP-API disabled, using Sellerboard only")
+        elif is_admin and not disable_sp_api:
+            print(f"⚠️  SP-API ENABLED: Admin user {discord_id} will try SP-API first, fallback to Sellerboard")
         
         if is_admin and not disable_sp_api:
             pass  # Debug print removed
@@ -4191,7 +4220,7 @@ def get_orders_analytics():
                         'sellerboard_error': str(sellerboard_error)
                     }), 500
         elif is_admin and disable_sp_api:
-            pass  # Debug print removed
+            print(f"✅ SP-API DISABLED: Using Sellerboard analytics for admin user {discord_id}")
             # Admin user with SP-API disabled - use Sellerboard
             try:
                 from orders_analysis import OrdersAnalysis
@@ -4219,7 +4248,7 @@ def get_orders_analytics():
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_get_user_column_mapping(user_record),
+                    'column_mapping': get_user_column_mapping(user_record),
                     'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
@@ -4276,7 +4305,7 @@ def get_orders_analytics():
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_get_user_column_mapping(user_record),
+                    'column_mapping': get_user_column_mapping(user_record),
                     'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90)
                 }
                 
@@ -8165,7 +8194,7 @@ def analyze_discount_opportunities():
                         'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                         'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                         'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                        'column_mapping': config_get_user_column_mapping(user_record)
+                        'column_mapping': get_user_column_mapping(user_record)
                     }
                 )
                 
@@ -8210,7 +8239,7 @@ def analyze_discount_opportunities():
         sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         search_all_worksheets = get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', True)
-        column_mapping = config_get_user_column_mapping(user_record)
+        column_mapping = get_user_column_mapping(user_record)
         
         if enable_source_links and sheet_id and google_tokens.get('access_token'):
             try:
@@ -9207,7 +9236,7 @@ def get_expected_arrivals():
         # Get the Google Sheet settings for purchase data
         sheet_id = get_user_field(config_user_record, 'files.sheet_id')
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
-        column_mapping = config_get_user_column_mapping(user_record)
+        column_mapping = get_user_column_mapping(user_record)
         
         # Check for Sellerboard COGS URL - prioritize this over Google Sheets for inventory data
         sellerboard_cogs_url = get_user_field(config_user_record, 'integrations.sellerboard.cogs_url')
@@ -9805,7 +9834,7 @@ def analyze_retailer_leads():
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': config_get_user_column_mapping(user_record)
+                    'column_mapping': get_user_column_mapping(user_record)
                 }
             )
             
@@ -10206,7 +10235,7 @@ def sync_leads_to_sheets():
         
         try:
             # Get column mapping
-            column_mapping = config_get_user_column_mapping(user_record)
+            column_mapping = get_user_column_mapping(user_record)
             
             # Check if user has search_all_worksheets enabled
             search_all_worksheets = get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', True)  # Default to True

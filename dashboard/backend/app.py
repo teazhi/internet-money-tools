@@ -2066,7 +2066,8 @@ def validate_and_fix_token_data(tokens):
 
 
 def refresh_google_token(user_record):
-    refresh_token = user_record["google_tokens"].get("refresh_token")
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    refresh_token = google_tokens.get("refresh_token")
     if not refresh_token:
         raise Exception("No refresh_token found. User must re-link Google account.")
 
@@ -2087,13 +2088,16 @@ def refresh_google_token(user_record):
     # Validate and fix token data to prevent NoneType arithmetic errors
     new_tokens = validate_and_fix_token_data(new_tokens)
 
-    user_record["google_tokens"].update(new_tokens)
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    google_tokens.update(new_tokens)
+    set_user_field(user_record, 'integrations.google.tokens', google_tokens)
     users = get_users_config()
     update_users_config(users)
     return new_tokens["access_token"]
 
 def safe_google_api_call(user_record, api_call_func):
-    access_token = user_record["google_tokens"]["access_token"]
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    access_token = google_tokens.get("access_token")
     try:
         return api_call_func(access_token)
     except Exception as e:
@@ -2751,7 +2755,7 @@ def complete_google_auth():
         if "refresh_token" not in tokens and "refresh_token" in old_tokens:
             tokens["refresh_token"] = old_tokens["refresh_token"]
         
-        user_record["google_tokens"] = tokens
+        set_user_field(user_record, 'integrations.google.tokens', tokens)
         
         if update_users_config(users):
             return jsonify({'message': 'Google account linked successfully'})
@@ -7493,9 +7497,11 @@ def fetch_all_sheet_titles_for_user(user_record) -> list[str]:
     to return a list of all worksheet titles in that user's Sheet.
     """
     # 1) Grab a valid access_token (refresh if needed)
-    access_token = user_record["google_tokens"]["access_token"]
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    access_token = google_tokens.get("access_token")
     # Try one request; if 401, refresh and retry
-    url = f"https://sheets.googleapis.com/v4/spreadsheets/{user_record['sheet_id']}?fields=sheets(properties(title))"
+    sheet_id = get_user_field(user_record, 'files.sheet_id')
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets(properties(title))"
     headers = {"Authorization": f"Bearer {access_token}"}
     resp = requests.get(url, headers=headers)
     if resp.status_code == 401:
@@ -7515,8 +7521,9 @@ def fetch_google_sheet_as_df(user_record, worksheet_title):
     import pandas as pd
     import urllib.parse
     
-    sheet_id = user_record["sheet_id"]
-    access_token = user_record["google_tokens"]["access_token"]
+    sheet_id = get_user_field(user_record, 'files.sheet_id')
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    access_token = google_tokens.get("access_token")
     range_ = f"'{worksheet_title}'!A1:ZZ"
     url = (
         f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
@@ -7669,7 +7676,8 @@ def refresh_google_token(user_record):
     Refresh the Google access token for a user record.
     Updates the user record and returns the new access token.
     """
-    refresh_token = user_record["google_tokens"].get("refresh_token")
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    refresh_token = google_tokens.get("refresh_token")
     if not refresh_token:
         raise Exception("No refresh_token found. User must re-link Google account.")
 
@@ -7689,7 +7697,9 @@ def refresh_google_token(user_record):
         new_tokens["refresh_token"] = refresh_token
 
     # Update the user record
-    user_record["google_tokens"].update(new_tokens)
+    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+    google_tokens.update(new_tokens)
+    set_user_field(user_record, 'integrations.google.tokens', google_tokens)
     
     # Update the users config
     users = get_users_config()
@@ -13491,7 +13501,7 @@ def get_inventory_age_analysis():
             'discord_id': discord_id
         }
         
-        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(user_settings.get('google_tokens'))}")
+        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
         
         from orders_analysis import OrdersAnalysis
         analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)

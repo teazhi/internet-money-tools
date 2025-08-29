@@ -5531,6 +5531,43 @@ def debug_session():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/smtp-config', methods=['GET'])
+@admin_required
+def debug_smtp_config():
+    """Debug SMTP configuration for admin"""
+    try:
+        config_status = {
+            'smtp_server': SMTP_SERVER,
+            'smtp_port': SMTP_PORT,
+            'smtp_email_configured': bool(SMTP_EMAIL),
+            'smtp_password_configured': bool(SMTP_PASSWORD),
+            'smtp_email_value': SMTP_EMAIL[:5] + "***" if SMTP_EMAIL else "Not set"
+        }
+        return jsonify(config_status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/test-invitation', methods=['POST'])
+@admin_required
+def debug_test_invitation():
+    """Test invitation email sending with detailed logging"""
+    try:
+        data = request.json
+        test_email = data.get('email', 'test@example.com')
+        
+        # Test the email sending function directly
+        result = send_invitation_email(test_email, 'debug-token-123', 'Debug Test')
+        
+        return jsonify({
+            'email_sent': result,
+            'smtp_configured': bool(SMTP_EMAIL and SMTP_PASSWORD),
+            'test_email': test_email,
+            'smtp_server': SMTP_SERVER,
+            'smtp_port': SMTP_PORT
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': str(e)}), 500
+
 @app.route('/api/admin/users/bulk', methods=['PUT'])
 @admin_required
 def admin_bulk_update():

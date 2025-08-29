@@ -304,6 +304,23 @@ const AdminCompact = () => {
     }
   };
 
+  const handleDeleteUser = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to delete user ${username}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setError('');
+      setSuccess('');
+      
+      await axios.delete(`/api/admin/users/${userId}`, { withCredentials: true });
+      setSuccess(`User ${username} deleted successfully`);
+      fetchData();
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to delete user');
+    }
+  };
+
   const handleViewUserDashboard = async (userId) => {
     try {
       setError('');
@@ -976,7 +993,11 @@ const AdminCompact = () => {
                                       <UserPlus className="h-4 w-4" />
                                     </button>
                                   )}
-                                  <button className="text-red-600 hover:text-red-800">
+                                  <button 
+                                    onClick={() => handleDeleteUser(user.discord_id, user.discord_username)}
+                                    className="text-red-600 hover:text-red-800"
+                                    title="Delete User"
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 </div>

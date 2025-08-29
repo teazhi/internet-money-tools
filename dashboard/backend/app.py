@@ -1793,6 +1793,10 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
         </html>
         """
         
+        # Use Gmail as reply-to so responses come back to you
+        from_email = 'DMS Dashboard <onboarding@resend.dev>'
+        reply_to = SMTP_EMAIL if SMTP_EMAIL else 'catalystgvmain@gmail.com'
+        
         response = requests.post(
             'https://api.resend.com/emails',
             headers={
@@ -1800,8 +1804,9 @@ def send_invitation_email_via_resend(email, invitation_token, invited_by):
                 'Content-Type': 'application/json'
             },
             json={
-                'from': 'DMS Dashboard <onboarding@resend.dev>',
+                'from': from_email,
                 'to': [email],
+                'reply_to': [reply_to],
                 'subject': "You're invited to DMS Dashboard",
                 'html': html_body
             }
@@ -1870,15 +1875,21 @@ def send_invitation_email(email, invitation_token, invited_by):
         
         print(f"[INVITATION] Connecting to SMTP server...")
         
+        # Use a shorter timeout to detect Railway blocking faster
+        import socket
+        socket.setdefaulttimeout(10)
+        
         # Try SSL first (port 465), then fallback to TLS (port 587)
         if SMTP_PORT == 465:
             print(f"[INVITATION] Using SSL connection on port 465...")
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
         else:
             print(f"[INVITATION] Using TLS connection on port {SMTP_PORT}...")
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
             print(f"[INVITATION] Starting TLS...")
             server.starttls()
+        
+        print(f"[INVITATION] SSL/TLS connection established successfully")
             
         print(f"[INVITATION] Logging in...")
         server.login(SMTP_EMAIL, SMTP_PASSWORD)

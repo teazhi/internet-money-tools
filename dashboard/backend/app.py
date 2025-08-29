@@ -2733,7 +2733,22 @@ def get_user():
         'run_scripts': (get_user_field(user_record, 'settings.run_scripts') or user_record.get('run_scripts', False)) if user_record else False,
         'run_prep_center': (get_user_field(user_record, 'settings.run_prep_center') or user_record.get('run_prep_center', False)) if user_record else False,
         
-        'user_record': user_record if user_record else None
+        # Add user_record object for frontend compatibility
+        'user_record': {
+            'email': get_user_email(user_record) if user_record else None,
+            'listing_loader_key': get_user_field(user_record, 'integrations.sellerboard.listing_loader_key') if user_record else None,
+            'sb_file_key': get_user_field(user_record, 'integrations.sellerboard.sb_file_key') if user_record else None,
+            'run_scripts': (get_user_field(user_record, 'settings.run_scripts') or user_record.get('run_scripts', False)) if user_record else False,
+            'run_prep_center': (get_user_field(user_record, 'settings.run_prep_center') or user_record.get('run_prep_center', False)) if user_record else False,
+            'sellerboard_orders_url': get_user_sellerboard_orders_url(user_record) if user_record else None,
+            'sellerboard_stock_url': get_user_sellerboard_stock_url(user_record) if user_record else None,
+            'sellerboard_cogs_url': get_user_sellerboard_cogs_url(user_record) if user_record else None,
+            'timezone': get_user_timezone(user_record) if user_record else None,
+            'enable_source_links': get_user_enable_source_links(user_record) if user_record else False,
+            'search_all_worksheets': (get_user_field(user_record, 'integrations.google.search_all_worksheets') or user_record.get('search_all_worksheets', False)) if user_record else False,
+            'disable_sp_api': (get_user_field(user_record, 'integrations.amazon.disable_sp_api') or user_record.get('disable_sp_api', False)) if user_record else False,
+            'amazon_lead_time_days': (get_user_field(user_record, 'integrations.amazon.lead_time_days') or user_record.get('amazon_lead_time_days', 90)) if user_record else 90
+        }
     }
     
     # Add impersonation info if applicable

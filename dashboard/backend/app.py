@@ -267,6 +267,9 @@ SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_EMAIL = os.getenv('SMTP_EMAIL')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
 
+# Alternative HTTP-based email service (Resend)
+RESEND_API_KEY = os.getenv('RESEND_API_KEY')
+
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -1760,10 +1763,74 @@ def update_purchases_config(purchases):
         print(f"Error updating purchases config: {e}")
         return False
 
+def send_invitation_email_via_resend(email, invitation_token, invited_by):
+    """Send invitation email using Resend API"""
+    if not RESEND_API_KEY:
+        print("Warning: Resend API key not configured")
+        return False
+        
+    try:
+        invitation_url = f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
+        
+        html_body = f"""
+        <html>
+        <body>
+            <h2>You're invited to DMS Dashboard!</h2>
+            <p>Hi there!</p>
+            <p>{invited_by} has invited you to join the DMS Amazon Seller Dashboard.</p>
+            <p>This platform provides:</p>
+            <ul>
+                <li>Advanced analytics for your Amazon business</li>
+                <li>Smart restock recommendations</li>
+                <li>Inventory tracking and insights</li>
+            </ul>
+            <p><strong><a href="{invitation_url}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Accept Invitation</a></strong></p>
+            <p>Or copy and paste this link: {invitation_url}</p>
+            <p>This invitation will expire in 7 days.</p>
+            <br>
+            <p>Best regards,<br>DMS Team</p>
+        </body>
+        </html>
+        """
+        
+        response = requests.post(
+            'https://api.resend.com/emails',
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'from': 'DMS Dashboard <onboarding@resend.dev>',
+                'to': [email],
+                'subject': "You're invited to DMS Dashboard",
+                'html': html_body
+            }
+        )
+        
+        if response.status_code == 200:
+            print(f"[RESEND] Email sent successfully to {email}")
+            return True
+        else:
+            print(f"[RESEND] Failed to send email. Status: {response.status_code}, Response: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"[RESEND] Error sending email to {email}: {str(e)}")
+        return False
+
 def send_invitation_email(email, invitation_token, invited_by):
     """Send invitation email to user"""
+    # Try Resend first (HTTP-based, works on Railway)
+    if RESEND_API_KEY:
+        print(f"[INVITATION] Using Resend API for email to {email}")
+        resend_result = send_invitation_email_via_resend(email, invitation_token, invited_by)
+        if resend_result:
+            return True
+        print(f"[INVITATION] Resend failed, trying SMTP fallback...")
+    
+    # Fallback to SMTP
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print(f"Warning: SMTP credentials not configured. SMTP_EMAIL={bool(SMTP_EMAIL)}, SMTP_PASSWORD={bool(SMTP_PASSWORD)}")
+        print(f"Warning: No email service configured. RESEND_API_KEY={bool(RESEND_API_KEY)}, SMTP_EMAIL={bool(SMTP_EMAIL)}, SMTP_PASSWORD={bool(SMTP_PASSWORD)}")
         return False
     
     try:
@@ -1806,10 +1873,10 @@ def send_invitation_email(email, invitation_token, invited_by):
         # Try SSL first (port 465), then fallback to TLS (port 587)
         if SMTP_PORT == 465:
             print(f"[INVITATION] Using SSL connection on port 465...")
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=30)
         else:
             print(f"[INVITATION] Using TLS connection on port {SMTP_PORT}...")
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
             print(f"[INVITATION] Starting TLS...")
             server.starttls()
             

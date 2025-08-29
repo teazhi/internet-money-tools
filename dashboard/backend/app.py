@@ -2281,7 +2281,11 @@ def discord_callback():
     
     # Check for invitation token from state parameter (runs for both new and existing users)
     invitation_token = request.args.get('state')  # Discord passes our state parameter back
-    # Process Discord callback with invitation token
+    print(f"[INVITATION_DEBUG] Discord callback - invitation_token: {invitation_token}")
+    print(f"[INVITATION_DEBUG] Existing user found: {bool(existing_user)}")
+    
+    # Initialize valid_invitation outside scope so it's available later
+    valid_invitation = None
     
     # If user doesn't exist, check for invitation requirement (for new users only)
     if not existing_user:
@@ -2292,7 +2296,6 @@ def discord_callback():
         # Validate invitation token for new users
         invitations = get_invitations_config()
         # Check invitations for valid token
-        valid_invitation = None
         for inv in invitations:
             pass  # Check invitation validity
             if inv['token'] == invitation_token and inv['status'] == 'pending':
@@ -2307,7 +2310,7 @@ def discord_callback():
                     pass  # Check invitation expiry
                     if time_diff < timedelta(days=7):
                         valid_invitation = inv
-                        pass  # Found valid invitation
+                        print(f"[INVITATION_DEBUG] Valid invitation found: {invitation_token}")
                         break
                     else:
                         pass  # Invitation expired
@@ -2346,7 +2349,8 @@ def discord_callback():
             user_record = {"discord_id": discord_id}
             
             # Check if this is a sub-user invitation
-            if 'valid_invitation' in locals() and valid_invitation:
+            print(f"[INVITATION_DEBUG] Creating new user record, valid_invitation: {bool(valid_invitation)}")
+            if valid_invitation:
                 if valid_invitation.get('user_type') == 'subuser':
                     set_user_field(user_record, 'account.user_type', 'subuser')
                     set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))

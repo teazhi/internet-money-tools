@@ -2082,7 +2082,7 @@ def discord_callback():
     
     # Check if user is already registered or has a valid invitation
     users = get_users_config()
-    existing_user = next((u for u in users if u.get("discord_id") == discord_id), None)
+    existing_user = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
     
     # Check for invitation token from state parameter (runs for both new and existing users)
     invitation_token = request.args.get('state')  # Discord passes our state parameter back
@@ -2145,7 +2145,7 @@ def discord_callback():
     try:
         users = get_users_config()
         discord_id = session['discord_id']
-        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
         
         if user_record is None:
             user_record = {"discord_id": discord_id}
@@ -2258,7 +2258,7 @@ def amazon_seller_callback():
         users = get_users_config()
         
         for user in users:
-            if user['discord_id'] == discord_id:
+            if get_user_field(user, 'identity.discord_id') == discord_id:
                 user['amazon_refresh_token'] = encrypted_token
                 user['amazon_selling_partner_id'] = selling_partner_id
                 user['amazon_connected_at'] = datetime.now().isoformat()
@@ -2282,7 +2282,7 @@ def disconnect_amazon_seller():
         users = get_users_config()
         
         for user in users:
-            if user['discord_id'] == discord_id:
+            if get_user_field(user, 'identity.discord_id') == discord_id:
                 # Remove Amazon credentials
                 user.pop('amazon_refresh_token', None)
                 user.pop('amazon_selling_partner_id', None)
@@ -2555,7 +2555,7 @@ def update_profile():
     data = request.json
     
     users = get_users_config()
-    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
     
     if user_record is None:
         user_record = {"discord_id": discord_id}
@@ -2662,7 +2662,7 @@ def complete_google_auth():
         
         discord_id = session['discord_id']
         users = get_users_config()
-        user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+        user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
         
         if user_record is None:
             user_record = {"discord_id": discord_id, "google_tokens": {}}
@@ -2688,7 +2688,7 @@ def disconnect_google():
     """Disconnect user's Google account"""
     discord_id = session['discord_id']
     users = get_users_config()
-    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
     
     if not user_record:
         return jsonify({'error': 'User not found'}), 404
@@ -2927,7 +2927,7 @@ def configure_sheet():
         return jsonify({'error': 'Missing required fields'}), 400
     
     users = get_users_config()
-    user_record = next((u for u in users if u.get("discord_id") == discord_id), None)
+    user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
     
     if not user_record:
         return jsonify({'error': 'User profile not found'}), 404
@@ -3928,7 +3928,7 @@ def get_orders_analytics():
                 if should_update:
                     users = get_users_config()
                     for user in users:
-                        if user.get("discord_id") == discord_id:
+                        if get_user_field(user, 'identity.discord_id') == discord_id:
                             user['last_activity'] = datetime.now().isoformat()
                             if 'discord_username' in session:
                                 user['discord_username'] = session['discord_username']
@@ -4584,7 +4584,7 @@ def migrate_all_user_files_old():
                         
                         # Add to user's uploaded_files
                         for i, user in enumerate(users):
-                            if user.get('discord_id') == matched_user:
+                            if get_user_field(user, 'identity.discord_id') == matched_user:
                                 if 'uploaded_files' not in user:
                                     user['uploaded_files'] = []
                                 
@@ -8847,9 +8847,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
     import pandas as pd
     import requests
     from io import StringIO
-    import urllib.parse
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
     
     try:
         # Check if URL has required parameters
@@ -8880,91 +8877,14 @@ def fetch_sellerboard_cogs_data(cogs_url):
                 'Connection': 'keep-alive',
             }
             
-            # Custom redirect handling to preserve spaces in URLs
-            def follow_redirects_preserving_spaces(session, url, max_redirects=5):
-                """Follow redirects manually while preserving spaces in URLs"""
-                redirect_count = 0
-                current_url = url
-                
-                while redirect_count < max_redirects:
-                    print(f"[SELLERBOARD] Fetching: {current_url[:100]}{'...' if len(current_url) > 100 else ''}")
-                    
-                    # Make request without automatic redirects
-                    # Use custom approach to avoid URL encoding issues with spaces
-                    try:
-                        response = session.get(current_url, timeout=30, allow_redirects=False, headers=headers)
-                    except Exception as e:
-                        print(f"[SELLERBOARD] Error with URL: {current_url}")
-                        print(f"[SELLERBOARD] Error: {e}")
-                        # If there's an issue with spaces, try a workaround
-                        if ' ' in current_url:
-                            print("[SELLERBOARD] Detected spaces in URL, using alternative approach")
-                            # Use requests.Request to build the request manually
-                            import requests
-                            req = requests.Request('GET', current_url, headers=headers)
-                            prepared = session.prepare_request(req)
-                            # Don't encode the URL - use it exactly as is
-                            prepared.url = current_url
-                            response = session.send(prepared, timeout=30, allow_redirects=False)
-                        else:
-                            raise
-                    
-                    # If not a redirect, we're done
-                    if response.status_code not in (301, 302, 303, 307, 308):
-                        return response
-                    
-                    # Get redirect location
-                    location = response.headers.get('Location')
-                    if not location:
-                        print("[SELLERBOARD] No Location header in redirect response")
-                        break
-                    
-                    redirect_count += 1
-                    print(f"[SELLERBOARD] Redirect {redirect_count} to: {location[:100]}{'...' if len(location) > 100 else ''}")
-                    
-                    # Use the location exactly as provided (preserving spaces)
-                    if location.startswith('http'):
-                        current_url = location  # Absolute URL
-                    else:
-                        # Relative URL - build absolute URL manually
-                        from urllib.parse import urljoin
-                        current_url = urljoin(current_url, location)
-                
-                # If we exhausted redirects, return the last response
-                print(f"[SELLERBOARD] Warning: Exhausted {max_redirects} redirects")
-                return response
-            
-            # Use our custom redirect handler
-            response = follow_redirects_preserving_spaces(session, cogs_url)
-        
-        print(f"[SELLERBOARD] Final response status: {response.status_code}")
-        print(f"[SELLERBOARD] Final response URL: {response.url}")
-        print(f"[SELLERBOARD] Content-Type: {response.headers.get('Content-Type', 'unknown')}")
-        print(f"[SELLERBOARD] Content length: {len(response.text)} characters")
+            # Try the complex approach with allow_redirects=True
+            response = session.get(cogs_url, timeout=30, allow_redirects=True, headers=headers)
         
         response.raise_for_status()
         
-        # Check if we actually got CSV data
-        if not response.text.strip():
-            raise ValueError("Empty response from Sellerboard URL")
-        
-        # Log first few lines for debugging
-        lines = response.text.split('\n')[:3]
-        print(f"[SELLERBOARD] First few lines of response:")
-        for i, line in enumerate(lines):
-            print(f"  Line {i+1}: {line[:100]}{'...' if len(line) > 100 else ''}")
-        
         # Parse CSV data
         csv_data = StringIO(response.text)
-        try:
-            df = pd.read_csv(csv_data)
-            print(f"[SELLERBOARD] Successfully parsed CSV with {len(df)} rows and {len(df.columns)} columns")
-            if len(df.columns) > 0:
-                print(f"[SELLERBOARD] Columns: {list(df.columns)[:5]}{'...' if len(df.columns) > 5 else ''}")
-        except Exception as csv_error:
-            print(f"[SELLERBOARD] Error parsing CSV: {csv_error}")
-            print(f"[SELLERBOARD] Response content sample: {response.text[:500]}...")
-            raise ValueError(f"Unable to parse CSV data: {csv_error}")
+        df = pd.read_csv(csv_data)
         
         # Clean the data according to requirements:
         # 1. Remove products without SKUs
@@ -9018,11 +8938,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
     except requests.exceptions.RequestException as e:
         if hasattr(e, 'response') and e.response is not None:
             if e.response.status_code == 401:
-                # Check if this might be related to space encoding
-                error_context = ""
-                if hasattr(e.response, 'url') and '%20' in str(e.response.url):
-                    error_context = "\n\nThis error might be caused by spaces in the download URL. The system has attempted to preserve the original URL format, but the server rejected the request."
-                
                 raise ValueError(
                     "Authentication failed (401 Unauthorized). This usually means the token in your automation report URL has expired.\n\n"
                     "To fix this:\n"
@@ -9031,7 +8946,6 @@ def fetch_sellerboard_cogs_data(cogs_url):
                     "3. Generate a new 'Automated Report URL'\n"
                     "4. Update the URL in your settings\n\n"
                     "Note: Automation report URLs contain time-limited tokens that need to be refreshed periodically."
-                    f"{error_context}"
                 )
             elif e.response.status_code == 403:
                 raise ValueError(

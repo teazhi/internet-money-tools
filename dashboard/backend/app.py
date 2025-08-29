@@ -1763,7 +1763,7 @@ def update_purchases_config(purchases):
 def send_invitation_email(email, invitation_token, invited_by):
     """Send invitation email to user"""
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        pass  # SMTP credentials not configured
+        print(f"Warning: SMTP credentials not configured. SMTP_EMAIL={bool(SMTP_EMAIL)}, SMTP_PASSWORD={bool(SMTP_PASSWORD)}")
         return False
     
     try:
@@ -1806,7 +1806,9 @@ def send_invitation_email(email, invitation_token, invited_by):
         
         return True
     except Exception as e:
-        pass  # Error sending invitation email
+        print(f"Error sending invitation email to {email}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def login_required(f):
@@ -5688,10 +5690,24 @@ def admin_create_invitation():
         
         if update_invitations_config(invitations):
             # Send invitation email
-            if send_invitation_email(email, invitation_token, session.get('discord_username', 'Admin')):
+            email_sent = send_invitation_email(email, invitation_token, session.get('discord_username', 'Admin'))
+            
+            if not SMTP_EMAIL or not SMTP_PASSWORD:
+                return jsonify({
+                    'message': 'Invitation created successfully. Note: Email notifications are disabled (SMTP not configured).',
+                    'invitation': invitation,
+                    'warning': 'SMTP credentials not configured. Please share the invitation link manually.',
+                    'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
+                })
+            elif email_sent:
                 return jsonify({'message': 'Invitation sent successfully', 'invitation': invitation})
             else:
-                return jsonify({'message': 'Invitation created but email failed to send', 'invitation': invitation})
+                return jsonify({
+                    'message': 'Invitation created but email failed to send', 
+                    'invitation': invitation,
+                    'warning': 'Email could not be sent. Please share the invitation link manually.',
+                    'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
+                })
         else:
             return jsonify({'error': 'Failed to create invitation'}), 500
             
@@ -5796,10 +5812,24 @@ def invite_subuser():
         if update_invitations_config(invitations):
             # Send invitation email
             inviter_name = current_user.get('username', session.get('discord_username', 'User'))
-            if send_invitation_email(email, invitation_token, inviter_name):
+            email_sent = send_invitation_email(email, invitation_token, inviter_name)
+            
+            if not SMTP_EMAIL or not SMTP_PASSWORD:
+                return jsonify({
+                    'message': 'Sub-user invitation created successfully. Note: Email notifications are disabled (SMTP not configured).',
+                    'invitation': invitation,
+                    'warning': 'SMTP credentials not configured. Please share the invitation link manually.',
+                    'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
+                })
+            elif email_sent:
                 return jsonify({'message': 'Sub-user invitation sent successfully', 'invitation': invitation})
             else:
-                return jsonify({'message': 'Invitation created but email failed to send', 'invitation': invitation})
+                return jsonify({
+                    'message': 'Sub-user invitation created but email failed to send', 
+                    'invitation': invitation,
+                    'warning': 'Email could not be sent. Please share the invitation link manually.',
+                    'invitation_url': f"https://dms-amazon.vercel.app/login?invitation={invitation_token}"
+                })
         else:
             return jsonify({'error': 'Failed to create invitation'}), 500
             

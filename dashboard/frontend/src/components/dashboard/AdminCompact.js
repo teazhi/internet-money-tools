@@ -257,13 +257,23 @@ const AdminCompact = () => {
     if (!inviteEmail) return;
     
     try {
-      await axios.post('/api/admin/invitations', { email: inviteEmail }, { withCredentials: true });
-      setSuccess('Invitation sent successfully!');
+      const response = await axios.post('/api/admin/invitations', { email: inviteEmail }, { withCredentials: true });
+      const { message, warning, invitation_url } = response.data;
+      
+      if (warning) {
+        // Show warning and invitation URL if email couldn't be sent
+        setSuccess(`${message}\n\n${warning}\n\nInvitation link: ${invitation_url}`);
+      } else {
+        setSuccess(message || 'Invitation sent successfully!');
+      }
+      
       setInviteEmail('');
       setShowInviteModal(false);
       fetchData();
     } catch (error) {
-      setError('Failed to send invitation');
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Failed to send invitation';
+      setError(errorMessage);
+      console.error('Invitation error:', error.response?.data || error);
     }
   };
 

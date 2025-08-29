@@ -1,0 +1,35 @@
+[DEBUG] Feature flags system initialized with user groups
+Image queue worker started
+Purchases table initialized successfully
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.47.248.173:5000
+[33mPress CTRL+C to quit[0m
+/Users/tevinzhuo/Documents/GitHub/internet-money-tools/dashboard/backend/app.py:1985: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  launch_data.get('launched_at', datetime.utcnow().isoformat()),
+⚠️  Warning: Using auto-generated encryption key. Set EMAIL_ENCRYPTION_KEY environment variable for production.
+⚠️  Warning: Using auto-generated encryption key. Set EMAIL_ENCRYPTION_KEY environment variable for production.
+🚀 Starting Email Monitoring Service in background...
+🚀 Starting Email Monitoring Service (S3 Version)
+Check interval: 1 day(s)
+🔄 Starting email monitoring cycle at 2025-08-29 08:00:09.505842
+✅ Email Monitoring Service started successfully
+🔧 Initializing database tables in app_data.db...
+⏳ Skipping automated run - last run was 12.4 hours ago
+   Next automated run in 10.6 hours
+✅ Email monitoring cycle completed at 2025-08-29 08:00:09.854043
+Successfully synced S3 feature config to database
+✅ Email monitoring tables created successfully
+[DEBUG] Feature flags system initialized with user groups
+Image queue worker started
+Purchases table initialized successfully
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.47.248.173:5000
+[33mPress CTRL+C to quit[0m

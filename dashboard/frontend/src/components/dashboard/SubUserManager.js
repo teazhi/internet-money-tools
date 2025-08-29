@@ -46,13 +46,23 @@ const SubUserManager = () => {
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/api/invite-subuser', inviteForm, { withCredentials: true });
+      const response = await axios.post('/api/invite-subuser', inviteForm, { withCredentials: true });
+      const { message, warning, invitation_url } = response.data;
+      
       setInviteForm({ email: '', va_name: '', permissions: [] });
       setShowInviteForm(false);
       fetchData(); // Refresh data
-      alert('Invitation sent successfully!');
+      
+      if (warning) {
+        // Show warning and invitation URL if email couldn't be sent
+        alert(`${message}\n\n${warning}\n\nInvitation link: ${invitation_url}`);
+      } else {
+        alert(message || 'Invitation sent successfully!');
+      }
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to send invitation');
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || 'Failed to send invitation';
+      alert(errorMessage);
+      console.error('SubUser invitation error:', error.response?.data || error);
     }
   };
 

@@ -5319,6 +5319,7 @@ def admin_get_users():
             
             # Flatten key fields for frontend compatibility
             enhanced_user['discord_username'] = get_user_field(user, 'identity.discord_username') or user.get('discord_username')
+            enhanced_user['discord_avatar'] = get_user_field(user, 'identity.avatar') or user.get('discord_avatar')
             enhanced_user['email'] = get_user_field(user, 'identity.email') or user.get('email')
             enhanced_user['discord_id'] = get_user_field(user, 'identity.discord_id') or user.get('discord_id')
             enhanced_user['user_type'] = get_user_field(user, 'account.user_type') or user.get('user_type', 'main')

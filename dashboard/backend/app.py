@@ -2274,6 +2274,7 @@ def discord_callback():
                     set_user_field(user_record, 'account.permissions', valid_invitation.get('permissions', ['reimbursements_analysis']))
                     set_user_field(user_record, 'identity.va_name', valid_invitation.get('va_name', ''))
                     set_user_field(user_record, 'identity.email', valid_invitation.get('email'))
+                    set_user_field(user_record, 'profile.configured', True)  # Subusers inherit parent's config
                     print(f"[USER_CREATE] Created subuser with parent: {valid_invitation.get('parent_user_id')}")
                 else:
                     set_user_field(user_record, 'account.user_type', 'main')

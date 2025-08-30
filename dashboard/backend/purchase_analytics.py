@@ -528,6 +528,7 @@ class PurchaseAnalytics:
             
             # If we only have 1 worksheet, that's okay - use what we have
             if len(last_2_months_sheets) == 1:
+                pass  # Use the single available worksheet
             
             last_2_worksheets = last_2_months_sheets
             

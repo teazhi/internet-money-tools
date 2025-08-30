@@ -1679,7 +1679,7 @@ def get_discount_monitoring_config():
     except Exception as e:
         # Return default config if not found and cache it
         default_config = {
-            'days_back': 14,  # Increased to 14 days to catch more emails
+            'days_back': 7,  # Default to 7 days
             'enabled': bool(DISCOUNT_MONITOR_EMAIL),
             'last_updated': None
         }
@@ -1722,7 +1722,6 @@ def get_discount_email_days_back():
     days_back = config.get('days_back', env_days)
     
     # Debug logging to see what date range we're using
-    print(f"[DEBUG-DISCOUNT] Email fetch range: {days_back} days back")
     
     return days_back
 
@@ -3390,10 +3389,8 @@ def get_discount_gmail_token(user_record):
     
     # Priority 2: Fall back to regular Google tokens
     if get_user_field(user_record, 'integrations.google.tokens'):
-        print("[DEBUG-DISCOUNT] Using regular Google tokens as fallback")
         return refresh_google_token(user_record)
     
-    print("[DEBUG-DISCOUNT] No Gmail tokens available")
     return None
 
 def refresh_discount_gmail_token(user_record):
@@ -8314,7 +8311,6 @@ def analyze_discount_opportunities():
                 enhanced_analytics = cache_entry['data']
                 analysis = cache_entry.get('analysis')
         
-        print(f"[DEBUG-DISCOUNT] enhanced_analytics is None: {enhanced_analytics is None}")
         if enhanced_analytics is None:
             try:
                 from orders_analysis import EnhancedOrdersAnalysis
@@ -8377,24 +8373,18 @@ def analyze_discount_opportunities():
         
         # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
-        print(f"[DEBUG-DISCOUNT] Found {len(email_alerts)} email alerts")
         if email_alerts:
             sample_alerts = email_alerts[:3]
             for alert in sample_alerts:
-                print(f"[DEBUG-DISCOUNT] Sample alert: ASIN={alert.get('asin')}, retailer={alert.get('retailer')}")
             
             # Check specifically for B008XQO7WA
             b008_alerts = [alert for alert in email_alerts if alert.get('asin') == 'B008XQO7WA']
-            print(f"[DEBUG-DISCOUNT] B008XQO7WA alerts found: {len(b008_alerts)}")
             if b008_alerts:
                 for alert in b008_alerts:
-                    print(f"[DEBUG-DISCOUNT] B008XQO7WA alert: {alert}")
             else:
                 # Check if it's in there with a different format
                 all_asins = [alert.get('asin') for alert in email_alerts]
-                print(f"[DEBUG-DISCOUNT] All ASINs found: {all_asins}")
                 b008_mentions = [alert for alert in email_alerts if 'B008XQO7WA' in str(alert)]
-                print(f"[DEBUG-DISCOUNT] Alerts mentioning B008XQO7WA: {len(b008_mentions)}")
         
         # Fetch source links from user's Google Sheet (same approach as Smart Restock)
         asin_to_source_link = {}
@@ -8474,11 +8464,8 @@ def analyze_discount_opportunities():
                 return None
             
             # Check if this ASIN is in user's inventory (debug enhanced_analytics)
-            print(f"[DEBUG-DISCOUNT] Checking ASIN {asin} in enhanced_analytics")
-            print(f"[DEBUG-DISCOUNT] enhanced_analytics has {len(enhanced_analytics) if enhanced_analytics else 0} keys")
             if enhanced_analytics and len(enhanced_analytics) > 0:
                 sample_keys = list(enhanced_analytics.keys())[:5]
-                print(f"[DEBUG-DISCOUNT] Sample enhanced_analytics keys: {sample_keys}")
             
             if asin in enhanced_analytics:
                 inventory_data = enhanced_analytics[asin]
@@ -8626,8 +8613,6 @@ def analyze_discount_opportunities():
         not_needed_count = len([o for o in opportunities if o['status'] == 'Not Needed'])
         not_tracked_count = len([o for o in opportunities if o['status'] == 'Not Tracked'])
         
-        print(f"[DEBUG-DISCOUNT] Final opportunities count: {len(opportunities)}")
-        print(f"[DEBUG-DISCOUNT] Breakdown - Restock Needed: {restock_needed_count}, Not Needed: {not_needed_count}, Not Tracked: {not_tracked_count}")
         
         result = {
             'opportunities': opportunities,
@@ -8990,7 +8975,6 @@ def init_feature_flags():
         sync_s3_to_database()
         
         print("✅ Email monitoring tables created successfully")
-        print("[DEBUG-DISCOUNT] Feature flags system initialized with user groups")
         
     except Exception as e:
         print(f"Error initializing feature flags: {e}")
@@ -10966,30 +10950,22 @@ def fetch_discount_email_alerts():
             # Check configuration type from database or S3
             config_type = admin_gmail_config.get('config_type', 'gmail_oauth')
             if config_type == 'imap':
-                print(f"[DEBUG-DISCOUNT] ✅ Using IMAP configuration for discount email (S3: {admin_gmail_config.get('is_s3_config', False)})")
-                print(f"[DEBUG-DISCOUNT] Email: {admin_gmail_config.get('email_address')}")
                 return fetch_discount_alerts_from_imap(admin_gmail_config)
             else:  # gmail_oauth
-                print(f"[DEBUG-DISCOUNT] ✅ Using Gmail OAuth configuration for discount email (S3: {admin_gmail_config.get('is_s3_config', False)})")
-                print(f"[DEBUG-DISCOUNT] Email: {admin_gmail_config.get('email_address')}")
                 return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
         elif admin_gmail_config and admin_gmail_config.get('tokens'):
             # Use legacy Gmail API configuration
-            print(f"[DEBUG-DISCOUNT] ✅ Using legacy Gmail API configuration")
-            print(f"[DEBUG-DISCOUNT] Gmail: {admin_gmail_config.get('gmail_email', 'Unknown')}")
             return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
         else:
             # Check if DISCOUNT_MONITOR_EMAIL is configured as fallback
             monitor_email = DISCOUNT_MONITOR_EMAIL
             if monitor_email:
-                print(f"[DEBUG-DISCOUNT] Using DISCOUNT_MONITOR_EMAIL: {monitor_email}")
                 # TODO: Implement direct email monitoring if needed
                 return fetch_mock_discount_alerts()
             else:
                 # Return mock data if no configuration available
-                print(f"[DEBUG-DISCOUNT] No email configuration found, returning mock data")
                 return fetch_mock_discount_alerts()
     
     except Exception as e:
@@ -11023,12 +10999,10 @@ def fetch_discount_alerts_from_imap(email_config):
         
         search_query = f'{sender_query} {subject_query} {date_query}' if sender_query else f'{subject_query} {date_query}'
         
-        print(f"[DEBUG-DISCOUNT] IMAP search query: {search_query}")
         
         result, messages = mail.search(None, search_query.strip())
         
         if result != 'OK' or not messages[0]:
-            print(f"[DEBUG-DISCOUNT] No discount emails found")
             mail.logout()
             return fetch_mock_discount_alerts()
         
@@ -11095,16 +11069,13 @@ def fetch_discount_alerts_from_imap(email_config):
                 })
                 
             except Exception as e:
-                print(f"[DEBUG-DISCOUNT] Error processing email {email_id}: {e}")
                 continue
         
         mail.logout()
         
-        print(f"[DEBUG-DISCOUNT] Found {len(alerts)} discount emails via IMAP")
         return alerts if alerts else fetch_mock_discount_alerts()
         
     except Exception as e:
-        print(f"[DEBUG-DISCOUNT] IMAP fetch error: {e}")
         return fetch_mock_discount_alerts()
 
 def is_valid_asin(asin):
@@ -11133,8 +11104,6 @@ def is_valid_asin(asin):
 def fetch_discount_alerts_from_gmail_api(gmail_config):
     """Fetch discount alerts using Gmail API configuration"""
     try:
-        print(f"[DEBUG-DISCOUNT] ✅ Using Gmail API for discount email")
-        print(f"[DEBUG-DISCOUNT] Connected Gmail: {gmail_config.get('gmail_email', 'Unknown')}")
         
         # Create a mock user record for API calls
         user_record = {
@@ -11156,22 +11125,16 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         cutoff_date = datetime.now() - timedelta(days=days_back)
         query += f' after:{cutoff_date.strftime("%Y/%m/%d")}'
         
-        print(f"[DEBUG-DISCOUNT] Gmail search query: {query}")
-        print(f"[DEBUG-DISCOUNT] Cutoff date: {cutoff_date.strftime('%Y/%m/%d')} ({cutoff_date})")
-        print(f"[DEBUG-DISCOUNT] Looking for emails from: {sender_filter}")
         
         # Search for messages - increase limit to ensure we get all recent emails
         messages = search_gmail_messages(user_record, query, max_results=100)
         
-        print(f"[DEBUG-DISCOUNT] Gmail API returned {len(messages.get('messages', [])) if messages else 0} message IDs")
         
         if not messages or not messages.get('messages'):
-            print(f"[DEBUG-DISCOUNT] No discount emails found in Gmail")
             return fetch_mock_discount_alerts()
         
         alerts = []
         
-        print(f"[DEBUG-DISCOUNT] Starting to process {len(messages['messages'][:50])} message IDs...")
         
         # Process each message
         for i, message in enumerate(messages['messages'][:50]):  # Limit to 50 for performance
@@ -11189,11 +11152,9 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 date_received = headers.get('Date', '')
                 
                 # Debug log each email being processed
-                print(f"[DEBUG-DISCOUNT] Processing email {i+1}/{len(messages['messages'][:50])}: From='{sender}', Subject='{subject}'")
                 
                 # Check specifically for B008XQO7WA in this email
                 if 'B008XQO7WA' in subject:
-                    print(f"[DEBUG-DISCOUNT] *** FOUND B008XQO7WA in subject: '{subject}' ***")
                 
                 # Get email body
                 html_content = ""
@@ -11228,9 +11189,6 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 # Debug: Log email content for ASIN extraction debugging
                 if len(alerts) < 3:  # Only debug first 3 emails to avoid spam
-                    print(f"[DEBUG-DISCOUNT] Email {len(alerts)+1} - Subject: {subject[:100]}")
-                    print(f"[DEBUG-DISCOUNT] Email {len(alerts)+1} - Content preview: {html_content[:200]}")
-                    print(f"[DEBUG-DISCOUNT] Email {len(alerts)+1} - Sender: {sender}")
                 
                 # Extract ASIN using configurable pattern from admin settings
                 asin = None
@@ -11245,11 +11203,8 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                     potential_asin = asin_match.group(1)
                     if is_valid_asin(potential_asin):
                         asin = potential_asin
-                        print(f"[DEBUG-DISCOUNT] Extracted ASIN from subject using pattern: {asin}")
                     else:
-                        print(f"[DEBUG-DISCOUNT] Invalid ASIN format: {potential_asin}")
                 else:
-                    print(f"[DEBUG-DISCOUNT] No ASIN match in subject: '{subject}' using pattern: {asin_pattern}")
                 
                 # Fallback: try to find ASIN in email content
                 if not asin:
@@ -11265,12 +11220,10 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                             potential_asin = content_match.group(1)
                             if is_valid_asin(potential_asin):
                                 asin = potential_asin
-                                print(f"[DEBUG-DISCOUNT] Extracted ASIN from content: {asin}")
                                 break
                 
                 # Skip emails without valid ASINs (not discount opportunities)
                 if not asin:
-                    print(f"[DEBUG-DISCOUNT] Skipping email - no valid ASIN found in subject: {subject}")
                     continue
                 
                 # Extract retailer using configurable pattern from admin settings
@@ -11282,7 +11235,6 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 if retailer_match:
                     retailer = retailer_match.group(1).strip()
-                    print(f"[DEBUG-DISCOUNT] Extracted retailer using pattern: {retailer}")
                 else:
                     # Fallback: check sender and subject for retailer keywords
                     sender_lower = sender.lower()
@@ -11315,14 +11267,11 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 }
                 
                 alerts.append(alert)
-                print(f"[DEBUG-DISCOUNT] Processed Gmail alert: {retailer} - {asin}")
                 
                 # Special logging for B008XQO7WA
                 if asin == 'B008XQO7WA':
-                    print(f"[DEBUG-DISCOUNT] *** B008XQO7WA ALERT CREATED: {alert} ***")
                 
             except Exception as e:
-                print(f"[DEBUG-DISCOUNT] Error processing Gmail message {message_id}: {e}")
                 
                 # Check if this was a B008XQO7WA email that failed
                 try:
@@ -11330,12 +11279,10 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                         headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
                         subject = headers.get('Subject', '')
                         if 'B008XQO7WA' in subject:
-                            print(f"[DEBUG-DISCOUNT] *** B008XQO7WA EMAIL FAILED PROCESSING: Subject='{subject}', Error={e} ***")
                 except:
                     pass
                 continue
         
-        print(f"[DEBUG-DISCOUNT] Found {len(alerts)} Gmail discount alerts")
         return alerts if alerts else fetch_mock_discount_alerts()
         
     except Exception as e:

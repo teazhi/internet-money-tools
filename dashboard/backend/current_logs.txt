@@ -34,3 +34,5 @@ Purchases table initialized successfully
  * Running on http://10.47.248.173:5000
 [33mPress CTRL+C to quit[0m
 127.0.0.1 - - [29/Aug/2025 09:08:58] "[31m[1mGET /api/admin/users HTTP/1.1[0m" 401 -
+127.0.0.1 - - [30/Aug/2025 12:29:38] "[33mGET /api/discount-opportunities/test-patterns HTTP/1.1[0m" 404 -
+127.0.0.1 - - [30/Aug/2025 12:29:43] "[31m[1mPOST /api/discount-opportunities/analyze HTTP/1.1[0m" 401 -

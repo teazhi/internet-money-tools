@@ -6452,7 +6452,6 @@ def manual_sellerboard_update():
                     redirect_url = initial_response.headers.get('Location')
                     
                     if 'Cost of Goods Sold' in redirect_url:
-                        print("DEBUG: Spaces detected in redirect - using custom urllib3 approach...")
                         
                         # Parse the URL to get components
                         parsed = urllib.parse.urlparse(redirect_url)
@@ -6460,9 +6459,6 @@ def manual_sellerboard_update():
                         path = parsed.path
                         query = parsed.query
                         
-                        print(f"DEBUG: Host: {host}")
-                        print(f"DEBUG: Path with spaces: {path}")
-                        print(f"DEBUG: Query: {query}")
                         
                         # Create custom urllib3 pool manager with retry
                         http = urllib3.PoolManager(
@@ -6492,7 +6488,6 @@ def manual_sellerboard_update():
                         if query:
                             full_url_with_spaces += f"?{query}"
                             
-                        print(f"DEBUG: Attempting custom request to: {full_url_with_spaces}")
                         
                         # Final attempt: Use raw socket to send HTTP request with spaces
                         try:
@@ -13759,11 +13754,19 @@ def get_inventory_age_analysis():
         if not user_record:
             return jsonify({'error': 'User not found'}), 404
         
+        # Handle parent-child relationship for configuration
+        config_user_record = user_record
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+        
         # Get current analytics data
         from orders_analysis import EnhancedOrdersAnalysis
         
-        orders_url = get_user_sellerboard_orders_url(user_record)
-        stock_url = get_user_sellerboard_stock_url(user_record)
+        orders_url = get_user_sellerboard_orders_url(config_user_record)
+        stock_url = get_user_sellerboard_stock_url(config_user_record)
         
         if not orders_url or not stock_url:
             return jsonify({
@@ -13792,7 +13795,7 @@ def get_inventory_age_analysis():
             'discord_id': discord_id
         }
         
-        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
+        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(user_record, 'integrations.google.tokens'))}")
         
         from orders_analysis import OrdersAnalysis
         cogs_url = get_user_sellerboard_cogs_url(config_user_record)

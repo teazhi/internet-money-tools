@@ -11386,7 +11386,6 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                     if email_data:
                         headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
                         subject = headers.get('Subject', '')
-                        if 'B008XQO7WA' in subject:
                 except:
                     pass
                 continue

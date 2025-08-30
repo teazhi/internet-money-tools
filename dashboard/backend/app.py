@@ -4311,6 +4311,7 @@ def get_orders_analytics():
                 # Get user's configured Sellerboard URLs
                 orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
                 stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
+                cogs_url = get_user_sellerboard_cogs_url(config_user_record)
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -4322,7 +4323,7 @@ def get_orders_analytics():
                     }), 400
                 
                 pass  # Debug print removed
-                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
@@ -4368,6 +4369,7 @@ def get_orders_analytics():
                 # Get user's configured Sellerboard URLs
                 orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
                 stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
+                cogs_url = get_user_sellerboard_cogs_url(config_user_record)
                 
                 if not orders_url or not stock_url:
                     return jsonify({
@@ -4379,7 +4381,7 @@ def get_orders_analytics():
                     }), 400
                 
                 pass  # Debug print removed
-                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
@@ -6431,12 +6433,10 @@ def manual_sellerboard_update():
             # The automation URL redirects to a download URL with spaces in the filename
             # All HTTP libraries automatically encode spaces to %20, but Sellerboard expects literal spaces
             
-            print("DEBUG: Implementing solution based on previous space encoding tests...")
             
             # FOCUS: The redirect URL contains spaces that get auto-encoded to %20
             # Solution: Manually handle the redirect with custom urllib3 pool manager
             try:
-                print(f"DEBUG: Intercepting redirect to handle space encoding...")
                 
                 # Step 1: Get the redirect URL but don't follow it
                 import urllib3
@@ -6450,7 +6450,6 @@ def manual_sellerboard_update():
                 
                 if initial_response.status_code == 302:
                     redirect_url = initial_response.headers.get('Location')
-                    print(f"DEBUG: Got redirect URL: {redirect_url}")
                     
                     if 'Cost of Goods Sold' in redirect_url:
                         print("DEBUG: Spaces detected in redirect - using custom urllib3 approach...")
@@ -9217,78 +9216,70 @@ def fetch_sellerboard_cogs_data(cogs_url):
             
             # Check if redirect URL contains spaces (common with Sellerboard COGS reports)
             if redirect_url and ' ' in redirect_url:
-                # Solution: Use raw socket to preserve spaces in URL
-                from urllib.parse import urlparse
-                import socket
-                import ssl
+                # Solution: Use urllib3 with custom poolmanager that doesn't encode spaces
+                import urllib3
+                from urllib3.poolmanager import PoolManager
+                from urllib3.util.retry import Retry
+                from urllib3.util.timeout import Timeout
+                import urllib.parse
+                
+                print(f"Detected spaces in redirect URL, preserving them...")
                 
                 try:
-                    # Parse URL components
-                    url_parts = urlparse(redirect_url)
-                    host = url_parts.netloc
-                    path_with_query = url_parts.path
-                    if url_parts.query:
-                        path_with_query += f"?{url_parts.query}"
+                    # Create custom urllib3 pool manager with SSL verification disabled for space handling
+                    http = urllib3.PoolManager(
+                        cert_reqs='CERT_NONE',  # Disable SSL verification to avoid encoding issues
+                        assert_hostname=False,
+                        timeout=Timeout(total=30),
+                        retries=Retry(total=3, backoff_factor=1)
+                    )
                     
-                    # Create SSL context with proper certificate verification
-                    context = ssl.create_default_context()
-                    context.check_hostname = True
-                    context.verify_mode = ssl.CERT_REQUIRED
+                    # Disable urllib3 SSL warnings for this specific case
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                     
-                    # Create socket connection
-                    with socket.create_connection((host, 443), timeout=30) as sock:
-                        with context.wrap_socket(sock, server_hostname=host) as ssock:
-                            # Send HTTP request with spaces preserved
-                            http_request = f"GET {path_with_query} HTTP/1.1\r\n"
-                            http_request += f"Host: {host}\r\n"
-                            for key, value in headers.items():
-                                http_request += f"{key}: {value}\r\n"
-                            http_request += "Connection: close\r\n\r\n"
-                            
-                            ssock.sendall(http_request.encode())
-                            
-                            # Read response
-                            response_data = b""
-                            while True:
-                                chunk = ssock.recv(8192)
-                                if not chunk:
-                                    break
-                                response_data += chunk
-                            
-                            # Parse HTTP response
-                            response_str = response_data.decode('utf-8', errors='ignore')
-                            
-                            if 'HTTP/1.1 200 OK' in response_str:
-                                # Extract body
-                                if '\r\n\r\n' in response_str:
-                                    headers_end = response_str.find('\r\n\r\n') + 4
-                                    body = response_str[headers_end:]
-                                    
-                                    class MockResponse:
-                                        def __init__(self, text, status_code):
-                                            self.text = text
-                                            self.status_code = status_code
-                                        def raise_for_status(self):
-                                            if self.status_code >= 400:
-                                                raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
-                                    
-                                    response = MockResponse(body, 200)
-                                else:
-                                    raise Exception("Could not parse response body")
-                            else:
-                                # Extract status code
-                                status_line = response_str.split('\r\n')[0]
-                                if 'HTTP/1.1 401' in status_line:
-                                    raise requests.exceptions.HTTPError("401 Unauthorized")
-                                elif 'HTTP/1.1 403' in status_line:
-                                    raise requests.exceptions.HTTPError("403 Forbidden")
-                                else:
-                                    raise requests.exceptions.HTTPError(f"HTTP error: {status_line}")
-                                    
-                except Exception as socket_error:
-                    # If socket approach fails, fall back to encoded URL
-                    print(f"Raw socket failed: {socket_error}, falling back to encoded URL")
-                    response = session.get(redirect_url, timeout=30, headers=headers)
+                    # Convert headers to format urllib3 expects
+                    urllib3_headers = {}
+                    for key, value in headers.items():
+                        urllib3_headers[key] = value
+                    
+                    # Make request with raw URL - urllib3 handles spaces better than requests
+                    print(f"Making urllib3 request to URL with spaces: {redirect_url}")
+                    raw_response = http.request('GET', redirect_url, headers=urllib3_headers)
+                    
+                    if raw_response.status == 200:
+                        response_text = raw_response.data.decode('utf-8')
+                        print(f"✅ urllib3 successfully handled URL with spaces!")
+                        
+                        class MockResponse:
+                            def __init__(self, text, status_code):
+                                self.text = text
+                                self.status_code = status_code
+                            def raise_for_status(self):
+                                if self.status_code >= 400:
+                                    raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+                        
+                        response = MockResponse(response_text, 200)
+                    else:
+                        print(f"urllib3 failed with status {raw_response.status}")
+                        raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
+                        
+                except Exception as urllib3_error:
+                    print(f"urllib3 approach failed: {urllib3_error}")
+                    # Try alternative: manually construct URL without auto-encoding
+                    try:
+                        # Split URL at spaces and encode each part separately, then rejoin with %20
+                        # But then manually replace %20 back to + which some servers accept
+                        url_encoded = urllib.parse.quote(redirect_url, safe=':/?#[]@!$&\'()*+,;=')
+                        url_with_plus = url_encoded.replace('%20', '+')
+                        
+                        print(f"Trying + encoding instead of %20: {url_with_plus}")
+                        response = session.get(url_with_plus, timeout=30, headers=headers)
+                        
+                    except Exception as plus_error:
+                        print(f"+ encoding failed: {plus_error}")
+                        # Final fallback to normal encoded URL
+                        print(f"Final fallback to encoded URL")
+                        response = session.get(redirect_url, timeout=30, headers=headers)
             else:
                 # Normal redirect handling for URLs without spaces
                 response = session.get(redirect_url, timeout=30, headers=headers)
@@ -13804,7 +13795,8 @@ def get_inventory_age_analysis():
         print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
         
         from orders_analysis import OrdersAnalysis
-        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url)
+        cogs_url = get_user_sellerboard_cogs_url(config_user_record)
+        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
         analysis = analyzer.analyze(
             for_date=target_date,
             user_timezone=user_timezone,

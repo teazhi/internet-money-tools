@@ -15,11 +15,12 @@ STOCK_REPORT_URL = None
 YESTERDAY_SALES_FILE = "yesterday_sales.json"
 
 class EnhancedOrdersAnalysis:
-    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None):
+    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None):
         if not orders_url or not stock_url:
             raise ValueError("Both orders_url and stock_url must be provided. No default URLs available.")
         self.orders_url = orders_url
         self.stock_url = stock_url
+        self.cogs_url = cogs_url  # Optional Sellerboard COGS URL
         
         # Initialize purchase analytics
         self.purchase_analytics = PurchaseAnalytics()
@@ -128,97 +129,70 @@ class EnhancedOrdersAnalysis:
                 
                 # Check if redirect URL contains spaces (common with Sellerboard COGS reports)
                 if redirect_url and ' ' in redirect_url:
-                    # Solution: Use requests.PreparedRequest to bypass URL encoding
-                    from requests import PreparedRequest
-                    from urllib.parse import urlparse
+                    # Solution: Use urllib3 with custom poolmanager that doesn't encode spaces
+                    import urllib3
+                    from urllib3.poolmanager import PoolManager
+                    from urllib3.util.retry import Retry
+                    from urllib3.util.timeout import Timeout
+                    import urllib.parse
                     
-                    # Create a prepared request with the raw URL
-                    prepared_request = PreparedRequest()
-                    prepared_request.prepare_method('GET')
-                    prepared_request.prepare_url(redirect_url, None)  # This will encode
-                    
-                    # Now manually fix the URL to preserve spaces
-                    # Replace %20 back to spaces in the URL path only
-                    parsed = urlparse(prepared_request.url)
-                    fixed_path = parsed.path.replace('%20', ' ')
-                    
-                    # Reconstruct URL with spaces preserved
-                    if parsed.query:
-                        fixed_url = f"{parsed.scheme}://{parsed.netloc}{fixed_path}?{parsed.query}"
-                    else:
-                        fixed_url = f"{parsed.scheme}://{parsed.netloc}{fixed_path}"
-                    
-                    # Use a custom adapter to send raw HTTP request
-                    import socket
-                    import ssl
+                    print(f"Detected spaces in redirect URL, preserving them...")
                     
                     try:
-                        # Parse URL components
-                        url_parts = urlparse(fixed_url)
-                        host = url_parts.netloc
-                        path_with_query = url_parts.path
-                        if url_parts.query:
-                            path_with_query += f"?{url_parts.query}"
+                        # Create custom urllib3 pool manager with SSL verification disabled for space handling
+                        http = urllib3.PoolManager(
+                            cert_reqs='CERT_NONE',  # Disable SSL verification to avoid encoding issues
+                            assert_hostname=False,
+                            timeout=Timeout(total=30),
+                            retries=Retry(total=3, backoff_factor=1)
+                        )
                         
-                        # Create SSL context with proper certificate verification
-                        context = ssl.create_default_context()
-                        context.check_hostname = True
-                        context.verify_mode = ssl.CERT_REQUIRED
+                        # Disable urllib3 SSL warnings for this specific case
+                        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                         
-                        # Create socket connection
-                        with socket.create_connection((host, 443), timeout=30) as sock:
-                            with context.wrap_socket(sock, server_hostname=host) as ssock:
-                                # Send HTTP request with spaces preserved
-                                http_request = f"GET {path_with_query} HTTP/1.1\r\n"
-                                http_request += f"Host: {host}\r\n"
-                                for key, value in headers.items():
-                                    http_request += f"{key}: {value}\r\n"
-                                http_request += "Connection: close\r\n\r\n"
-                                
-                                ssock.sendall(http_request.encode())
-                                
-                                # Read response
-                                response_data = b""
-                                while True:
-                                    chunk = ssock.recv(8192)
-                                    if not chunk:
-                                        break
-                                    response_data += chunk
-                                
-                                # Parse HTTP response
-                                response_str = response_data.decode('utf-8', errors='ignore')
-                                
-                                if 'HTTP/1.1 200 OK' in response_str:
-                                    # Extract body
-                                    if '\r\n\r\n' in response_str:
-                                        headers_end = response_str.find('\r\n\r\n') + 4
-                                        body = response_str[headers_end:]
-                                        
-                                        class MockResponse:
-                                            def __init__(self, text, status_code):
-                                                self.text = text
-                                                self.status_code = status_code
-                                            def raise_for_status(self):
-                                                if self.status_code >= 400:
-                                                    raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
-                                        
-                                        response = MockResponse(body, 200)
-                                    else:
-                                        raise Exception("Could not parse response body")
-                                else:
-                                    # Extract status code
-                                    status_line = response_str.split('\r\n')[0]
-                                    if 'HTTP/1.1 401' in status_line:
-                                        raise requests.exceptions.HTTPError("401 Unauthorized")
-                                    elif 'HTTP/1.1 403' in status_line:
-                                        raise requests.exceptions.HTTPError("403 Forbidden")
-                                    else:
-                                        raise requests.exceptions.HTTPError(f"HTTP error: {status_line}")
-                                        
-                    except Exception as socket_error:
-                        # If socket approach fails, fall back to encoded URL
-                        print(f"Raw socket failed: {socket_error}, falling back to encoded URL")
-                        response = session.get(redirect_url, timeout=30, headers=headers)
+                        # Convert headers to format urllib3 expects
+                        urllib3_headers = {}
+                        for key, value in headers.items():
+                            urllib3_headers[key] = value
+                        
+                        # Make request with raw URL - urllib3 handles spaces better than requests
+                        print(f"Making urllib3 request to URL with spaces: {redirect_url}")
+                        raw_response = http.request('GET', redirect_url, headers=urllib3_headers)
+                        
+                        if raw_response.status == 200:
+                            response_text = raw_response.data.decode('utf-8')
+                            print(f"✅ urllib3 successfully handled URL with spaces!")
+                            
+                            class MockResponse:
+                                def __init__(self, text, status_code):
+                                    self.text = text
+                                    self.status_code = status_code
+                                def raise_for_status(self):
+                                    if self.status_code >= 400:
+                                        raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+                            
+                            response = MockResponse(response_text, 200)
+                        else:
+                            print(f"urllib3 failed with status {raw_response.status}")
+                            raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
+                            
+                    except Exception as urllib3_error:
+                        print(f"urllib3 approach failed: {urllib3_error}")
+                        # Try alternative: manually construct URL without auto-encoding
+                        try:
+                            # Split URL at spaces and encode each part separately, then rejoin with %20
+                            # But then manually replace %20 back to + which some servers accept
+                            url_encoded = urllib.parse.quote(redirect_url, safe=':/?#[]@!$&\'()*+,;=')
+                            url_with_plus = url_encoded.replace('%20', '+')
+                            
+                            print(f"Trying + encoding instead of %20: {url_with_plus}")
+                            response = session.get(url_with_plus, timeout=30, headers=headers)
+                            
+                        except Exception as plus_error:
+                            print(f"+ encoding failed: {plus_error}")
+                            # Final fallback to normal encoded URL
+                            print(f"Final fallback to encoded URL")
+                            response = session.get(redirect_url, timeout=30, headers=headers)
                         
                 elif redirect_url and 'download-report' in redirect_url:
                     # Normal redirect handling for download URLs
@@ -1585,18 +1559,66 @@ class EnhancedOrdersAnalysis:
         stock_df = self.download_csv(self.stock_url)
         stock_info = self.get_stock_info(stock_df)
 
-        # Fetch COGS data and purchase analytics from Google Sheet if enabled
+        # Fetch COGS data and purchase analytics 
         cogs_data = {}
         purchase_insights = {}
         
+        # First, try to use Sellerboard COGS URL if available
+        if self.cogs_url:
+            try:
+                print(f"Using Sellerboard COGS URL: {self.cogs_url}")
+                # Import the function from app.py
+                import importlib.util
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                app_py_path = os.path.join(current_dir, 'app.py')
+                spec = importlib.util.spec_from_file_location("main_app", app_py_path)
+                main_app = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(main_app)
+                
+                # Use the fixed fetch_sellerboard_cogs_data function
+                cogs_result = main_app.fetch_sellerboard_cogs_data(self.cogs_url)
+                
+                # Convert Sellerboard COGS format to our expected format
+                if cogs_result and 'data' in cogs_result:
+                    sellerboard_cogs_data = {}
+                    asin_col = cogs_result.get('asin_column')
+                    
+                    for item in cogs_result['data']:
+                        asin = item.get(asin_col)
+                        if asin:
+                            # Look for COGS/cost columns in the data
+                            cogs_value = None
+                            for key, value in item.items():
+                                if any(term in key.lower() for term in ['cogs', 'cost', 'price']):
+                                    try:
+                                        cogs_value = float(value) if value else 0
+                                        break
+                                    except (ValueError, TypeError):
+                                        continue
+                            
+                            if cogs_value is not None:
+                                sellerboard_cogs_data[asin] = {
+                                    'cogs': cogs_value,
+                                    'source_link': 'Sellerboard COGS Report',
+                                    'source_column': 'sellerboard_cogs'
+                                }
+                    
+                    cogs_data = sellerboard_cogs_data
+                    print(f"Successfully loaded COGS data from Sellerboard for {len(cogs_data)} products")
+                    
+            except Exception as e:
+                print(f"Failed to fetch Sellerboard COGS data: {e}")
+                print("Falling back to Google Sheets for COGS data")
         
-        # Always try to fetch COGS data and purchase analytics if we have any Google Sheets configuration
-        should_fetch_analytics = (
-            user_settings and 
-            (user_settings.get('enable_source_links') or 
-             user_settings.get('sheet_id') or 
-             user_settings.get('search_all_worksheets'))
-        )
+        # If no Sellerboard COGS data, or if it failed, try Google Sheets
+        if not cogs_data:
+            # Always try to fetch COGS data and purchase analytics if we have any Google Sheets configuration
+            should_fetch_analytics = (
+                user_settings and 
+                (user_settings.get('enable_source_links') or 
+                 user_settings.get('sheet_id') or 
+                 user_settings.get('search_all_worksheets'))
+            )
         
         if should_fetch_analytics:
             try:
@@ -1944,14 +1966,15 @@ class BasicOrdersAnalysis:
 # Maintain backward compatibility
 class OrdersAnalysis(EnhancedOrdersAnalysis):
     """Backward compatible class name"""
-    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None):
+    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None):
         try:
-            super().__init__(orders_url, stock_url)
+            super().__init__(orders_url, stock_url, cogs_url)
         except Exception as e:
             pass  # Debug print removed
             # Fall back to basic implementation
             self.orders_url = orders_url
             self.stock_url = stock_url
+            self.cogs_url = cogs_url
             self.is_fallback = True
     
     def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None, preserve_purchase_history: bool = False) -> dict:

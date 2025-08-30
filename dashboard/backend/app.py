@@ -9599,7 +9599,7 @@ def get_expected_arrivals():
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = config_get_user_sellerboard_stock_url(user_record)
+        sellerboard_url = get_user_sellerboard_stock_url(user_record)
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 
@@ -9983,7 +9983,7 @@ def analyze_retailer_leads():
                     config_user_record = parent_record
         
         # Check if user has necessary configurations
-        if not config_get_user_sellerboard_orders_url(user_record) or not config_get_user_sellerboard_stock_url(user_record):
+        if not get_user_sellerboard_orders_url(user_record) or not get_user_sellerboard_stock_url(user_record):
             return jsonify({
                 'error': 'Sellerboard URLs not configured',
                 'message': 'Please configure your Sellerboard URLs in Settings first'

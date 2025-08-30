@@ -123,13 +123,105 @@ class EnhancedOrdersAnalysis:
             initial_response = session.get(url, timeout=30, allow_redirects=False, headers=headers)
             
             if initial_response.status_code == 302:
-                # Handle redirect manually to see what's happening
+                # Handle redirect manually to preserve spaces in URLs
                 redirect_url = initial_response.headers.get('Location')
                 
-                # Check if the redirect URL is a download URL
-                if redirect_url and 'download-report' in redirect_url:
-                    pass  # Debug print removed
-                    # Try to follow the redirect with the session cookies
+                # Check if redirect URL contains spaces (common with Sellerboard COGS reports)
+                if redirect_url and ' ' in redirect_url:
+                    # Solution: Use requests.PreparedRequest to bypass URL encoding
+                    from requests import PreparedRequest
+                    from urllib.parse import urlparse
+                    
+                    # Create a prepared request with the raw URL
+                    prepared_request = PreparedRequest()
+                    prepared_request.prepare_method('GET')
+                    prepared_request.prepare_url(redirect_url, None)  # This will encode
+                    
+                    # Now manually fix the URL to preserve spaces
+                    # Replace %20 back to spaces in the URL path only
+                    parsed = urlparse(prepared_request.url)
+                    fixed_path = parsed.path.replace('%20', ' ')
+                    
+                    # Reconstruct URL with spaces preserved
+                    if parsed.query:
+                        fixed_url = f"{parsed.scheme}://{parsed.netloc}{fixed_path}?{parsed.query}"
+                    else:
+                        fixed_url = f"{parsed.scheme}://{parsed.netloc}{fixed_path}"
+                    
+                    # Use a custom adapter to send raw HTTP request
+                    import socket
+                    import ssl
+                    
+                    try:
+                        # Parse URL components
+                        url_parts = urlparse(fixed_url)
+                        host = url_parts.netloc
+                        path_with_query = url_parts.path
+                        if url_parts.query:
+                            path_with_query += f"?{url_parts.query}"
+                        
+                        # Create SSL context with proper certificate verification
+                        context = ssl.create_default_context()
+                        context.check_hostname = True
+                        context.verify_mode = ssl.CERT_REQUIRED
+                        
+                        # Create socket connection
+                        with socket.create_connection((host, 443), timeout=30) as sock:
+                            with context.wrap_socket(sock, server_hostname=host) as ssock:
+                                # Send HTTP request with spaces preserved
+                                http_request = f"GET {path_with_query} HTTP/1.1\r\n"
+                                http_request += f"Host: {host}\r\n"
+                                for key, value in headers.items():
+                                    http_request += f"{key}: {value}\r\n"
+                                http_request += "Connection: close\r\n\r\n"
+                                
+                                ssock.sendall(http_request.encode())
+                                
+                                # Read response
+                                response_data = b""
+                                while True:
+                                    chunk = ssock.recv(8192)
+                                    if not chunk:
+                                        break
+                                    response_data += chunk
+                                
+                                # Parse HTTP response
+                                response_str = response_data.decode('utf-8', errors='ignore')
+                                
+                                if 'HTTP/1.1 200 OK' in response_str:
+                                    # Extract body
+                                    if '\r\n\r\n' in response_str:
+                                        headers_end = response_str.find('\r\n\r\n') + 4
+                                        body = response_str[headers_end:]
+                                        
+                                        class MockResponse:
+                                            def __init__(self, text, status_code):
+                                                self.text = text
+                                                self.status_code = status_code
+                                            def raise_for_status(self):
+                                                if self.status_code >= 400:
+                                                    raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+                                        
+                                        response = MockResponse(body, 200)
+                                    else:
+                                        raise Exception("Could not parse response body")
+                                else:
+                                    # Extract status code
+                                    status_line = response_str.split('\r\n')[0]
+                                    if 'HTTP/1.1 401' in status_line:
+                                        raise requests.exceptions.HTTPError("401 Unauthorized")
+                                    elif 'HTTP/1.1 403' in status_line:
+                                        raise requests.exceptions.HTTPError("403 Forbidden")
+                                    else:
+                                        raise requests.exceptions.HTTPError(f"HTTP error: {status_line}")
+                                        
+                    except Exception as socket_error:
+                        # If socket approach fails, fall back to encoded URL
+                        print(f"Raw socket failed: {socket_error}, falling back to encoded URL")
+                        response = session.get(redirect_url, timeout=30, headers=headers)
+                        
+                elif redirect_url and 'download-report' in redirect_url:
+                    # Normal redirect handling for download URLs
                     response = session.get(redirect_url, timeout=30, headers=headers)
                 else:
                     # Follow redirects normally

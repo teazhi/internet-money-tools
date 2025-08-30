@@ -42,28 +42,22 @@ class EmailMonitorS3:
         
     def start(self):
         """Start the email monitoring loop"""
-        print("🚀 Starting Email Monitoring Service (S3 Version)")
-        print(f"Check interval: {self.check_interval // 86400} day(s)")
         
         self.is_running = True
         
         while self.is_running:
             try:
-                print(f"🔄 Starting email monitoring cycle at {datetime.now()}")
                 self.run_email_check_cycle()
-                print(f"✅ Email monitoring cycle completed at {datetime.now()}")
                 
                 if self.is_running:
                     time.sleep(self.check_interval)
                     
             except Exception as e:
-                print(f"❌ Error in email monitoring cycle: {e}")
                 if self.is_running:
                     time.sleep(300)  # Wait 5 minutes before retrying
     
     def stop(self):
         """Stop the email monitoring service"""
-        print("🛑 Stopping Email Monitoring Service...")
         self.is_running = False
     
     def run_email_check_cycle(self, send_webhooks=True):
@@ -81,9 +75,6 @@ class EmailMonitorS3:
                     
                     # Don't run if less than 23 hours since last automated run
                     if time_since_last.total_seconds() < 82800:  # 23 hours
-                        hours_until_next = (82800 - time_since_last.total_seconds()) / 3600
-                        print(f"⏳ Skipping automated run - last run was {time_since_last.total_seconds()/3600:.1f} hours ago")
-                        print(f"   Next automated run in {hours_until_next:.1f} hours")
                         return
                 except Exception as e:
                     print(f"Error parsing last run time: {e}")
@@ -96,19 +87,17 @@ class EmailMonitorS3:
                 'last_check_start': datetime.utcnow().isoformat()
             })
             
-            print(f"🔄 Starting email check cycle (instance: {instance_id})")
             
             try:
                 # Get all active email configurations
                 active_configs = self.manager.get_all_active_configs()
-                print(f"Found {len(active_configs)} active email configurations")
                 
                 for config in active_configs:
                     try:
                         self.check_monitor_email_account(config, send_webhooks=send_webhooks)
                     except Exception as e:
-                        print(f"Error checking email account {config.get('email_address', 'Unknown')}: {e}")
-                
+                        pass
+                    
                 # Update status to indicate check completed
                 if send_webhooks:
                     self.manager.update_service_status({
@@ -117,7 +106,6 @@ class EmailMonitorS3:
                         'last_check_complete': datetime.utcnow().isoformat()
                     })
                 
-                print(f"✅ Email check cycle completed")
                 
             except Exception as e:
                 # Mark check as failed
@@ -129,17 +117,17 @@ class EmailMonitorS3:
                 raise
                 
         except Exception as e:
-            print(f"Error in email check cycle: {e}")
+            pass
     
     def monitor_update_last_checked(self, discord_id: str, email_address: str):
         """Update last checked timestamp for email account"""
         try:
             success = self.manager.update_last_checked(discord_id, email_address)
             if success:
-                print(f"✅ Updated last checked time for {email_address}")
+                pass
             return success
         except Exception as e:
-            print(f"Error updating last checked for {email_address}: {e}")
+            pass
             return False
     
     def monitor_log_email_match(self, discord_id: str, rule_id: str, email_subject: str, 
@@ -152,10 +140,10 @@ class EmailMonitorS3:
                 email_date, webhook_sent, webhook_response, email_body
             )
             if success:
-                print(f"📊 Logged email email match: {email_subject[:50]}...")
+                pass
             return success
         except Exception as e:
-            print(f"Error logging email email match: {e}")
+            pass
             return False
     
     def monitor_decode_email_header(self, header):
@@ -172,7 +160,7 @@ class EmailMonitorS3:
                     decoded_header += str(part)
             return decoded_header.strip()
         except Exception as e:
-            print(f"Error decoding email email header '{header}': {e}")
+            pass
             return str(header) if header else ""
     
     def monitor_matches_rule(self, email_msg: Dict, rule: Dict, debug: bool = False) -> bool:
@@ -182,72 +170,29 @@ class EmailMonitorS3:
             sender = email_msg.get('sender', '').lower() 
             content = email_msg.get('html_content', '').lower()
             
-            if debug:
-                print(f"    🔍 Rule matching debug:")
-                print(f"      Email subject (lowercase): '{subject}'")
-                print(f"      Email sender (lowercase): '{sender}'")
-                print(f"      Email content length: {len(content)} chars")
-                if content:
-                    print(f"      Email content preview: '{content[:100]}...'")
             
             # Check sender filter
             sender_filter = rule.get('sender_filter', '').lower().strip()
-            if debug:
-                print(f"      Sender filter: '{sender_filter}' (empty = match all)")
                 
             if sender_filter and sender_filter not in sender:
-                if debug:
-                    print(f"      ❌ Sender filter failed: '{sender_filter}' not in '{sender}'")
                 return False
-            elif debug and sender_filter:
-                print(f"      ✅ Sender filter passed: '{sender_filter}' found in '{sender}'")
-            elif debug:
-                print(f"      ✅ Sender filter skipped (empty)")
             
             # Check subject filter
             subject_filter = rule.get('subject_filter', '').lower().strip()
-            if debug:
-                print(f"      Subject filter: '{subject_filter}' (empty = match all)")
                 
             if subject_filter and subject_filter not in subject:
-                if debug:
-                    print(f"      ❌ Subject filter failed: '{subject_filter}' not in '{subject}'")
                 return False
-            elif debug and subject_filter:
-                print(f"      ✅ Subject filter passed: '{subject_filter}' found in '{subject}'")
-            elif debug:
-                print(f"      ✅ Subject filter skipped (empty)")
                 
             # Check content filter
             content_filter = rule.get('content_filter', '').lower().strip()
-            if debug:
-                print(f"      Content filter: '{content_filter}' (empty = match all)")
                 
             if content_filter and content_filter not in content:
-                if debug:
-                    print(f"      ❌ Content filter failed: '{content_filter}' not found in content")
-                    # Show where we're looking for the content
-                    if content:
-                        if 'yankee' in content_filter and 'yankee' in content:
-                            yankee_pos = content.find('yankee')
-                            print(f"      📍 'yankee' found at position {yankee_pos}")
-                            print(f"      📍 Context: '{content[max(0, yankee_pos-50):yankee_pos+50]}'")
-                        if 'candle' in content_filter and 'candle' in content:
-                            candle_pos = content.find('candle')
-                            print(f"      📍 'candle' found at position {candle_pos}")  
-                            print(f"      📍 Context: '{content[max(0, candle_pos-50):candle_pos+50]}'")
                 return False
-            elif debug and content_filter:
-                print(f"      ✅ Content filter passed: '{content_filter}' found in content")
-            elif debug:
-                print(f"      ✅ Content filter skipped (empty)")
             
-            if debug:
-                print(f"    🎉 EMAIL MATCHES ALL RULE CONDITIONS!")
             return True
             
         except Exception as e:
-            print(f"Error checking email email against rule: {e}")
+            pass
             return False
     
     def monitor_send_webhook(self, webhook_url: str, email_data: Dict, discord_id: str = None, include_body: bool = False) -> tuple[bool, str]:
@@ -302,8 +247,6 @@ class EmailMonitorS3:
             email_address = config['email_address']
             auth_type = config.get('auth_type', 'imap')
             
-            print(f"Checking email email: {email_address} using {auth_type}")
-            
             if auth_type == 'oauth':
                 self.check_monitor_email_account_oauth(
                     discord_id=discord_id,
@@ -336,7 +279,6 @@ class EmailMonitorS3:
         """Check email email account using Gmail OAuth"""
         try:
             if not access_token:
-                print(f"❌ No access token for {email_address}")
                 return
             
             # Check if token needs refresh
@@ -344,7 +286,6 @@ class EmailMonitorS3:
                 try:
                     expires_at = datetime.fromisoformat(token_expires_at.replace('Z', '+00:00'))
                     if datetime.utcnow() >= expires_at - timedelta(minutes=5):
-                        print(f"🔄 Refreshing token for {email_address}")
                         new_token = self.monitor_refresh_oauth_token(refresh_token)
                         if new_token:
                             access_token = new_token['access_token']
@@ -356,7 +297,6 @@ class EmailMonitorS3:
                                 new_token.get('expires_at')
                             )
                         else:
-                            print(f"❌ Failed to refresh token for {email_address}")
                             return
                 except Exception as e:
                     print(f"Error checking token expiry: {e}")
@@ -364,17 +304,8 @@ class EmailMonitorS3:
             # Get monitoring rules for this user first
             rules = self.manager.get_monitoring_rules(discord_id)
             if not rules:
-                print(f"No email monitoring rules configured for user {discord_id}")
                 self.monitor_update_last_checked(discord_id, email_address)
                 return
-            
-            print(f"🔍 DEBUG: Found {len(rules)} rules for user {discord_id}")
-            for i, rule in enumerate(rules):
-                print(f"  Rule {i+1}: '{rule.get('rule_name', 'Unknown')}'")
-                print(f"    - Sender filter: '{rule.get('sender_filter', '')}'")
-                print(f"    - Subject filter: '{rule.get('subject_filter', '')}'")
-                print(f"    - Content filter: '{rule.get('content_filter', '')}'")
-                print(f"    - Is active: {rule.get('is_active', True)}")
             
             # Always check only the past day for daily runs
             cutoff_date = datetime.utcnow() - timedelta(days=1)
@@ -385,7 +316,6 @@ class EmailMonitorS3:
             
             for rule in rules:
                 if not rule.get('is_active', True):
-                    print(f"⚠️  Skipping inactive rule: {rule.get('rule_name', 'Unknown')}")
                     continue
                 
                 # Build Gmail search query for this rule
@@ -405,7 +335,6 @@ class EmailMonitorS3:
                 # Content filter will still need to be checked after fetching
                 
                 query = ' '.join(query_parts)
-                print(f"🔍 Gmail API search query for rule '{rule.get('rule_name')}': {query}")
                 
                 # Search Gmail for this rule
                 search_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages"
@@ -420,8 +349,6 @@ class EmailMonitorS3:
                 
                 search_results = response.json()
                 messages = search_results.get('messages', [])
-                
-                print(f"Found {len(messages)} messages matching rule '{rule.get('rule_name')}'")
                 
                 if not messages:
                     continue
@@ -442,7 +369,6 @@ class EmailMonitorS3:
                         msg_response = requests.get(message_url, headers=headers)
                         
                         if not msg_response.ok:
-                            print(f"❌ Failed to get message {message_id}: {msg_response.status_code}")
                             continue
                             
                         email_data = msg_response.json()
@@ -465,7 +391,6 @@ class EmailMonitorS3:
                                 date = value
                         
                         if not subject:
-                            print(f"⚠️  Skipping message {message_id}: No subject found")
                             continue
                             
                         # Extract email content (only if rule has content filter)
@@ -481,16 +406,6 @@ class EmailMonitorS3:
                             'message_id': message_id
                         }
                         
-                        # Debug first few emails in detail
-                        if rule_processed_count <= 2:
-                            print(f"🔍 DEBUG Email {rule_processed_count} for rule '{rule.get('rule_name')}':")
-                            print(f"  Message ID: {message_id}")
-                            print(f"  Subject: '{subject}'")
-                            print(f"  From: '{sender}'")
-                            print(f"  Date: '{date}'")
-                            if html_content:
-                                content_preview = html_content[:200].replace('\n', ' ').replace('\r', ' ')
-                                print(f"  Content preview: '{content_preview}...'")
                         
                         # Check against this specific rule (content filter only, since Gmail already filtered sender/subject)
                         content_filter = rule.get('content_filter', '').strip()
@@ -498,19 +413,11 @@ class EmailMonitorS3:
                         
                         if content_filter and html_content:
                             content_matches = content_filter.lower() in html_content.lower()
-                            if rule_processed_count <= 2:
-                                print(f"  Content filter '{content_filter}': {'✅ PASS' if content_matches else '❌ FAIL'}")
                         elif content_filter and not html_content:
                             content_matches = False
-                            if rule_processed_count <= 2:
-                                print(f"  Content filter '{content_filter}': ❌ FAIL (no content)")
                         
                         if content_matches:
                             matched_count += 1
-                            
-                            print(f"📧 Email matched rule '{rule.get('rule_name', 'Unknown')}':")
-                            print(f"   Subject: {subject}")
-                            print(f"   From: {sender}")
                             
                             # Add to processed messages to avoid duplicates
                             all_messages.append(email_msg)
@@ -531,13 +438,7 @@ class EmailMonitorS3:
                                         'date': date,
                                         'body': html_content if html_content else "No content"
                                     }, discord_id, include_body)
-                                    
-                                    if webhook_sent:
-                                        print(f"✅ Webhook sent for email")
-                                    else:
-                                        print(f"❌ Webhook failed: {webhook_response}")
                             else:
-                                print(f"🔇 Webhook skipped (manual check mode)")
                                 webhook_response = "Skipped (manual check)"
                             
                             # Log the match
@@ -548,15 +449,14 @@ class EmailMonitorS3:
                             )
                         
                     except Exception as e:
-                        print(f"Error processing email message: {e}")
+                        pass
             
-            print(f"✅ Processed {len(all_messages)} unique messages across {len(rules)} rules, {matched_count} matches found")
             
             # Update last checked timestamp
             self.monitor_update_last_checked(discord_id, email_address)
             
         except Exception as e:
-            print(f"Error in email OAuth email check: {e}")
+            pass
     
     def monitor_extract_email_content(self, payload: Dict) -> Optional[str]:
         """Extract HTML content from Gmail message payload for email monitoring"""
@@ -602,7 +502,6 @@ class EmailMonitorS3:
             if not encryption_key:
                 # Generate a consistent key for development
                 encryption_key = base64.urlsafe_b64encode(b'development_key_32_chars_long!').decode()
-                print("⚠️  Warning: Using auto-generated encryption key for email email. Set EMAIL_ENCRYPTION_KEY environment variable for production.")
             
             cipher = Fernet(encryption_key)
             
@@ -622,18 +521,15 @@ class EmailMonitorS3:
             result, messages = mail.search(None, f'SINCE "{date_str}"')
             
             if result != 'OK' or not messages[0]:
-                print(f"No new email emails found via IMAP for {email_address}")
                 mail.logout()
                 self.monitor_update_last_checked(discord_id, email_address)
                 return
             
             message_ids = messages[0].split()
-            print(f"Found {len(message_ids)} messages for email IMAP processing")
             
             # Get monitoring rules
             rules = self.manager.get_monitoring_rules(discord_id)
             if not rules:
-                print(f"No email monitoring rules configured for user {discord_id}")
                 mail.logout()
                 self.monitor_update_last_checked(discord_id, email_address)
                 return
@@ -682,10 +578,6 @@ class EmailMonitorS3:
                         if self.monitor_matches_rule(email_msg, rule):
                             matched_count += 1
                             
-                            print(f"📧 Email email matched rule '{rule.get('rule_name', 'Unknown')}' via IMAP:")
-                            print(f"   Subject: {subject}")
-                            print(f"   From: {sender}")
-                            
                             # Send webhook (only if enabled)
                             webhook_sent = False
                             webhook_response = ""
@@ -703,7 +595,6 @@ class EmailMonitorS3:
                                         'body': html_content if html_content else "No content"
                                     }, discord_id, include_body)
                             else:
-                                print(f"🔇 Webhook skipped (manual check mode)")
                                 webhook_response = "Skipped (manual check)"
                             
                             # Log the match
@@ -717,7 +608,6 @@ class EmailMonitorS3:
                     print(f"Error processing email IMAP message: {e}")
             
             mail.logout()
-            print(f"✅ IMAP: Processed {len(message_ids)} messages, {matched_count} email matches")
             self.monitor_update_last_checked(discord_id, email_address)
             
         except Exception as e:
@@ -730,7 +620,6 @@ class EmailMonitorS3:
             google_client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
             
             if not google_client_id or not google_client_secret:
-                print("❌ Missing Google OAuth credentials for email monitoring")
                 return None
             
             token_data = {
@@ -753,7 +642,6 @@ class EmailMonitorS3:
                     'expires_at': expires_at
                 }
             else:
-                print(f"❌ Failed to refresh email OAuth token: {response.text}")
                 return None
                 
         except Exception as e:
@@ -775,10 +663,8 @@ def create_yankee_candle_rule(discord_id: str) -> Optional[str]:
         rule_id = email_monitoring_manager.add_monitoring_rule(discord_id, rule)
         
         if rule_id:
-            print(f"✅ Created Yankee Candle email rule for discord_id: {discord_id}")
             return rule_id
         else:
-            print(f"❌ Failed to create Yankee Candle email rule")
             return None
             
     except Exception as e:
@@ -788,12 +674,9 @@ def create_yankee_candle_rule(discord_id: str) -> Optional[str]:
 
 if __name__ == "__main__":
     # Test the email email monitor
-    monitor = EmailEmailMonitorS3()
-    print("Email Email Monitor S3 - Test Mode")
-    print("Press Ctrl+C to stop")
+    monitor = EmailMonitorS3()
     
     try:
         monitor.start()
     except KeyboardInterrupt:
-        print("\\nStopping email email monitor...")
         monitor.stop()

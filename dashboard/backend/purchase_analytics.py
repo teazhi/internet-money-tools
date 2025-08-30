@@ -98,7 +98,6 @@ class PurchaseAnalytics:
                     cutoff_date = datetime.now() - timedelta(days=365)
                     clean_df = clean_df[clean_df['date'] >= cutoff_date]
                 else:
-                    print("DEBUG - Purchase analytics: preserving all purchase history for inventory age analysis")
             
             # Remove rows with invalid core data
             clean_df = clean_df[
@@ -482,8 +481,6 @@ class PurchaseAnalytics:
             current_month = current_date.strftime('%B').upper()  # e.g., 'AUGUST'
             previous_month = (current_date.replace(day=1) - timedelta(days=1)).strftime('%B').upper()  # e.g., 'JULY'
             
-            print(f"DEBUG - Looking for months: current='{current_month}', previous='{previous_month}'")
-            print(f"DEBUG - Available worksheets: {list(worksheets)}")
             
             # Find worksheets that contain the current month or previous month names
             current_month_sheets = [ws for ws in worksheets if current_month in ws.upper()]
@@ -498,7 +495,6 @@ class PurchaseAnalytics:
             # Always include the first worksheet (assumed to be current month)
             if worksheets_list:
                 last_2_months_sheets.append(worksheets_list[0])
-                print(f"DEBUG - Using first worksheet as current month: {worksheets_list[0]}")
             
             # Look for July worksheet specifically
             if previous_month_sheets:
@@ -506,7 +502,6 @@ class PurchaseAnalytics:
                 for july_sheet in previous_month_sheets:
                     if july_sheet not in last_2_months_sheets:
                         last_2_months_sheets.append(july_sheet)
-                print(f"DEBUG - Found July sheets: {previous_month_sheets}")
             else:
                 # No July worksheet found, look for other worksheets that might contain July data
                 july_variants = ['JULY', 'July', 'july', '07', 'JUL', 'Jul']
@@ -517,7 +512,6 @@ class PurchaseAnalytics:
                         if ws not in last_2_months_sheets:
                             last_2_months_sheets.append(ws)
                             july_found = True
-                            print(f"DEBUG - Found July variant worksheet: {ws}")
                             break
                 
                 if not july_found:
@@ -525,17 +519,14 @@ class PurchaseAnalytics:
                     for ws in worksheets_list[1:]:  # Skip first worksheet (already added)
                         if ws not in last_2_months_sheets:
                             last_2_months_sheets.append(ws)
-                            print(f"DEBUG - No July worksheet found, using next available: {ws}")
                             break
             
             # Ensure we have exactly the sheets we want (limit to 2 for now)
             last_2_months_sheets = last_2_months_sheets[:2]
             
-            print(f"DEBUG - Final selected worksheets for recent purchases: {last_2_months_sheets}")
             
             # If we only have 1 worksheet, that's okay - use what we have
             if len(last_2_months_sheets) == 1:
-                print("DEBUG - Only 1 worksheet available for recent purchases analysis")
             
             last_2_worksheets = last_2_months_sheets
             

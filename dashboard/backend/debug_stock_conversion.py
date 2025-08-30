@@ -11,7 +11,7 @@ def debug_stock_conversion():
     """Debug the stock conversion process"""
     url = "https://app.sellerboard.com/en/automation/reports?id=171f0ae5a4a449b88e0449ffacfe2499&format=csv&t=be4a1dbeb5e949d1a0f750f569db4362"
     
-    print("🔍 Debugging Stock Conversion Process")
+    print("🔍 Stock Conversion Process")
     print("=" * 60)
     
     try:

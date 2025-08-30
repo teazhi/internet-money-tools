@@ -1679,7 +1679,7 @@ def get_discount_monitoring_config():
     except Exception as e:
         # Return default config if not found and cache it
         default_config = {
-            'days_back': 7,  # Default to 7 days
+            'days_back': 14,  # Increased to 14 days to catch more emails
             'enabled': bool(DISCOUNT_MONITOR_EMAIL),
             'last_updated': None
         }
@@ -11171,8 +11171,10 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         
         alerts = []
         
+        print(f"[DEBUG-DISCOUNT] Starting to process {len(messages['messages'][:50])} message IDs...")
+        
         # Process each message
-        for message in messages['messages'][:50]:  # Limit to 50 for performance
+        for i, message in enumerate(messages['messages'][:50]):  # Limit to 50 for performance
             try:
                 message_id = message['id']
                 email_data = get_gmail_message(user_record, message_id)
@@ -11187,7 +11189,11 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 date_received = headers.get('Date', '')
                 
                 # Debug log each email being processed
-                print(f"[DEBUG-DISCOUNT] Processing email: From='{sender}', Subject='{subject}'")
+                print(f"[DEBUG-DISCOUNT] Processing email {i+1}/{len(messages['messages'][:50])}: From='{sender}', Subject='{subject}'")
+                
+                # Check specifically for B008XQO7WA in this email
+                if 'B008XQO7WA' in subject:
+                    print(f"[DEBUG-DISCOUNT] *** FOUND B008XQO7WA in subject: '{subject}' ***")
                 
                 # Get email body
                 html_content = ""
@@ -11311,8 +11317,22 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 alerts.append(alert)
                 print(f"[DEBUG-DISCOUNT] Processed Gmail alert: {retailer} - {asin}")
                 
+                # Special logging for B008XQO7WA
+                if asin == 'B008XQO7WA':
+                    print(f"[DEBUG-DISCOUNT] *** B008XQO7WA ALERT CREATED: {alert} ***")
+                
             except Exception as e:
-                print(f"Error processing Gmail message {message_id}: {e}")
+                print(f"[DEBUG-DISCOUNT] Error processing Gmail message {message_id}: {e}")
+                
+                # Check if this was a B008XQO7WA email that failed
+                try:
+                    if email_data:
+                        headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                        subject = headers.get('Subject', '')
+                        if 'B008XQO7WA' in subject:
+                            print(f"[DEBUG-DISCOUNT] *** B008XQO7WA EMAIL FAILED PROCESSING: Subject='{subject}', Error={e} ***")
+                except:
+                    pass
                 continue
         
         print(f"[DEBUG-DISCOUNT] Found {len(alerts)} Gmail discount alerts")
@@ -15251,6 +15271,22 @@ def control_email_monitoring_service():
 def get_discount_email_config_status():
     """Get current discount opportunities email configuration"""
     try:
+        # First check S3 configuration (matches the priority in other functions)
+        s3_config = get_discount_email_config()
+        if s3_config and s3_config.get('is_s3_config'):
+            return jsonify({
+                'configured': True,
+                'config': {
+                    'email_address': s3_config.get('email_address'),
+                    'config_type': s3_config.get('config_type', 'gmail_oauth'),
+                    'is_active': True,
+                    'created_at': s3_config.get('created_at'),
+                    'last_updated': s3_config.get('last_updated'),
+                    'source': 'S3'
+                }
+            })
+        
+        # Fallback to database for backward compatibility
         local_conn = sqlite3.connect(DATABASE_FILE)
         local_cursor = local_conn.cursor()
         

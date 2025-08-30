@@ -305,6 +305,19 @@ def is_date_yesterday(target_date, user_timezone):
     
     return target_date == (current_date_in_user_tz - timedelta(days=1))
 
+def update_user_last_activity(discord_id):
+    """Update user's last activity timestamp consistently"""
+    try:
+        users = get_users_config()
+        for user in users:
+            if get_user_field(user, 'identity.discord_id') == discord_id:
+                # Always update in profile.last_activity for consistency
+                set_user_field(user, 'profile.last_activity', datetime.now().isoformat())
+                break
+        update_users_config(users)
+    except Exception as e:
+        print(f"[ERROR] Failed to update last activity: {e}")
+
 def get_s3_client():
     return boto3.client(
         's3',
@@ -2290,7 +2303,8 @@ def discord_callback():
         # Update Discord username, avatar, and last activity in permanent record
         set_user_field(user_record, 'identity.discord_username', user_data['username'])
         set_user_field(user_record, 'identity.avatar', user_data.get('avatar'))
-        set_user_field(user_record, 'profile.last_activity', datetime.now().isoformat())
+        # Update last activity using helper function
+        update_user_last_activity(discord_id)
         update_users_config(users)
         # User record updated with Discord data
     except Exception as e:
@@ -2655,6 +2669,10 @@ def get_user():
     discord_id = session['discord_id']
     user_record = get_user_record(discord_id)
     
+    # Update last activity for authenticated users
+    if user_record:
+        update_user_last_activity(discord_id)
+    
     # Debug: log what we're finding
     print(f"[USER_API] discord_id: {discord_id}")
     print(f"[USER_API] user_record found: {bool(user_record)}")
@@ -2797,7 +2815,8 @@ def update_profile():
         # Only allow timezone updates for subusers
         if 'timezone' in data:
             set_user_field(user_record, 'profile.timezone', data['timezone'])
-        set_user_field(user_record, 'account.last_activity', datetime.now().isoformat())
+        # Update last activity using helper function
+        update_user_last_activity(get_user_field(user_record, 'identity.discord_id'))
         if 'discord_username' in session:
             set_user_field(user_record, 'identity.discord_username', session['discord_username'])
         if 'discord_avatar' in session:
@@ -4187,16 +4206,20 @@ def get_orders_analytics():
                         should_update = True
                 
                 if should_update:
-                    users = get_users_config()
-                    for user in users:
-                        if get_user_field(user, 'identity.discord_id') == discord_id:
-                            set_user_field(user, 'profile.last_activity', datetime.now().isoformat())
-                            if 'discord_username' in session:
-                                set_user_field(user, 'identity.discord_username', session['discord_username'])
-                            if 'discord_avatar' in session:
-                                set_user_field(user, 'identity.avatar', session['discord_avatar'])
-                            break
-                    update_users_config(users)
+                    # Update last activity
+                    update_user_last_activity(discord_id)
+                    
+                    # Update Discord username and avatar if present
+                    if 'discord_username' in session or 'discord_avatar' in session:
+                        users = get_users_config()
+                        for user in users:
+                            if get_user_field(user, 'identity.discord_id') == discord_id:
+                                if 'discord_username' in session:
+                                    set_user_field(user, 'identity.discord_username', session['discord_username'])
+                                if 'discord_avatar' in session:
+                                    set_user_field(user, 'identity.avatar', session['discord_avatar'])
+                                break
+                        update_users_config(users)
             except Exception as e:
                 # Failed to update last activity - not critical
                 pass
@@ -5374,6 +5397,10 @@ def admin_get_users():
             enhanced_user['user_type'] = get_user_field(user, 'account.user_type') or user.get('user_type', 'main')
             enhanced_user['va_name'] = get_user_field(user, 'identity.va_name') or user.get('va_name')
             enhanced_user['parent_user_id'] = get_user_field(user, 'account.parent_user_id') or user.get('parent_user_id')
+            # Get last_activity from multiple possible locations
+            enhanced_user['last_activity'] = (get_user_field(user, 'profile.last_activity') or 
+                                             get_user_field(user, 'account.last_activity') or 
+                                             user.get('last_activity'))
             
             enhanced_users.append(enhanced_user)
             

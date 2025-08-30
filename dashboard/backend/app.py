@@ -256,11 +256,6 @@ DISCORD_REDIRECT_URI = os.getenv('DISCORD_REDIRECT_URI', default_redirect)
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 CONFIG_S3_BUCKET = os.getenv("CONFIG_S3_BUCKET")
-
-# Supabase Configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://klofzfttlpaxtlzchcno.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")
 USERS_CONFIG_KEY = "users.json"
 INVITATIONS_CONFIG_KEY = "invitations.json"
 DISCOUNT_MONITORING_CONFIG_KEY = "discount_monitoring.json"
@@ -330,16 +325,6 @@ def get_s3_client():
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     )
 
-def get_supabase_connection():
-    """Get PostgreSQL connection to Supabase"""
-    import psycopg2
-    from urllib.parse import urlparse
-    
-    if not SUPABASE_DB_URL:
-        raise ValueError("SUPABASE_DB_URL environment variable not set")
-    
-    return psycopg2.connect(SUPABASE_DB_URL)
-
 def encrypt_token(token):
     """Encrypt sensitive tokens for storage"""
     try:
@@ -350,87 +335,6 @@ def encrypt_token(token):
     except Exception as e:
         pass  # Error encrypting token
         return None
-
-def initialize_supabase_tables():
-    """Initialize PostgreSQL tables in Supabase for config storage"""
-    try:
-        conn = get_supabase_connection()
-        cursor = conn.cursor()
-        
-        # Config storage table - replaces S3 JSON files
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS config_storage (
-                id SERIAL PRIMARY KEY,
-                config_key VARCHAR(255) UNIQUE NOT NULL,
-                config_data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create index for faster lookups
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_config_key ON config_storage(config_key)
-        ''')
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        print("✅ Supabase tables initialized successfully")
-        
-    except Exception as e:
-        print(f"❌ Failed to initialize Supabase tables: {e}")
-        raise
-
-def get_config_from_postgres(config_key):
-    """Get configuration from PostgreSQL - replaces S3 get_object"""
-    try:
-        conn = get_supabase_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "SELECT config_data FROM config_storage WHERE config_key = %s",
-            (config_key,)
-        )
-        
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if result:
-            return result[0]  # JSONB data
-        return None
-        
-    except Exception as e:
-        print(f"❌ Failed to get config {config_key}: {e}")
-        return None
-
-def save_config_to_postgres(config_key, config_data):
-    """Save configuration to PostgreSQL - replaces S3 put_object"""
-    try:
-        conn = get_supabase_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO config_storage (config_key, config_data, updated_at)
-            VALUES (%s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (config_key) 
-            DO UPDATE SET 
-                config_data = EXCLUDED.config_data,
-                updated_at = CURRENT_TIMESTAMP
-        ''', (config_key, json.dumps(config_data)))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        print(f"✅ Saved config {config_key} to PostgreSQL")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Failed to save config {config_key}: {e}")
-        return False
 
 def decrypt_token(encrypted_token):
     """Decrypt stored tokens"""
@@ -1611,20 +1515,11 @@ def get_users_config():
         if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
             return cached_data
     
+    s3_client = get_s3_client()
     try:
-        # Try PostgreSQL first, fallback to S3
-        config_data = get_config_from_postgres(USERS_CONFIG_KEY)
-        if config_data:
-            users = config_data.get("users", [])
-        else:
-            # Fallback to S3 if not in PostgreSQL yet
-            s3_client = get_s3_client()
-            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
-            config_data = json.loads(response['Body'].read().decode('utf-8'))
-            users = config_data.get("users", [])
-            
-            # Migrate to PostgreSQL
-            save_config_to_postgres(USERS_CONFIG_KEY, config_data)
+        response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key=USERS_CONFIG_KEY)
+        config_data = json.loads(response['Body'].read().decode('utf-8'))
+        users = config_data.get("users", [])
         
         # Normalize all users to new schema and validate tokens
         normalized_users = []
@@ -1685,11 +1580,6 @@ def update_users_config(users):
     # About to save users to S3
     
     try:
-        # Save to PostgreSQL first
-        postgres_success = save_config_to_postgres(USERS_CONFIG_KEY, config_data)
-        
-        # Also save to S3 as backup during migration period
-        s3_client = get_s3_client()
         result = s3_client.put_object(
             Bucket=CONFIG_S3_BUCKET, 
             Key=USERS_CONFIG_KEY, 
@@ -3569,22 +3459,7 @@ def get_discount_email_config():
             if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
                 return cached_data
         
-        # Try PostgreSQL first, fallback to S3
-        config_data = get_config_from_postgres('admin/discount_email_config.json')
-        if config_data:
-            # Add cache
-            config_cache[cache_key] = (config_data, datetime.now())
-            
-            # Ensure required fields exist with defaults
-            config_data.setdefault('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)')
-            config_data.setdefault('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)')
-            config_data.setdefault('retailer_pattern', r'\[([^\]]+)\]\s*Alert:')
-            config_data.setdefault('sender_filter', 'alert@distill.io')
-            config_data['is_s3_config'] = True
-            
-            return config_data
-        
-        # Fallback to S3 if not in PostgreSQL yet
+        # Try to get discount email config from S3
         try:
             response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='admin/discount_email_config.json')
             config_data = json.loads(response['Body'].read().decode('utf-8'))
@@ -3598,9 +3473,6 @@ def get_discount_email_config():
             config_data.setdefault('retailer_pattern', r'\[([^\]]+)\]\s*Alert:')
             config_data.setdefault('sender_filter', 'alert@distill.io')
             config_data['is_s3_config'] = True
-            
-            # Migrate to PostgreSQL
-            save_config_to_postgres('admin/discount_email_config.json', config_data)
             
             return config_data
             
@@ -3624,11 +3496,7 @@ def save_discount_email_config(config_data):
         config_data['last_updated'] = datetime.now().isoformat()
         config_data['is_s3_config'] = True
         
-        # Save to PostgreSQL first
-        postgres_success = save_config_to_postgres('admin/discount_email_config.json', config_data)
-        
-        # Also save to S3 as backup during migration period
-        s3_client = get_s3_client()
+        # Save to S3
         s3_client.put_object(
             Bucket=CONFIG_S3_BUCKET,
             Key='admin/discount_email_config.json',
@@ -8505,6 +8373,18 @@ def analyze_discount_opportunities():
         
         # Fetch recent email alerts
         email_alerts = fetch_discount_email_alerts()
+        if email_alerts:
+            sample_alerts = email_alerts[:3]
+            for alert in sample_alerts:
+            
+            # Check specifically for B008XQO7WA
+            b008_alerts = [alert for alert in email_alerts if alert.get('asin') == 'B008XQO7WA']
+            if b008_alerts:
+                for alert in b008_alerts:
+            else:
+                # Check if it's in there with a different format
+                all_asins = [alert.get('asin') for alert in email_alerts]
+                b008_mentions = [alert for alert in email_alerts if 'B008XQO7WA' in str(alert)]
         
         # Fetch source links from user's Google Sheet (same approach as Smart Restock)
         asin_to_source_link = {}
@@ -11271,6 +11151,11 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 sender = headers.get('From', '')
                 date_received = headers.get('Date', '')
                 
+                # Debug log each email being processed
+                
+                # Check specifically for B008XQO7WA in this email
+                if 'B008XQO7WA' in subject:
+                
                 # Get email body
                 html_content = ""
                 payload = email_data.get('payload', {})
@@ -11302,6 +11187,9 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 # Extract ASIN from subject or content
                 import re
                 
+                # Debug: Log email content for ASIN extraction debugging
+                if len(alerts) < 3:  # Only debug first 3 emails to avoid spam
+                
                 # Extract ASIN using configurable pattern from admin settings
                 asin = None
                 
@@ -11315,6 +11203,8 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                     potential_asin = asin_match.group(1)
                     if is_valid_asin(potential_asin):
                         asin = potential_asin
+                    else:
+                else:
                 
                 # Fallback: try to find ASIN in email content
                 if not asin:
@@ -15897,16 +15787,6 @@ if __name__ == '__main__':
         
         pass  # Debug print removed
         pass  # Debug print removed
-        
-        # Initialize Supabase tables
-        try:
-            if SUPABASE_DB_URL:
-                initialize_supabase_tables()
-                print("🗄️ Supabase PostgreSQL ready for config storage")
-            else:
-                print("⚠️ SUPABASE_DB_URL not set, using S3 fallback")
-        except Exception as e:
-            print(f"⚠️ Supabase initialization failed, using S3 fallback: {e}")
         
         # Check critical environment variables
         critical_vars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'CONFIG_S3_BUCKET']

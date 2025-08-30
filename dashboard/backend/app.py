@@ -2266,10 +2266,6 @@ def discord_callback():
     session['discord_username'] = discord_username  
     session['discord_avatar'] = user_data.get('avatar')
     
-    # Debug: Check what Discord actually provides
-    print(f"DEBUG: Full Discord user data: {user_data}")
-    print(f"DEBUG: Available keys: {list(user_data.keys())}")
-    print(f"DEBUG: Avatar hash: {user_data.get('avatar')}")
     
     # Session configured with Discord ID
     
@@ -2879,16 +2875,9 @@ def update_profile():
         set_user_field(user_record, 'profile.configured', True)
         set_user_field(user_record, 'profile.setup_step', 'completed')
     
-    # Debug logging to check if settings are being saved
-    print(f"DEBUG: Saving profile for user {discord_id}")
-    print(f"DEBUG: disable_sp_api after save: {get_user_field(user_record, 'integrations.amazon.disable_sp_api')}")
-    print(f"DEBUG: enable_source_links after save: {get_user_field(user_record, 'settings.enable_source_links')}")
-    
     if update_users_config(users):
-        print(f"DEBUG: Successfully saved users config to S3")
         return jsonify({'message': 'Profile updated successfully'})
     else:
-        print(f"DEBUG: FAILED to save users config to S3")
         return jsonify({'error': 'Failed to update profile'}), 500
 
 @app.route('/api/google/auth-url')

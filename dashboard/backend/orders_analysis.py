@@ -245,30 +245,6 @@ class EnhancedOrdersAnalysis:
             try:
                 df = pd.read_csv(StringIO(response.text))
                 
-                # Debug: Show CSV info if this is a stock URL
-                if 'stock' in url.lower() or 'inventory' in url.lower():
-                    print(f"DEBUG - Downloaded stock CSV with {len(df)} rows and {len(df.columns)} columns")
-                    print(f"DEBUG - Stock CSV URL: {url}")
-                    print(f"DEBUG - Stock CSV columns: {list(df.columns)}")
-                    if len(df) > 0:
-                        # Show first 3 rows to see actual data
-                        print(f"DEBUG - First 3 rows of stock CSV:")
-                        for i in range(min(3, len(df))):
-                            row_dict = df.iloc[i].to_dict()
-                            print(f"  Row {i+1}: {row_dict}")
-                        print()
-                        
-                        # Show stock-related columns specifically
-                        stock_related_cols = [col for col in df.columns if any(keyword in col.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])]
-                        if stock_related_cols:
-                            print(f"DEBUG - Stock-related columns found: {stock_related_cols}")
-                            print(f"DEBUG - Stock values for first 3 rows:")
-                            for i in range(min(3, len(df))):
-                                stock_values = {col: df.iloc[i][col] for col in stock_related_cols}
-                                print(f"  Row {i+1}: {stock_values}")
-                        else:
-                            print(f"DEBUG - WARNING: No stock-related columns found in CSV!")
-                        print()
                 
                 return df
             except Exception as csv_error:
@@ -885,47 +861,28 @@ class EnhancedOrdersAnalysis:
     def get_recent_2_months_purchases(self, asin: str, purchase_analytics: Dict) -> int:
         """Get the quantity purchased for this ASIN in the last 2 months (from last 2 worksheets)"""
         if not purchase_analytics:
-            print(f"DEBUG: ASIN {asin} - No purchase analytics available")
             return 0
         
-        # Debug: Check what keys are available in purchase analytics
-        if asin == 'B0017TF1E8':
-            print(f"DEBUG: ASIN {asin} - Purchase analytics keys: {list(purchase_analytics.keys())}")
             
         # First check the dedicated recent 2 months purchases data
         recent_2_months_data = purchase_analytics.get('recent_2_months_purchases', {})
-        if asin == 'B0017TF1E8':
-            print(f"DEBUG: ASIN {asin} - Recent 2 months data keys: {list(recent_2_months_data.keys())}")
-            print(f"DEBUG: ASIN {asin} - ASIN in recent_2_months_data: {asin in recent_2_months_data}")
             
         if asin in recent_2_months_data:
             qty_purchased = recent_2_months_data[asin].get('total_quantity_purchased', 0)
-            if asin == 'B0017TF1E8':
-                print(f"DEBUG: ASIN {asin} - Found in recent_2_months_data, qty: {qty_purchased}")
             return qty_purchased
         
         # Fallback to velocity analysis approach
         velocity_analysis = purchase_analytics.get('purchase_velocity_analysis', {}).get(asin, {})
-        if asin == 'B0017TF1E8':
-            print(f"DEBUG: ASIN {asin} - Velocity analysis available: {bool(velocity_analysis)}")
-            if velocity_analysis:
-                print(f"DEBUG: ASIN {asin} - Velocity analysis data: {velocity_analysis}")
                 
         if velocity_analysis:
             days_since_last = velocity_analysis.get('days_since_last_purchase', 999)
             
-            if asin == 'B0017TF1E8':
-                print(f"DEBUG: ASIN {asin} - Days since last purchase: {days_since_last}")
             
             # If purchased within the last 2 months (last 60 days), return the last purchase quantity
             if days_since_last <= 60:
                 qty = int(velocity_analysis.get('avg_quantity_per_purchase', 0))
-                if asin == 'B0017TF1E8':
-                    print(f"DEBUG: ASIN {asin} - Within 60 days, returning qty: {qty}")
                 return qty
         
-        if asin == 'B0017TF1E8':
-            print(f"DEBUG: ASIN {asin} - No recent purchases found, returning 0")
         return 0
     
     def get_direct_stock_value(self, stock_df: pd.DataFrame, asin: str) -> float:
@@ -1014,59 +971,6 @@ class EnhancedOrdersAnalysis:
             
         print(f"Extracted {len(stock_info)} products from stock report using column '{asin_col}'")
         
-        # Debug: Show first few products with their stock values
-        if stock_info:
-            print("DEBUG - First 5 products from stock CSV:")
-            for i, (asin, data) in enumerate(stock_info.items()):
-                if i >= 5:
-                    break
-                # Test stock extraction on this product
-                extracted_stock = self.extract_current_stock(data, debug_asin=asin)
-                print(f"  ASIN: {asin}")
-                print(f"    Raw data keys: {list(data.keys())}")
-                print(f"    Extracted stock: {extracted_stock}")
-                
-                # Show specific stock-related values
-                stock_related_data = {k: v for k, v in data.items() if any(keyword in k.lower() for keyword in ['stock', 'inventory', 'qty', 'quantity', 'available'])}
-                if stock_related_data:
-                    print(f"    Stock-related fields: {stock_related_data}")
-                else:
-                    print(f"    No stock-related fields found!")
-                    print(f"    ALL fields: {data}")
-                print()
-            
-            # Summary of stock extraction results
-            total_products = len(stock_info)
-            products_with_stock = 0
-            products_with_zero_stock = 0
-            total_stock_detected = 0
-            high_stock_products = []
-            
-            print(f"DEBUG - Detailed stock extraction for all {total_products} products:")
-            for asin, data in stock_info.items():
-                stock = self.extract_current_stock(data)
-                if stock > 0:
-                    products_with_stock += 1
-                    total_stock_detected += stock
-                    if stock > 10:  # Flag potentially suspicious high stock values
-                        high_stock_products.append((asin, stock))
-                    print(f"  {asin}: {stock} units")
-                else:
-                    products_with_zero_stock += 1
-                    print(f"  {asin}: 0 units (no stock)")
-            
-            print(f"\nDEBUG - Stock extraction summary:")
-            print(f"  - {products_with_stock} products have stock > 0")
-            print(f"  - {products_with_zero_stock} products have 0 stock")
-            print(f"  - Total stock detected: {total_stock_detected} units")
-            if products_with_stock > 0:
-                print(f"  - Average stock per product with inventory: {total_stock_detected/products_with_stock:.1f}")
-            
-            if high_stock_products:
-                print(f"DEBUG - Products with >10 units (potentially verify these):")
-                for asin, stock in high_stock_products[:10]:  # Show first 10
-                    print(f"  {asin}: {stock} units")
-            print()
         return stock_info
 
     def fetch_google_sheet_data(self, access_token: str, sheet_id: str, worksheet_title: str, column_mapping: dict) -> Tuple[Dict[str, dict], pd.DataFrame]:
@@ -1251,10 +1155,8 @@ class EnhancedOrdersAnalysis:
         Returns:
             tuple: (cogs_data dict, combined_dataframe for purchase analytics)
         """
-        print(f"DEBUG - INSIDE FUNCTION: fetch_google_sheet_cogs_data_all_worksheets called with sheet_id={sheet_id}")
         try:
             import requests
-            print("DEBUG - Starting Google Sheets API calls")
             
             # First, get list of all worksheets
             metadata_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
@@ -1266,7 +1168,6 @@ class EnhancedOrdersAnalysis:
             
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
-            print(f"DEBUG - fetch_google_sheet_cogs_data_all_worksheets: Found {len(worksheet_names)} worksheets: {worksheet_names}")
             
             # Expected column structure based on user's column mapping
             # Get the actual column names from user's mapping (excluding source field which we'll detect dynamically)
@@ -1276,7 +1177,6 @@ class EnhancedOrdersAnalysis:
                 mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
                 expected_columns.add(mapped_column)
             
-            print(f"DEBUG - Expected columns after mapping: {expected_columns}")
             
             
             combined_cogs_data = {}
@@ -1285,7 +1185,6 @@ class EnhancedOrdersAnalysis:
             
             for worksheet_name in worksheet_names:
                 try:
-                    print(f"DEBUG - Processing worksheet: '{worksheet_name}'")
                     
                     # Fetch worksheet data
                     range_ = f"'{worksheet_name}'!A1:Z"
@@ -1332,9 +1231,6 @@ class EnhancedOrdersAnalysis:
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        print(f"DEBUG - Skipping worksheet '{worksheet_name}': missing columns {missing}")
-                        print(f"DEBUG - Expected: {expected_columns}")
-                        print(f"DEBUG - Available: {available_columns}")
                         continue
                     
                     # Worksheet has correct structure
@@ -1434,7 +1330,6 @@ class EnhancedOrdersAnalysis:
                         missing_columns = mapped_purchase_columns - available_columns
                     
                     successful_sheets.append(worksheet_name)
-                    print(f"DEBUG - Successfully processed worksheet: '{worksheet_name}' with {len(df)} rows")
                     
                 except Exception as e:
                     # Error processing worksheet
@@ -1446,7 +1341,6 @@ class EnhancedOrdersAnalysis:
             # Combine all DataFrames for purchase analytics
             if combined_dataframes:
                 try:
-                    print(f"DEBUG - Combining {len(combined_dataframes)} DataFrames for purchase analytics")
                     
                     # Standardize columns across all DataFrames to prevent concatenation errors
                     if len(combined_dataframes) > 1:
@@ -1484,7 +1378,6 @@ class EnhancedOrdersAnalysis:
                         for df in combined_dataframes:
                             all_columns.update(df.columns)
                         
-                        print(f"DEBUG - All unique columns across worksheets: {sorted(all_columns)}")
                         
                         # Standardize each DataFrame to have the same columns
                         standardized_dataframes = []
@@ -1493,7 +1386,6 @@ class EnhancedOrdersAnalysis:
                             missing_cols = all_columns - current_cols
                             
                             if missing_cols:
-                                print(f"DEBUG - DataFrame {i} missing columns: {missing_cols}")
                                 # Add missing columns with empty string values
                                 for col in missing_cols:
                                     df[col] = ''
@@ -1505,12 +1397,9 @@ class EnhancedOrdersAnalysis:
                         combined_dataframes = standardized_dataframes
                     
                     combined_df = pd.concat(combined_dataframes, ignore_index=True, sort=False)
-                    print(f"DEBUG - Combined DataFrame shape: {combined_df.shape}")
                     if '_worksheet_source' in combined_df.columns:
                         unique_sources = combined_df['_worksheet_source'].unique()
-                        print(f"DEBUG - Combined DataFrame worksheet sources: {list(unique_sources)}")
                 except Exception as concat_error:
-                    print(f"DEBUG - Error combining DataFrames: {concat_error}")
                     import traceback
                     traceback.print_exc()
                     # Fall back to using just the first DataFrame
@@ -1527,10 +1416,8 @@ class EnhancedOrdersAnalysis:
         except Exception as e:
             # Let 401 errors bubble up to safe_google_api_call for automatic token refresh
             if "401" in str(e) or "Unauthorized" in str(e):
-                print(f"DEBUG - 401 error detected, letting it bubble up for token refresh: {str(e)}")
                 raise  # Re-raise 401 errors for token refresh handling
             else:
-                print(f"DEBUG - Exception in fetch_google_sheet_cogs_data_all_worksheets: {str(e)}")
                 import traceback
                 traceback.print_exc()
                 return {}, pd.DataFrame()
@@ -1750,7 +1637,6 @@ class EnhancedOrdersAnalysis:
                     
                     # Check if we should search all worksheets or just the mapped one
                     if user_settings.get('search_all_worksheets', False):
-                        print("DEBUG - OrdersAnalysis: search_all_worksheets is TRUE, fetching all worksheets")
                         
                         # Try the API call with token refresh on 401 error
                         try:
@@ -1759,7 +1645,6 @@ class EnhancedOrdersAnalysis:
                             )
                         except Exception as e:
                             if "401" in str(e) or "Unauthorized" in str(e):
-                                print("DEBUG - OrdersAnalysis: 401 error, refreshing token and retrying...")
                                 # Refresh token and retry
                                 access_token = refresh_google_token(temp_user_record)
                                 cogs_data, sheet_data = self.fetch_google_sheet_cogs_data_all_worksheets(
@@ -1767,10 +1652,8 @@ class EnhancedOrdersAnalysis:
                                 )
                             else:
                                 raise
-                        print(f"DEBUG - OrdersAnalysis: All worksheets fetched. Sheet data shape: {sheet_data.shape if hasattr(sheet_data, 'shape') else 'Not a DataFrame'}")
                         if hasattr(sheet_data, 'columns') and '_worksheet_source' in sheet_data.columns:
                             unique_worksheets = sheet_data['_worksheet_source'].unique()
-                            print(f"DEBUG - OrdersAnalysis: Unique worksheet sources in data: {list(unique_worksheets)}")
                         # Use the user's column mapping for purchase analytics
                         column_mapping_for_purchase = column_mapping
                         
@@ -1782,7 +1665,6 @@ class EnhancedOrdersAnalysis:
                                 )
                             except Exception as e:
                                 if "401" in str(e) or "Unauthorized" in str(e):
-                                    print("DEBUG - OrdersAnalysis: 401 error in fallback, refreshing token and retrying...")
                                     access_token = refresh_google_token(temp_user_record)
                                     cogs_data, sheet_data = self.fetch_google_sheet_data(
                                         access_token, sheet_id, worksheet_title, column_mapping
@@ -1798,7 +1680,6 @@ class EnhancedOrdersAnalysis:
                             )
                         except Exception as e:
                             if "401" in str(e) or "Unauthorized" in str(e):
-                                print("DEBUG - OrdersAnalysis: 401 error in single worksheet fetch, refreshing token and retrying...")
                                 access_token = refresh_google_token(temp_user_record)
                                 cogs_data, sheet_data = self.fetch_google_sheet_data(
                                     access_token, sheet_id, worksheet_title, column_mapping
@@ -1815,27 +1696,19 @@ class EnhancedOrdersAnalysis:
                     
                     # Generate purchase analytics if we have sheet data
                     if not sheet_data.empty:
-                        print(f"DEBUG - Generating purchase analytics from sheet data with {len(sheet_data)} rows")
                         purchase_insights = self.purchase_analytics.analyze_purchase_data(
                             sheet_data, column_mapping_for_purchase, preserve_all_history=preserve_purchase_history
                         )
-                        print(f"DEBUG - Purchase insights generated: {len(purchase_insights)} categories")
-                        print(f"DEBUG - Purchase insights keys: {list(purchase_insights.keys())}")
                         if 'recent_2_months_purchases' in purchase_insights:
-                            print(f"DEBUG - Recent 2 months purchases found: {len(purchase_insights['recent_2_months_purchases'])} ASINs")
-                            print(f"DEBUG - Sample recent purchases: {list(purchase_insights['recent_2_months_purchases'].keys())[:3]}")
                     else:
-                        print("DEBUG - No sheet data available for purchase analytics")
                         purchase_insights = {}
                 else:
-                    print("DEBUG - Google Sheets not configured, using fallback purchase analytics")
                     # Create minimal purchase insights structure for fallback
                     purchase_insights = {
                         'recent_2_months_purchases': {},
                         'purchase_velocity_analysis': {}
                     }
             except Exception as e:
-                print(f"DEBUG - Exception in COGS/analytics fetching: {str(e)}")
                 # COGS data fetching failed, use minimal fallback
                 cogs_data = {}
                 purchase_insights = {

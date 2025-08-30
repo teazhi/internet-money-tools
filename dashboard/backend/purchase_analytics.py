@@ -98,6 +98,7 @@ class PurchaseAnalytics:
                     cutoff_date = datetime.now() - timedelta(days=365)
                     clean_df = clean_df[clean_df['date'] >= cutoff_date]
                 else:
+                    pass  # Keep all data when preserving history
             
             # Remove rows with invalid core data
             clean_df = clean_df[

@@ -11378,8 +11378,6 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 alerts.append(alert)
                 
-                # Special logging for B008XQO7WA
-                if asin == 'B008XQO7WA':
                 
             except Exception as e:
                 

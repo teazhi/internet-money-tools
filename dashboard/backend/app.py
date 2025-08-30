@@ -6313,22 +6313,16 @@ def update_script_configs():
 def manual_sellerboard_update():
     """Manually trigger Sellerboard COGS update for the current user"""
     try:
-        print("DEBUG: Manual Sellerboard update endpoint called")
         data = request.json or {}
         full_update = data.get('full_update', False)
         discord_id = session.get('discord_id')
         
-        print(f"DEBUG: Request data: {data}")
-        print(f"DEBUG: Discord ID: {discord_id}")
-        print(f"DEBUG: Full update: {full_update}")
         
         if not discord_id:
             return jsonify({'error': 'User not authenticated or discord_id not found'}), 401
         
         # Get user configuration
-        print("DEBUG: Getting users config...")
         users = get_users_config()
-        print(f"DEBUG: Found {len(users)} users in config")
         user_config = None
         
         for user in users:
@@ -6337,34 +6331,25 @@ def manual_sellerboard_update():
                 break
         
         if not user_config:
-            print(f"DEBUG: User config not found for discord_id: {discord_id}")
             return jsonify({'error': 'User configuration not found'}), 404
         
-        print("DEBUG: Found user config, checking requirements...")
-        print(f"DEBUG: Main user config keys: {list(user_config.keys())}")
         
         # Check if user has required settings
         user_record = user_config.get('user_record', {})
-        print(f"DEBUG: User record keys: {list(user_record.keys()) if user_record else 'None'}")
         
         # If user_record is empty, check if settings are at the top level
         if not user_record:
-            print("DEBUG: user_record is empty, checking top-level config")
             user_record = user_config  # Use the main config if no nested user_record
         
         if not get_user_field(user_record, 'integrations.sellerboard.cogs_url'):
-            print("DEBUG: Missing sellerboard_cogs_url")
             return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
         
         if not (get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token'):
-            print("DEBUG: Missing google refresh token")
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
         
         if not get_user_field(user_record, 'files.sheet_id') or not get_user_field(user_record, 'integrations.google.worksheet_title'):
-            print(f"DEBUG: Missing sheet config - sheet_id: {bool(get_user_field(user_record, 'files.sheet_id'))}, worksheet_title: {bool(get_user_field(user_record, 'integrations.google.worksheet_title'))}")
             return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
         
-        print("DEBUG: All requirements met, preparing Lambda payload...")
         
         # Prepare Lambda payload
         lambda_payload = {
@@ -6376,7 +6361,6 @@ def manual_sellerboard_update():
         
         # Process Sellerboard COGS update directly in dashboard backend
         # This avoids AWS Lambda IP blocking issues
-        print("DEBUG: Processing Sellerboard COGS update in dashboard backend...")
         
         try:
             # Import required modules for processing
@@ -6422,13 +6406,8 @@ def manual_sellerboard_update():
                     'details': 'Reasons: Missing Google Sheet ID, worksheet title, or authentication. Please complete your Google Sheet setup.'
                 })
             
-            print(f"DEBUG: Starting COGS update for user: {get_user_field(user_record, 'identity.email')}")
-            print(f"DEBUG: COGS URL configured: {bool(sellerboard_cogs_url)}")
-            print(f"DEBUG: Google Sheet configured: {bool(sheet_id and worksheet_title)}")
             
             # Download Sellerboard COGS data using EXACT same approach as working stock endpoints
-            print("DEBUG: Downloading Sellerboard COGS CSV using exact stock pattern...")
-            print(f"DEBUG: COGS URL: {sellerboard_cogs_url}")
             
             # Copy exact pattern from /api/test/stock-simple endpoint
             cogs_url = get_user_field(user_record, 'integrations.sellerboard.cogs_url')

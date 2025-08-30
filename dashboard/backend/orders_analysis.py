@@ -1700,6 +1700,7 @@ class EnhancedOrdersAnalysis:
                             sheet_data, column_mapping_for_purchase, preserve_all_history=preserve_purchase_history
                         )
                         if 'recent_2_months_purchases' in purchase_insights:
+                            pass  # Purchase insights already available
                     else:
                         purchase_insights = {}
                 else:

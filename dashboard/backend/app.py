@@ -2218,13 +2218,10 @@ def discord_callback():
     # Initialize valid_invitation outside scope so it's available later
     valid_invitation = None
     
-    # If user doesn't exist, check for invitation requirement (for new users only)
-    if not existing_user:
-        if not invitation_token:
-            pass  # No invitation token found for new user
-            return redirect("https://dms-amazon.vercel.app/login?error=no_invitation")
-        
-        # Validate invitation token for new users
+    # Check for invitation token regardless of whether user exists
+    # This allows existing users to be converted to subusers
+    if invitation_token:
+        # Validate invitation token
         invitations = get_invitations_config()
         # Check invitations for valid token
         for inv in invitations:
@@ -2253,15 +2250,16 @@ def discord_callback():
             else:
                 pass  # Invitation mismatch
         
-        if not valid_invitation:
-            pass  # No valid invitation found
-            return redirect("https://dms-amazon.vercel.app/login?error=invalid_invitation")
-        
         # Clean up the invitation only after successful validation
-        # Clean up invitation token after successful validation
-        invitations = [inv for inv in invitations if inv['token'] != invitation_token]
-        update_invitations_config(invitations)
-        # Removed accepted invitation from list
+        if valid_invitation:
+            invitations = [inv for inv in invitations if inv['token'] != invitation_token]
+            update_invitations_config(invitations)
+            # Removed accepted invitation from list
+    
+    # Check if user exists or has valid invitation
+    if not existing_user and not valid_invitation:
+        # New user without invitation - reject
+        return redirect("https://dms-amazon.vercel.app/login?error=no_invitation")
     
     session['discord_id'] = discord_id
     session['discord_username'] = discord_username  
@@ -2281,7 +2279,8 @@ def discord_callback():
             
             # Check if this is a sub-user invitation
             if valid_invitation:
-                print(f"[USER_CREATE] Processing invitation: {valid_invitation.get('user_type', 'main')}")
+                print(f"[USER_CREATE] Processing invitation: {valid_invitation}")
+                print(f"[USER_CREATE] Invitation type: {valid_invitation.get('user_type', 'main')}")
                 if valid_invitation.get('user_type') == 'subuser':
                     set_user_field(user_record, 'account.user_type', 'subuser')
                     set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))
@@ -2598,6 +2597,34 @@ def debug_auth():
         'has_auth': 'discord_id' in session
     })
 
+@app.route('/api/user/debug-subuser')
+@login_required
+def debug_subuser_setup():
+    """Debug endpoint to check subuser setup status"""
+    discord_id = session['discord_id']
+    user_record = get_user_record(discord_id)
+    
+    if not user_record:
+        return jsonify({'error': 'User not found'}), 404
+    
+    debug_info = {
+        'discord_id': discord_id,
+        'user_type': get_user_field(user_record, 'account.user_type'),
+        'parent_user_id': get_user_field(user_record, 'account.parent_user_id'),
+        'profile_configured': get_user_field(user_record, 'profile.configured'),
+        'raw_user_record': user_record,
+    }
+    
+    if get_user_field(user_record, 'account.user_type') == 'subuser':
+        parent_user = get_parent_user_record(discord_id)
+        debug_info['parent_found'] = bool(parent_user)
+        if parent_user:
+            debug_info['parent_profile_configured'] = is_user_configured(parent_user)
+            debug_info['parent_google_linked'] = bool(get_user_google_tokens(parent_user))
+            debug_info['parent_sheet_configured'] = bool(get_user_sheet_id(parent_user))
+    
+    return jsonify(debug_info)
+
 @app.route('/api/user/debug-settings')
 @login_required 
 def debug_user_settings():
@@ -2677,6 +2704,8 @@ def get_user():
     # Debug: log what we're finding
     print(f"[USER_API] discord_id: {discord_id}")
     print(f"[USER_API] user_record found: {bool(user_record)}")
+    print(f"[USER_API] user_type: {get_user_field(user_record, 'account.user_type') if user_record else 'None'}")
+    print(f"[USER_API] profile.configured: {get_user_field(user_record, 'profile.configured') if user_record else 'None'}")
     if user_record:
         print(f"[USER_API] user_record structure: {user_record}")
         print(f"[USER_API] email: {get_user_email(user_record)}")
@@ -2777,6 +2806,14 @@ def get_user():
         response_data['original_admin_id'] = admin_impersonating['original_discord_id']
         response_data['original_admin_username'] = admin_impersonating['original_discord_username']
         # Return impersonated user data
+    
+    # Debug log the response for subusers
+    if response_data.get('user_type') == 'subuser':
+        print(f"[USER_API] Subuser response:")
+        print(f"  - user_type: {response_data.get('user_type')}")
+        print(f"  - profile_configured: {response_data.get('profile_configured')}")
+        print(f"  - google_linked: {response_data.get('google_linked')}")
+        print(f"  - sheet_configured: {response_data.get('sheet_configured')}")
     
     return jsonify(response_data)
 
@@ -9307,20 +9344,31 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
     Returns data in same format as fetch_sellerboard_cogs_data for compatibility
     """
     try:
-        # Get user's Gmail access token
+        # Get user's record
         user_record = get_user_record(discord_id)
         if not user_record:
             return None
         
-        google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
-        access_token = google_tokens.get('access_token')
+        # Check for subuser and get parent config if needed
+        config_user_record = user_record
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
         
-        if not access_token:
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
+        
+        if not google_tokens.get('access_token'):
             print("No Gmail access token available for COGS email processing")
             return None
         
-        # Fetch latest Sellerboard COGS email
-        return fetch_latest_sellerboard_cogs_email(access_token)
+        # Use safe_google_api_call to handle token refresh
+        def api_call(access_token):
+            return fetch_latest_sellerboard_cogs_email(access_token)
+        
+        return safe_google_api_call(config_user_record, api_call)
         
     except Exception as e:
         print(f"Error fetching COGS data from email: {e}")

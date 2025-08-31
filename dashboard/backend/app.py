@@ -2308,6 +2308,7 @@ def discord_callback():
     
     # Check for invitation token from state parameter (runs for both new and existing users)
     invitation_token = request.args.get('state')  # Discord passes our state parameter back
+    print(f"[DISCORD_CALLBACK] Invitation token from state: {invitation_token}")
     
     # Initialize valid_invitation outside scope so it's available later
     valid_invitation = None
@@ -2317,9 +2318,10 @@ def discord_callback():
     if invitation_token:
         # Validate invitation token
         invitations = get_invitations_config()
+        print(f"[DISCORD_CALLBACK] Found {len(invitations)} invitations to check")
         # Check invitations for valid token
         for inv in invitations:
-            pass  # Check invitation validity
+            print(f"[DISCORD_CALLBACK] Checking invitation: {inv.get('token')} == {invitation_token}, status: {inv.get('status')}")
             if inv['token'] == invitation_token and inv['status'] == 'pending':
                 # Check if invitation is not expired (7 days)
                 try:
@@ -2331,15 +2333,15 @@ def discord_callback():
                     time_diff = current_time - invitation_date
                     pass  # Check invitation expiry
                     if time_diff < timedelta(days=7):
+                        print(f"[DISCORD_CALLBACK] Found valid invitation: {inv}")
                         valid_invitation = inv
                         break
                     else:
-                        pass  # Invitation expired
+                        print(f"[DISCORD_CALLBACK] Invitation expired: {time_diff.days} days old")
                 except Exception as date_error:
-                    pass  # Date parsing error, treating as valid
+                    print(f"[DISCORD_CALLBACK] Date parsing error, treating as valid: {date_error}")
                     # If date parsing fails, allow the invitation (fallback)
                     valid_invitation = inv
-                    pass  # Found valid invitation (date parse fallback)
                     break
             else:
                 pass  # Invitation mismatch
@@ -2368,8 +2370,12 @@ def discord_callback():
         discord_id = session['discord_id']
         user_record = next((u for u in users if get_user_field(u, 'identity.discord_id') == discord_id), None)
         
+        print(f"[USER_HANDLING] existing user_record: {bool(user_record)}")
+        print(f"[USER_HANDLING] valid_invitation: {valid_invitation}")
+        
         if user_record is None:
             user_record = {"discord_id": discord_id}
+            print(f"[USER_CREATE] Creating new user record")
             
             # Check if this is a sub-user invitation
             if valid_invitation:
@@ -2702,6 +2708,35 @@ def debug_auth():
         'discord_username': session.get('discord_username'),
         'has_auth': 'discord_id' in session
     })
+
+@app.route('/api/admin/debug-all-users')
+@admin_required
+def debug_all_users():
+    """Debug endpoint to see all users and their types"""
+    try:
+        users = get_users_config()
+        debug_users = []
+        
+        for user in users:
+            debug_users.append({
+                'discord_id': get_user_field(user, 'identity.discord_id'),
+                'discord_username': get_user_field(user, 'identity.discord_username'),
+                'user_type': get_user_field(user, 'account.user_type'),
+                'parent_user_id': get_user_field(user, 'account.parent_user_id'),
+                'profile_configured': get_user_field(user, 'profile.configured'),
+                'va_name': get_user_field(user, 'identity.va_name'),
+                'email': get_user_field(user, 'identity.email')
+            })
+        
+        # Also check pending invitations
+        invitations = get_invitations_config()
+        
+        return jsonify({
+            'users': debug_users,
+            'pending_invitations': invitations
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/user/debug-subuser')
 @login_required

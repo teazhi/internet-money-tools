@@ -7096,8 +7096,8 @@ def manual_cogs_update_from_leadsheet():
         # Check if user has required settings
         google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
         sheet_id = get_user_sheet_id(user_record) 
-        enable_source_links = get_user_field(user_record, 'integrations.google.enable_source_links', False)
-        search_all_worksheets = get_user_field(user_record, 'integrations.google.search_all_worksheets', False)
+        enable_source_links = get_user_field(user_record, 'settings.enable_source_links') or False
+        search_all_worksheets = get_user_field(user_record, 'integrations.google.search_all_worksheets') or False
         
         if not google_tokens.get('refresh_token'):
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
@@ -7124,7 +7124,7 @@ def manual_cogs_update_from_leadsheet():
         print(f"[MANUAL COGS UPDATE] Found {len(sb_df)} products in Sellerboard COGS data")
         
         # Get fresh access token
-        access_token = refresh_access_token(google_tokens['refresh_token'])
+        access_token = refresh_google_token(user_record)
         
         # Fetch all worksheets from the Google Sheet
         print(f"[MANUAL COGS UPDATE] Scanning all worksheets in lead sheet for cost data")

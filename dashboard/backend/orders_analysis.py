@@ -1552,9 +1552,6 @@ class EnhancedOrdersAnalysis:
              user_settings.get('search_all_worksheets'))
         )
         
-        # If no Sellerboard COGS data, or if it failed, try Google Sheets
-        if not cogs_data:
-        
         if should_fetch_analytics:
             try:
                 # Import here to avoid circular imports

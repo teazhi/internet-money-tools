@@ -9643,60 +9643,23 @@ def get_expected_arrivals():
         google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
         column_mapping = get_user_column_mapping(user_record)
         
-        # Check for Sellerboard COGS URL - prioritize this over Google Sheets for inventory data
-        sellerboard_cogs_url = get_user_field(config_user_record, 'integrations.sellerboard.cogs_url')
+        # Try email-based COGS first
+        inventory_data = None
+        try:
+            email_cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+            if email_cogs_data:
+                inventory_data = email_cogs_data
+                print(f"✅ Successfully fetched COGS data from email: {email_cogs_data['filename']}")
+        except Exception as email_error:
+            print(f"Email COGS fetch failed: {email_error}")
         
-        if sellerboard_cogs_url:
-            # Try to use Sellerboard COGS data as the inventory source
-            try:
-                inventory_data = fetch_sellerboard_cogs_data(sellerboard_cogs_url)
-                
-                # Still need Google Sheets for purchase data
-                if not sheet_id or not google_tokens.get('access_token'):
-                    return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings for purchase data."}), 400
-                    
-            except Exception as e:
-                print(f"COGS URL fetch failed: {e}, trying email-based COGS")
-                # Try email-based COGS as fallback
-                try:
-                    email_cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
-                    if email_cogs_data:
-                        inventory_data = email_cogs_data
-                        print(f"✅ Successfully fetched COGS data from email: {email_cogs_data['filename']}")
-                    else:
-                        inventory_data = None
-                except Exception as email_error:
-                    print(f"Email COGS fetch also failed: {email_error}")
-                    inventory_data = None
-                
-                # If both URL and email failed, check if we can fall back to Google Sheets
-                if not inventory_data:
-                    if not sheet_id or not google_tokens.get('access_token'):
-                        return jsonify({
-                            "error": f"COGS data unavailable. URL download failed and email processing failed (likely missing Gmail permissions). Please either fix the COGS URL, set up Google integration with Gmail permissions, or configure Google Sheets.",
-                            "cogs_url_error": str(e)[:100],
-                            "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted for email-based COGS processing"
-                        }), 400
-        else:
-            # No COGS URL configured, try email-based COGS first
-            try:
-                email_cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
-                if email_cogs_data:
-                    inventory_data = email_cogs_data
-                    print(f"✅ Successfully fetched COGS data from email (no URL configured): {email_cogs_data['filename']}")
-                else:
-                    inventory_data = None
-            except Exception as email_error:
-                print(f"Email COGS fetch failed: {email_error}")
-                inventory_data = None
-            
-            # If email COGS failed, check Google Sheets requirement
-            if not inventory_data:
-                if not sheet_id or not google_tokens.get('access_token'):
-                    return jsonify({
-                        "error": "No COGS data source available. Email processing failed (likely missing Gmail permissions) and Google Sheets not configured.",
-                        "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted, or configure Google Sheets for COGS data"
-                    }), 400
+        # If email COGS failed, check Google Sheets requirement
+        if not inventory_data:
+            if not sheet_id or not google_tokens.get('access_token'):
+                return jsonify({
+                    "error": "No COGS data source available. Email processing failed (likely missing Gmail permissions) and Google Sheets not configured.",
+                    "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted, or configure Google Sheets for COGS data"
+                }), 400
 
         # Initialize OrdersAnalysis to get purchase data
         from orders_analysis import OrdersAnalysis
@@ -14063,9 +14026,20 @@ def get_inventory_age_analysis():
         
         print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
         
+        # Get COGS data directly from email for all products
+        cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+        
+        if not cogs_data:
+            return jsonify({
+                'error': 'No COGS data available',
+                'message': 'Unable to retrieve COGS data from Sellerboard emails. Please ensure Sellerboard automation emails are being received.'
+            }), 500
+        
+        print(f"Using COGS file as primary data source: {cogs_data['filename']} with {cogs_data['total_products']} products")
+        
+        # Still need orders analysis for sales data
         from orders_analysis import OrdersAnalysis
-        cogs_url = get_user_sellerboard_cogs_url(config_user_record)
-        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url, discord_id=discord_id)
+        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=None, discord_id=discord_id)
         analysis = analyzer.analyze(
             for_date=target_date,
             user_timezone=user_timezone,
@@ -14073,19 +14047,67 @@ def get_inventory_age_analysis():
             preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
         )
         
-        if not analysis or not analysis.get('enhanced_analytics'):
+        if not analysis:
             return jsonify({
-                'error': 'No inventory data available',
-                'message': 'Unable to retrieve inventory data for age analysis.'
+                'error': 'No sales data available',
+                'message': 'Unable to retrieve sales data for analysis.'
             }), 500
         
         # Initialize age analyzer
         age_analyzer = InventoryAgeAnalyzer()
         
-        # Get raw data for age analysis - use the SAME data that Smart Restock uses
-        enhanced_analytics = analysis.get('enhanced_analytics', {})
-        restock_alerts = analysis.get('restock_alerts', {})  # This is what Smart Restock uses
-        purchase_insights = analysis.get('purchase_insights', {})
+        # Create enhanced_analytics by combining COGS file (for all ASINs) with Stock file (for accurate stock quantities)
+        enhanced_analytics = {}
+        
+        for _, cogs_row in cogs_df_filtered.iterrows():
+            asin = cogs_row.get(asin_col)
+            if asin:
+                # Extract product info from COGS data
+                product_name = cogs_row.get('Product Name') or cogs_row.get('Title') or f"Product {asin}"
+                
+                # Look for COGS value in COGS file
+                cogs_value = 0
+                for col, value in cogs_row.items():
+                    if any(term in col.lower() for term in ['cogs', 'cost', 'price']):
+                        try:
+                            cogs_value = float(value) if value else 0
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Get accurate stock quantity from stock file if available
+                current_stock = 0
+                if asin in stock_info:
+                    current_stock = stock_info[asin].get('current_stock', 0)
+                else:
+                    # ASIN not in stock file (likely out of stock), try COGS file as fallback
+                    for col, value in cogs_row.items():
+                        if any(term in col.lower() for term in ['stock', 'quantity', 'qty', 'units']):
+                            try:
+                                current_stock = int(float(value)) if value else 0
+                                break
+                            except (ValueError, TypeError):
+                                continue
+                
+                enhanced_analytics[asin] = {
+                    'product_name': product_name,
+                    'current_stock': current_stock,
+                    'cogs': cogs_value,
+                    'restock': {
+                        'current_stock': current_stock,
+                        'source': 'stock_file' if asin in stock_info else 'cogs_file'
+                    },
+                    'source': 'cogs_and_stock_combined'
+                }
+        
+        # Get other analysis data for compatibility
+        restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
+        purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
+        
+        print(f"Combined COGS + Stock data: {len(enhanced_analytics)} total products")
+        in_stock_count = sum(1 for data in enhanced_analytics.values() if data['current_stock'] > 0)
+        print(f"  - {in_stock_count} products with stock > 0")
+        print(f"  - {len(enhanced_analytics) - in_stock_count} products out of stock or unknown")
         
         # Verify we have the same data structure as Smart Restock Recommendations
         print(f"DEBUG - Inventory age analysis:")
@@ -14105,9 +14127,33 @@ def get_inventory_age_analysis():
         # Download raw orders data for velocity inference using the same analyzer
         orders_df = analyzer.download_csv(orders_url)
         
-        # Get raw stock data using the same analyzer
+        # Use both COGS and stock files strategically
+        import pandas as pd
+        cogs_df = pd.DataFrame(cogs_data['data'])
+        
+        # Filter COGS data to exclude hidden products
+        asin_col = cogs_data['asin_column']
+        
+        # Check for Hide column and filter out hidden products
+        hide_col = None
+        for col in cogs_df.columns:
+            if 'hide' in col.lower():
+                hide_col = col
+                break
+        
+        if hide_col:
+            cogs_df_filtered = cogs_df[cogs_df[hide_col] != 'Yes']
+            print(f"Filtered out {len(cogs_df) - len(cogs_df_filtered)} hidden products from COGS file")
+        else:
+            cogs_df_filtered = cogs_df
+            print("No Hide column found in COGS file")
+        
+        # Get stock data from stock file for accurate stock quantities
         stock_df = analyzer.download_csv(stock_url)
-        stock_data = analyzer.get_stock_info(stock_df)
+        stock_info = analyzer.get_stock_info(stock_df)
+        
+        print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
+        print(f"Stock file: {len(stock_info)} products")
         
         # Debug: Show what stock values we're actually getting
         print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")

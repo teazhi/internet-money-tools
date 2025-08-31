@@ -1500,10 +1500,9 @@ class EnhancedOrdersAnalysis:
         cogs_data = {}
         purchase_insights = {}
         
-        # First, try to use Sellerboard COGS URL if available
-        if self.cogs_url:
+        # Try email-based COGS data first
+        if self.discord_id:
             try:
-                print(f"Using Sellerboard COGS URL: {self.cogs_url}")
                 # Import the function from app.py
                 import importlib.util
                 import os
@@ -1513,15 +1512,13 @@ class EnhancedOrdersAnalysis:
                 main_app = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(main_app)
                 
-                # Use the fixed fetch_sellerboard_cogs_data function
-                cogs_result = main_app.fetch_sellerboard_cogs_data(self.cogs_url)
+                email_cogs_result = main_app.fetch_sellerboard_cogs_data_from_email(self.discord_id)
                 
-                # Convert Sellerboard COGS format to our expected format
-                if cogs_result and 'data' in cogs_result:
+                if email_cogs_result and 'data' in email_cogs_result:
                     sellerboard_cogs_data = {}
-                    asin_col = cogs_result.get('asin_column')
+                    asin_col = email_cogs_result.get('asin_column')
                     
-                    for item in cogs_result['data']:
+                    for item in email_cogs_result['data']:
                         asin = item.get(asin_col)
                         if asin:
                             # Look for COGS/cost columns in the data
@@ -1537,53 +1534,13 @@ class EnhancedOrdersAnalysis:
                             if cogs_value is not None:
                                 sellerboard_cogs_data[asin] = {
                                     'cogs': cogs_value,
-                                    'source_link': 'Sellerboard COGS Report',
-                                    'source_column': 'sellerboard_cogs'
+                                    'source_link': f"Sellerboard Email: {email_cogs_result.get('filename')}",
+                                    'source_column': 'sellerboard_email_cogs'
                                 }
                     
                     cogs_data = sellerboard_cogs_data
-                    print(f"Successfully loaded COGS data from Sellerboard for {len(cogs_data)} products")
+                    print(f"Successfully loaded COGS data from email for {len(cogs_data)} products")
                     
-            except Exception as e:
-                print(f"Failed to fetch Sellerboard COGS data: {e}")
-                print("Trying email-based COGS data, then falling back to Google Sheets")
-        
-        # If no Sellerboard COGS data from URL, try email-based COGS data
-        if not cogs_data:
-            try:
-                # Try to get COGS data from email processing
-                # We need discord_id to fetch email data - get it from the current session
-                discord_id = getattr(self, 'discord_id', None)
-                if discord_id:
-                    email_cogs_result = main_app.fetch_sellerboard_cogs_data_from_email(discord_id)
-                    
-                    if email_cogs_result and 'data' in email_cogs_result:
-                        sellerboard_cogs_data = {}
-                        asin_col = email_cogs_result.get('asin_column')
-                        
-                        for item in email_cogs_result['data']:
-                            asin = item.get(asin_col)
-                            if asin:
-                                # Look for COGS/cost columns in the data
-                                cogs_value = None
-                                for key, value in item.items():
-                                    if any(term in key.lower() for term in ['cogs', 'cost', 'price']):
-                                        try:
-                                            cogs_value = float(value) if value else 0
-                                            break
-                                        except (ValueError, TypeError):
-                                            continue
-                                
-                                if cogs_value is not None:
-                                    sellerboard_cogs_data[asin] = {
-                                        'cogs': cogs_value,
-                                        'source_link': f"Sellerboard Email: {email_cogs_result.get('filename')}",
-                                        'source_column': 'sellerboard_email_cogs'
-                                    }
-                        
-                        cogs_data = sellerboard_cogs_data
-                        print(f"Successfully loaded COGS data from email for {len(cogs_data)} products")
-                        
             except Exception as e:
                 print(f"Failed to fetch email-based COGS data: {e}")
         

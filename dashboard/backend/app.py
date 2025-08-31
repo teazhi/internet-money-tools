@@ -6502,14 +6502,19 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
     Flexibly fetch COGS data from all worksheets with loose column matching
     Returns combined data from all worksheets that contain ASIN and COGS columns
     """
-    import googleapiclient.discovery
-    from googleapiclient.errors import HttpError
+    import urllib.parse
     
     try:
-        service = googleapiclient.discovery.build('sheets', 'v4', credentials=build_google_credentials(access_token))
+        # Get all worksheets using HTTP API
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(url, headers=headers)
         
-        # Get all worksheets
-        sheet_metadata = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+        if resp.status_code != 200:
+            print(f"ERROR: Failed to get sheet metadata: {resp.status_code}")
+            return []
+        
+        sheet_metadata = resp.json()
         worksheets = [sheet['properties']['title'] for sheet in sheet_metadata.get('sheets', [])]
         
         print(f"DEBUG: Found {len(worksheets)} worksheets: {worksheets}")
@@ -6521,15 +6526,21 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
             try:
                 print(f"DEBUG: Processing worksheet: {worksheet_name}")
                 
-                # Get worksheet data
-                range_name = f"'{worksheet_name}'!A1:Z1000"  # Get more data range
-                result = service.spreadsheets().values().get(
-                    spreadsheetId=sheet_id,
-                    range=range_name,
-                    valueRenderOption='UNFORMATTED_VALUE'
-                ).execute()
+                # Get worksheet data using HTTP API
+                range_name = f"'{worksheet_name}'!A1:Z1000"
+                url = (
+                    f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+                    f"/values/{urllib.parse.quote(range_name)}?majorDimension=ROWS"
+                )
+                headers = {"Authorization": f"Bearer {access_token}"}
+                resp = requests.get(url, headers=headers)
                 
-                values = result.get('values', [])
+                if resp.status_code != 200:
+                    print(f"DEBUG: Failed to fetch {worksheet_name}: {resp.status_code}")
+                    continue
+                
+                data = resp.json()
+                values = data.get('values', [])
                 if not values or len(values) < 2:  # Need at least header + 1 data row
                     print(f"DEBUG: Skipping {worksheet_name} - insufficient data")
                     continue
@@ -9361,6 +9372,81 @@ def debug_discount_emails():
             result['summary']['issues_detected'].append('No emails found with current search criteria')
         if len(valid_asins) == 0 and result['email_search']['messages_found'] > 0:
             result['summary']['issues_detected'].append('Emails found but no valid ASINs extracted')
+        
+        # Multiple B008XQO7WA searches to find today's email
+        result['b008_searches'] = {}
+        
+        # Search 1: No date restriction
+        try:
+            no_date_query = f"from:{result['config']['sender_filter']} B008XQO7WA"
+            no_date_messages = search_gmail_messages(user_record, no_date_query, max_results=20)
+            
+            result['b008_searches']['no_date_restriction'] = {
+                'query': no_date_query,
+                'messages_found': len(no_date_messages.get('messages', [])) if no_date_messages else 0,
+                'recent_subjects': []
+            }
+            
+            if no_date_messages and no_date_messages.get('messages'):
+                for msg in no_date_messages['messages'][:5]:
+                    try:
+                        email_data = get_gmail_message(user_record, msg['id'])
+                        if email_data:
+                            headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                            subject = headers.get('Subject', '')
+                            date_received = headers.get('Date', '')
+                            result['b008_searches']['no_date_restriction']['recent_subjects'].append({
+                                'subject': subject,
+                                'date': date_received
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            result['b008_searches']['no_date_restriction'] = {'error': str(e)}
+        
+        # Search 2: Today specifically
+        try:
+            today = datetime.now().strftime('%Y/%m/%d')
+            today_query = f"from:{result['config']['sender_filter']} B008XQO7WA after:{today}"
+            today_messages = search_gmail_messages(user_record, today_query, max_results=10)
+            
+            result['b008_searches']['today_only'] = {
+                'query': today_query,
+                'date': today,
+                'messages_found': len(today_messages.get('messages', [])) if today_messages else 0
+            }
+        except Exception as e:
+            result['b008_searches']['today_only'] = {'error': str(e)}
+        
+        # Search 3: All emails from sender today (to see what's actually there)
+        try:
+            all_today_query = f"from:{result['config']['sender_filter']} after:{today}"
+            all_today_messages = search_gmail_messages(user_record, all_today_query, max_results=50)
+            
+            result['b008_searches']['all_today'] = {
+                'query': all_today_query,
+                'messages_found': len(all_today_messages.get('messages', [])) if all_today_messages else 0,
+                'subjects_with_b008': []
+            }
+            
+            if all_today_messages and all_today_messages.get('messages'):
+                for msg in all_today_messages['messages']:
+                    try:
+                        email_data = get_gmail_message(user_record, msg['id'])
+                        if email_data:
+                            headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                            subject = headers.get('Subject', '')
+                            if 'B008XQO7WA' in subject:
+                                date_received = headers.get('Date', '')
+                                result['b008_searches']['all_today']['subjects_with_b008'].append({
+                                    'subject': subject,
+                                    'date': date_received
+                                })
+                    except:
+                        continue
+                        
+        except Exception as e:
+            result['b008_searches']['all_today'] = {'error': str(e)}
         
         return jsonify(result)
         

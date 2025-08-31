@@ -6873,7 +6873,7 @@ def manual_sellerboard_update():
                     except (ValueError, TypeError):
                         continue
                     
-                    # Check if ASIN exists in Sellerboard data
+                    # Check if ASIN exists in Sellerboard data (may be multiple SKUs per ASIN)
                     existing = sellerboard_df[sellerboard_df["ASIN"] == asin]
                     
                     if existing.empty:
@@ -6900,42 +6900,48 @@ def manual_sellerboard_update():
                         })
                         
                     else:
-                        # Existing product - check for cost update
-                        old_cost = existing.iloc[0]['Cost']
+                        # Existing product(s) - update ALL rows with this ASIN (multiple SKUs per ASIN)
+                        print(f"DEBUG: Found {len(existing)} rows with ASIN {asin}")
                         
-                        try:
-                            if pd.isna(old_cost) or old_cost is None:
-                                # No existing cost - update automatically
-                                sellerboard_df.loc[sellerboard_df["ASIN"] == asin, "Cost"] = new_cost
+                        # Process each row with this ASIN
+                        for existing_idx, existing_row in existing.iterrows():
+                            old_cost = existing_row['Cost']
+                            sku = existing_row['SKU']
+                            title = existing_row['Title']
+                            
+                            try:
+                                if pd.isna(old_cost) or old_cost is None:
+                                    # No existing cost - update automatically
+                                    sellerboard_df.loc[existing_idx, "Cost"] = new_cost
+                                    actual_updates.append({
+                                        'ASIN': asin,
+                                        'SKU': sku,
+                                        'Name': title,
+                                        'new_cost': new_cost,
+                                        'old_cost': None,
+                                        'action': 'updated'
+                                    })
+                                elif abs(float(old_cost) - new_cost) > 0.01:
+                                    # Cost difference detected - add to potential updates
+                                    potential_updates.append({
+                                        'ASIN': asin,
+                                        'SKU': sku,
+                                        'Name': title,
+                                        'new_cost': new_cost,
+                                        'old_cost': float(old_cost),
+                                        'action': 'suggested'
+                                    })
+                            except (ValueError, TypeError):
+                                # Old cost invalid - update with new cost
+                                sellerboard_df.loc[existing_idx, "Cost"] = new_cost
                                 actual_updates.append({
                                     'ASIN': asin,
-                                    'SKU': existing.iloc[0]['SKU'],
-                                    'Name': existing.iloc[0]['Title'],
+                                    'SKU': sku,
+                                    'Name': title,
                                     'new_cost': new_cost,
-                                    'old_cost': None,
+                                    'old_cost': old_cost,
                                     'action': 'updated'
                                 })
-                            elif abs(float(old_cost) - new_cost) > 0.01:
-                                # Cost difference detected - add to potential updates
-                                potential_updates.append({
-                                    'ASIN': asin,
-                                    'SKU': existing.iloc[0]['SKU'],
-                                    'Name': existing.iloc[0]['Title'],
-                                    'new_cost': new_cost,
-                                    'old_cost': float(old_cost),
-                                    'action': 'suggested'
-                                })
-                        except (ValueError, TypeError):
-                            # Old cost invalid - update with new cost
-                            sellerboard_df.loc[sellerboard_df["ASIN"] == asin, "Cost"] = new_cost
-                            actual_updates.append({
-                                'ASIN': asin,
-                                'SKU': existing.iloc[0]['SKU'],
-                                'Name': existing.iloc[0]['Title'],
-                                'new_cost': new_cost,
-                                'old_cost': old_cost,
-                                'action': 'updated'
-                            })
             
             # Also check Sellerboard products with Hide=yes for COGS updates from purchase data
             print("DEBUG: Checking hidden Sellerboard products for COGS updates...")
@@ -6968,41 +6974,47 @@ def manual_sellerboard_update():
                         # Check if cost needs updating
                         old_cost = hidden_row['Cost']
                         
-                        try:
-                            if pd.isna(old_cost) or old_cost is None:
-                                # No existing cost - update automatically
-                                sellerboard_df.loc[sellerboard_df["ASIN"] == hidden_asin, "Cost"] = new_cost
+                        # Update ALL hidden products with this ASIN (multiple SKUs per ASIN)
+                        all_hidden_with_asin = sellerboard_df[sellerboard_df["ASIN"] == hidden_asin]
+                        
+                        for hidden_idx, hidden_item in all_hidden_with_asin.iterrows():
+                            old_cost = hidden_item['Cost']
+                            
+                            try:
+                                if pd.isna(old_cost) or old_cost is None:
+                                    # No existing cost - update automatically
+                                    sellerboard_df.loc[hidden_idx, "Cost"] = new_cost
+                                    actual_updates.append({
+                                        'ASIN': hidden_asin,
+                                        'SKU': hidden_item['SKU'],
+                                        'Name': hidden_item['Title'],
+                                        'new_cost': new_cost,
+                                        'old_cost': None,
+                                        'action': 'updated (hidden product)'
+                                    })
+                                elif abs(float(old_cost) - new_cost) > 0.01:
+                                    # Cost difference detected - add to potential updates
+                                    potential_updates.append({
+                                        'ASIN': hidden_asin,
+                                        'SKU': hidden_item['SKU'],
+                                        'Name': hidden_item['Title'],
+                                        'new_cost': new_cost,
+                                        'old_cost': float(old_cost),
+                                        'action': 'suggested (hidden product)'
+                                    })
+                            except (ValueError, TypeError):
+                                # Old cost invalid - update with new cost
+                                sellerboard_df.loc[hidden_idx, "Cost"] = new_cost
                                 actual_updates.append({
                                     'ASIN': hidden_asin,
-                                    'SKU': hidden_row['SKU'],
-                                    'Name': hidden_row['Title'],
+                                    'SKU': hidden_item['SKU'],
+                                    'Name': hidden_item['Title'],
                                     'new_cost': new_cost,
-                                    'old_cost': None,
+                                    'old_cost': old_cost,
                                     'action': 'updated (hidden product)'
                                 })
-                                seen_asins.add(hidden_asin)
-                            elif abs(float(old_cost) - new_cost) > 0.01:
-                                # Cost difference detected - add to potential updates
-                                potential_updates.append({
-                                    'ASIN': hidden_asin,
-                                    'SKU': hidden_row['SKU'],
-                                    'Name': hidden_row['Title'],
-                                    'new_cost': new_cost,
-                                    'old_cost': float(old_cost),
-                                    'action': 'suggested (hidden product)'
-                                })
-                        except (ValueError, TypeError):
-                            # Old cost invalid - update with new cost
-                            sellerboard_df.loc[sellerboard_df["ASIN"] == hidden_asin, "Cost"] = new_cost
-                            actual_updates.append({
-                                'ASIN': hidden_asin,
-                                'SKU': hidden_row['SKU'],
-                                'Name': hidden_row['Title'],
-                                'new_cost': new_cost,
-                                'old_cost': old_cost,
-                                'action': 'updated (hidden product)'
-                            })
-                            seen_asins.add(hidden_asin)
+                        
+                        seen_asins.add(hidden_asin)
             
             print(f"DEBUG: COGS Update Summary:")
             print(f"  - Actual updates: {len(actual_updates)}")

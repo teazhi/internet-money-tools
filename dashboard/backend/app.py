@@ -14168,7 +14168,7 @@ def get_inventory_age_analysis():
         age_analysis = age_analyzer.analyze_inventory_age(
             enhanced_analytics=age_analysis_source,
             purchase_insights=purchase_insights,
-            stock_data=stock_data,
+            stock_data=stock_info,
             orders_data=orders_df
         )
         

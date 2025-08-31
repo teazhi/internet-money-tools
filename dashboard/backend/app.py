@@ -6647,13 +6647,16 @@ def manual_sellerboard_update():
             # Get column mapping for processing
             column_mapping = get_user_column_mapping(user_record)
             
-            # Check if user has search_all_worksheets enabled
+            # Check if user has search_all_worksheets enabled OR if this is a full update
             search_all_worksheets = get_user_field(user_record, 'integrations.google.search_all_worksheets') or user_record.get('search_all_worksheets', False)
             
-            # Fetch COGS data from ALL worksheets if enabled, otherwise just main worksheet
-            print(f"DEBUG: search_all_worksheets = {search_all_worksheets}")
+            # For full updates, always scan all worksheets (like the dedicated lead sheet button)
+            use_all_worksheets = search_all_worksheets or full_update
             
-            if search_all_worksheets:
+            # Fetch COGS data from ALL worksheets if enabled or full update, otherwise just main worksheet
+            print(f"DEBUG: search_all_worksheets = {search_all_worksheets}, full_update = {full_update}, use_all_worksheets = {use_all_worksheets}")
+            
+            if use_all_worksheets:
                 print("DEBUG: Fetching COGS data from ALL worksheets...")
                 from orders_analysis import OrdersAnalysis
                 analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
@@ -6720,9 +6723,9 @@ def manual_sellerboard_update():
                 # If all worksheets approach failed, fallback to main worksheet
                 if sheet_df.empty:
                     print("DEBUG: All worksheets approach found no valid data, falling back to main worksheet...")
-                    search_all_worksheets = False
+                    use_all_worksheets = False
                 
-            if not search_all_worksheets:
+            if not use_all_worksheets:
                 print("DEBUG: Fetching data from main worksheet only...")
                 # Fetch Google Sheet data (handles token refresh internally)
                 sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
@@ -6750,7 +6753,7 @@ def manual_sellerboard_update():
             # Filter data for processing (date filtering only if not using all worksheets data)
             from datetime import datetime, timedelta
             
-            if search_all_worksheets:
+            if use_all_worksheets:
                 # When using all worksheets, we already have COGS-specific data
                 filtered_df = sheet_df.copy()
                 print(f"DEBUG: Using all worksheets COGS data - {len(filtered_df)} products")
@@ -11859,12 +11862,17 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         cutoff_date = datetime.now() - timedelta(days=days_back)
         query += f' after:{cutoff_date.strftime("%Y/%m/%d")}'
         
+        print(f"🔍 DMS Debug - Searching emails with query: {query}")
+        print(f"📅 DMS Debug - Using {days_back} days back, cutoff date: {cutoff_date.strftime('%Y/%m/%d')}")
         
         # Search for messages - increase limit to ensure we get all recent emails
         messages = search_gmail_messages(user_record, query, max_results=100)
         
+        print(f"📧 DMS Debug - Gmail API response: {messages}")
+        print(f"📧 DMS Debug - Found {len(messages.get('messages', [])) if messages else 0} messages")
         
         if not messages or not messages.get('messages'):
+            print(f"⚠️  DMS Debug - No messages found, returning mock data")
             return fetch_mock_discount_alerts()
         
         alerts = []
@@ -11923,20 +11931,27 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 # Extract ASIN using configurable pattern from admin settings
                 asin = None
                 
-                # Get custom patterns from discount config (S3-based)
-                asin_pattern = discount_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)') if discount_config else r'\(ASIN:\s*([B0-9A-Z]{10})\)'
+                # Get custom patterns from discount config (S3-based) - use flexible pattern as default
+                asin_pattern = discount_config.get('asin_pattern', r'\b(B[0-9A-Z]{9})\b') if discount_config else r'\b(B[0-9A-Z]{9})\b'
                 
                 # Extract ASIN from subject line using custom pattern
                 asin_match = re.search(asin_pattern, subject, re.IGNORECASE)
                 
+                print(f"🔍 DMS Debug - Pattern: {asin_pattern}")
+                print(f"🔍 DMS Debug - Subject match result: {asin_match.group(1) if asin_match else 'No match'}")
+                
                 if asin_match:
                     potential_asin = asin_match.group(1)
+                    print(f"🔍 DMS Debug - Potential ASIN: {potential_asin}")
+                    print(f"✅ DMS Debug - ASIN valid: {is_valid_asin(potential_asin)}")
                     if is_valid_asin(potential_asin):
                         asin = potential_asin
                 
                 # Fallback: try to find ASIN in email content
                 if not asin:
+                    print(f"🔍 DMS Debug - No ASIN from subject, trying content patterns")
                     content_patterns = [
+                        r'\b(B[0-9A-Z]{9})\b',  # Any ASIN with word boundaries
                         r'\(ASIN:\s*([B0-9A-Z]{10})\)',  # (ASIN: B123456789)
                         r'amazon\.com/[^/]*/dp/([B0-9A-Z]{10})',  # Amazon URL
                         r'ASIN[:\s]*([B0-9A-Z]{10})',  # ASIN: B123456789
@@ -11946,12 +11961,19 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                         content_match = re.search(pattern, html_content, re.IGNORECASE)
                         if content_match:
                             potential_asin = content_match.group(1)
+                            print(f"🔍 DMS Debug - Content pattern '{pattern}' found ASIN: {potential_asin}")
+                            print(f"✅ DMS Debug - Content ASIN valid: {is_valid_asin(potential_asin)}")
                             if is_valid_asin(potential_asin):
                                 asin = potential_asin
                                 break
                 
+                # Debug logging for ASIN extraction
+                print(f"📧 DMS Debug - Email subject: {subject}")
+                print(f"🔍 DMS Debug - Extracted ASIN: {asin}")
+                
                 # Skip emails without valid ASINs (not discount opportunities)
                 if not asin:
+                    print(f"❌ DMS Debug - No valid ASIN found, skipping email")
                     continue
                 
                 # Extract retailer using configurable pattern from admin settings
@@ -11998,15 +12020,22 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 
             except Exception as e:
-                
+                print(f"❌ DMS Debug - Error processing email: {e}")
                 # Check if this was a B008XQO7WA email that failed
                 try:
                     if email_data:
                         headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
                         subject = headers.get('Subject', '')
+                        print(f"⚠️  DMS Debug - Failed to process email with subject: {subject}")
+                        if 'B008XQO7WA' in subject:
+                            print(f"🚨 DMS Debug - CRITICAL: B008XQO7WA email failed to process!")
                 except:
                     pass
                 continue
+        
+        print(f"✅ DMS Debug - Final result: {len(alerts)} alerts extracted")
+        for i, alert in enumerate(alerts[:5]):  # Show first 5 alerts
+            print(f"  Alert {i+1}: ASIN={alert.get('asin')}, Subject={alert.get('subject', '')[:60]}...")
         
         return alerts if alerts else fetch_mock_discount_alerts()
         

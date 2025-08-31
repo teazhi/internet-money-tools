@@ -6595,11 +6595,160 @@ def manual_sellerboard_update():
             
             # Get Google Sheet data for COGS processing
             print("DEBUG: Fetching Google Sheet data...")
-            # You'll need to implement Google Sheets API integration here similar to Lambda
-            # For now, let's create a basic version that just updates the Sellerboard data
             
-            # Create updated Sellerboard file with any processing needed
-            # For now, we'll just send the original data since the main goal is delivery
+            # Refresh access token for Google Sheets
+            access_token = refresh_access_token(refresh_token)
+            if not access_token:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to refresh Google access token.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': ['Google authentication failed'],
+                    'details': 'Unable to refresh Google access token for sheet access.'
+                })
+            
+            # Fetch Google Sheet data
+            from orders_analysis import EnhancedOrdersAnalysis
+            analysis_obj = EnhancedOrdersAnalysis()
+            sheet_df = analysis_obj.fetch_google_sheet_api(access_token, sheet_id, worksheet_title)
+            
+            if sheet_df.empty:
+                return jsonify({
+                    'success': False,
+                    'message': 'No data found in Google Sheet.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': ['Empty Google Sheet'],
+                    'details': f'No data found in worksheet "{worksheet_title}".'
+                })
+            
+            print(f"DEBUG: Fetched {len(sheet_df)} rows from Google Sheet")
+            
+            # Get column mapping for processing
+            column_mapping = get_user_column_mapping(user_record)
+            date_field = column_mapping.get("Date", "Date")
+            asin_field = column_mapping.get("ASIN", "ASIN")
+            cogs_field = column_mapping.get("COGS", "COGS")
+            
+            # Filter data for processing
+            from datetime import datetime, timedelta
+            
+            if full_update:
+                # Process all data for full update
+                filtered_df = sheet_df.copy()
+                print(f"DEBUG: Full update - processing all {len(filtered_df)} rows")
+            else:
+                # Quick update - only process recent data (last 30 days)
+                cutoff_date = datetime.now() - timedelta(days=30)
+                
+                if date_field in sheet_df.columns:
+                    sheet_df[date_field] = pd.to_datetime(sheet_df[date_field], errors='coerce')
+                    filtered_df = sheet_df[sheet_df[date_field] >= cutoff_date].copy()
+                    print(f"DEBUG: Quick update - processing {len(filtered_df)} rows from last 30 days")
+                else:
+                    filtered_df = sheet_df.copy()
+                    print(f"DEBUG: No date field found, processing all {len(filtered_df)} rows")
+            
+            # Process COGS updates
+            actual_updates = []
+            potential_updates = []
+            new_products = []
+            seen_asins = set()
+            
+            # Clean and prepare data
+            if asin_field in filtered_df.columns and cogs_field in filtered_df.columns:
+                # Remove rows with missing ASIN or COGS
+                valid_rows = filtered_df.dropna(subset=[asin_field, cogs_field])
+                
+                for _, row in valid_rows.iterrows():
+                    asin = str(row[asin_field]).strip()
+                    
+                    if not asin or asin in seen_asins:
+                        continue
+                    seen_asins.add(asin)
+                    
+                    # Extract new cost
+                    new_cost_raw = row[cogs_field]
+                    try:
+                        if isinstance(new_cost_raw, str):
+                            new_cost = float(new_cost_raw.replace('$', '').replace(',', ''))
+                        else:
+                            new_cost = float(new_cost_raw)
+                    except (ValueError, TypeError):
+                        continue
+                    
+                    # Check if ASIN exists in Sellerboard data
+                    existing = sellerboard_df[sellerboard_df["ASIN"] == asin]
+                    
+                    if existing.empty:
+                        # New product - add to Sellerboard
+                        new_sku = f"ABCD-{asin[-6:]}"
+                        new_product = {
+                            'ASIN': asin,
+                            'SKU': new_sku,
+                            'Title': str(row.get('Name', asin)),
+                            'Cost': new_cost
+                        }
+                        
+                        # Add to dataframe
+                        new_row_df = pd.DataFrame([new_product])
+                        sellerboard_df = pd.concat([sellerboard_df, new_row_df], ignore_index=True)
+                        new_products.append(new_product)
+                        actual_updates.append({
+                            'ASIN': asin,
+                            'SKU': new_sku,
+                            'Name': str(row.get('Name', asin)),
+                            'new_cost': new_cost,
+                            'old_cost': None,
+                            'action': 'added'
+                        })
+                        
+                    else:
+                        # Existing product - check for cost update
+                        old_cost = existing.iloc[0]['Cost']
+                        
+                        try:
+                            if pd.isna(old_cost) or old_cost is None:
+                                # No existing cost - update automatically
+                                sellerboard_df.loc[sellerboard_df["ASIN"] == asin, "Cost"] = new_cost
+                                actual_updates.append({
+                                    'ASIN': asin,
+                                    'SKU': existing.iloc[0]['SKU'],
+                                    'Name': existing.iloc[0]['Title'],
+                                    'new_cost': new_cost,
+                                    'old_cost': None,
+                                    'action': 'updated'
+                                })
+                            elif abs(float(old_cost) - new_cost) > 0.01:
+                                # Cost difference detected - add to potential updates
+                                potential_updates.append({
+                                    'ASIN': asin,
+                                    'SKU': existing.iloc[0]['SKU'],
+                                    'Name': existing.iloc[0]['Title'],
+                                    'new_cost': new_cost,
+                                    'old_cost': float(old_cost),
+                                    'action': 'suggested'
+                                })
+                        except (ValueError, TypeError):
+                            # Old cost invalid - update with new cost
+                            sellerboard_df.loc[sellerboard_df["ASIN"] == asin, "Cost"] = new_cost
+                            actual_updates.append({
+                                'ASIN': asin,
+                                'SKU': existing.iloc[0]['SKU'],
+                                'Name': existing.iloc[0]['Title'],
+                                'new_cost': new_cost,
+                                'old_cost': old_cost,
+                                'action': 'updated'
+                            })
+            
+            print(f"DEBUG: COGS Update Summary:")
+            print(f"  - Actual updates: {len(actual_updates)}")
+            print(f"  - Potential updates: {len(potential_updates)}")
+            print(f"  - New products: {len(new_products)}")
+            
             updated_sellerboard_data = sellerboard_df
             
             # Convert DataFrame to Excel for email attachment
@@ -6640,7 +6789,7 @@ def manual_sellerboard_update():
             filename = f"sellerboard_cogs_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             encoded_excel = base64.b64encode(excel_data).decode('utf-8')
             
-            # Build HTML email content
+            # Build HTML email content with update tracking
             update_type = "Full" if full_update else "Quick"
             html_content = f"""
             <html>
@@ -6653,10 +6802,16 @@ def manual_sellerboard_update():
                     <h3 style="color: #34495e; margin-top: 0;">Update Details:</h3>
                     <ul style="margin: 0;">
                         <li><strong>Update Type:</strong> {update_type}</li>
-                        <li><strong>Processed Products:</strong> {len(updated_sellerboard_data)} items</li>
+                        <li><strong>Total Products in File:</strong> {len(updated_sellerboard_data)} items</li>
+                        <li><strong>COGS Actually Updated:</strong> {len(actual_updates)} items</li>
+                        <li><strong>New Products Added:</strong> {len(new_products)} items</li>
+                        <li><strong>Potential Updates (Review Needed):</strong> {len(potential_updates)} items</li>
                         <li><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC</li>
                     </ul>
                 </div>
+                
+                {'''<div style="background-color: #e8f5e8; padding: 10px; border-radius: 5px; margin: 15px 0;">
+                    <h4 style="color: #2d5016; margin-top: 0;">Actual Updates Made:</h4>''' + ''.join([f'<p style="margin: 2px 0; font-size: 12px;">• {update["ASIN"]} - ${update["new_cost"]:.2f} ({update["action"]})</p>' for update in actual_updates[:10]]) + (f'<p style="margin: 2px 0; font-size: 12px; font-style: italic;">...and {len(actual_updates) - 10} more</p>' if len(actual_updates) > 10 else '') + '</div>' if actual_updates else ''}
                 
                 <p>The updated file is attached to this email.</p>
                 
@@ -6705,11 +6860,15 @@ def manual_sellerboard_update():
             
             return jsonify({
                 'success': True,
-                'message': f'Update completed successfully! 1 email sent.',
+                'message': f'Update completed successfully! {len(actual_updates)} COGS updated, {len(new_products)} new products added.',
                 'full_update': full_update,
                 'emails_sent': 1,
                 'users_processed': 1,
-                'details': f'{"Full" if full_update else "Quick"} update processed 1 user and sent 1 email with {len(updated_sellerboard_data)} product records.'
+                'actual_updates': len(actual_updates),
+                'potential_updates': len(potential_updates),
+                'new_products': len(new_products),
+                'total_products': len(updated_sellerboard_data),
+                'details': f'{"Full" if full_update else "Quick"} update processed {len(actual_updates)} COGS updates and {len(new_products)} new products.'
             })
             
         except Exception as processing_error:

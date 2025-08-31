@@ -9141,6 +9141,136 @@ def refresh_discount_opportunities():
     except Exception as e:
         return jsonify({'error': f'Error refreshing opportunities: {str(e)}'}), 500
 
+@app.route('/api/discount-opportunities/debug-emails', methods=['GET'])
+@admin_required  
+def debug_discount_emails():
+    """Focused debug endpoint for DMS email processing"""
+    try:
+        result = {
+            'timestamp': datetime.now().isoformat(),
+            'config': {},
+            'email_search': {},
+            'asin_extraction': [],
+            'summary': {}
+        }
+        
+        # Get configuration
+        discount_config = get_discount_email_config()
+        days_back = get_discount_email_days_back()
+        
+        result['config'] = {
+            'days_back': days_back,
+            'sender_filter': discount_config.get('sender_filter', 'alert@distill.io') if discount_config else 'alert@distill.io',
+            'asin_pattern': discount_config.get('asin_pattern', r'\b(B[0-9A-Z]{9})\b') if discount_config else r'\b(B[0-9A-Z]{9})\b',
+            'has_email_config': bool(discount_config),
+            'email_address': discount_config.get('email_address') if discount_config else None
+        }
+        
+        # Create mock user record for Gmail API
+        if discount_config and discount_config.get('tokens'):
+            user_record = {
+                'google_tokens': discount_config.get('tokens', {})
+            }
+        else:
+            # Try to find admin user with Gmail tokens
+            users = get_users_config()
+            admin_user = None
+            for user in users:
+                if get_user_field(user, 'integrations.google.tokens'):
+                    admin_user = user
+                    break
+            
+            user_record = admin_user if admin_user else {}
+        
+        # Test email search
+        from datetime import datetime, timedelta
+        cutoff_date = datetime.now() - timedelta(days=days_back)
+        query = f"from:{result['config']['sender_filter']} after:{cutoff_date.strftime('%Y/%m/%d')}"
+        
+        result['email_search'] = {
+            'query': query,
+            'cutoff_date': cutoff_date.strftime('%Y/%m/%d'),
+            'user_record_available': bool(user_record),
+            'messages_found': 0,
+            'gmail_api_error': None
+        }
+        
+        # Try Gmail search
+        try:
+            messages = search_gmail_messages(user_record, query, max_results=20)
+            if messages:
+                result['email_search']['messages_found'] = len(messages.get('messages', []))
+                result['email_search']['gmail_api_success'] = True
+                
+                # Process first few emails for ASIN extraction testing
+                if messages.get('messages'):
+                    for i, msg in enumerate(messages['messages'][:5]):  # Only test first 5
+                        try:
+                            email_data = get_gmail_message(user_record, msg['id'])
+                            if email_data:
+                                headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                                subject = headers.get('Subject', '')
+                                sender = headers.get('From', '')
+                                date_received = headers.get('Date', '')
+                                
+                                # Test ASIN extraction
+                                asin = None
+                                asin_pattern = result['config']['asin_pattern']
+                                asin_match = re.search(asin_pattern, subject, re.IGNORECASE)
+                                
+                                extraction_result = {
+                                    'email_index': i + 1,
+                                    'subject': subject,
+                                    'sender': sender,
+                                    'date': date_received,
+                                    'pattern_used': asin_pattern,
+                                    'pattern_matched': bool(asin_match),
+                                    'extracted_asin': None,
+                                    'asin_valid': False,
+                                    'final_asin': None
+                                }
+                                
+                                if asin_match:
+                                    potential_asin = asin_match.group(1)
+                                    extraction_result['extracted_asin'] = potential_asin
+                                    extraction_result['asin_valid'] = is_valid_asin(potential_asin)
+                                    if extraction_result['asin_valid']:
+                                        asin = potential_asin
+                                        extraction_result['final_asin'] = asin
+                                
+                                result['asin_extraction'].append(extraction_result)
+                        except Exception as e:
+                            result['asin_extraction'].append({
+                                'email_index': i + 1,
+                                'error': str(e)
+                            })
+            else:
+                result['email_search']['gmail_api_success'] = False
+                result['email_search']['gmail_api_error'] = 'No messages returned'
+                
+        except Exception as e:
+            result['email_search']['gmail_api_success'] = False
+            result['email_search']['gmail_api_error'] = str(e)
+        
+        # Summary
+        valid_asins = [item['final_asin'] for item in result['asin_extraction'] if item.get('final_asin')]
+        result['summary'] = {
+            'emails_processed': len(result['asin_extraction']),
+            'valid_asins_found': len(valid_asins),
+            'asins': valid_asins,
+            'issues_detected': []
+        }
+        
+        if result['email_search']['messages_found'] == 0:
+            result['summary']['issues_detected'].append('No emails found with current search criteria')
+        if len(valid_asins) == 0 and result['email_search']['messages_found'] > 0:
+            result['summary']['issues_detected'].append('Emails found but no valid ASINs extracted')
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/discount-opportunities/check-stale', methods=['POST'])
 @login_required
 def check_stale_opportunities():
@@ -11862,17 +11992,10 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         cutoff_date = datetime.now() - timedelta(days=days_back)
         query += f' after:{cutoff_date.strftime("%Y/%m/%d")}'
         
-        print(f"🔍 DMS Debug - Searching emails with query: {query}")
-        print(f"📅 DMS Debug - Using {days_back} days back, cutoff date: {cutoff_date.strftime('%Y/%m/%d')}")
-        
         # Search for messages - increase limit to ensure we get all recent emails
         messages = search_gmail_messages(user_record, query, max_results=100)
         
-        print(f"📧 DMS Debug - Gmail API response: {messages}")
-        print(f"📧 DMS Debug - Found {len(messages.get('messages', [])) if messages else 0} messages")
-        
         if not messages or not messages.get('messages'):
-            print(f"⚠️  DMS Debug - No messages found, returning mock data")
             return fetch_mock_discount_alerts()
         
         alerts = []
@@ -11937,19 +12060,13 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 # Extract ASIN from subject line using custom pattern
                 asin_match = re.search(asin_pattern, subject, re.IGNORECASE)
                 
-                print(f"🔍 DMS Debug - Pattern: {asin_pattern}")
-                print(f"🔍 DMS Debug - Subject match result: {asin_match.group(1) if asin_match else 'No match'}")
-                
                 if asin_match:
                     potential_asin = asin_match.group(1)
-                    print(f"🔍 DMS Debug - Potential ASIN: {potential_asin}")
-                    print(f"✅ DMS Debug - ASIN valid: {is_valid_asin(potential_asin)}")
                     if is_valid_asin(potential_asin):
                         asin = potential_asin
                 
                 # Fallback: try to find ASIN in email content
                 if not asin:
-                    print(f"🔍 DMS Debug - No ASIN from subject, trying content patterns")
                     content_patterns = [
                         r'\b(B[0-9A-Z]{9})\b',  # Any ASIN with word boundaries
                         r'\(ASIN:\s*([B0-9A-Z]{10})\)',  # (ASIN: B123456789)
@@ -11961,19 +12078,12 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                         content_match = re.search(pattern, html_content, re.IGNORECASE)
                         if content_match:
                             potential_asin = content_match.group(1)
-                            print(f"🔍 DMS Debug - Content pattern '{pattern}' found ASIN: {potential_asin}")
-                            print(f"✅ DMS Debug - Content ASIN valid: {is_valid_asin(potential_asin)}")
                             if is_valid_asin(potential_asin):
                                 asin = potential_asin
                                 break
                 
-                # Debug logging for ASIN extraction
-                print(f"📧 DMS Debug - Email subject: {subject}")
-                print(f"🔍 DMS Debug - Extracted ASIN: {asin}")
-                
                 # Skip emails without valid ASINs (not discount opportunities)
                 if not asin:
-                    print(f"❌ DMS Debug - No valid ASIN found, skipping email")
                     continue
                 
                 # Extract retailer using configurable pattern from admin settings
@@ -12020,22 +12130,7 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
                 
                 
             except Exception as e:
-                print(f"❌ DMS Debug - Error processing email: {e}")
-                # Check if this was a B008XQO7WA email that failed
-                try:
-                    if email_data:
-                        headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
-                        subject = headers.get('Subject', '')
-                        print(f"⚠️  DMS Debug - Failed to process email with subject: {subject}")
-                        if 'B008XQO7WA' in subject:
-                            print(f"🚨 DMS Debug - CRITICAL: B008XQO7WA email failed to process!")
-                except:
-                    pass
                 continue
-        
-        print(f"✅ DMS Debug - Final result: {len(alerts)} alerts extracted")
-        for i, alert in enumerate(alerts[:5]):  # Show first 5 alerts
-            print(f"  Alert {i+1}: ASIN={alert.get('asin')}, Subject={alert.get('subject', '')[:60]}...")
         
         return alerts if alerts else fetch_mock_discount_alerts()
         

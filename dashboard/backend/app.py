@@ -6497,6 +6497,107 @@ def update_script_configs():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mapping):
+    """
+    Flexibly fetch COGS data from all worksheets with loose column matching
+    Returns combined data from all worksheets that contain ASIN and COGS columns
+    """
+    import googleapiclient.discovery
+    from googleapiclient.errors import HttpError
+    
+    try:
+        service = googleapiclient.discovery.build('sheets', 'v4', credentials=build_google_credentials(access_token))
+        
+        # Get all worksheets
+        sheet_metadata = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+        worksheets = [sheet['properties']['title'] for sheet in sheet_metadata.get('sheets', [])]
+        
+        print(f"DEBUG: Found {len(worksheets)} worksheets: {worksheets}")
+        
+        all_cogs_data = []
+        processed_worksheets = 0
+        
+        for worksheet_name in worksheets:
+            try:
+                print(f"DEBUG: Processing worksheet: {worksheet_name}")
+                
+                # Get worksheet data
+                range_name = f"'{worksheet_name}'!A1:Z1000"  # Get more data range
+                result = service.spreadsheets().values().get(
+                    spreadsheetId=sheet_id,
+                    range=range_name,
+                    valueRenderOption='UNFORMATTED_VALUE'
+                ).execute()
+                
+                values = result.get('values', [])
+                if not values or len(values) < 2:  # Need at least header + 1 data row
+                    print(f"DEBUG: Skipping {worksheet_name} - insufficient data")
+                    continue
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(values[1:], columns=values[0])
+                
+                # Look for ASIN column (flexible matching)
+                asin_col = None
+                for col in df.columns:
+                    if 'asin' in str(col).lower():
+                        asin_col = col
+                        break
+                
+                # Look for COGS/Cost column (flexible matching)
+                cogs_col = None
+                for col in df.columns:
+                    col_lower = str(col).lower()
+                    if any(keyword in col_lower for keyword in ['cogs', 'cost']):
+                        cogs_col = col
+                        break
+                
+                if not asin_col or not cogs_col:
+                    print(f"DEBUG: Skipping {worksheet_name} - missing ASIN ({asin_col}) or COGS ({cogs_col}) column")
+                    continue
+                
+                # Filter rows with valid ASIN and COGS data
+                valid_data = df[(df[asin_col].notna()) & (df[asin_col] != '') & 
+                               (df[cogs_col].notna()) & (df[cogs_col] != '')]
+                
+                if valid_data.empty:
+                    print(f"DEBUG: Skipping {worksheet_name} - no valid ASIN/COGS pairs")
+                    continue
+                
+                # Process valid rows
+                for _, row in valid_data.iterrows():
+                    asin = str(row[asin_col]).strip()
+                    cogs = row[cogs_col]
+                    
+                    # Try to convert COGS to float
+                    try:
+                        if isinstance(cogs, str):
+                            cogs = cogs.replace('$', '').replace(',', '').strip()
+                        cogs_value = float(cogs)
+                        
+                        all_cogs_data.append({
+                            'asin': asin,
+                            'cogs': cogs_value,
+                            'worksheet': worksheet_name
+                        })
+                    except (ValueError, TypeError):
+                        print(f"DEBUG: Invalid COGS value in {worksheet_name}: {cogs}")
+                        continue
+                
+                processed_worksheets += 1
+                print(f"DEBUG: Extracted {len(valid_data)} COGS entries from {worksheet_name}")
+                
+            except Exception as e:
+                print(f"DEBUG: Error processing worksheet {worksheet_name}: {str(e)}")
+                continue
+        
+        print(f"DEBUG: Successfully processed {processed_worksheets} worksheets, found {len(all_cogs_data)} total COGS entries")
+        return all_cogs_data
+        
+    except Exception as e:
+        print(f"ERROR: Failed to fetch flexible COGS data: {str(e)}")
+        return []
+
 @app.route('/api/manual-sellerboard-update', methods=['POST'])
 @login_required
 def manual_sellerboard_update():
@@ -6657,16 +6758,13 @@ def manual_sellerboard_update():
             print(f"DEBUG: search_all_worksheets = {search_all_worksheets}, full_update = {full_update}, use_all_worksheets = {use_all_worksheets}")
             
             if use_all_worksheets:
-                print("DEBUG: Fetching COGS data from ALL worksheets...")
-                from orders_analysis import OrdersAnalysis
-                analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+                print("DEBUG: Fetching COGS data from ALL worksheets with flexible column matching...")
                 
                 # Get fresh access token
-                google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
                 access_token = refresh_google_token(user_record)
                 
-                # Fetch COGS data from all worksheets
-                cogs_data_all, _ = analyzer.fetch_google_sheet_cogs_data_all_worksheets(
+                # Use custom function to fetch from all worksheets with flexible matching
+                cogs_data_all = fetch_flexible_cogs_from_all_worksheets(
                     access_token, sheet_id, column_mapping
                 )
                 
@@ -6682,43 +6780,16 @@ def manual_sellerboard_update():
                     })
                 
                 # Convert to DataFrame for processing
-                if cogs_data_all:
-                    sheet_df = pd.DataFrame(cogs_data_all)
-                    print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets")
-                    print(f"DEBUG: All worksheets DataFrame columns: {list(sheet_df.columns)}")
-                    
-                    # The all-worksheets function returns data with specific column names
-                    # Let's map them to what we expect
-                    if 'asin' in sheet_df.columns:
-                        asin_field = 'asin'
-                    elif 'ASIN' in sheet_df.columns:
-                        asin_field = 'ASIN'
-                    else:
-                        # Look for any column containing 'asin' (case insensitive)
-                        asin_candidates = [col for col in sheet_df.columns if 'asin' in col.lower()]
-                        if asin_candidates:
-                            asin_field = asin_candidates[0]
-                            print(f"DEBUG: Using ASIN column: {asin_field}")
-                        else:
-                            print(f"DEBUG: No ASIN column found in combined data, skipping all worksheets approach")
-                            sheet_df = pd.DataFrame()  # Empty DataFrame to skip processing
-                    
-                    if not sheet_df.empty:
-                        if 'cogs' in sheet_df.columns:
-                            cogs_field = 'cogs'
-                        elif 'COGS' in sheet_df.columns:
-                            cogs_field = 'COGS'
-                        else:
-                            # Look for any column containing 'cogs' or 'cost'
-                            cogs_candidates = [col for col in sheet_df.columns if any(x in col.lower() for x in ['cogs', 'cost'])]
-                            if cogs_candidates:
-                                cogs_field = cogs_candidates[0]
-                                print(f"DEBUG: Using COGS column: {cogs_field}")
-                            else:
-                                print(f"DEBUG: No COGS column found in combined data, skipping all worksheets approach")
-                                sheet_df = pd.DataFrame()  # Empty DataFrame to skip processing
-                else:
-                    sheet_df = pd.DataFrame()  # Empty DataFrame if no data returned
+                sheet_df = pd.DataFrame(cogs_data_all)
+                print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets with flexible matching")
+                print(f"DEBUG: All worksheets DataFrame columns: {list(sheet_df.columns)}")
+                
+                # Data is already in standardized format from our custom function
+                asin_field = 'asin'
+                cogs_field = 'cogs'
+                print(f"DEBUG: Using standardized columns - ASIN: {asin_field}, COGS: {cogs_field}")
+            else:
+                sheet_df = pd.DataFrame()  # Empty DataFrame if no data returned
                 
                 # If all worksheets approach failed, fallback to main worksheet
                 if sheet_df.empty:
@@ -9146,6 +9217,9 @@ def refresh_discount_opportunities():
 def debug_discount_emails():
     """Focused debug endpoint for DMS email processing"""
     try:
+        from datetime import datetime, timedelta
+        import re
+        
         result = {
             'timestamp': datetime.now().isoformat(),
             'config': {},
@@ -9183,7 +9257,6 @@ def debug_discount_emails():
             user_record = admin_user if admin_user else {}
         
         # Test email search
-        from datetime import datetime, timedelta
         cutoff_date = datetime.now() - timedelta(days=days_back)
         query = f"from:{result['config']['sender_filter']} after:{cutoff_date.strftime('%Y/%m/%d')}"
         

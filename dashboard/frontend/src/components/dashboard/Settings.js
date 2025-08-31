@@ -63,11 +63,6 @@ const Settings = () => {
     status: '', 
     fullUpdate: false 
   });
-  const [leadSheetCogsUpdate, setLeadSheetCogsUpdate] = useState({ 
-    loading: false, 
-    status: '', 
-    result: null 
-  });
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [defaultWorksheetForNoSource, setDefaultWorksheetForNoSource] = useState('Unknown');
@@ -339,61 +334,6 @@ const Settings = () => {
     }
   };
 
-  const handleLeadSheetCogsUpdate = async () => {
-    setLeadSheetCogsUpdate({ loading: true, status: 'Scanning lead sheet for COGS data...', result: null });
-    setMessage({ type: '', text: '' });
-
-    try {
-      console.log('Triggering lead sheet COGS update');
-
-      const response = await axios.post('/api/manual-cogs-update-from-leadsheet', {}, { 
-        withCredentials: true 
-      });
-
-      console.log('Lead sheet COGS update response:', response.data);
-
-      if (response.data.success) {
-        const updates = response.data.updates_made || 0;
-        const sources = response.data.cost_sources_found || 0;
-        
-        setLeadSheetCogsUpdate({ 
-          loading: false, 
-          status: `Successfully updated ${updates} COGS entries from ${sources} lead sheet sources`,
-          result: response.data
-        });
-        
-        setMessage({ 
-          type: 'success', 
-          text: `Successfully updated ${updates} COGS entries! Updated file sent to your email.`
-        });
-      } else {
-        setLeadSheetCogsUpdate({ 
-          loading: false, 
-          status: `Update failed: ${response.data.message || 'Unknown error'}`,
-          result: null
-        });
-        
-        setMessage({ 
-          type: 'error', 
-          text: response.data.message || 'Failed to update COGS from lead sheet'
-        });
-      }
-    } catch (error) {
-      console.error('Lead sheet COGS update error:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to update COGS from lead sheet';
-      
-      setLeadSheetCogsUpdate({ 
-        loading: false,
-        status: `Update failed: ${errorMessage}`,
-        result: null
-      });
-      
-      setMessage({ 
-        type: 'error', 
-        text: errorMessage
-      });
-    }
-  };
 
   const handleSyncLeads = async () => {
     setSyncLoading(true);
@@ -1059,67 +999,6 @@ const Settings = () => {
         </div>
       )}
 
-      {/* Lead Sheet COGS Update - Only show for non-subusers with required settings */}
-      {user?.user_type !== 'subuser' && formData.enable_source_links && formData.search_all_worksheets && (
-        <div className="card max-w-2xl border-blue-200">
-          <div className="flex items-center space-x-3 mb-4">
-            <RefreshCw className="h-5 w-5 text-blue-500" />
-            <h3 className="text-sm font-semibold text-blue-900">COGS Update from Lead Sheet</h3>
-          </div>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <div className="flex items-start space-x-3">
-              <Database className="h-5 w-5 text-blue-500 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="text-sm font-medium text-blue-900">Update COGS from All Worksheets</h4>
-                <p className="text-sm text-blue-700 mb-3">
-                  Scan all worksheets in your lead sheet for ASIN cost data and update your Sellerboard COGS file accordingly.
-                  This uses the most recent cost found across all worksheets.
-                </p>
-                
-                <div className="text-xs text-blue-600 mb-3 space-y-1">
-                  <p><strong>How it works:</strong></p>
-                  <p>• Fetches latest Sellerboard COGS data from email</p>
-                  <p>• Scans all worksheets in your lead sheet for ASIN/COGS data</p>
-                  <p>• Updates COGS with most recent costs found</p>
-                  <p>• Emails you the updated Sellerboard file</p>
-                </div>
-                
-                {leadSheetCogsUpdate.loading && (
-                  <div className="flex items-center space-x-2 text-blue-600 mb-3">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">{leadSheetCogsUpdate.status}</span>
-                  </div>
-                )}
-                
-                {leadSheetCogsUpdate.result && !leadSheetCogsUpdate.loading && (
-                  <div className="text-xs text-blue-700 mb-3 p-2 bg-blue-100 rounded border border-blue-200">
-                    <strong>Last Update Result:</strong> {leadSheetCogsUpdate.status}
-                  </div>
-                )}
-                
-                <button 
-                  onClick={handleLeadSheetCogsUpdate}
-                  disabled={leadSheetCogsUpdate.loading}
-                  className="flex items-center space-x-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-3 py-2 rounded-md transition-colors duration-200"
-                >
-                  {leadSheetCogsUpdate.loading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      <span>Updating COGS...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4" />
-                      <span>Update COGS from Lead Sheet</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Lead Sync Controls */}
       <div className="card max-w-2xl border-green-200">

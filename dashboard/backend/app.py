@@ -1717,7 +1717,7 @@ def update_discount_monitoring_config(config):
 def get_discount_email_days_back():
     """Get the current days back setting for discount email checking"""
     config = get_discount_monitoring_config()
-    env_days = int(os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '7'))
+    env_days = int(os.getenv('DISCOUNT_EMAIL_DAYS_BACK', '14'))
     
     # Prefer config over environment variable, but fallback to env if not set
     days_back = config.get('days_back', env_days)
@@ -9282,14 +9282,15 @@ def debug_discount_emails():
         
         # Try Gmail search
         try:
-            messages = search_gmail_messages(user_record, query, max_results=20)
+            messages = search_gmail_messages(user_record, query, max_results=100)
             if messages:
                 result['email_search']['messages_found'] = len(messages.get('messages', []))
                 result['email_search']['gmail_api_success'] = True
                 
-                # Process first few emails for ASIN extraction testing
+                # Process all emails for ASIN extraction testing
                 if messages.get('messages'):
-                    for i, msg in enumerate(messages['messages'][:5]):  # Only test first 5
+                    b008_found = False
+                    for i, msg in enumerate(messages['messages'][:20]):  # Test first 20
                         try:
                             email_data = get_gmail_message(user_record, msg['id'])
                             if email_data:
@@ -9303,6 +9304,11 @@ def debug_discount_emails():
                                 asin_pattern = result['config']['asin_pattern']
                                 asin_match = re.search(asin_pattern, subject, re.IGNORECASE)
                                 
+                                # Check if this is the B008XQO7WA email we're looking for
+                                is_b008_email = 'B008XQO7WA' in subject
+                                if is_b008_email:
+                                    b008_found = True
+                                
                                 extraction_result = {
                                     'email_index': i + 1,
                                     'subject': subject,
@@ -9312,7 +9318,8 @@ def debug_discount_emails():
                                     'pattern_matched': bool(asin_match),
                                     'extracted_asin': None,
                                     'asin_valid': False,
-                                    'final_asin': None
+                                    'final_asin': None,
+                                    'is_b008_email': is_b008_email
                                 }
                                 
                                 if asin_match:
@@ -9339,10 +9346,14 @@ def debug_discount_emails():
         
         # Summary
         valid_asins = [item['final_asin'] for item in result['asin_extraction'] if item.get('final_asin')]
+        b008_emails = [item for item in result['asin_extraction'] if item.get('is_b008_email')]
+        
         result['summary'] = {
             'emails_processed': len(result['asin_extraction']),
             'valid_asins_found': len(valid_asins),
             'asins': valid_asins,
+            'b008_found_in_search': b008_found,
+            'b008_emails_count': len(b008_emails),
             'issues_detected': []
         }
         
@@ -12078,7 +12089,7 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         query += f' after:{cutoff_date.strftime("%Y/%m/%d")}'
         
         # Search for messages - increase limit to ensure we get all recent emails
-        messages = search_gmail_messages(user_record, query, max_results=100)
+        messages = search_gmail_messages(user_record, query, max_results=500)
         
         if not messages or not messages.get('messages'):
             return fetch_mock_discount_alerts()

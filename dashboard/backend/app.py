@@ -9213,70 +9213,85 @@ def fetch_sellerboard_cogs_data(cogs_url):
             if redirect_url and ' ' in redirect_url:
                 print(f"Detected spaces in redirect URL, preserving them...")
                 
+                # We need to send the URL with literal spaces, not encoded
+                # Using raw TCP socket to bypass all HTTP libraries
+                import socket
+                import ssl
+                from urllib.parse import urlparse
+                
                 try:
-                    # Use curl command to preserve spaces - it handles raw URLs better
-                    import subprocess
-                    import tempfile
-                    import os
+                    parsed = urlparse(redirect_url)
+                    host = parsed.hostname
+                    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+                    path = parsed.path + ('?' + parsed.query if parsed.query else '')
                     
-                    # Create a temporary file to store the response
-                    with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as tmp_file:
-                        tmp_filename = tmp_file.name
+                    # Create raw socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(30)
                     
-                    try:
-                        # Build curl command with the URL in quotes to preserve spaces
-                        curl_cmd = [
-                            'curl',
-                            '-L',  # Follow redirects (though we're already at the redirect URL)
-                            '-s',  # Silent mode
-                            '-S',  # Show errors
-                            '-k',  # Allow insecure SSL
-                            '-o', tmp_filename,  # Output to file
-                            '--max-time', '30',  # 30 second timeout
-                        ]
+                    # Wrap with SSL for HTTPS
+                    if parsed.scheme == 'https':
+                        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                        sock = context.wrap_socket(sock, server_hostname=host)
+                    
+                    # Connect
+                    sock.connect((host, port))
+                    
+                    # Build raw HTTP request with literal spaces
+                    request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\n"
+                    for k, v in headers.items():
+                        request += f"{k}: {v}\r\n"
+                    request += "\r\n"
+                    
+                    print(f"Sending raw request with literal spaces in path: {path}")
+                    sock.send(request.encode())
+                    
+                    # Read response
+                    response_data = b""
+                    while True:
+                        data = sock.recv(4096)
+                        if not data:
+                            break
+                        response_data += data
+                        if b'\r\n\r\n' in response_data and (
+                            b'Content-Length: 0\r\n' in response_data or
+                            response_data.endswith(b'0\r\n\r\n') or
+                            len(data) < 4096
+                        ):
+                            break
+                    
+                    sock.close()
+                    
+                    # Parse response
+                    response_str = response_data.decode('utf-8', errors='ignore')
+                    headers_end = response_str.find('\r\n\r\n')
+                    headers_part = response_str[:headers_end]
+                    body = response_str[headers_end + 4:]
+                    
+                    # Get status code
+                    status_line = headers_part.split('\r\n')[0]
+                    status_code = int(status_line.split()[1])
+                    
+                    print(f"Got response status: {status_code}")
+                    
+                    if status_code == 200:
+                        class MockResponse:
+                            def __init__(self, text, status_code):
+                                self.text = text
+                                self.status_code = status_code
+                            def raise_for_status(self):
+                                pass
                         
-                        # Add headers
-                        for key, value in headers.items():
-                            curl_cmd.extend(['-H', f'{key}: {value}'])
+                        response = MockResponse(body, 200)
+                        print("✅ Successfully downloaded with literal spaces!")
+                    else:
+                        raise Exception(f"Server returned status {status_code}")
                         
-                        # Add the URL with spaces preserved
-                        curl_cmd.append(redirect_url)
-                        
-                        print(f"Using curl to preserve spaces in URL")
-                        
-                        # Execute curl command
-                        result = subprocess.run(curl_cmd, capture_output=True, text=True)
-                        
-                        if result.returncode == 0:
-                            # Read the downloaded content
-                            with open(tmp_filename, 'r', encoding='utf-8') as f:
-                                response_text = f.read()
-                            
-                            print(f"✅ Curl successfully handled URL with spaces!")
-                            
-                            class MockResponse:
-                                def __init__(self, text, status_code):
-                                    self.text = text
-                                    self.status_code = status_code
-                                def raise_for_status(self):
-                                    if self.status_code >= 400:
-                                        raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
-                            
-                            response = MockResponse(response_text, 200)
-                        else:
-                            print(f"Curl failed with return code {result.returncode}")
-                            print(f"Stderr: {result.stderr}")
-                            raise Exception(f"Curl failed: {result.stderr}")
-                            
-                    finally:
-                        # Clean up temp file
-                        if os.path.exists(tmp_filename):
-                            os.unlink(tmp_filename)
-                        
-                except Exception as curl_error:
-                    print(f"Curl approach failed: {curl_error}")
-                    # No encoding fallbacks - spaces must be preserved exactly
-                    raise Exception(f"Failed to download from Sellerboard URL with spaces. Error: {curl_error}")
+                except Exception as e:
+                    print(f"Raw socket approach failed: {e}")
+                    raise Exception(f"Failed to download Sellerboard CSV with spaces in URL: {e}")
             else:
                 # Normal redirect handling for URLs without spaces
                 response = session.get(redirect_url, timeout=30, headers=headers)

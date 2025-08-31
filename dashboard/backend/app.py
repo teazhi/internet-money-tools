@@ -6543,8 +6543,26 @@ def manual_sellerboard_update():
                 })
             
             # Use email data we already fetched
-            sb_df = cogs_data['dataframe']
-            original_filename = cogs_data['filename']
+            # The fetch_sellerboard_cogs_data_from_email returns a dict with various keys
+            if isinstance(cogs_data, dict) and 'data' in cogs_data:
+                # It seems to return data in a different format
+                sb_df = pd.DataFrame(cogs_data['data'])
+                original_filename = cogs_data.get('filename', 'sellerboard_cogs.csv')
+            elif isinstance(cogs_data, dict) and 'dataframe' in cogs_data:
+                # If it has a dataframe key, use that
+                sb_df = pd.DataFrame(cogs_data['data'])
+                original_filename = cogs_data.get('filename', 'sellerboard_cogs.csv')
+            else:
+                # Try to handle it as the dataframe directly
+                return jsonify({
+                    'success': False,
+                    'message': 'Unexpected COGS data format from email.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 0,
+                    'errors': ['COGS data format error'],
+                    'details': f'Expected dict with dataframe, got: {type(cogs_data)}'
+                })
             
             print(f"[MANUAL UPDATE] Using Sellerboard COGS data from email: {original_filename}")
             print(f"[MANUAL UPDATE] Found {len(sb_df)} products in COGS data")
@@ -6734,7 +6752,7 @@ def manual_cogs_update_from_leadsheet():
                 'message': 'Please ensure Gmail permissions are granted and recent COGS emails are available.'
             }), 400
         
-        sb_df = cogs_data['dataframe']
+        sb_df = pd.DataFrame(cogs_data['data'])
         print(f"[MANUAL COGS UPDATE] Found {len(sb_df)} products in Sellerboard COGS data")
         
         # Get fresh access token

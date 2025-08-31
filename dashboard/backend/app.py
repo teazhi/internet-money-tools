@@ -6608,46 +6608,90 @@ def manual_sellerboard_update():
             # Get Google Sheet data for COGS processing
             print("DEBUG: Fetching Google Sheet data...")
             
-            # Fetch Google Sheet data (handles token refresh internally)
-            sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
-            
-            if sheet_df.empty:
-                return jsonify({
-                    'success': False,
-                    'message': 'No data found in Google Sheet.',
-                    'full_update': full_update,
-                    'emails_sent': 0,
-                    'users_processed': 0,
-                    'errors': ['Empty Google Sheet'],
-                    'details': f'No data found in worksheet "{worksheet_title}".'
-                })
-            
-            print(f"DEBUG: Fetched {len(sheet_df)} rows from Google Sheet")
-            
             # Get column mapping for processing
             column_mapping = get_user_column_mapping(user_record)
+            
+            # Check if user has search_all_worksheets enabled
+            search_all_worksheets = get_user_field(user_record, 'integrations.google.search_all_worksheets') or user_record.get('search_all_worksheets', False)
+            
+            # Fetch COGS data from ALL worksheets if enabled, otherwise just main worksheet
+            print(f"DEBUG: search_all_worksheets = {search_all_worksheets}")
+            
+            if search_all_worksheets:
+                print("DEBUG: Fetching COGS data from ALL worksheets...")
+                from orders_analysis import OrdersAnalysis
+                analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+                
+                # Get fresh access token
+                google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+                access_token = refresh_google_token(user_record)
+                
+                # Fetch COGS data from all worksheets
+                cogs_data_all, _ = analyzer.fetch_google_sheet_cogs_data_all_worksheets(
+                    access_token, sheet_id, column_mapping
+                )
+                
+                if not cogs_data_all:
+                    return jsonify({
+                        'success': False,
+                        'message': 'No COGS data found in any worksheets.',
+                        'full_update': full_update,
+                        'emails_sent': 0,
+                        'users_processed': 0,
+                        'errors': ['No COGS data in worksheets'],
+                        'details': 'No ASIN/COGS data found across all worksheets in the Google Sheet.'
+                    })
+                
+                # Convert to DataFrame for processing
+                sheet_df = pd.DataFrame(cogs_data_all)
+                print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets")
+                
+            else:
+                print("DEBUG: Fetching data from main worksheet only...")
+                # Fetch Google Sheet data (handles token refresh internally)
+                sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
+                
+                if sheet_df.empty:
+                    return jsonify({
+                        'success': False,
+                        'message': 'No data found in Google Sheet.',
+                        'full_update': full_update,
+                        'emails_sent': 0,
+                        'users_processed': 0,
+                        'errors': ['Empty Google Sheet'],
+                        'details': f'No data found in worksheet "{worksheet_title}".'
+                    })
+                
+                print(f"DEBUG: Fetched {len(sheet_df)} rows from main worksheet")
+            
+            # Get field mappings
             date_field = column_mapping.get("Date", "Date")
-            asin_field = column_mapping.get("ASIN", "ASIN")
+            asin_field = column_mapping.get("ASIN", "ASIN") 
             cogs_field = column_mapping.get("COGS", "COGS")
             
-            # Filter data for processing
+            # Filter data for processing (date filtering only if not using all worksheets data)
             from datetime import datetime, timedelta
             
-            if full_update:
-                # Process all data for full update
+            if search_all_worksheets:
+                # When using all worksheets, we already have COGS-specific data
                 filtered_df = sheet_df.copy()
-                print(f"DEBUG: Full update - processing all {len(filtered_df)} rows")
+                print(f"DEBUG: Using all worksheets COGS data - {len(filtered_df)} products")
             else:
-                # Quick update - only process recent data (last 30 days)
-                cutoff_date = datetime.now() - timedelta(days=30)
-                
-                if date_field in sheet_df.columns:
-                    sheet_df[date_field] = pd.to_datetime(sheet_df[date_field], errors='coerce')
-                    filtered_df = sheet_df[sheet_df[date_field] >= cutoff_date].copy()
-                    print(f"DEBUG: Quick update - processing {len(filtered_df)} rows from last 30 days")
-                else:
+                # Apply date filtering for single worksheet
+                if full_update:
                     filtered_df = sheet_df.copy()
-                    print(f"DEBUG: No date field found, processing all {len(filtered_df)} rows")
+                    print(f"DEBUG: Full update - processing all {len(filtered_df)} rows")
+                else:
+                    # Quick update - only process recent data (last 30 days)
+                    cutoff_date = datetime.now() - timedelta(days=30)
+                    
+                    if date_field in sheet_df.columns:
+                        sheet_df[date_field] = pd.to_datetime(sheet_df[date_field], errors='coerce')
+                        filtered_df = sheet_df[sheet_df[date_field] >= cutoff_date].copy()
+                        print(f"DEBUG: Quick update - processing {len(filtered_df)} rows from last 30 days")
+                    else:
+                        filtered_df = sheet_df.copy()
+                        print(f"DEBUG: No date field found, processing all {len(filtered_df)} rows")
             
             # Process COGS updates
             actual_updates = []
@@ -6740,6 +6784,73 @@ def manual_sellerboard_update():
                                 'old_cost': old_cost,
                                 'action': 'updated'
                             })
+            
+            # Also check Sellerboard products with Hide=yes for COGS updates from purchase data
+            print("DEBUG: Checking hidden Sellerboard products for COGS updates...")
+            if 'Hide' in sellerboard_df.columns:
+                hidden_products = sellerboard_df[sellerboard_df['Hide'].str.upper() == 'YES']
+                print(f"DEBUG: Found {len(hidden_products)} hidden products in Sellerboard")
+                
+                for _, hidden_row in hidden_products.iterrows():
+                    hidden_asin = str(hidden_row['ASIN']).strip()
+                    
+                    if hidden_asin in seen_asins:
+                        continue  # Already processed
+                    
+                    # Check if this ASIN has cost data in purchase records
+                    matching_purchases = filtered_df[filtered_df[asin_field].astype(str).str.strip() == hidden_asin]
+                    
+                    if not matching_purchases.empty:
+                        # Get the most recent cost for this ASIN
+                        latest_purchase = matching_purchases.iloc[-1]  # Most recent
+                        new_cost_raw = latest_purchase[cogs_field]
+                        
+                        try:
+                            if isinstance(new_cost_raw, str):
+                                new_cost = float(new_cost_raw.replace('$', '').replace(',', ''))
+                            else:
+                                new_cost = float(new_cost_raw)
+                        except (ValueError, TypeError):
+                            continue
+                        
+                        # Check if cost needs updating
+                        old_cost = hidden_row['Cost']
+                        
+                        try:
+                            if pd.isna(old_cost) or old_cost is None:
+                                # No existing cost - update automatically
+                                sellerboard_df.loc[sellerboard_df["ASIN"] == hidden_asin, "Cost"] = new_cost
+                                actual_updates.append({
+                                    'ASIN': hidden_asin,
+                                    'SKU': hidden_row['SKU'],
+                                    'Name': hidden_row['Title'],
+                                    'new_cost': new_cost,
+                                    'old_cost': None,
+                                    'action': 'updated (hidden product)'
+                                })
+                                seen_asins.add(hidden_asin)
+                            elif abs(float(old_cost) - new_cost) > 0.01:
+                                # Cost difference detected - add to potential updates
+                                potential_updates.append({
+                                    'ASIN': hidden_asin,
+                                    'SKU': hidden_row['SKU'],
+                                    'Name': hidden_row['Title'],
+                                    'new_cost': new_cost,
+                                    'old_cost': float(old_cost),
+                                    'action': 'suggested (hidden product)'
+                                })
+                        except (ValueError, TypeError):
+                            # Old cost invalid - update with new cost
+                            sellerboard_df.loc[sellerboard_df["ASIN"] == hidden_asin, "Cost"] = new_cost
+                            actual_updates.append({
+                                'ASIN': hidden_asin,
+                                'SKU': hidden_row['SKU'],
+                                'Name': hidden_row['Title'],
+                                'new_cost': new_cost,
+                                'old_cost': old_cost,
+                                'action': 'updated (hidden product)'
+                            })
+                            seen_asins.add(hidden_asin)
             
             print(f"DEBUG: COGS Update Summary:")
             print(f"  - Actual updates: {len(actual_updates)}")

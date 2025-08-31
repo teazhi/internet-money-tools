@@ -9240,7 +9240,13 @@ def fetch_sellerboard_cogs_data(cogs_url):
                     print(f"Making raw HTTP request to preserve spaces: {path_with_query}")
                     
                     # Make the request with literal spaces preserved
-                    conn.request('GET', path_with_query, headers=dict(headers))
+                    # We need to manually construct the request to avoid http.client's URL validation
+                    request_line = f"GET {path_with_query} HTTP/1.1\r\n"
+                    header_lines = "\r\n".join([f"{k}: {v}" for k, v in headers.items()])
+                    full_request = f"{request_line}Host: {parsed_url.netloc}\r\n{header_lines}\r\n\r\n"
+                    
+                    # Send raw request
+                    conn.send(full_request.encode('utf-8'))
                     raw_response = conn.getresponse()
                     
                     if raw_response.status == 200:

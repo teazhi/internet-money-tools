@@ -1849,25 +1849,14 @@ def send_invitation_email(email, invitation_token, invited_by):
 
 def send_cogs_update_email(attachments, recipient_email, potential_updates, new_products, actual_updates, replen_products):
     """
-    Send email with COGS update results and attachments
+    Send email with COGS update results and attachments using Resend API
     """
     try:
-        import smtplib
-        import ssl
-        from email.message import EmailMessage
+        import base64
         
-        # Get email credentials from environment
-        email_address = os.getenv("EMAIL_ADDRESS")
-        email_password = os.getenv("EMAIL_PASSWORD")
-        
-        if not email_address or not email_password:
-            print("Email credentials not configured")
+        if not RESEND_API_KEY:
+            print("Resend API key not configured")
             return False
-        
-        msg = EmailMessage()
-        msg['From'] = email_address
-        msg['To'] = recipient_email
-        msg['Subject'] = "Amazon COGS Update Report"
         
         # Build HTML email content
         html_content = """<html>
@@ -1906,29 +1895,47 @@ def send_cogs_update_email(attachments, recipient_email, potential_updates, new_
         </body>
         </html>"""
         
-        msg.add_alternative(html_content, subtype='html')
-        
-        # Add attachments
+        # Prepare attachments for Resend (base64 encoded)
+        resend_attachments = []
         for attachment_data, attachment_filename in attachments:
             attachment_data.seek(0)
             try:
-                msg.add_attachment(
-                    attachment_data.read(),
-                    filename=attachment_filename,
-                    maintype="application",
-                    subtype="octet-stream"
-                )
+                file_content = attachment_data.read()
+                encoded_content = base64.b64encode(file_content).decode('utf-8')
+                resend_attachments.append({
+                    'filename': attachment_filename,
+                    'content': encoded_content,
+                    'content_type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                })
             except Exception as e:
-                print(f"Failed to add attachment {attachment_filename}: {e}")
+                print(f"Failed to encode attachment {attachment_filename}: {e}")
         
-        # Send email
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            server.login(email_address, email_password)
-            server.send_message(msg)
+        # Send email via Resend API
+        from_email = f'DMS Dashboard <{RESEND_FROM_DOMAIN}>'
         
-        print(f"COGS update email sent successfully to {recipient_email}")
-        return True
+        payload = {
+            'from': from_email,
+            'to': [recipient_email],
+            'subject': 'Amazon COGS Update Report',
+            'html': html_content,
+            'attachments': resend_attachments
+        }
+        
+        response = requests.post(
+            'https://api.resend.com/emails',
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json'
+            },
+            json=payload
+        )
+        
+        if response.status_code == 200:
+            print(f"COGS update email sent successfully to {recipient_email} via Resend")
+            return True
+        else:
+            print(f"Failed to send COGS update email via Resend. Status: {response.status_code}, Response: {response.text}")
+            return False
         
     except Exception as e:
         print(f"Failed to send COGS update email to {recipient_email}: {e}")
@@ -6500,11 +6507,7 @@ def manual_sellerboard_update():
             # Import required modules for processing
             from orders_analysis import EnhancedOrdersAnalysis
             from io import BytesIO
-            import smtplib
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-            from email.mime.base import MIMEBase
-            from email import encoders
+            import base64
             import pandas as pd
             from datetime import datetime
             import tempfile
@@ -6621,13 +6624,8 @@ def manual_sellerboard_update():
                     'details': 'Reasons: User email not found in configuration.'
                 })
             
-            # Email configuration (you'll need to set these environment variables)
-            smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-            smtp_port = int(os.getenv('SMTP_PORT', '587'))
-            email_address = os.getenv('EMAIL_ADDRESS')
-            email_password = os.getenv('EMAIL_PASSWORD')
-            
-            if not (email_address and email_password):
+            # Email configuration using Resend API
+            if not RESEND_API_KEY:
                 return jsonify({
                     'success': False,
                     'message': 'Update completed but no emails were sent.',
@@ -6635,48 +6633,73 @@ def manual_sellerboard_update():
                     'emails_sent': 0,
                     'users_processed': 1,
                     'errors': ['Email configuration missing'],
-                    'details': 'Reasons: SMTP credentials not configured on server.'
+                    'details': 'Reasons: Resend API key not configured on server.'
                 })
             
-            # Create email message
-            msg = MIMEMultipart()
-            msg['From'] = email_address
-            msg['To'] = user_email
-            msg['Subject'] = f"Updated Sellerboard COGS Report - {'Full' if full_update else 'Quick'} Update"
-            
-            # Email body
-            update_type = "Full" if full_update else "Quick"
-            email_body = f"""
-Hello,
-
-Your Sellerboard COGS report has been successfully updated.
-
-Update Details:
-- Update Type: {update_type}
-- Processed Products: {len(updated_sellerboard_data)} items
-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC
-
-The updated file is attached to this email.
-
-Best regards,
-Internet Money Tools
-"""
-            
-            msg.attach(MIMEText(email_body, 'plain'))
-            
-            # Attach Excel file
+            # Create attachment for Resend
             filename = f"sellerboard_cogs_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            attachment = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            attachment.set_payload(excel_data)
-            encoders.encode_base64(attachment)
-            attachment.add_header('Content-Disposition', f'attachment; filename= {filename}')
-            msg.attach(attachment)
+            encoded_excel = base64.b64encode(excel_data).decode('utf-8')
             
-            # Send email
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(email_address, email_password)
-                server.send_message(msg)
+            # Build HTML email content
+            update_type = "Full" if full_update else "Quick"
+            html_content = f"""
+            <html>
+            <body>
+                <h2 style="color: #2c3e50;">Sellerboard COGS Update Complete</h2>
+                <p>Hello,</p>
+                <p>Your Sellerboard COGS report has been successfully updated.</p>
+                
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <h3 style="color: #34495e; margin-top: 0;">Update Details:</h3>
+                    <ul style="margin: 0;">
+                        <li><strong>Update Type:</strong> {update_type}</li>
+                        <li><strong>Processed Products:</strong> {len(updated_sellerboard_data)} items</li>
+                        <li><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC</li>
+                    </ul>
+                </div>
+                
+                <p>The updated file is attached to this email.</p>
+                
+                <p>Best regards,<br>DMS Team</p>
+            </body>
+            </html>
+            """
+            
+            # Send email via Resend API
+            from_email = f'DMS Dashboard <{RESEND_FROM_DOMAIN}>'
+            
+            payload = {
+                'from': from_email,
+                'to': [user_email],
+                'subject': f'Updated Sellerboard COGS Report - {update_type} Update',
+                'html': html_content,
+                'attachments': [{
+                    'filename': filename,
+                    'content': encoded_excel,
+                    'content_type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                }]
+            }
+            
+            response = requests.post(
+                'https://api.resend.com/emails',
+                headers={
+                    'Authorization': f'Bearer {RESEND_API_KEY}',
+                    'Content-Type': 'application/json'
+                },
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                print(f"Failed to send email via Resend. Status: {response.status_code}, Response: {response.text}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Update completed but email failed to send.',
+                    'full_update': full_update,
+                    'emails_sent': 0,
+                    'users_processed': 1,
+                    'errors': ['Email delivery failed'],
+                    'details': f'Resend API error: {response.status_code}'
+                })
             
             print(f"DEBUG: Email sent successfully to {user_email}")
             

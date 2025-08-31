@@ -1847,6 +1847,93 @@ def send_invitation_email(email, invitation_token, invited_by):
         
     return send_invitation_email_via_resend(email, invitation_token, invited_by)
 
+def send_cogs_update_email(attachments, recipient_email, potential_updates, new_products, actual_updates, replen_products):
+    """
+    Send email with COGS update results and attachments
+    """
+    try:
+        import smtplib
+        import ssl
+        from email.message import EmailMessage
+        
+        # Get email credentials from environment
+        email_address = os.getenv("EMAIL_ADDRESS")
+        email_password = os.getenv("EMAIL_PASSWORD")
+        
+        if not email_address or not email_password:
+            print("Email credentials not configured")
+            return False
+        
+        msg = EmailMessage()
+        msg['From'] = email_address
+        msg['To'] = recipient_email
+        msg['Subject'] = "Amazon COGS Update Report"
+        
+        # Build HTML email content
+        html_content = """<html>
+        <body>
+            <h2 style="color: #2c3e50;">Amazon COGS Update Report</h2>
+            <div style="margin-bottom: 30px;">"""
+        
+        if actual_updates:
+            html_content += """
+            <h3 style="color: #34495e;">Completed Cost Updates</h3>
+            <table style="border-collapse: collapse; width: 100%; margin-bottom: 20px;">
+                <tr style="background-color: #f8f9fa;">
+                    <th style="padding: 12px; border: 1px solid #ddd;">ASIN</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">SKU</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Name</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">New Cost</th>
+                    <th style="padding: 12px; border: 1px solid #ddd;">Source</th>
+                </tr>"""
+            for update in actual_updates:
+                source = update.get('source_worksheet', 'Email Update')
+                html_content += f"""
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{update['ASIN']}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{update['SKU']}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{update.get('Title', update.get('Name', ''))}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">${update['new_cost']:.2f}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{source}</td>
+                </tr>"""
+            html_content += "</table>"
+        
+        html_content += """
+            </div>
+            <p style="color: #7f8c8d;">
+                Your updated Sellerboard COGS file is attached.
+            </p>
+        </body>
+        </html>"""
+        
+        msg.add_alternative(html_content, subtype='html')
+        
+        # Add attachments
+        for attachment_data, attachment_filename in attachments:
+            attachment_data.seek(0)
+            try:
+                msg.add_attachment(
+                    attachment_data.read(),
+                    filename=attachment_filename,
+                    maintype="application",
+                    subtype="octet-stream"
+                )
+            except Exception as e:
+                print(f"Failed to add attachment {attachment_filename}: {e}")
+        
+        # Send email
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+            server.login(email_address, email_password)
+            server.send_message(msg)
+        
+        print(f"COGS update email sent successfully to {recipient_email}")
+        return True
+        
+    except Exception as e:
+        print(f"Failed to send COGS update email to {recipient_email}: {e}")
+        return False
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -6388,8 +6475,8 @@ def manual_sellerboard_update():
         if not user_record:
             user_record = user_config  # Use the main config if no nested user_record
         
-        if not get_user_field(user_record, 'integrations.sellerboard.cogs_url'):
-            return jsonify({'error': 'Sellerboard COGS URL not configured. Please update your settings.'}), 400
+        # Note: We no longer require Sellerboard COGS URL since we fetch from email
+        # Check for email access instead
         
         if not (get_user_field(user_record, 'integrations.google.tokens') or {}).get('refresh_token'):
             return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
@@ -6423,17 +6510,19 @@ def manual_sellerboard_update():
             import tempfile
             import os
             
-            # Get user's Sellerboard COGS URL
-            sellerboard_cogs_url = get_user_field(user_record, 'integrations.sellerboard.cogs_url')
-            if not sellerboard_cogs_url:
+            # Fetch Sellerboard COGS data from email instead of URL
+            print(f"[MANUAL UPDATE] Fetching Sellerboard COGS data from email for user {discord_id}")
+            cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+            
+            if not cogs_data:
                 return jsonify({
                     'success': False,
-                    'message': 'Update completed but no emails were sent.',
+                    'message': 'Could not fetch Sellerboard COGS data from email.',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': ['Sellerboard COGS URL not configured'],
-                    'details': 'Reasons: Sellerboard COGS URL not configured. Please add your Sellerboard COGS URL in settings.'
+                    'errors': ['Email COGS fetch failed'],
+                    'details': 'Reasons: Unable to fetch COGS data from Sellerboard emails. Please ensure Gmail permissions are granted and recent COGS emails are available.'
                 })
             
             # Get user's Google Sheet data for COGS processing
@@ -6453,241 +6542,34 @@ def manual_sellerboard_update():
                     'details': 'Reasons: Missing Google Sheet ID, worksheet title, or authentication. Please complete your Google Sheet setup.'
                 })
             
+            # Use email data we already fetched
+            sb_df = cogs_data['dataframe']
+            original_filename = cogs_data['filename']
             
-            # Download Sellerboard COGS data using EXACT same approach as working stock endpoints
+            print(f"[MANUAL UPDATE] Using Sellerboard COGS data from email: {original_filename}")
+            print(f"[MANUAL UPDATE] Found {len(sb_df)} products in COGS data")
+            # Normalize ASIN column name if needed
+            asin_column = cogs_data.get('asin_column', 'ASIN')
+            if asin_column != 'ASIN' and asin_column in sb_df.columns:
+                sb_df = sb_df.rename(columns={asin_column: 'ASIN'})
             
-            # Copy exact pattern from /api/test/stock-simple endpoint
-            cogs_url = get_user_field(user_record, 'integrations.sellerboard.cogs_url')
-            if not cogs_url:
+            # Ensure required columns exist
+            required_columns = ['ASIN', 'SKU', 'Title', 'Cost']
+            missing_columns = [col for col in required_columns if col not in sb_df.columns]
+            
+            if missing_columns:
                 return jsonify({
                     'success': False,
-                    'message': 'Update completed but no emails were sent.',
+                    'message': f'Sellerboard COGS file missing required columns: {", ".join(missing_columns)}',
                     'full_update': full_update,
                     'emails_sent': 0,
                     'users_processed': 0,
-                    'errors': ['Sellerboard COGS URL not configured'],
-                    'details': 'Reasons: Sellerboard COGS URL not configured in settings.'
+                    'errors': [f'Missing columns: {", ".join(missing_columns)}'],
+                    'details': f'The Sellerboard COGS email file is missing required columns: {", ".join(missing_columns)}'
                 })
             
-            # Download CSV directly - EXACT same pattern as stock endpoints
-            import requests
-            from io import StringIO
-            import pandas as pd
-            
-            # Based on our previous testing, we know the issue is URL encoding of spaces
-            # The automation URL redirects to a download URL with spaces in the filename
-            # All HTTP libraries automatically encode spaces to %20, but Sellerboard expects literal spaces
-            
-            
-            # FOCUS: The redirect URL contains spaces that get auto-encoded to %20
-            # Solution: Manually handle the redirect with custom urllib3 pool manager
-            try:
-                
-                # Step 1: Get the redirect URL but don't follow it
-                import urllib3
-                from urllib3.util.retry import Retry
-                from urllib3.util.timeout import Timeout
-                import urllib.parse
-                
-                # Create a requests session to get initial redirect
-                req_session = requests.Session()
-                initial_response = req_session.get(cogs_url, allow_redirects=False, timeout=30)
-                
-                if initial_response.status_code == 302:
-                    redirect_url = initial_response.headers.get('Location')
-                    
-                    if 'Cost of Goods Sold' in redirect_url:
-                        
-                        # Parse the URL to get components
-                        parsed = urllib.parse.urlparse(redirect_url)
-                        host = parsed.netloc
-                        path = parsed.path
-                        query = parsed.query
-                        
-                        
-                        # Create custom urllib3 pool manager with retry
-                        http = urllib3.PoolManager(
-                            timeout=Timeout(total=30),
-                            retries=Retry(total=3, backoff_factor=1)
-                        )
-                        
-                        # Here's the key: construct the URL manually without letting urllib3 encode spaces
-                        # We'll construct the full URL but encode everything except spaces
-                        
-                        # First, encode only the parts that need encoding (not spaces)
-                        import re
-                        
-                        # Split path by spaces to encode each part separately
-                        path_parts = path.split(' ')
-                        encoded_parts = []
-                        for part in path_parts:
-                            # Encode this part but we'll join with literal spaces
-                            encoded_part = urllib.parse.quote(part, safe='/')
-                            encoded_parts.append(encoded_part)
-                        
-                        # Now we have encoded parts, but we need to join them with spaces
-                        # This is the tricky part - we need urllib3 to NOT encode the spaces
-                        
-                        # Try using the _encode_url_methods to bypass automatic encoding
-                        full_url_with_spaces = f"https://{host}{path}"
-                        if query:
-                            full_url_with_spaces += f"?{query}"
-                            
-                        
-                        # Final attempt: Use raw socket to send HTTP request with spaces
-                        try:
-                            import socket
-                            import ssl
-                            
-                            print("DEBUG: Using raw socket connection to preserve spaces...")
-                            
-                            # Create SSL context
-                            context = ssl.create_default_context()
-                            
-                            # Build the raw HTTP request with spaces preserved
-                            http_request = f"GET {path} HTTP/1.1\r\n"
-                            http_request += f"Host: {host}\r\n"
-                            http_request += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
-                            http_request += "Accept: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*\r\n"
-                            http_request += "Connection: close\r\n"
-                            http_request += "\r\n"
-                            
-                            print(f"DEBUG: Raw HTTP request:\n{http_request[:200]}...")
-                            
-                            # Create socket and wrap with SSL
-                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                                sock.settimeout(30)
-                                with context.wrap_socket(sock, server_hostname=host) as ssock:
-                                    # Connect to the server
-                                    ssock.connect((host, 443))
-                                    
-                                    # Send the request with spaces
-                                    ssock.sendall(http_request.encode())
-                                    
-                                    # Read the response
-                                    response_data = b""
-                                    while True:
-                                        chunk = ssock.recv(4096)
-                                        if not chunk:
-                                            break
-                                        response_data += chunk
-                                    
-                                    # Parse HTTP response
-                                    response_str = response_data.decode('utf-8', errors='ignore')
-                                    print(f"DEBUG: Raw socket response status: {response_str[:100]}...")
-                                    
-                                    if 'HTTP/1.1 200 OK' in response_str:
-                                        print("DEBUG: Raw socket with spaces worked!")
-                                        
-                                        # Extract body after headers
-                                        if '\r\n\r\n' in response_str:
-                                            headers_end = response_str.find('\r\n\r\n') + 4
-                                            body_data = response_data[headers_end:]
-                                            
-                                            # Process the response based on content type
-                                            if 'format=xls' in cogs_url:
-                                                from io import BytesIO
-                                                sellerboard_df = pd.read_excel(BytesIO(body_data))
-                                            else:
-                                                body_str = body_data.decode('utf-8')
-                                                sellerboard_df = pd.read_csv(StringIO(body_str))
-                                                
-                                            print(f"DEBUG: SUCCESS! Raw socket preserved spaces! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                        else:
-                                            raise Exception("Could not find body in raw socket response")
-                                    elif 'HTTP/1.1 400 Bad Request' in response_str:
-                                        print("DEBUG: 400 Bad Request - spaces violate HTTP spec")
-                                        raise Exception("Server rejected request with spaces (400 Bad Request)")
-                                    elif 'HTTP/1.1 401 Unauthorized' in response_str:
-                                        print("DEBUG: 401 Unauthorized - authentication issue")
-                                        raise Exception("Server rejected request (401 Unauthorized)")
-                                    else:
-                                        status_line = response_str.split('\r\n')[0]
-                                        raise Exception(f"Raw socket request failed: {status_line}")
-                                        
-                        except Exception as e:
-                            print(f"DEBUG: Raw socket with spaces failed: {e}")
-                            
-                            # Last resort: Try alternative URL patterns that Sellerboard might accept
-                            print("DEBUG: Trying alternative URL patterns...")
-                            
-                            # Try different variations of the filename
-                            alternative_urls = []
-                            
-                            # Try replacing "Cost of Goods Sold" with different patterns
-                            base_url = redirect_url.split('TRS_TRADE_INC_')[0] + 'TRS_TRADE_INC_'
-                            suffix = redirect_url.split('Sold_')[1] if 'Sold_' in redirect_url else ''
-                            
-                            alternatives = [
-                                'COGS',  # Common abbreviation
-                                 'CostOfGoodsSold',  # No spaces
-                                'Cost_of_Goods_Sold',  # Underscores
-                                'Cost-of-Goods-Sold',  # Dashes
-                                'CoGS',  # Another abbreviation
-                                'cost_of_goods_sold',  # Lowercase with underscores
-                            ]
-                            
-                            for alt in alternatives:
-                                alt_url = f"{base_url}{alt}_{suffix}"
-                                alternative_urls.append(alt_url)
-                                
-                            # Try each alternative
-                            for i, alt_url in enumerate(alternative_urls):
-                                try:
-                                    print(f"DEBUG: Trying alternative {i+1}: {alt_url}")
-                                    response = req_session.get(alt_url, timeout=5)
-                                    if response.status_code == 200:
-                                        print(f"DEBUG: Alternative URL worked! Pattern: {alternatives[i]}")
-                                        
-                                        # Process the response
-                                        if 'format=xls' in cogs_url:
-                                            from io import BytesIO
-                                            sellerboard_df = pd.read_excel(BytesIO(response.content))
-                                        else:
-                                            sellerboard_df = pd.read_csv(StringIO(response.text))
-                                            
-                                        print(f"DEBUG: Alternative URL success! {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
-                                        break
-                                    else:
-                                        print(f"DEBUG: Alternative {i+1} failed with status {response.status_code}")
-                                except Exception as alt_e:
-                                    print(f"DEBUG: Alternative {i+1} error: {str(alt_e)[:50]}")
-                            else:
-                                # None of the alternatives worked
-                                raise Exception("All URL alternatives failed. The space encoding issue cannot be resolved with current Sellerboard API.")
-                    else:
-                        print("DEBUG: No spaces in redirect, processing normally")
-                        response = req_session.get(redirect_url, timeout=30)
-                        response.raise_for_status()
-                        
-                        if 'format=xls' in cogs_url:
-                            from io import BytesIO
-                            sellerboard_df = pd.read_excel(BytesIO(response.content))
-                        else:
-                            sellerboard_df = pd.read_csv(StringIO(response.text))
-                else:
-                    print("DEBUG: No redirect, processing direct response")
-                    if initial_response.status_code == 200:
-                        if 'format=xls' in cogs_url:
-                            from io import BytesIO
-                            sellerboard_df = pd.read_excel(BytesIO(initial_response.content))
-                        else:
-                            sellerboard_df = pd.read_csv(StringIO(initial_response.text))
-                    else:
-                        raise Exception(f"Unexpected response status: {initial_response.status_code}")
-                    
-            except Exception as e:
-                print(f"DEBUG: COGS processing failed: {e}")
-                return jsonify({
-                    'success': False,
-                    'message': 'Update failed - Could not process COGS data.',
-                    'full_update': full_update,
-                    'emails_sent': 0,
-                    'users_processed': 0,
-                    'errors': [f'COGS data processing error: {str(e)}'],
-                    'details': f'Failed to download or process COGS data from Sellerboard. Error: {str(e)}'
-                })
-            print(f"DEBUG: Successfully downloaded COGS data: {sellerboard_df.shape[0]} rows, {sellerboard_df.shape[1]} columns")
+            sellerboard_df = sb_df  # Use consistent variable name
+            print(f"DEBUG: Successfully loaded COGS data from email: {len(sellerboard_df)} rows, {len(sellerboard_df.columns)} columns")
             print(f"DEBUG: COGS data columns: {list(sellerboard_df.columns)}")
             
             # Get Google Sheet data for COGS processing
@@ -6989,8 +6871,7 @@ def manual_cogs_update_from_leadsheet():
         user_email = get_user_field(user_record, 'identity.email') or session.get('email')
         
         try:
-            from lambda_function import send_email
-            send_email(attachments, user_email, [], [], potential_updates, [])
+            send_cogs_update_email(attachments, user_email, [], [], potential_updates, [])
             
             return jsonify({
                 'success': True,

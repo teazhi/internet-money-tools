@@ -132,119 +132,69 @@ class EnhancedOrdersAnalysis:
                     print(f"Detected spaces in redirect URL, preserving them...")
                     
                     try:
-                        # Use raw socket for complete control over the HTTP request
-                        import socket
-                        import ssl
-                        from urllib.parse import urlparse
+                        # Use curl command to preserve spaces - it handles raw URLs better
+                        import subprocess
+                        import tempfile
+                        import os
                         
-                        parsed_url = urlparse(redirect_url)
+                        # Create a temporary file to store the response
+                        with tempfile.NamedTemporaryFile(mode='w+b', delete=False) as tmp_file:
+                            tmp_filename = tmp_file.name
                         
-                        # Create socket
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        sock.settimeout(30)
-                        
-                        # Wrap with SSL if needed
-                        if parsed_url.scheme == 'https':
-                            context = ssl.create_default_context()
-                            context.check_hostname = False
-                            context.verify_mode = ssl.CERT_NONE
-                            sock = context.wrap_socket(sock, server_hostname=parsed_url.hostname)
-                        
-                        # Connect to the server
-                        port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
-                        sock.connect((parsed_url.hostname, port))
-                        
-                        # Construct the path with query string, preserving spaces exactly
-                        path_with_query = parsed_url.path
-                        if parsed_url.query:
-                            path_with_query += '?' + parsed_url.query
-                        
-                        print(f"Making raw socket request to preserve spaces: {path_with_query}")
-                        
-                        # Build HTTP request with literal spaces
-                        request_lines = [
-                            f"GET {path_with_query} HTTP/1.1",
-                            f"Host: {parsed_url.netloc}",
-                        ]
-                        
-                        # Add headers
-                        for key, value in headers.items():
-                            request_lines.append(f"{key}: {value}")
-                        
-                        # Add empty line to end headers
-                        request_lines.append("")
-                        request_lines.append("")
-                        
-                        # Join with CRLF and send
-                        http_request = "\r\n".join(request_lines)
-                        sock.sendall(http_request.encode('utf-8'))
-                        
-                        # Read response
-                        response_data = b""
-                        while True:
-                            chunk = sock.recv(4096)
-                            if not chunk:
-                                break
-                            response_data += chunk
-                            # Check if we have the full response
-                            if b"\r\n\r\n" in response_data:
-                                header_end = response_data.find(b"\r\n\r\n") + 4
-                                headers_raw = response_data[:header_end]
+                        try:
+                            # Build curl command with the URL in quotes to preserve spaces
+                            curl_cmd = [
+                                'curl',
+                                '-L',  # Follow redirects (though we're already at the redirect URL)
+                                '-s',  # Silent mode
+                                '-S',  # Show errors
+                                '-k',  # Allow insecure SSL
+                                '-o', tmp_filename,  # Output to file
+                                '--max-time', '30',  # 30 second timeout
+                            ]
+                            
+                            # Add headers
+                            for key, value in headers.items():
+                                curl_cmd.extend(['-H', f'{key}: {value}'])
+                            
+                            # Add the URL with spaces preserved
+                            curl_cmd.append(redirect_url)
+                            
+                            print(f"Using curl to preserve spaces in URL")
+                            
+                            # Execute curl command
+                            result = subprocess.run(curl_cmd, capture_output=True, text=True)
+                            
+                            if result.returncode == 0:
+                                # Read the downloaded content
+                                with open(tmp_filename, 'r', encoding='utf-8') as f:
+                                    response_text = f.read()
                                 
-                                # Check for Content-Length
-                                if b"Content-Length:" in headers_raw:
-                                    for line in headers_raw.split(b"\r\n"):
-                                        if line.startswith(b"Content-Length:"):
-                                            content_length = int(line.split(b":")[1].strip())
-                                            # Read until we have all content
-                                            while len(response_data) - header_end < content_length:
-                                                chunk = sock.recv(4096)
-                                                if not chunk:
-                                                    break
-                                                response_data += chunk
-                                            break
-                                elif b"Transfer-Encoding: chunked" in headers_raw:
-                                    # Handle chunked encoding
-                                    while not response_data.endswith(b"0\r\n\r\n"):
-                                        chunk = sock.recv(4096)
-                                        if not chunk:
-                                            break
-                                        response_data += chunk
-                                    break
-                        
-                        sock.close()
-                        
-                        # Parse response
-                        response_text = response_data.decode('utf-8', errors='ignore')
-                        
-                        # Extract status code
-                        status_line = response_text.split('\r\n')[0]
-                        status_code = int(status_line.split()[1])
-                        
-                        if status_code == 200:
-                            # Extract body
-                            body_start = response_text.find('\r\n\r\n') + 4
-                            response_body = response_text[body_start:]
+                                print(f"✅ Curl successfully handled URL with spaces!")
+                                
+                                class MockResponse:
+                                    def __init__(self, text, status_code):
+                                        self.text = text
+                                        self.status_code = status_code
+                                    def raise_for_status(self):
+                                        if self.status_code >= 400:
+                                            raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
+                                
+                                response = MockResponse(response_text, 200)
+                            else:
+                                print(f"Curl failed with return code {result.returncode}")
+                                print(f"Stderr: {result.stderr}")
+                                raise Exception(f"Curl failed: {result.stderr}")
+                                
+                        finally:
+                            # Clean up temp file
+                            if os.path.exists(tmp_filename):
+                                os.unlink(tmp_filename)
                             
-                            print(f"✅ Raw socket successfully handled URL with spaces!")
-                            
-                            class MockResponse:
-                                def __init__(self, text, status_code):
-                                    self.text = text
-                                    self.status_code = status_code
-                                def raise_for_status(self):
-                                    if self.status_code >= 400:
-                                        raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
-                            
-                            response = MockResponse(response_body, 200)
-                        else:
-                            print(f"Raw socket failed with status {status_code}")
-                            raise requests.exceptions.HTTPError(f"HTTP {status_code}: Sellerboard rejected URL")
-                            
-                    except Exception as raw_http_error:
-                        print(f"Raw HTTP approach failed: {raw_http_error}")
+                    except Exception as curl_error:
+                        print(f"Curl approach failed: {curl_error}")
                         # No encoding fallbacks - spaces must be preserved exactly
-                        raise Exception(f"Failed to download from Sellerboard URL with spaces. Error: {raw_http_error}")
+                        raise Exception(f"Failed to download from Sellerboard URL with spaces. Error: {curl_error}")
                         
                 elif redirect_url and 'download-report' in redirect_url:
                     # Normal redirect handling for download URLs

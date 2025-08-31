@@ -129,39 +129,41 @@ class EnhancedOrdersAnalysis:
                 
                 # Check if redirect URL contains spaces (common with Sellerboard COGS reports)
                 if redirect_url and ' ' in redirect_url:
-                    # Solution: Use urllib3 with custom poolmanager that doesn't encode spaces
-                    import urllib3
-                    from urllib3.poolmanager import PoolManager
-                    from urllib3.util.retry import Retry
-                    from urllib3.util.timeout import Timeout
-                    import urllib.parse
-                    
                     print(f"Detected spaces in redirect URL, preserving them...")
                     
                     try:
-                        # Create custom urllib3 pool manager with SSL verification disabled for space handling
-                        http = urllib3.PoolManager(
-                            cert_reqs='CERT_NONE',  # Disable SSL verification to avoid encoding issues
-                            assert_hostname=False,
-                            timeout=Timeout(total=30),
-                            retries=Retry(total=3, backoff_factor=1)
-                        )
+                        # Use http.client for raw HTTP request that won't encode the URL
+                        import http.client
+                        import ssl
+                        from urllib.parse import urlparse
                         
-                        # Disable urllib3 SSL warnings for this specific case
-                        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                        parsed_url = urlparse(redirect_url)
                         
-                        # Convert headers to format urllib3 expects
-                        urllib3_headers = {}
-                        for key, value in headers.items():
-                            urllib3_headers[key] = value
+                        # Create SSL context that doesn't verify certificates (for space handling)
+                        ssl_context = ssl.create_default_context()
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
                         
-                        # Make request with raw URL - urllib3 handles spaces better than requests
-                        print(f"Making urllib3 request to URL with spaces: {redirect_url}")
-                        raw_response = http.request('GET', redirect_url, headers=urllib3_headers)
+                        # Create connection
+                        if parsed_url.scheme == 'https':
+                            conn = http.client.HTTPSConnection(parsed_url.netloc, context=ssl_context)
+                        else:
+                            conn = http.client.HTTPConnection(parsed_url.netloc)
+                        
+                        # Construct the path with query string, preserving spaces exactly
+                        path_with_query = parsed_url.path
+                        if parsed_url.query:
+                            path_with_query += '?' + parsed_url.query
+                        
+                        print(f"Making raw HTTP request to preserve spaces: {path_with_query}")
+                        
+                        # Make the request with literal spaces preserved
+                        conn.request('GET', path_with_query, headers=dict(headers))
+                        raw_response = conn.getresponse()
                         
                         if raw_response.status == 200:
-                            response_text = raw_response.data.decode('utf-8')
-                            print(f"✅ urllib3 successfully handled URL with spaces!")
+                            response_text = raw_response.read().decode('utf-8')
+                            print(f"✅ Raw HTTP successfully handled URL with spaces!")
                             
                             class MockResponse:
                                 def __init__(self, text, status_code):
@@ -173,36 +175,15 @@ class EnhancedOrdersAnalysis:
                             
                             response = MockResponse(response_text, 200)
                         else:
-                            print(f"urllib3 failed with status {raw_response.status}")
-                            # If it's 401, the URL format is correct but token is expired
-                            if raw_response.status == 401:
-                                raise requests.exceptions.HTTPError(f"HTTP 401: Sellerboard authentication token expired. Please regenerate your URL.")
-                            else:
-                                raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
-                            
-                    except Exception as urllib3_error:
-                        print(f"urllib3 approach failed: {urllib3_error}")
+                            print(f"Raw HTTP failed with status {raw_response.status}")
+                            raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}: Sellerboard rejected URL - spaces may not be preserved correctly")
                         
-                        # If the error mentions 401, don't try encoding fallbacks - it's an auth issue
-                        if "401" in str(urllib3_error):
-                            print("Authentication error detected - skipping encoding fallbacks")
-                            raise urllib3_error
+                        conn.close()
                             
-                        # Try alternative: manually construct URL without auto-encoding
-                        try:
-                            # Split URL at spaces and encode each part separately, then rejoin with %20
-                            # But then manually replace %20 back to + which some servers accept
-                            url_encoded = urllib.parse.quote(redirect_url, safe=':/?#[]@!$&\'()*+,;=')
-                            url_with_plus = url_encoded.replace('%20', '+')
-                            
-                            print(f"Trying + encoding instead of %20: {url_with_plus}")
-                            response = session.get(url_with_plus, timeout=30, headers=headers)
-                            
-                        except Exception as plus_error:
-                            print(f"+ encoding failed: {plus_error}")
-                            # Final fallback to normal encoded URL
-                            print(f"Final fallback to encoded URL")
-                            response = session.get(redirect_url, timeout=30, headers=headers)
+                    except Exception as raw_http_error:
+                        print(f"Raw HTTP approach failed: {raw_http_error}")
+                        # No encoding fallbacks - spaces must be preserved exactly
+                        raise Exception(f"Failed to download from Sellerboard URL with spaces. Error: {raw_http_error}")
                         
                 elif redirect_url and 'download-report' in redirect_url:
                     # Normal redirect handling for download URLs

@@ -14056,6 +14056,34 @@ def get_inventory_age_analysis():
         # Initialize age analyzer
         age_analyzer = InventoryAgeAnalyzer()
         
+        # Use both COGS and stock files strategically
+        import pandas as pd
+        cogs_df = pd.DataFrame(cogs_data['data'])
+        
+        # Filter COGS data to exclude hidden products
+        asin_col = cogs_data['asin_column']
+        
+        # Check for Hide column and filter out hidden products
+        hide_col = None
+        for col in cogs_df.columns:
+            if 'hide' in col.lower():
+                hide_col = col
+                break
+        
+        if hide_col:
+            cogs_df_filtered = cogs_df[cogs_df[hide_col] != 'Yes']
+            print(f"Filtered out {len(cogs_df) - len(cogs_df_filtered)} hidden products from COGS file")
+        else:
+            cogs_df_filtered = cogs_df
+            print("No Hide column found in COGS file")
+        
+        # Get stock data from stock file for accurate stock quantities
+        stock_df = analyzer.download_csv(stock_url)
+        stock_info = analyzer.get_stock_info(stock_df)
+        
+        print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
+        print(f"Stock file: {len(stock_info)} products")
+        
         # Create enhanced_analytics by combining COGS file (for all ASINs) with Stock file (for accurate stock quantities)
         enhanced_analytics = {}
         
@@ -14126,34 +14154,6 @@ def get_inventory_age_analysis():
         
         # Download raw orders data for velocity inference using the same analyzer
         orders_df = analyzer.download_csv(orders_url)
-        
-        # Use both COGS and stock files strategically
-        import pandas as pd
-        cogs_df = pd.DataFrame(cogs_data['data'])
-        
-        # Filter COGS data to exclude hidden products
-        asin_col = cogs_data['asin_column']
-        
-        # Check for Hide column and filter out hidden products
-        hide_col = None
-        for col in cogs_df.columns:
-            if 'hide' in col.lower():
-                hide_col = col
-                break
-        
-        if hide_col:
-            cogs_df_filtered = cogs_df[cogs_df[hide_col] != 'Yes']
-            print(f"Filtered out {len(cogs_df) - len(cogs_df_filtered)} hidden products from COGS file")
-        else:
-            cogs_df_filtered = cogs_df
-            print("No Hide column found in COGS file")
-        
-        # Get stock data from stock file for accurate stock quantities
-        stock_df = analyzer.download_csv(stock_url)
-        stock_info = analyzer.get_stock_info(stock_df)
-        
-        print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
-        print(f"Stock file: {len(stock_info)} products")
         
         # Debug: Show what stock values we're actually getting
         print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")

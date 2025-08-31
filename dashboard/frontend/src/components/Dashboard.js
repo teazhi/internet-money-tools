@@ -227,7 +227,18 @@ const Dashboard = () => {
   // VA subusers should skip setup and use their parent's configuration
   const needsOnboarding = isMainUser && (!user?.profile_configured || !user?.google_linked || !user?.sheet_configured);
   
+  // Debug logging for subuser issue
+  console.log('[DASHBOARD] User debug info:', {
+    user_type: user?.user_type,
+    isMainUser,
+    profile_configured: user?.profile_configured,
+    google_linked: user?.google_linked,
+    sheet_configured: user?.sheet_configured,
+    needsOnboarding
+  });
+  
   if (needsOnboarding) {
+    console.log('[DASHBOARD] Showing onboarding for user:', user?.discord_id);
     return <Onboarding />;
   }
 

@@ -2393,6 +2393,18 @@ def discord_callback():
                 print(f"[USER_CREATE] Created main user (no invitation)")
                 
             users.append(user_record)
+        else:
+            # Handle existing users with invitations (e.g., converting to subuser)
+            if valid_invitation:
+                print(f"[USER_UPDATE] Processing invitation for existing user: {valid_invitation}")
+                if valid_invitation.get('user_type') == 'subuser':
+                    set_user_field(user_record, 'account.user_type', 'subuser')
+                    set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))
+                    set_user_field(user_record, 'account.permissions', valid_invitation.get('permissions', ['reimbursements_analysis']))
+                    set_user_field(user_record, 'identity.va_name', valid_invitation.get('va_name', ''))
+                    set_user_field(user_record, 'identity.email', valid_invitation.get('email'))
+                    set_user_field(user_record, 'profile.configured', True)  # Subusers inherit parent's config
+                    print(f"[USER_UPDATE] Converted existing user to subuser with parent: {valid_invitation.get('parent_user_id')}")
         
         # Update Discord username, avatar, and last activity in permanent record
         set_user_field(user_record, 'identity.discord_username', user_data['username'])

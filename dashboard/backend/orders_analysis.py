@@ -174,10 +174,20 @@ class EnhancedOrdersAnalysis:
                             response = MockResponse(response_text, 200)
                         else:
                             print(f"urllib3 failed with status {raw_response.status}")
-                            raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
+                            # If it's 401, the URL format is correct but token is expired
+                            if raw_response.status == 401:
+                                raise requests.exceptions.HTTPError(f"HTTP 401: Sellerboard authentication token expired. Please regenerate your URL.")
+                            else:
+                                raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
                             
                     except Exception as urllib3_error:
                         print(f"urllib3 approach failed: {urllib3_error}")
+                        
+                        # If the error mentions 401, don't try encoding fallbacks - it's an auth issue
+                        if "401" in str(urllib3_error):
+                            print("Authentication error detected - skipping encoding fallbacks")
+                            raise urllib3_error
+                            
                         # Try alternative: manually construct URL without auto-encoding
                         try:
                             # Split URL at spaces and encode each part separately, then rejoin with %20

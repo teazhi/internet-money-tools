@@ -9256,10 +9256,20 @@ def fetch_sellerboard_cogs_data(cogs_url):
                         response = MockResponse(response_text, 200)
                     else:
                         print(f"urllib3 failed with status {raw_response.status}")
-                        raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
+                        # If it's 401, the URL format is correct but token is expired
+                        if raw_response.status == 401:
+                            raise requests.exceptions.HTTPError(f"HTTP 401: Sellerboard authentication token expired. Please regenerate your COGS URL.")
+                        else:
+                            raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}")
                         
                 except Exception as urllib3_error:
                     print(f"urllib3 approach failed: {urllib3_error}")
+                    
+                    # If the error mentions 401, don't try encoding fallbacks - it's an auth issue
+                    if "401" in str(urllib3_error):
+                        print("Authentication error detected - skipping encoding fallbacks")
+                        raise urllib3_error
+                        
                     # Try alternative: manually construct URL without auto-encoding
                     try:
                         # Split URL at spaces and encode each part separately, then rejoin with %20
@@ -13795,7 +13805,7 @@ def get_inventory_age_analysis():
             'discord_id': discord_id
         }
         
-        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(user_record, 'integrations.google.tokens'))}")
+        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
         
         from orders_analysis import OrdersAnalysis
         cogs_url = get_user_sellerboard_cogs_url(config_user_record)

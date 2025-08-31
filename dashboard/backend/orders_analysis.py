@@ -1544,15 +1544,16 @@ class EnhancedOrdersAnalysis:
             except Exception as e:
                 print(f"Failed to fetch email-based COGS data: {e}")
         
+        # Always try to fetch COGS data and purchase analytics if we have any Google Sheets configuration
+        should_fetch_analytics = (
+            user_settings and 
+            (user_settings.get('enable_source_links') or 
+             user_settings.get('sheet_id') or 
+             user_settings.get('search_all_worksheets'))
+        )
+        
         # If no Sellerboard COGS data, or if it failed, try Google Sheets
         if not cogs_data:
-            # Always try to fetch COGS data and purchase analytics if we have any Google Sheets configuration
-            should_fetch_analytics = (
-                user_settings and 
-                (user_settings.get('enable_source_links') or 
-                 user_settings.get('sheet_id') or 
-                 user_settings.get('search_all_worksheets'))
-            )
         
         if should_fetch_analytics:
             try:

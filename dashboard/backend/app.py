@@ -6608,23 +6608,8 @@ def manual_sellerboard_update():
             # Get Google Sheet data for COGS processing
             print("DEBUG: Fetching Google Sheet data...")
             
-            # Refresh access token for Google Sheets
-            access_token = refresh_access_token(refresh_token)
-            if not access_token:
-                return jsonify({
-                    'success': False,
-                    'message': 'Failed to refresh Google access token.',
-                    'full_update': full_update,
-                    'emails_sent': 0,
-                    'users_processed': 0,
-                    'errors': ['Google authentication failed'],
-                    'details': 'Unable to refresh Google access token for sheet access.'
-                })
-            
-            # Fetch Google Sheet data
-            from orders_analysis import EnhancedOrdersAnalysis
-            analysis_obj = EnhancedOrdersAnalysis()
-            sheet_df = analysis_obj.fetch_google_sheet_api(access_token, sheet_id, worksheet_title)
+            # Fetch Google Sheet data (handles token refresh internally)
+            sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
             
             if sheet_df.empty:
                 return jsonify({

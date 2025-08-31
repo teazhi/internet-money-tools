@@ -6810,6 +6810,217 @@ Internet Money Tools
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/manual-cogs-update-from-leadsheet', methods=['POST'])
+@login_required
+def manual_cogs_update_from_leadsheet():
+    """Manually update COGS of all ASINs in Sellerboard from lead sheet worksheets"""
+    try:
+        discord_id = session.get('discord_id')
+        
+        if not discord_id:
+            return jsonify({'error': 'User not authenticated or discord_id not found'}), 401
+        
+        # Get user configuration  
+        user_record = get_user_record(discord_id)
+        if not user_record:
+            return jsonify({'error': 'User configuration not found'}), 404
+        
+        # Check if user has required settings
+        google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+        sheet_id = get_user_sheet_id(user_record) 
+        enable_source_links = get_user_field(user_record, 'integrations.google.enable_source_links', False)
+        search_all_worksheets = get_user_field(user_record, 'integrations.google.search_all_worksheets', False)
+        
+        if not google_tokens.get('refresh_token'):
+            return jsonify({'error': 'Google account not linked. Please link your Google account.'}), 400
+        
+        if not sheet_id:
+            return jsonify({'error': 'Google Sheet not configured. Please complete sheet setup.'}), 400
+        
+        if not enable_source_links or not search_all_worksheets:
+            return jsonify({
+                'error': 'Lead sheet scanning not enabled. Please enable "Source Links" and "Search All Worksheets" in your settings.'
+            }), 400
+        
+        # First fetch the latest Sellerboard COGS data from email
+        print(f"[MANUAL COGS UPDATE] Fetching Sellerboard COGS data from email for user {discord_id}")
+        cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+        
+        if not cogs_data:
+            return jsonify({
+                'error': 'Could not fetch Sellerboard COGS data from email',
+                'message': 'Please ensure Gmail permissions are granted and recent COGS emails are available.'
+            }), 400
+        
+        sb_df = cogs_data['dataframe']
+        print(f"[MANUAL COGS UPDATE] Found {len(sb_df)} products in Sellerboard COGS data")
+        
+        # Get fresh access token
+        access_token = refresh_access_token(google_tokens['refresh_token'])
+        
+        # Fetch all worksheets from the Google Sheet
+        print(f"[MANUAL COGS UPDATE] Scanning all worksheets in lead sheet for cost data")
+        worksheets_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        response = requests.get(worksheets_url, headers=headers)
+        if not response.ok:
+            return jsonify({'error': 'Failed to access Google Sheet'}), 400
+        
+        sheet_info = response.json()
+        worksheets = sheet_info.get('sheets', [])
+        
+        print(f"[MANUAL COGS UPDATE] Found {len(worksheets)} worksheets to scan")
+        
+        # Collect cost data from all worksheets
+        cost_lookup = {}  # {ASIN: {cost: float, worksheet: str, last_seen: datetime}}
+        
+        for sheet in worksheets:
+            worksheet_name = sheet['properties']['title']
+            print(f"[MANUAL COGS UPDATE] Scanning worksheet: {worksheet_name}")
+            
+            try:
+                # Fetch worksheet data
+                ws_df = fetch_google_sheet_api(access_token, sheet_id, worksheet_name)
+                
+                if ws_df.empty:
+                    continue
+                
+                # Look for ASIN and COGS columns
+                asin_col = None
+                cogs_col = None
+                date_col = None
+                
+                for col in ws_df.columns:
+                    col_lower = col.lower()
+                    if 'asin' in col_lower and not asin_col:
+                        asin_col = col
+                    elif 'cogs' in col_lower or 'cost' in col_lower:
+                        cogs_col = col
+                    elif 'date' in col_lower:
+                        date_col = col
+                
+                if not asin_col or not cogs_col:
+                    print(f"[MANUAL COGS UPDATE] Skipping {worksheet_name} - missing ASIN or COGS column")
+                    continue
+                
+                # Process each row for cost data
+                for _, row in ws_df.iterrows():
+                    asin = str(row[asin_col]).strip()
+                    if not asin or asin.lower() in ['nan', 'none', '']:
+                        continue
+                    
+                    try:
+                        cost_value = pd.to_numeric(str(row[cogs_col]).replace('$', '').replace(',', ''), errors='coerce')
+                        if pd.isna(cost_value):
+                            continue
+                        
+                        # Get date if available
+                        date_value = datetime.now()
+                        if date_col and date_col in row.index:
+                            try:
+                                date_value = pd.to_datetime(row[date_col], errors='coerce')
+                                if pd.isna(date_value):
+                                    date_value = datetime.now()
+                            except:
+                                date_value = datetime.now()
+                        
+                        # Keep the most recent cost for each ASIN
+                        if asin not in cost_lookup or date_value > cost_lookup[asin]['last_seen']:
+                            cost_lookup[asin] = {
+                                'cost': float(cost_value),
+                                'worksheet': worksheet_name,
+                                'last_seen': date_value
+                            }
+                    
+                    except Exception as row_error:
+                        continue
+                
+                print(f"[MANUAL COGS UPDATE] Found {len([k for k in cost_lookup if cost_lookup[k]['worksheet'] == worksheet_name])} cost entries in {worksheet_name}")
+                
+            except Exception as ws_error:
+                print(f"[MANUAL COGS UPDATE] Error processing worksheet {worksheet_name}: {ws_error}")
+                continue
+        
+        print(f"[MANUAL COGS UPDATE] Total unique ASINs with cost data found: {len(cost_lookup)}")
+        
+        # Update Sellerboard COGS data with found costs
+        updates_made = 0
+        potential_updates = []
+        
+        for _, row in sb_df.iterrows():
+            asin = str(row['ASIN']).strip()
+            if asin in cost_lookup:
+                current_cost = pd.to_numeric(str(row.get('Cost', 0)).replace('$', ''), errors='coerce')
+                new_cost = cost_lookup[asin]['cost']
+                worksheet_source = cost_lookup[asin]['worksheet']
+                
+                if pd.isna(current_cost) or current_cost != new_cost:
+                    sb_df.loc[sb_df['ASIN'] == asin, 'Cost'] = new_cost
+                    updates_made += 1
+                    
+                    potential_updates.append({
+                        'ASIN': asin,
+                        'SKU': row.get('SKU', ''),
+                        'Title': row.get('Title', ''),
+                        'old_cost': current_cost if not pd.isna(current_cost) else 0,
+                        'new_cost': new_cost,
+                        'source_worksheet': worksheet_source
+                    })
+        
+        if updates_made == 0:
+            return jsonify({
+                'success': True,
+                'message': 'No cost updates needed - all COGS data is already up to date',
+                'updates_made': 0,
+                'total_asins_checked': len(sb_df),
+                'cost_sources_found': len(cost_lookup)
+            })
+        
+        # Save updated Sellerboard file and send email
+        sb_buffer = BytesIO()
+        sb_df.to_excel(sb_buffer, index=False, engine='openpyxl')
+        sb_buffer.seek(0)
+        
+        # Send email with updated file
+        attachments = [(sb_buffer, f"sellerboard_cogs_updated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")]
+        
+        # Create update summary email
+        user_email = get_user_field(user_record, 'identity.email') or session.get('email')
+        
+        try:
+            from lambda_function import send_email
+            send_email(attachments, user_email, [], [], potential_updates, [])
+            
+            return jsonify({
+                'success': True,
+                'message': f'Successfully updated {updates_made} COGS entries from lead sheet data',
+                'updates_made': updates_made,
+                'total_asins_checked': len(sb_df),
+                'cost_sources_found': len(cost_lookup),
+                'email_sent': True,
+                'updates': potential_updates[:10]  # Show first 10 updates
+            })
+            
+        except Exception as email_error:
+            print(f"Error sending email: {email_error}")
+            return jsonify({
+                'success': True,
+                'message': f'Successfully updated {updates_made} COGS entries from lead sheet data (email failed)',
+                'updates_made': updates_made,
+                'total_asins_checked': len(sb_df),
+                'cost_sources_found': len(cost_lookup),
+                'email_sent': False,
+                'email_error': str(email_error),
+                'updates': potential_updates[:10]
+            })
+        
+    except Exception as e:
+        print(f"Error in manual COGS update from lead sheet: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/trigger-script', methods=['POST'])
 @admin_required
 def trigger_script():
@@ -14389,6 +14600,15 @@ def get_demo_inventory_age_analysis():
     # Generate demo inventory age data
     demo_asins = ['B08N5WRWNW', 'B07XJ8C8F7', 'B09KMXJQ9R', 'B08ABC123', 'B09DEF456', 'B07GHI789']
     
+    demo_product_names = {
+        'B08N5WRWNW': 'Wireless Bluetooth Earbuds Pro',
+        'B07XJ8C8F7': 'Smart LED Strip Lights 16ft',
+        'B09KMXJQ9R': 'USB-C Fast Charging Cable 6ft',
+        'B08ABC123': 'Portable Power Bank 20000mAh',
+        'B09DEF456': 'Laptop Stand Adjustable Aluminum',
+        'B07GHI789': 'Gaming Mouse RGB Wireless'
+    }
+    
     age_categories = {
         'fresh': {'min': 0, 'max': 30, 'label': 'Fresh (0-30 days)', 'color': '#10b981'},
         'moderate': {'min': 31, 'max': 90, 'label': 'Moderate (31-90 days)', 'color': '#f59e0b'}, 
@@ -14458,7 +14678,7 @@ def get_demo_inventory_age_analysis():
             
             action_items.append({
                 'asin': asin,
-                'product_name': f'Demo Product {asin}',
+                'product_name': demo_product_names.get(asin, f'Demo Product {asin}'),
                 'age_days': age_days,
                 'age_category': category,
                 'current_stock': current_stock,
@@ -14471,6 +14691,17 @@ def get_demo_inventory_age_analysis():
     
     # Sort action items by urgency
     action_items.sort(key=lambda x: x['urgency_score'], reverse=True)
+    
+    # Create enhanced_analytics for frontend compatibility
+    enhanced_analytics = {}
+    for asin in demo_asins:
+        enhanced_analytics[asin] = {
+            'product_name': demo_product_names.get(asin, f'Demo Product {asin}'),
+            'current_stock': random.randint(10, 200),
+            'velocity': {
+                'weighted_velocity': random.uniform(0.5, 5.0)
+            }
+        }
     
     return jsonify({
         'age_analysis': age_analysis,
@@ -14494,7 +14725,8 @@ def get_demo_inventory_age_analysis():
         'action_items': action_items[:20],
         'total_action_items': len(action_items),
         'generated_at': datetime.now().isoformat(),
-        'demo_mode': True
+        'demo_mode': True,
+        'enhanced_analytics': enhanced_analytics
     })
 
 @app.route('/api/demo/product-image/<asin>/simple', methods=['GET'])

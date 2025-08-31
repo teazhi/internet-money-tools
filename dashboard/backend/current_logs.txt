@@ -36,3 +36,8 @@ Purchases table initialized successfully
 127.0.0.1 - - [29/Aug/2025 09:08:58] "[31m[1mGET /api/admin/users HTTP/1.1[0m" 401 -
 127.0.0.1 - - [30/Aug/2025 12:29:38] "[33mGET /api/discount-opportunities/test-patterns HTTP/1.1[0m" 404 -
 127.0.0.1 - - [30/Aug/2025 12:29:43] "[31m[1mPOST /api/discount-opportunities/analyze HTTP/1.1[0m" 401 -
+127.0.0.1 - - [31/Aug/2025 13:30:34] "GET /api/demo/analytics/inventory-age HTTP/1.1" 200 -
+127.0.0.1 - - [31/Aug/2025 13:30:39] "GET /api/demo/analytics/inventory-age HTTP/1.1" 200 -
+127.0.0.1 - - [31/Aug/2025 13:30:46] "GET /api/demo/analytics/inventory-age HTTP/1.1" 200 -
+127.0.0.1 - - [31/Aug/2025 13:31:56] "GET /api/demo/analytics/inventory-age HTTP/1.1" 200 -
+127.0.0.1 - - [31/Aug/2025 13:32:48] "GET /api/demo/analytics/inventory-age HTTP/1.1" 200 -

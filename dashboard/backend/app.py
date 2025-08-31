@@ -2374,7 +2374,6 @@ def discord_callback():
         print(f"[USER_HANDLING] valid_invitation: {valid_invitation}")
         
         if user_record is None:
-            user_record = {"discord_id": discord_id}
             print(f"[USER_CREATE] Creating new user record")
             
             # Check if this is a sub-user invitation
@@ -2382,20 +2381,22 @@ def discord_callback():
                 print(f"[USER_CREATE] Processing invitation: {valid_invitation}")
                 print(f"[USER_CREATE] Invitation type: {valid_invitation.get('user_type', 'main')}")
                 if valid_invitation.get('user_type') == 'subuser':
-                    set_user_field(user_record, 'account.user_type', 'subuser')
-                    set_user_field(user_record, 'account.parent_user_id', valid_invitation.get('parent_user_id'))
-                    set_user_field(user_record, 'account.permissions', valid_invitation.get('permissions', ['reimbursements_analysis']))
-                    set_user_field(user_record, 'identity.va_name', valid_invitation.get('va_name', ''))
-                    set_user_field(user_record, 'identity.email', valid_invitation.get('email'))
-                    set_user_field(user_record, 'profile.configured', True)  # Subusers inherit parent's config
+                    # Create user record with subuser fields pre-populated to avoid normalization override
+                    user_record = {
+                        "discord_id": discord_id,
+                        "user_type": "subuser",  # Old schema field for migration compatibility
+                        "parent_user_id": valid_invitation.get('parent_user_id'),
+                        "permissions": valid_invitation.get('permissions', ['reimbursements_analysis']),
+                        "va_name": valid_invitation.get('va_name', ''),
+                        "email": valid_invitation.get('email'),
+                        "profile_configured": True  # Old schema field for migration compatibility
+                    }
                     print(f"[USER_CREATE] Created subuser with parent: {valid_invitation.get('parent_user_id')}")
                 else:
-                    set_user_field(user_record, 'account.user_type', 'main')
-                    set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
+                    user_record = {"discord_id": discord_id}
                     print(f"[USER_CREATE] Created main user")
             else:
-                set_user_field(user_record, 'account.user_type', 'main')
-                set_user_field(user_record, 'account.permissions', ['all'])  # Main users have all permissions
+                user_record = {"discord_id": discord_id}
                 print(f"[USER_CREATE] Created main user (no invitation)")
                 
             users.append(user_record)
@@ -6678,10 +6679,50 @@ def manual_sellerboard_update():
                     })
                 
                 # Convert to DataFrame for processing
-                sheet_df = pd.DataFrame(cogs_data_all)
-                print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets")
+                if cogs_data_all:
+                    sheet_df = pd.DataFrame(cogs_data_all)
+                    print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets")
+                    print(f"DEBUG: All worksheets DataFrame columns: {list(sheet_df.columns)}")
+                    
+                    # The all-worksheets function returns data with specific column names
+                    # Let's map them to what we expect
+                    if 'asin' in sheet_df.columns:
+                        asin_field = 'asin'
+                    elif 'ASIN' in sheet_df.columns:
+                        asin_field = 'ASIN'
+                    else:
+                        # Look for any column containing 'asin' (case insensitive)
+                        asin_candidates = [col for col in sheet_df.columns if 'asin' in col.lower()]
+                        if asin_candidates:
+                            asin_field = asin_candidates[0]
+                            print(f"DEBUG: Using ASIN column: {asin_field}")
+                        else:
+                            print(f"DEBUG: No ASIN column found in combined data, skipping all worksheets approach")
+                            sheet_df = pd.DataFrame()  # Empty DataFrame to skip processing
+                    
+                    if not sheet_df.empty:
+                        if 'cogs' in sheet_df.columns:
+                            cogs_field = 'cogs'
+                        elif 'COGS' in sheet_df.columns:
+                            cogs_field = 'COGS'
+                        else:
+                            # Look for any column containing 'cogs' or 'cost'
+                            cogs_candidates = [col for col in sheet_df.columns if any(x in col.lower() for x in ['cogs', 'cost'])]
+                            if cogs_candidates:
+                                cogs_field = cogs_candidates[0]
+                                print(f"DEBUG: Using COGS column: {cogs_field}")
+                            else:
+                                print(f"DEBUG: No COGS column found in combined data, skipping all worksheets approach")
+                                sheet_df = pd.DataFrame()  # Empty DataFrame to skip processing
+                else:
+                    sheet_df = pd.DataFrame()  # Empty DataFrame if no data returned
                 
-            else:
+                # If all worksheets approach failed, fallback to main worksheet
+                if sheet_df.empty:
+                    print("DEBUG: All worksheets approach found no valid data, falling back to main worksheet...")
+                    search_all_worksheets = False
+                
+            if not search_all_worksheets:
                 print("DEBUG: Fetching data from main worksheet only...")
                 # Fetch Google Sheet data (handles token refresh internally)
                 sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
@@ -6698,11 +6739,13 @@ def manual_sellerboard_update():
                     })
                 
                 print(f"DEBUG: Fetched {len(sheet_df)} rows from main worksheet")
+                
+                # Set field mappings for main worksheet
+                asin_field = column_mapping.get("ASIN", "ASIN") 
+                cogs_field = column_mapping.get("COGS", "COGS")
             
-            # Get field mappings
+            # Get date field mapping (used in both cases)
             date_field = column_mapping.get("Date", "Date")
-            asin_field = column_mapping.get("ASIN", "ASIN") 
-            cogs_field = column_mapping.get("COGS", "COGS")
             
             # Filter data for processing (date filtering only if not using all worksheets data)
             from datetime import datetime, timedelta

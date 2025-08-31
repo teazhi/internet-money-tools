@@ -232,16 +232,14 @@ const AllProductAnalytics = () => {
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
       asin,
-      product_name: allProductsData?.enhanced_analytics?.[asin]?.stock_info?.Title || 
-                   allProductsData?.enhanced_analytics?.[asin]?.stock_info?.['Product Name'] || 
-                   allProductsData?.enhanced_analytics?.[asin]?.stock_info?.Name || 
+      product_name: allProductsData?.enhanced_analytics?.[asin]?.product_name || 
                    `Product ${asin}`,
       age_info: ageInfo,
       estimated_age_days: ageInfo.estimated_age_days || 0,
       age_category: ageInfo.age_category || 'unknown',
       confidence_score: ageInfo.confidence_score || 0,
-      // Get real inventory data - current_stock should come directly from FBA/FBM Stock column
-      current_stock: allProductsData?.enhanced_analytics?.[asin]?.stock_info?.['FBA/FBM Stock'] || 0,
+      // Get real inventory data - current_stock should come directly from enhanced_analytics
+      current_stock: allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0,
       velocity: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
       days_left: Math.floor(Math.random() * 180) + 5,
       reorder_point: Math.floor(Math.random() * 50) + 10,

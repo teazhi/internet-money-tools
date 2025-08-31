@@ -1521,6 +1521,16 @@ class EnhancedOrdersAnalysis:
                     for item in email_cogs_result['data']:
                         asin = item.get(asin_col)
                         if asin:
+                            # Check if product is hidden (skip hidden products)
+                            is_hidden = False
+                            for key, value in item.items():
+                                if 'hide' in key.lower() and str(value).lower() == 'yes':
+                                    is_hidden = True
+                                    break
+                            
+                            if is_hidden:
+                                continue  # Skip hidden products
+                            
                             # Look for COGS/cost columns in the data
                             cogs_value = None
                             for key, value in item.items():
@@ -1690,15 +1700,23 @@ class EnhancedOrdersAnalysis:
         products_to_analyze.update(today_sales.keys())  # Products with sales today
         products_to_analyze.update(yesterday_sales.keys())  # Products with historical sales
         
-        # IMPORTANT: Also include ALL products from stock info, even without recent sales
-        # This ensures lead analysis can check against complete inventory
-        products_to_analyze.update(stock_info.keys())
+        # IMPORTANT: Include ALL products from COGS file for complete product list (includes in-stock and out-of-stock)
+        # If COGS data is available from email, use it for complete product list
+        if cogs_data:
+            products_to_analyze.update(cogs_data.keys())
+            print(f"Using COGS file for complete product list: {len(cogs_data)} products")
+        else:
+            # Fallback to stock info if COGS data not available
+            products_to_analyze.update(stock_info.keys())
+            print(f"Fallback to Stock file for product list: {len(stock_info)} products")
         
         # Total products to analyze calculated
         
         for asin in products_to_analyze:
-            if asin not in stock_info:
-                continue
+            # If using COGS file, we want to include ALL ASINs even if not in stock file
+            # For ASINs not in stock file, we'll use fallback stock data or mark as out of stock
+            if not cogs_data and asin not in stock_info:
+                continue  # Only skip if using stock file as primary source
                 
             # Calculate enhanced velocity
             velocity_data = self.calculate_enhanced_velocity(asin, orders_df, for_date, user_timezone)
@@ -1706,15 +1724,22 @@ class EnhancedOrdersAnalysis:
             # For lead analysis, we need ALL products in inventory, even those with zero velocity
             # So we DO NOT skip products with zero velocity anymore
             
+            # Get stock data for this ASIN (from Stock file if available, otherwise fallback)
+            asin_stock_info = stock_info.get(asin, {
+                'current_stock': 0,
+                'Title': f'Product {asin}',
+                'source': 'out_of_stock_fallback'
+            })
+            
             # Get priority score
             current_sales = today_sales.get(asin, 0)
-            priority_data = self.get_priority_score(asin, velocity_data, stock_info[asin], current_sales)
+            priority_data = self.get_priority_score(asin, velocity_data, asin_stock_info, current_sales)
             
             # Get user's lead time setting, default to 90 days
             user_lead_time = user_settings.get('amazon_lead_time_days', 90) if user_settings else 90
             
             # Calculate optimal restock quantity with purchase analytics and user's lead time
-            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, stock_info[asin], lead_time_days=user_lead_time, purchase_analytics=purchase_insights, stock_df=stock_df)
+            restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, asin_stock_info, lead_time_days=user_lead_time, purchase_analytics=purchase_insights, stock_df=stock_df)
             
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {
@@ -1722,8 +1747,8 @@ class EnhancedOrdersAnalysis:
                 'velocity': velocity_data,
                 'priority': priority_data,
                 'restock': restock_data,
-                'stock_info': stock_info[asin],
-                'product_name': stock_info[asin].get('Title', f'Product {asin}'),
+                'stock_info': asin_stock_info,
+                'product_name': asin_stock_info.get('Title', f'Product {asin}'),
                 'cogs_data': cogs_data.get(asin, {}),  # Include COGS and source link data
                 'purchase_analytics': {
                     'velocity_analysis': purchase_insights.get('purchase_velocity_analysis', {}).get(asin, {}),

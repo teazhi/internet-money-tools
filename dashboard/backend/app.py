@@ -4316,6 +4316,7 @@ def get_orders_analytics():
                     # Get user's configured Sellerboard URLs
                     orders_url = get_user_field(config_user_record, 'integrations.sellerboard.orders_url') if config_user_record else None
                     stock_url = get_user_field(config_user_record, 'integrations.sellerboard.stock_url') if config_user_record else None
+                    cogs_url = get_user_sellerboard_cogs_url(config_user_record)
                     
                     if not orders_url or not stock_url:
                         return jsonify({
@@ -4323,15 +4324,21 @@ def get_orders_analytics():
                             'status': 'configuration_required'
                         }), 400
                     
-                    # Use Sellerboard data
-                    analyzer = OrdersAnalysis(
-                        orders_url=orders_url,
-                        stock_url=stock_url,
-                        target_date=target_date,
-                        user_timezone=user_timezone
-                    )
+                    # Use Sellerboard data with COGS file support
+                    analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url, discord_id=discord_id)
                     
-                    analysis = analyzer.analyze()
+                    # Prepare user settings for COGS data fetching
+                    user_settings = {
+                        'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                        'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
+                        'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
+                        'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
+                        'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
+                        'column_mapping': get_user_column_mapping(user_record),
+                        'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90)
+                    }
+                    
+                    analysis = analyzer.analyze(target_date, user_timezone=user_timezone, user_settings=user_settings)
                     
                 except Exception as sellerboard_error:
                     pass  # Debug print removed
@@ -14154,6 +14161,15 @@ def get_inventory_age_analysis():
         
         # Download raw orders data for velocity inference using the same analyzer
         orders_df = analyzer.download_csv(orders_url)
+        
+        # Calculate velocity for each product and add to enhanced_analytics
+        for asin in enhanced_analytics.keys():
+            try:
+                velocity_data = analyzer.calculate_enhanced_velocity(asin, orders_df, target_date, user_timezone)
+                enhanced_analytics[asin]['velocity'] = velocity_data
+            except Exception as ve:
+                print(f"Warning: Failed to calculate velocity for {asin}: {ve}")
+                enhanced_analytics[asin]['velocity'] = {'weighted_velocity': 0}
         
         # Debug: Show what stock values we're actually getting
         print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")

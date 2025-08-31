@@ -9202,101 +9202,23 @@ def fetch_sellerboard_cogs_data(cogs_url):
             'Connection': 'keep-alive',
         }
         
-        # First, try to get the initial response without following redirects
+        # First, get the redirect URL without following it
         initial_response = session.get(cogs_url, timeout=30, allow_redirects=False, headers=headers)
         
         if initial_response.status_code == 302:
-            # Handle redirect manually to preserve spaces in URLs
             redirect_url = initial_response.headers.get('Location')
+            print(f"Got redirect to: {redirect_url}")
             
-            # Check if redirect URL contains spaces (common with Sellerboard COGS reports)
-            if redirect_url and ' ' in redirect_url:
-                print(f"Detected spaces in redirect URL, preserving them...")
+            # Now follow the redirect with the same session (preserving automation cookies)
+            response = session.get(redirect_url, timeout=30, headers=headers)
+            
+            if response.status_code == 401:
+                print(f"❌ 401 error - download URL requires additional authentication")
+                print(f"🔍 The automation token creates a session but download needs browser login")
+                print(f"💡 Solution: User must download manually through logged-in browser")
+                raise Exception(f"AUTHENTICATION_REQUIRED: Sellerboard COGS downloads require browser login session. Please download manually: {cogs_url}")
                 
-                # We need to send the URL with literal spaces, not encoded
-                # Using raw TCP socket to bypass all HTTP libraries
-                import socket
-                import ssl
-                from urllib.parse import urlparse
-                
-                try:
-                    parsed = urlparse(redirect_url)
-                    host = parsed.hostname
-                    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
-                    path = parsed.path + ('?' + parsed.query if parsed.query else '')
-                    
-                    # Create raw socket
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(30)
-                    
-                    # Wrap with SSL for HTTPS
-                    if parsed.scheme == 'https':
-                        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                        context.check_hostname = False
-                        context.verify_mode = ssl.CERT_NONE
-                        sock = context.wrap_socket(sock, server_hostname=host)
-                    
-                    # Connect
-                    sock.connect((host, port))
-                    
-                    # Build raw HTTP request with literal spaces
-                    request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\n"
-                    for k, v in headers.items():
-                        request += f"{k}: {v}\r\n"
-                    request += "\r\n"
-                    
-                    print(f"Sending raw request with literal spaces in path: {path}")
-                    sock.send(request.encode())
-                    
-                    # Read response
-                    response_data = b""
-                    while True:
-                        data = sock.recv(4096)
-                        if not data:
-                            break
-                        response_data += data
-                        if b'\r\n\r\n' in response_data and (
-                            b'Content-Length: 0\r\n' in response_data or
-                            response_data.endswith(b'0\r\n\r\n') or
-                            len(data) < 4096
-                        ):
-                            break
-                    
-                    sock.close()
-                    
-                    # Parse response
-                    response_str = response_data.decode('utf-8', errors='ignore')
-                    headers_end = response_str.find('\r\n\r\n')
-                    headers_part = response_str[:headers_end]
-                    body = response_str[headers_end + 4:]
-                    
-                    # Get status code
-                    status_line = headers_part.split('\r\n')[0]
-                    status_code = int(status_line.split()[1])
-                    
-                    print(f"Got response status: {status_code}")
-                    
-                    if status_code == 200:
-                        class MockResponse:
-                            def __init__(self, text, status_code):
-                                self.text = text
-                                self.status_code = status_code
-                            def raise_for_status(self):
-                                pass
-                        
-                        response = MockResponse(body, 200)
-                        print("✅ Successfully downloaded with literal spaces!")
-                    else:
-                        raise Exception(f"Server returned status {status_code}")
-                        
-                except Exception as e:
-                    print(f"Raw socket approach failed: {e}")
-                    raise Exception(f"Failed to download Sellerboard CSV with spaces in URL: {e}")
-            else:
-                # Normal redirect handling for URLs without spaces
-                response = session.get(redirect_url, timeout=30, headers=headers)
         else:
-            # No redirect, use initial response
             response = initial_response
         
         response.raise_for_status()

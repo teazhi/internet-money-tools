@@ -146,9 +146,12 @@ class EnhancedOrdersAnalysis:
                         
                         # Create connection
                         if parsed_url.scheme == 'https':
-                            conn = http.client.HTTPSConnection(parsed_url.netloc, context=ssl_context)
+                            conn = http.client.HTTPSConnection(parsed_url.netloc, context=ssl_context, timeout=30)
                         else:
-                            conn = http.client.HTTPConnection(parsed_url.netloc)
+                            conn = http.client.HTTPConnection(parsed_url.netloc, timeout=30)
+                        
+                        # Connect first
+                        conn.connect()
                         
                         # Construct the path with query string, preserving spaces exactly
                         path_with_query = parsed_url.path
@@ -164,7 +167,7 @@ class EnhancedOrdersAnalysis:
                         full_request = f"{request_line}Host: {parsed_url.netloc}\r\n{header_lines}\r\n\r\n"
                         
                         # Send raw request
-                        conn.send(full_request.encode('utf-8'))
+                        conn.sock.sendall(full_request.encode('utf-8'))
                         raw_response = conn.getresponse()
                         
                         if raw_response.status == 200:

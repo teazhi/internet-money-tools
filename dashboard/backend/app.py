@@ -9344,34 +9344,108 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
     Returns data in same format as fetch_sellerboard_cogs_data for compatibility
     """
     try:
-        # Get user's record
-        user_record = get_user_record(discord_id)
-        if not user_record:
-            return None
+        from email_monitoring_s3 import email_monitoring_manager
         
-        # Check for subuser and get parent config if needed
-        config_user_record = user_record
-        if get_user_field(user_record, 'account.user_type') == 'subuser':
-            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
-            if parent_user_id:
-                parent_record = get_user_record(parent_user_id)
-                if parent_record:
-                    config_user_record = parent_record
+        # First try to get access token from email monitoring OAuth configs
+        email_configs = email_monitoring_manager.get_email_configs(discord_id)
+        access_token = None
         
-        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
+        for config in email_configs:
+            if config.get('auth_type') == 'oauth' and config.get('oauth_access_token'):
+                access_token = config['oauth_access_token']
+                
+                # Check if token needs refresh
+                if config.get('oauth_token_expires_at'):
+                    try:
+                        from datetime import datetime, timedelta
+                        expires_at = datetime.fromisoformat(config['oauth_token_expires_at'].replace('Z', '+00:00'))
+                        if datetime.utcnow() >= expires_at - timedelta(minutes=5):
+                            # Token needs refresh
+                            refresh_token = config.get('oauth_refresh_token')
+                            if refresh_token:
+                                new_token = refresh_email_oauth_token(refresh_token)
+                                if new_token:
+                                    access_token = new_token['access_token']
+                                    # Update token in email monitoring system
+                                    email_monitoring_manager.update_oauth_tokens(
+                                        discord_id, config['email_address'],
+                                        new_token['access_token'],
+                                        refresh_token,
+                                        new_token.get('expires_at')
+                                    )
+                    except Exception as e:
+                        print(f"Error refreshing email monitoring token: {e}")
+                break
         
-        if not google_tokens.get('access_token'):
-            print("No Gmail access token available for COGS email processing")
-            return None
+        # If no email monitoring OAuth token, try main Google integration
+        if not access_token:
+            user_record = get_user_record(discord_id)
+            if not user_record:
+                return None
+            
+            # Check for subuser and get parent config if needed
+            config_user_record = user_record
+            if get_user_field(user_record, 'account.user_type') == 'subuser':
+                parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+                if parent_user_id:
+                    parent_record = get_user_record(parent_user_id)
+                    if parent_record:
+                        config_user_record = parent_record
+            
+            google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
+            
+            if not google_tokens.get('access_token'):
+                print("No Gmail access token available for COGS email processing")
+                print("💡 User needs to set up email monitoring OAuth or Google integration with Gmail permissions")
+                return None
+            
+            # Use safe_google_api_call to handle token refresh
+            def api_call(access_token):
+                return fetch_latest_sellerboard_cogs_email(access_token)
+            
+            return safe_google_api_call(config_user_record, api_call)
         
-        # Use safe_google_api_call to handle token refresh
-        def api_call(access_token):
-            return fetch_latest_sellerboard_cogs_email(access_token)
-        
-        return safe_google_api_call(config_user_record, api_call)
+        # Use email monitoring OAuth token directly
+        return fetch_latest_sellerboard_cogs_email(access_token)
         
     except Exception as e:
         print(f"Error fetching COGS data from email: {e}")
+        return None
+
+
+def refresh_email_oauth_token(refresh_token: str) -> Optional[Dict]:
+    """Refresh OAuth token for email access"""
+    try:
+        google_client_id = os.getenv('GOOGLE_CLIENT_ID')
+        google_client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        
+        if not google_client_id or not google_client_secret:
+            return None
+        
+        token_data = {
+            'client_id': google_client_id,
+            'client_secret': google_client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }
+        
+        response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
+        
+        if response.ok:
+            tokens = response.json()
+            access_token = tokens.get('access_token')
+            expires_in = tokens.get('expires_in', 3600)
+            expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+            
+            return {
+                'access_token': access_token,
+                'expires_at': expires_at
+            }
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error refreshing OAuth token: {e}")
         return None
 
 
@@ -9391,7 +9465,9 @@ def fetch_latest_sellerboard_cogs_email(access_token: str) -> Optional[Dict]:
         
         response = requests.get(search_url, headers=headers, params=params)
         if not response.ok:
-            print(f"Gmail search failed: {response.status_code}")
+            print(f"Gmail search failed: {response.status_code} - {response.text}")
+            if response.status_code == 401:
+                print("Gmail API authentication failed - user may need to re-authorize Google integration with Gmail permissions")
             return None
         
         search_results = response.json()
@@ -9597,9 +9673,9 @@ def get_expected_arrivals():
                 if not inventory_data:
                     if not sheet_id or not google_tokens.get('access_token'):
                         return jsonify({
-                            "error": f"COGS data unavailable (URL error: {str(e)[:50]}...) and Google Sheet not configured. Please either fix the COGS URL, ensure Sellerboard emails are being received, or set up Google Sheets in Settings.",
-                            "cogs_error": str(e),
-                            "suggestion": "Make sure you have Sellerboard automation emails enabled to team@sellerboard.com"
+                            "error": f"COGS data unavailable. URL download failed and email processing failed (likely missing Gmail permissions). Please either fix the COGS URL, set up Google integration with Gmail permissions, or configure Google Sheets.",
+                            "cogs_url_error": str(e)[:100],
+                            "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted for email-based COGS processing"
                         }), 400
         else:
             # No COGS URL configured, try email-based COGS first
@@ -9618,8 +9694,8 @@ def get_expected_arrivals():
             if not inventory_data:
                 if not sheet_id or not google_tokens.get('access_token'):
                     return jsonify({
-                        "error": "No COGS data source available. Please either configure Sellerboard COGS URL, ensure Sellerboard emails are being received, or set up Google Sheets in Settings.",
-                        "suggestion": "Enable Sellerboard automation emails to team@sellerboard.com for automatic COGS data"
+                        "error": "No COGS data source available. Email processing failed (likely missing Gmail permissions) and Google Sheets not configured.",
+                        "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted, or configure Google Sheets for COGS data"
                     }), 400
 
         # Initialize OrdersAnalysis to get purchase data

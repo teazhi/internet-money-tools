@@ -9214,47 +9214,101 @@ def fetch_sellerboard_cogs_data(cogs_url):
                 print(f"Detected spaces in redirect URL, preserving them...")
                 
                 try:
-                    # Use http.client for raw HTTP request that won't encode the URL
-                    import http.client
+                    # Use raw socket for complete control over the HTTP request
+                    import socket
                     import ssl
                     from urllib.parse import urlparse
                     
                     parsed_url = urlparse(redirect_url)
                     
-                    # Create SSL context that doesn't verify certificates (for space handling)
-                    ssl_context = ssl.create_default_context()
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
+                    # Create socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(30)
                     
-                    # Create connection
+                    # Wrap with SSL if needed
                     if parsed_url.scheme == 'https':
-                        conn = http.client.HTTPSConnection(parsed_url.netloc, context=ssl_context, timeout=30)
-                    else:
-                        conn = http.client.HTTPConnection(parsed_url.netloc, timeout=30)
+                        context = ssl.create_default_context()
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                        sock = context.wrap_socket(sock, server_hostname=parsed_url.hostname)
                     
-                    # Connect first
-                    conn.connect()
+                    # Connect to the server
+                    port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
+                    sock.connect((parsed_url.hostname, port))
                     
                     # Construct the path with query string, preserving spaces exactly
                     path_with_query = parsed_url.path
                     if parsed_url.query:
                         path_with_query += '?' + parsed_url.query
                     
-                    print(f"Making raw HTTP request to preserve spaces: {path_with_query}")
+                    print(f"Making raw socket request to preserve spaces: {path_with_query}")
                     
-                    # Make the request with literal spaces preserved
-                    # We need to manually construct the request to avoid http.client's URL validation
-                    request_line = f"GET {path_with_query} HTTP/1.1\r\n"
-                    header_lines = "\r\n".join([f"{k}: {v}" for k, v in headers.items()])
-                    full_request = f"{request_line}Host: {parsed_url.netloc}\r\n{header_lines}\r\n\r\n"
+                    # Build HTTP request with literal spaces
+                    request_lines = [
+                        f"GET {path_with_query} HTTP/1.1",
+                        f"Host: {parsed_url.netloc}",
+                    ]
                     
-                    # Send raw request
-                    conn.sock.sendall(full_request.encode('utf-8'))
-                    raw_response = conn.getresponse()
+                    # Add headers
+                    for key, value in headers.items():
+                        request_lines.append(f"{key}: {value}")
                     
-                    if raw_response.status == 200:
-                        response_text = raw_response.read().decode('utf-8')
-                        print(f"✅ Raw HTTP successfully handled URL with spaces!")
+                    # Add empty line to end headers
+                    request_lines.append("")
+                    request_lines.append("")
+                    
+                    # Join with CRLF and send
+                    http_request = "\r\n".join(request_lines)
+                    sock.sendall(http_request.encode('utf-8'))
+                    
+                    # Read response
+                    response_data = b""
+                    while True:
+                        chunk = sock.recv(4096)
+                        if not chunk:
+                            break
+                        response_data += chunk
+                        # Check if we have the full response
+                        if b"\r\n\r\n" in response_data:
+                            header_end = response_data.find(b"\r\n\r\n") + 4
+                            headers_raw = response_data[:header_end]
+                            
+                            # Check for Content-Length
+                            if b"Content-Length:" in headers_raw:
+                                for line in headers_raw.split(b"\r\n"):
+                                    if line.startswith(b"Content-Length:"):
+                                        content_length = int(line.split(b":")[1].strip())
+                                        # Read until we have all content
+                                        while len(response_data) - header_end < content_length:
+                                            chunk = sock.recv(4096)
+                                            if not chunk:
+                                                break
+                                            response_data += chunk
+                                        break
+                            elif b"Transfer-Encoding: chunked" in headers_raw:
+                                # Handle chunked encoding
+                                while not response_data.endswith(b"0\r\n\r\n"):
+                                    chunk = sock.recv(4096)
+                                    if not chunk:
+                                        break
+                                    response_data += chunk
+                                break
+                    
+                    sock.close()
+                    
+                    # Parse response
+                    response_text = response_data.decode('utf-8', errors='ignore')
+                    
+                    # Extract status code
+                    status_line = response_text.split('\r\n')[0]
+                    status_code = int(status_line.split()[1])
+                    
+                    if status_code == 200:
+                        # Extract body
+                        body_start = response_text.find('\r\n\r\n') + 4
+                        response_body = response_text[body_start:]
+                        
+                        print(f"✅ Raw socket successfully handled URL with spaces!")
                         
                         class MockResponse:
                             def __init__(self, text, status_code):
@@ -9264,12 +9318,10 @@ def fetch_sellerboard_cogs_data(cogs_url):
                                 if self.status_code >= 400:
                                     raise requests.exceptions.HTTPError(f"HTTP {self.status_code}")
                         
-                        response = MockResponse(response_text, 200)
+                        response = MockResponse(response_body, 200)
                     else:
-                        print(f"Raw HTTP failed with status {raw_response.status}")
-                        raise requests.exceptions.HTTPError(f"HTTP {raw_response.status}: Sellerboard rejected URL - spaces may not be preserved correctly")
-                    
-                    conn.close()
+                        print(f"Raw socket failed with status {status_code}")
+                        raise requests.exceptions.HTTPError(f"HTTP {status_code}: Sellerboard rejected URL")
                         
                 except Exception as raw_http_error:
                     print(f"Raw HTTP approach failed: {raw_http_error}")

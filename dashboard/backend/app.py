@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, session, redirect, url_for, send_from_directory, make_response
 from flask_cors import CORS
+from typing import Optional, Dict, List
 import os
 import json
 import requests
@@ -2726,7 +2727,7 @@ def get_user():
         'discord_id': discord_id,
         'discord_username': session.get('discord_username'),
         'discord_avatar': session.get('discord_avatar'),
-        'user_type': get_user_field(user_record, 'account.user_type') or 'main' if user_record else 'main',
+        'user_type': (get_user_field(user_record, 'account.user_type') or 'main') if user_record else 'main',
         'permissions': get_user_permissions(user_record) if user_record else ['all'],
         'parent_user_id': get_user_parent_id(user_record) if user_record else None,
         'va_name': get_user_field(user_record, 'identity.va_name') if user_record else None,

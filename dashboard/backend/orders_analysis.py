@@ -15,12 +15,13 @@ STOCK_REPORT_URL = None
 YESTERDAY_SALES_FILE = "yesterday_sales.json"
 
 class EnhancedOrdersAnalysis:
-    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None):
+    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None, discord_id: Optional[str] = None):
         if not orders_url or not stock_url:
             raise ValueError("Both orders_url and stock_url must be provided. No default URLs available.")
         self.orders_url = orders_url
         self.stock_url = stock_url
         self.cogs_url = cogs_url  # Optional Sellerboard COGS URL
+        self.discord_id = discord_id  # For email-based COGS data access
         
         # Initialize purchase analytics
         self.purchase_analytics = PurchaseAnalytics()
@@ -1545,7 +1546,46 @@ class EnhancedOrdersAnalysis:
                     
             except Exception as e:
                 print(f"Failed to fetch Sellerboard COGS data: {e}")
-                print("Falling back to Google Sheets for COGS data")
+                print("Trying email-based COGS data, then falling back to Google Sheets")
+        
+        # If no Sellerboard COGS data from URL, try email-based COGS data
+        if not cogs_data:
+            try:
+                # Try to get COGS data from email processing
+                # We need discord_id to fetch email data - get it from the current session
+                discord_id = getattr(self, 'discord_id', None)
+                if discord_id:
+                    email_cogs_result = main_app.fetch_sellerboard_cogs_data_from_email(discord_id)
+                    
+                    if email_cogs_result and 'data' in email_cogs_result:
+                        sellerboard_cogs_data = {}
+                        asin_col = email_cogs_result.get('asin_column')
+                        
+                        for item in email_cogs_result['data']:
+                            asin = item.get(asin_col)
+                            if asin:
+                                # Look for COGS/cost columns in the data
+                                cogs_value = None
+                                for key, value in item.items():
+                                    if any(term in key.lower() for term in ['cogs', 'cost', 'price']):
+                                        try:
+                                            cogs_value = float(value) if value else 0
+                                            break
+                                        except (ValueError, TypeError):
+                                            continue
+                                
+                                if cogs_value is not None:
+                                    sellerboard_cogs_data[asin] = {
+                                        'cogs': cogs_value,
+                                        'source_link': f"Sellerboard Email: {email_cogs_result.get('filename')}",
+                                        'source_column': 'sellerboard_email_cogs'
+                                    }
+                        
+                        cogs_data = sellerboard_cogs_data
+                        print(f"Successfully loaded COGS data from email for {len(cogs_data)} products")
+                        
+            except Exception as e:
+                print(f"Failed to fetch email-based COGS data: {e}")
         
         # If no Sellerboard COGS data, or if it failed, try Google Sheets
         if not cogs_data:
@@ -1903,15 +1943,16 @@ class BasicOrdersAnalysis:
 # Maintain backward compatibility
 class OrdersAnalysis(EnhancedOrdersAnalysis):
     """Backward compatible class name"""
-    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None):
+    def __init__(self, orders_url: Optional[str] = None, stock_url: Optional[str] = None, cogs_url: Optional[str] = None, discord_id: Optional[str] = None):
         try:
-            super().__init__(orders_url, stock_url, cogs_url)
+            super().__init__(orders_url, stock_url, cogs_url, discord_id)
         except Exception as e:
             pass  # Debug print removed
             # Fall back to basic implementation
             self.orders_url = orders_url
             self.stock_url = stock_url
             self.cogs_url = cogs_url
+            self.discord_id = discord_id
             self.is_fallback = True
     
     def analyze(self, for_date: date, prev_date: Optional[date] = None, user_timezone: str = None, user_settings: dict = None, preserve_purchase_history: bool = False) -> dict:

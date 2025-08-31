@@ -4323,7 +4323,7 @@ def get_orders_analytics():
                     }), 400
                 
                 pass  # Debug print removed
-                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url, discord_id=discord_id)
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
@@ -4381,7 +4381,7 @@ def get_orders_analytics():
                     }), 400
                 
                 pass  # Debug print removed
-                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
+                analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url, discord_id=discord_id)
                 
                 # Prepare user settings for COGS data fetching
                 user_settings = {
@@ -9299,6 +9299,178 @@ def fetch_sellerboard_cogs_data(cogs_url):
     except Exception as e:
         raise ValueError(f"Error processing Sellerboard COGS data: {str(e)}")
 
+
+def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
+    """
+    Fetch Sellerboard COGS data directly from latest email
+    Returns data in same format as fetch_sellerboard_cogs_data for compatibility
+    """
+    try:
+        # Get user's Gmail access token
+        user_record = get_user_record(discord_id)
+        if not user_record:
+            return None
+        
+        google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
+        access_token = google_tokens.get('access_token')
+        
+        if not access_token:
+            print("No Gmail access token available for COGS email processing")
+            return None
+        
+        # Fetch latest Sellerboard COGS email
+        return fetch_latest_sellerboard_cogs_email(access_token)
+        
+    except Exception as e:
+        print(f"Error fetching COGS data from email: {e}")
+        return None
+
+
+def fetch_latest_sellerboard_cogs_email(access_token: str) -> Optional[Dict]:
+    """Fetch the most recent Sellerboard COGS email and process its attachment"""
+    try:
+        import pandas as pd
+        from io import StringIO
+        
+        # Search for emails from team@sellerboard.com with "Your report is ready" in subject
+        search_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params = {
+            "q": 'from:"team@sellerboard.com" subject:"sellerboard: Your report is ready"',
+            "maxResults": 5
+        }
+        
+        response = requests.get(search_url, headers=headers, params=params)
+        if not response.ok:
+            print(f"Gmail search failed: {response.status_code}")
+            return None
+        
+        search_results = response.json()
+        messages = search_results.get('messages', [])
+        
+        if not messages:
+            print("No Sellerboard report emails found")
+            return None
+        
+        # Process the most recent message
+        message_id = messages[0]['id']
+        
+        # Get full message details
+        message_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}"
+        msg_response = requests.get(message_url, headers=headers)
+        
+        if not msg_response.ok:
+            print(f"Failed to fetch message details: {msg_response.status_code}")
+            return None
+            
+        email_data = msg_response.json()
+        
+        # Extract attachments
+        payload = email_data.get('payload', {})
+        attachments = []
+        
+        def find_attachments(part):
+            body = part.get('body', {})
+            if body.get('attachmentId'):
+                filename = part.get('filename', '')
+                if filename.lower().endswith('.csv'):
+                    attachments.append({
+                        'filename': filename,
+                        'attachmentId': body['attachmentId'],
+                        'mimeType': part.get('mimeType')
+                    })
+            
+            for subpart in part.get('parts', []):
+                find_attachments(subpart)
+        
+        for part in payload.get('parts', []):
+            find_attachments(part)
+        
+        if not attachments:
+            print("No CSV attachments found in Sellerboard email")
+            return None
+        
+        # Use the first CSV attachment (should be the COGS report)
+        attachment = attachments[0]
+        
+        # Download the attachment
+        attachment_url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/attachments/{attachment['attachmentId']}"
+        attachment_response = requests.get(attachment_url, headers=headers)
+        
+        if not attachment_response.ok:
+            print(f"Failed to download attachment: {attachment_response.status_code}")
+            return None
+        
+        attachment_data = attachment_response.json()
+        csv_data = attachment_data.get('data', '')
+        
+        if not csv_data:
+            print("No attachment data received")
+            return None
+        
+        # Decode and parse CSV
+        csv_content = base64.urlsafe_b64decode(csv_data + '===').decode('utf-8')
+        df = pd.read_csv(StringIO(csv_content))
+        
+        # Detect ASIN column
+        asin_column = None
+        asin_candidates = ['ASIN', 'asin', 'Asin', 'SKU', 'sku', 'Product ID', 'product_id']
+        for col in asin_candidates:
+            if col in df.columns:
+                asin_column = col
+                break
+        
+        if not asin_column:
+            print("No ASIN column found in CSV")
+            return None
+        
+        print(f"✅ Successfully processed Sellerboard email with {len(df)} products from {attachment['filename']}")
+        
+        return {
+            'data': df.to_dict('records'),
+            'asin_column': asin_column,
+            'total_products': len(df),
+            'filename': attachment['filename'],
+            'source': 'sellerboard_email'
+        }
+        
+    except Exception as e:
+        print(f"Error processing Sellerboard email: {e}")
+        return None
+
+
+@app.route('/api/test-cogs-email', methods=['POST'])
+@login_required
+def test_cogs_email():
+    """Test fetching COGS data from latest Sellerboard email"""
+    try:
+        discord_id = session.get('discord_id')
+        if not discord_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+        
+        if cogs_data:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully processed COGS data from {cogs_data["filename"]}',
+                'total_products': cogs_data['total_products'],
+                'filename': cogs_data['filename'],
+                'sample_data': cogs_data['data'][:3] if cogs_data['data'] else []
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No COGS email found or failed to process'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Error testing COGS email: {str(e)}'
+        }), 500
+
+
 @app.route('/api/missing-listings', methods=['GET'])
 @login_required
 def get_expected_arrivals():
@@ -9359,17 +9531,47 @@ def get_expected_arrivals():
                     return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings for purchase data."}), 400
                     
             except Exception as e:
-                # Fall back to Google Sheets approach instead of failing
+                print(f"COGS URL fetch failed: {e}, trying email-based COGS")
+                # Try email-based COGS as fallback
+                try:
+                    email_cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+                    if email_cogs_data:
+                        inventory_data = email_cogs_data
+                        print(f"✅ Successfully fetched COGS data from email: {email_cogs_data['filename']}")
+                    else:
+                        inventory_data = None
+                except Exception as email_error:
+                    print(f"Email COGS fetch also failed: {email_error}")
+                    inventory_data = None
+                
+                # If both URL and email failed, check if we can fall back to Google Sheets
+                if not inventory_data:
+                    if not sheet_id or not google_tokens.get('access_token'):
+                        return jsonify({
+                            "error": f"COGS data unavailable (URL error: {str(e)[:50]}...) and Google Sheet not configured. Please either fix the COGS URL, ensure Sellerboard emails are being received, or set up Google Sheets in Settings.",
+                            "cogs_error": str(e),
+                            "suggestion": "Make sure you have Sellerboard automation emails enabled to team@sellerboard.com"
+                        }), 400
+        else:
+            # No COGS URL configured, try email-based COGS first
+            try:
+                email_cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
+                if email_cogs_data:
+                    inventory_data = email_cogs_data
+                    print(f"✅ Successfully fetched COGS data from email (no URL configured): {email_cogs_data['filename']}")
+                else:
+                    inventory_data = None
+            except Exception as email_error:
+                print(f"Email COGS fetch failed: {email_error}")
                 inventory_data = None
+            
+            # If email COGS failed, check Google Sheets requirement
+            if not inventory_data:
                 if not sheet_id or not google_tokens.get('access_token'):
                     return jsonify({
-                        "error": f"COGS data unavailable ({str(e)[:100]}...) and Google Sheet not configured. Please either fix the COGS URL or set up Google Sheets in Settings.",
-                        "cogs_error": str(e)
+                        "error": "No COGS data source available. Please either configure Sellerboard COGS URL, ensure Sellerboard emails are being received, or set up Google Sheets in Settings.",
+                        "suggestion": "Enable Sellerboard automation emails to team@sellerboard.com for automatic COGS data"
                     }), 400
-        else:
-            # Fallback to original logic
-            if not sheet_id or not google_tokens.get('access_token'):
-                return jsonify({"error": "Google Sheet not configured. Please set up Google Sheets in Settings first."}), 400
 
         # Initialize OrdersAnalysis to get purchase data
         from orders_analysis import OrdersAnalysis
@@ -13738,7 +13940,7 @@ def get_inventory_age_analysis():
         
         from orders_analysis import OrdersAnalysis
         cogs_url = get_user_sellerboard_cogs_url(config_user_record)
-        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url)
+        analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=cogs_url, discord_id=discord_id)
         analysis = analyzer.analyze(
             for_date=target_date,
             user_timezone=user_timezone,

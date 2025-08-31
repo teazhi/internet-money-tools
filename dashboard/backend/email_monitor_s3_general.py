@@ -422,6 +422,7 @@ class EmailMonitorS3:
                             # Add to processed messages to avoid duplicates
                             all_messages.append(email_msg)
                             
+                            
                             # Send webhook notification (only if enabled)
                             webhook_sent = False
                             webhook_response = ""
@@ -486,6 +487,7 @@ class EmailMonitorS3:
         except Exception as e:
             print(f"Error extracting email email content: {e}")
             return None
+
     
     def check_monitor_email_account_imap(self, discord_id: str, email_address: str,
                                        imap_server: str, imap_port: int, username: str,

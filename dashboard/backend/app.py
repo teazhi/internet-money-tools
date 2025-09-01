@@ -10679,6 +10679,14 @@ def get_expected_arrivals():
         if not user_record:
             return jsonify({"error": "User not found"}), 404
 
+        # Handle parent-child relationship for configuration
+        config_user_record = user_record
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+
         # Security check: Ensure we're not mixing impersonation data
         if 'admin_impersonating' in session:
             target_user_id = session['admin_impersonating'].get('target_user_id')
@@ -10870,12 +10878,12 @@ def get_expected_arrivals():
             }), 200
 
         # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = get_user_sellerboard_stock_url(user_record)
+        sellerboard_url = get_user_sellerboard_stock_url(config_user_record)
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
 
         # Get COGS URL for complete inventory data (includes out-of-stock items)
-        sellerboard_cogs_url = get_user_sellerboard_cogs_url(user_record)
+        sellerboard_cogs_url = get_user_sellerboard_cogs_url(config_user_record)
 
         # Get inventory data (ASINs that have Amazon listings)
         all_known_asins = set()

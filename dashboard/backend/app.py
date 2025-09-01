@@ -11265,7 +11265,7 @@ def analyze_retailer_leads():
                     config_user_record = parent_record
         
         # Check if user has necessary configurations
-        if not get_user_sellerboard_orders_url(user_record) or not get_user_sellerboard_stock_url(user_record):
+        if not get_user_sellerboard_orders_url(config_user_record) or not get_user_sellerboard_stock_url(config_user_record):
             return jsonify({
                 'error': 'Sellerboard URLs not configured',
                 'message': 'Please configure your Sellerboard URLs in Settings first'
@@ -11290,7 +11290,7 @@ def analyze_retailer_leads():
                 for_date=today,
                 user_timezone=user_timezone,
                 user_settings={
-                    'enable_source_links': get_user_field(user_record, 'settings.enable_source_links') or user_record.get('enable_source_links', False),
+                    'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or config_user_record.get('enable_source_links', False),
                     'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', False),
                     'disable_sp_api': get_user_field(config_user_record, 'integrations.amazon.disable_sp_api') or config_user_record.get('disable_sp_api', False),
                     'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
@@ -11299,7 +11299,7 @@ def analyze_retailer_leads():
                     'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
                     'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'), 
                     'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': get_user_column_mapping(user_record)
+                    'column_mapping': get_user_column_mapping(config_user_record)
                 }
             )
             

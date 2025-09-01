@@ -210,18 +210,15 @@ const RetailerLeadAnalysis = () => {
       case 'asin':
         return (
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
-            <a
-              href={`https://www.amazon.com/dp/${item.asin}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-blue-600 hover:text-blue-800 inline-block"
-              onClick={(e) => {
-                e.stopPropagation();
+            <button
+              type="button"
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer bg-transparent border-none p-0"
+              onClick={() => {
                 window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
               }}
             >
               {item.asin}
-            </a>
+            </button>
           </td>
         );
       
@@ -229,18 +226,15 @@ const RetailerLeadAnalysis = () => {
         return (
           <td key={columnKey} className="px-3 py-3 text-center">
             {item.source_link ? (
-              <a
-                href={item.source_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation();
+              <button
+                type="button"
+                className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center cursor-pointer bg-transparent border-none p-1"
+                onClick={() => {
                   window.open(item.source_link, '_blank');
                 }}
               >
                 <ExternalLink className="h-4 w-4" />
-              </a>
+              </button>
             ) : (
               <span className="text-gray-400">-</span>
             )}

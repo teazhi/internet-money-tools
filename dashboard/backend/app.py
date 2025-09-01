@@ -9453,6 +9453,168 @@ def debug_discount_emails():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/discount-opportunities/email-diagnostics', methods=['GET'])
+@admin_required
+def discount_email_diagnostics():
+    """Comprehensive diagnostics for email date and fetching issues"""
+    try:
+        from datetime import datetime, timedelta
+        import pytz
+        import re
+        
+        result = {
+            'current_time': {
+                'utc': datetime.utcnow().isoformat(),
+                'local': datetime.now().isoformat(),
+                'timezone': str(datetime.now(pytz.timezone('US/Eastern')))
+            },
+            'date_ranges_tested': {},
+            'raw_email_data': [],
+            'processing_results': []
+        }
+        
+        # Get config
+        discount_config = get_discount_email_config()
+        sender_filter = discount_config.get('sender_filter', 'alert@distill.io') if discount_config else 'alert@distill.io'
+        
+        # Create user record
+        if discount_config and discount_config.get('tokens'):
+            user_record = {'google_tokens': discount_config.get('tokens', {})}
+        else:
+            users = get_users_config()
+            admin_user = None
+            for user in users:
+                if get_user_field(user, 'integrations.google.tokens'):
+                    admin_user = user
+                    break
+            user_record = admin_user if admin_user else {}
+        
+        # Test different date ranges
+        date_tests = [
+            ('last_24_hours', 1),
+            ('last_48_hours', 2),
+            ('last_7_days', 7),
+            ('last_14_days', 14)
+        ]
+        
+        for test_name, days in date_tests:
+            cutoff = datetime.now() - timedelta(days=days)
+            query = f"from:{sender_filter} after:{cutoff.strftime('%Y/%m/%d')}"
+            
+            try:
+                messages = search_gmail_messages(user_record, query, max_results=10)
+                count = len(messages.get('messages', [])) if messages else 0
+                
+                result['date_ranges_tested'][test_name] = {
+                    'query': query,
+                    'cutoff_date': cutoff.strftime('%Y/%m/%d %H:%M:%S'),
+                    'messages_found': count
+                }
+                
+                # For last 24 hours, get detailed info
+                if test_name == 'last_24_hours' and messages and messages.get('messages'):
+                    for i, msg in enumerate(messages['messages'][:5]):
+                        try:
+                            email_data = get_gmail_message(user_record, msg['id'])
+                            if email_data:
+                                headers = {h['name']: h['value'] for h in email_data.get('payload', {}).get('headers', [])}
+                                subject = headers.get('Subject', '')
+                                date_str = headers.get('Date', '')
+                                
+                                # Parse date multiple ways
+                                parsed_dates = {}
+                                
+                                # Try direct parsing
+                                try:
+                                    from email.utils import parsedate_to_datetime
+                                    parsed_date = parsedate_to_datetime(date_str)
+                                    parsed_dates['email_utils'] = parsed_date.isoformat()
+                                    parsed_dates['email_utils_utc'] = parsed_date.astimezone(pytz.UTC).isoformat()
+                                except Exception as e:
+                                    parsed_dates['email_utils_error'] = str(e)
+                                
+                                # Try manual parsing
+                                try:
+                                    alert_time = convert_gmail_date_to_iso(date_str)
+                                    parsed_dates['convert_gmail_date'] = alert_time
+                                except Exception as e:
+                                    parsed_dates['convert_gmail_date_error'] = str(e)
+                                
+                                result['raw_email_data'].append({
+                                    'index': i + 1,
+                                    'subject': subject,
+                                    'raw_date': date_str,
+                                    'parsed_dates': parsed_dates,
+                                    'contains_asin': bool(re.search(r'B[0-9A-Z]{9}', subject))
+                                })
+                        except Exception as e:
+                            result['raw_email_data'].append({
+                                'index': i + 1,
+                                'error': str(e)
+                            })
+                            
+            except Exception as e:
+                result['date_ranges_tested'][test_name]['error'] = str(e)
+        
+        # Test the actual processing function
+        try:
+            alerts = fetch_discount_email_alerts()
+            result['processing_results'] = {
+                'total_alerts': len(alerts),
+                'is_mock_data': len(alerts) > 0 and alerts[0].get('retailer') == 'Vitacost' and alerts[0].get('asin') == 'B07XVTRJKX',
+                'latest_alert_times': []
+            }
+            
+            # Get the latest alert times
+            for alert in sorted(alerts, key=lambda x: x.get('alert_time', ''), reverse=True)[:5]:
+                result['processing_results']['latest_alert_times'].append({
+                    'asin': alert.get('asin'),
+                    'time': alert.get('alert_time'),
+                    'subject': alert.get('subject', '')[:80]
+                })
+                
+        except Exception as e:
+            result['processing_results'] = {'error': str(e)}
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/discount-opportunities/test-recent', methods=['GET'])
+@admin_required
+def test_recent_discount_emails():
+    """Quick test to see recent emails and their processing"""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get the actual function results
+        alerts = fetch_discount_email_alerts()
+        
+        # Check if we're getting mock data
+        is_mock = len(alerts) > 0 and alerts[0].get('asin') == 'B07XVTRJKX' and alerts[0].get('retailer') == 'Vitacost'
+        
+        # Get latest alerts
+        sorted_alerts = sorted(alerts, key=lambda x: x.get('alert_time', ''), reverse=True)
+        
+        return jsonify({
+            'is_using_mock_data': is_mock,
+            'total_alerts': len(alerts),
+            'latest_5_alerts': [
+                {
+                    'asin': a.get('asin'),
+                    'time': a.get('alert_time'),
+                    'subject': a.get('subject', '')[:100],
+                    'retailer': a.get('retailer')
+                }
+                for a in sorted_alerts[:5]
+            ],
+            'days_back_setting': get_discount_email_days_back()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/discount-opportunities/check-stale', methods=['POST'])
 @login_required
 def check_stale_opportunities():
@@ -10617,6 +10779,9 @@ def get_expected_arrivals():
         sellerboard_url = get_user_sellerboard_stock_url(user_record)
         if not sellerboard_url:
             return jsonify({"error": "Sellerboard stock URL not configured"}), 400
+
+        # Get COGS URL for complete inventory data (includes out-of-stock items)
+        sellerboard_cogs_url = get_user_sellerboard_cogs_url(user_record)
 
         # Get inventory data (ASINs that have Amazon listings)
         all_known_asins = set()

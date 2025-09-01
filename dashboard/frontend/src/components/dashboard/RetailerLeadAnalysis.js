@@ -214,7 +214,11 @@ const RetailerLeadAnalysis = () => {
               href={`https://www.amazon.com/dp/${item.asin}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 inline-block"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
+              }}
             >
               {item.asin}
             </a>
@@ -229,7 +233,11 @@ const RetailerLeadAnalysis = () => {
                 href={item.source_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800"
+                className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(item.source_link, '_blank');
+                }}
               >
                 <ExternalLink className="h-4 w-4" />
               </a>

@@ -3265,14 +3265,14 @@ def disconnect_admin_discount_gmail():
 @login_required 
 def get_discount_gmail_status():
     """Get status of system-wide discount monitoring Gmail connection"""
-    admin_config = get_admin_gmail_config()
+    discount_config = get_discount_email_config()
     
-    if admin_config and admin_config.get('tokens'):
+    if discount_config and discount_config.get('tokens'):
         return jsonify({
             'connected': True,
-            'gmail_email': admin_config.get('gmail_email', 'Unknown'),
+            'gmail_email': discount_config.get('email_address', 'Unknown'),
             'message': 'System-wide discount monitoring Gmail is connected',
-            'connected_at': admin_config.get('connected_at'),
+            'connected_at': discount_config.get('connected_at'),
             'is_system_wide': True
         })
     else:
@@ -3700,93 +3700,47 @@ def save_discount_email_config(config_data):
         return False
 
 def get_admin_gmail_config():
-    """Get system-wide admin Gmail configuration - now checks S3 first"""
+    """Get system-wide admin Gmail configuration from S3"""
+    if DEMO_MODE:
+        return {
+            'email_address': 'admin@demo.com',
+            'config_type': 'gmail_oauth',
+            'gmail_email': 'admin@demo.com',
+            'connected_at': '2024-01-01T00:00:00Z',
+            'is_s3_config': True
+        }
+    
     try:
-        # First check S3 for discount email configuration
-        s3_config = get_discount_email_config()
-        if s3_config:
-            return s3_config
+        s3_client = get_s3_client()
         
-        # Fallback to database for backward compatibility
-        conn_local = sqlite3.connect(DATABASE_FILE)
-        cursor_local = conn_local.cursor()
+        # Check cache first
+        cache_key = f"config_admin_gmail_config"
+        if cache_key in config_cache:
+            cached_data, cached_time = config_cache[cache_key]
+            if (datetime.now() - cached_time).total_seconds() < CONFIG_CACHE_EXPIRY_MINUTES * 60:
+                return cached_data
         
-        cursor_local.execute('''
-            SELECT email_address, config_type, imap_server, imap_port, username, password_encrypted, 
-                   gmail_access_token, gmail_refresh_token, gmail_token_expires_at, last_updated,
-                   subject_pattern, asin_pattern, retailer_pattern, sender_filter
-            FROM discount_email_config
-            WHERE is_active = 1
-            ORDER BY created_at DESC
-            LIMIT 1
-        ''')
-        
-        row = cursor_local.fetchone()
-        conn_local.close()
-        
-        if row:
-            # Return database configuration
-            email_address, config_type, imap_server, imap_port, username, password_encrypted, gmail_access_token, gmail_refresh_token, gmail_token_expires_at, last_updated, subject_pattern, asin_pattern, retailer_pattern, sender_filter = row
+        # Try to get admin Gmail config from S3
+        try:
+            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='admin_gmail_config.json')
+            config_data = json.loads(response['Body'].read().decode('utf-8'))
+            config_data['is_s3_config'] = True
             
-            config = {
-                'email_address': email_address,
-                'config_type': config_type,
-                'gmail_email': email_address,  # For compatibility
-                'connected_at': last_updated,
-                'is_database_config': True,
-                # Add custom format patterns with fallback defaults
-                'subject_pattern': subject_pattern or r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
-                'asin_pattern': asin_pattern or r'\(ASIN:\s*([B0-9A-Z]{10})\)',
-                'retailer_pattern': retailer_pattern or r'\[([^\]]+)\]\s*Alert:',
-                'sender_filter': sender_filter or 'alert@distill.io'
-            }
+            # Cache the result
+            config_cache[cache_key] = (config_data, datetime.now())
+            return config_data
             
-            if config_type == 'gmail_oauth' and gmail_access_token:
-                # Gmail OAuth configuration
-                config.update({
-                    'tokens': {
-                        'access_token': gmail_access_token,
-                        'refresh_token': gmail_refresh_token,
-                        'expires_at': gmail_token_expires_at
-                    }
-                })
-            elif config_type == 'imap':
-                # IMAP configuration
-                config.update({
-                    'imap_server': imap_server,
-                    'imap_port': imap_port,
-                    'username': username,
-                    'password_encrypted': password_encrypted
-                })
-            
-            return config
-        
-        # Fallback to S3 config for backward compatibility
-        config_bucket = CONFIG_S3_BUCKET
-        if config_bucket:
-            try:
-                s3 = boto3.client('s3', 
-                    aws_access_key_id=AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-                )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                # Config doesn't exist yet
+                config_cache[cache_key] = (None, datetime.now())
+                return None
+            else:
+                print(f"Error accessing S3 admin Gmail config: {e}")
+                return None
                 
-                response = s3.get_object(Bucket=config_bucket, Key='admin_gmail_config.json')
-                config_data = json.loads(response['Body'].read())
-                return config_data
-            except ClientError as e:
-                if e.response['Error']['Code'] == 'NoSuchKey':
-                    return None
-                else:
-                    raise
-        else:
-            # Local file fallback
-            config_file = 'admin_gmail_config.json'
-            if os.path.exists(config_file):
-                with open(config_file, 'r') as f:
-                    return json.load(f)
-            return None
     except Exception as e:
-        print(f"Error loading admin Gmail config: {e}")
+        print(f"Error getting admin Gmail config: {e}")
         return None
 
 def save_admin_gmail_config(config):
@@ -9279,21 +9233,15 @@ def debug_discount_emails():
             'email_address': discount_config.get('email_address') if discount_config else None
         }
         
-        # Create mock user record for Gmail API
+        # Create user record for Gmail API - only use discount email config
         if discount_config and discount_config.get('tokens'):
             user_record = {
                 'google_tokens': discount_config.get('tokens', {})
             }
         else:
-            # Try to find admin user with Gmail tokens
-            users = get_users_config()
-            admin_user = None
-            for user in users:
-                if get_user_field(user, 'integrations.google.tokens'):
-                    admin_user = user
-                    break
-            
-            user_record = admin_user if admin_user else {}
+            # No fallback to admin users - discount email must be configured independently
+            user_record = {}
+            result['config']['error'] = 'Discount email not configured with Gmail tokens'
         
         # Test email search
         cutoff_date = datetime.now() - timedelta(days=days_back)
@@ -9626,6 +9574,136 @@ def test_recent_discount_emails():
                 for a in sorted_alerts[:5]
             ],
             'days_back_setting': get_discount_email_days_back()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/discount-email/config-source', methods=['GET'])
+@admin_required
+def get_discount_email_config_source():
+    """Debug endpoint to show which config source is being used"""
+    try:
+        result = {
+            's3_config': None,
+            'db_config': None,
+            'active_config': None,
+            'config_priority': 'S3 -> Database -> None'
+        }
+        
+        # Check S3 config
+        try:
+            s3_client = get_s3_client()
+            response = s3_client.get_object(Bucket=CONFIG_S3_BUCKET, Key='admin/discount_email_config.json')
+            s3_config = json.loads(response['Body'].read().decode('utf-8'))
+            result['s3_config'] = {
+                'exists': True,
+                'email': s3_config.get('email_address'),
+                'last_updated': s3_config.get('last_updated'),
+                'has_tokens': bool(s3_config.get('tokens'))
+            }
+        except:
+            result['s3_config'] = {'exists': False}
+        
+        # Check database config
+        try:
+            conn = sqlite3.connect(DATABASE_FILE)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT email_address, config_type, created_at, gmail_access_token IS NOT NULL as has_tokens
+                FROM discount_email_config
+                WHERE is_active = 1
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''')
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                result['db_config'] = {
+                    'exists': True,
+                    'email': row[0],
+                    'config_type': row[1],
+                    'created_at': row[2],
+                    'has_tokens': bool(row[3])
+                }
+            else:
+                result['db_config'] = {'exists': False}
+        except:
+            result['db_config'] = {'error': 'Could not check database'}
+        
+        # Get active config
+        active_config = get_discount_email_config()
+        if active_config:
+            result['active_config'] = {
+                'email': active_config.get('email_address'),
+                'is_s3_config': active_config.get('is_s3_config', False),
+                'has_tokens': bool(active_config.get('tokens'))
+            }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/discount-email/migrate-to-s3', methods=['POST'])
+@admin_required
+def migrate_discount_email_to_s3():
+    """Migrate discount email config from database to S3"""
+    try:
+        from datetime import datetime
+        # Get database config
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT email_address, config_type, gmail_access_token, gmail_refresh_token, 
+                   gmail_token_expires_at
+            FROM discount_email_config
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''')
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return jsonify({'error': 'No active database configuration found'}), 404
+        
+        email_address, config_type, access_token, refresh_token, token_expires_at = row
+        
+        if config_type != 'gmail_oauth' or not access_token:
+            return jsonify({'error': 'Only Gmail OAuth configurations can be migrated'}), 400
+        
+        # Create S3 config
+        config_data = {
+            'email_address': email_address,
+            'config_type': 'gmail_oauth',
+            'tokens': {
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'token_expires_at': token_expires_at
+            },
+            'connected_at': datetime.now().isoformat(),
+            'connected_by': session.get('discord_id', 'admin'),
+            'is_active': True,
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'asin_pattern': r'\b(B[0-9A-Z]{9})\b',
+            'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
+            'sender_filter': 'alert@distill.io'
+        }
+        
+        # Save to S3
+        save_discount_email_config(config_data)
+        
+        # Clear cache
+        cache_key = f"config_discount_email_config"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
+        
+        return jsonify({
+            'success': True,
+            'message': f'Configuration for {email_address} migrated to S3',
+            'note': 'Configuration will now persist across redeploys'
         })
         
     except Exception as e:
@@ -12165,38 +12243,20 @@ def sync_leads_to_sheets():
 def fetch_discount_email_alerts():
     """Fetch recent email alerts from admin-configured email using IMAP or Gmail API"""
     try:
-        # Get email configuration from S3 first to avoid reverting on redeploy
-        discount_email_config = get_discount_email_config()
+        # Get email configuration from S3 (single source of truth)
+        admin_gmail_config = get_discount_email_config()
         
-        # If S3 config exists and has email settings, use it
-        if discount_email_config and discount_email_config.get('email_address'):
-            admin_gmail_config = discount_email_config
-            admin_gmail_config['is_s3_config'] = True
-        else:
-            # Fallback to legacy database configuration
-            admin_gmail_config = get_admin_gmail_config()
-        
-        if admin_gmail_config and (admin_gmail_config.get('is_database_config') or admin_gmail_config.get('is_s3_config')):
-            # Check configuration type from database or S3
+        if admin_gmail_config and admin_gmail_config.get('email_address'):
+            # Check configuration type
             config_type = admin_gmail_config.get('config_type', 'gmail_oauth')
             if config_type == 'imap':
                 return fetch_discount_alerts_from_imap(admin_gmail_config)
             else:  # gmail_oauth
                 return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
         
-        elif admin_gmail_config and admin_gmail_config.get('tokens'):
-            # Use legacy Gmail API configuration
-            return fetch_discount_alerts_from_gmail_api(admin_gmail_config)
-        
         else:
-            # Check if DISCOUNT_MONITOR_EMAIL is configured as fallback
-            monitor_email = DISCOUNT_MONITOR_EMAIL
-            if monitor_email:
-                # TODO: Implement direct email monitoring if needed
-                return fetch_mock_discount_alerts()
-            else:
-                # Return mock data if no configuration available
-                return fetch_mock_discount_alerts()
+            # No discount email configuration found - return mock data
+            return fetch_mock_discount_alerts()
     
     except Exception as e:
         print(f"Error fetching discount email alerts: {e}")
@@ -16610,19 +16670,6 @@ def get_discount_email_config_status():
                 'config': config_data
             })
         else:
-            # Check for legacy Gmail config
-            legacy_config = get_admin_gmail_config()
-            if legacy_config and not legacy_config.get('is_database_config'):
-                return jsonify({
-                    'configured': True,
-                    'is_legacy': True,
-                    'config': {
-                        'email_address': legacy_config.get('gmail_email', 'Legacy Gmail'),
-                        'connected_at': legacy_config.get('connected_at'),
-                        'message': 'Using legacy Gmail OAuth configuration'
-                    }
-                })
-            
             return jsonify({'configured': False})
         
     except Exception as e:
@@ -16842,33 +16889,33 @@ def complete_discount_gmail_oauth():
         from datetime import datetime, timedelta
         expires_at = datetime.now() + timedelta(seconds=expires_in)
         
-        # Save to database
-        local_conn = sqlite3.connect(DATABASE_FILE)
-        local_cursor = local_conn.cursor()
+        # Save to S3 only (persistent across redeploys)
+        config_data = {
+            'email_address': email_address,
+            'config_type': 'gmail_oauth',
+            'tokens': {
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'token_expires_at': expires_at.isoformat()
+            },
+            'connected_at': datetime.now().isoformat(),
+            'connected_by': session.get('discord_id', 'admin'),
+            'is_active': True,
+            # Default patterns for Distill alerts
+            'subject_pattern': r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)',
+            'asin_pattern': r'\b(B[0-9A-Z]{9})\b',  # Use flexible pattern
+            'retailer_pattern': r'\[([^\]]+)\]\s*Alert:',
+            'sender_filter': 'alert@distill.io'
+        }
         
-        # Deactivate any existing configurations
-        local_cursor.execute('''
-            UPDATE discount_email_config SET is_active = 0 WHERE is_active = 1
-        ''')
+        # Save to S3
+        if not save_discount_email_config(config_data):
+            return jsonify({'error': 'Failed to save configuration'}), 500
         
-        # Insert new Gmail OAuth configuration
-        local_cursor.execute('''
-            INSERT INTO discount_email_config 
-            (email_address, config_type, gmail_access_token, gmail_refresh_token, 
-             gmail_token_expires_at, is_active, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            email_address,
-            'gmail_oauth',
-            access_token,
-            refresh_token,
-            expires_at.isoformat(),
-            True,
-            session.get('discord_id', 'admin')
-        ))
-        
-        local_conn.commit()
-        local_conn.close()
+        # Clear any cached discount email config
+        cache_key = f"config_discount_email_config"
+        if cache_key in config_cache:
+            del config_cache[cache_key]
         
         # Clean up session
         session.pop('discount_email_setup', None)
@@ -17062,13 +17109,13 @@ def test_discount_email_patterns():
         
         # Get current patterns if not provided
         if not patterns:
-            admin_config = get_admin_gmail_config()
+            discount_config = get_discount_email_config()
             patterns = {
-                'subject_pattern': admin_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)'),
-                'asin_pattern': admin_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)'),
-                'retailer_pattern': admin_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:'),
-                'sender_filter': admin_config.get('sender_filter', 'alert@distill.io')
-            } if admin_config else {}
+                'subject_pattern': discount_config.get('subject_pattern', r'\[([^\]]+)\]\s*Alert:\s*[^\(]*\(ASIN:\s*([B0-9A-Z]{10})\)'),
+                'asin_pattern': discount_config.get('asin_pattern', r'\(ASIN:\s*([B0-9A-Z]{10})\)'),
+                'retailer_pattern': discount_config.get('retailer_pattern', r'\[([^\]]+)\]\s*Alert:'),
+                'sender_filter': discount_config.get('sender_filter', 'alert@distill.io')
+            } if discount_config else {}
         
         results = []
         import re

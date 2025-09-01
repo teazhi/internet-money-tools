@@ -206,6 +206,7 @@ const RetailerLeadAnalysis = () => {
   };
 
   const renderTableCell = (columnKey, item, index) => {
+    console.log('Rendering cell:', columnKey, item);
     switch (columnKey) {
       case 'asin':
         return (
@@ -214,7 +215,14 @@ const RetailerLeadAnalysis = () => {
               type="button"
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer bg-transparent border-none p-0"
               onClick={() => {
-                window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
+                console.log('ASIN clicked:', item.asin);
+                console.log('Opening URL:', `https://www.amazon.com/dp/${item.asin}`);
+                try {
+                  const newWindow = window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
+                  console.log('Window opened:', newWindow);
+                } catch (error) {
+                  console.error('Error opening window:', error);
+                }
               }}
             >
               {item.asin}

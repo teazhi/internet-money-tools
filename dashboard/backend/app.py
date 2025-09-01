@@ -3447,7 +3447,7 @@ def get_gmail_service_for_user(user_record):
         print(f"Error creating Gmail service: {e}")
         return None
 
-def search_gmail_messages(user_record, query, max_results=50):
+def search_gmail_messages(user_record, query, max_results=500):
     """Search Gmail messages using the Gmail API"""
     try:
         def api_call(access_token):
@@ -3861,7 +3861,7 @@ def get_admin_gmail_token():
     
     return None
 
-def search_gmail_messages_admin(query, max_results=50):
+def search_gmail_messages_admin(query, max_results=500):
     """Search Gmail messages using system-wide admin configuration"""
     try:
         access_token = get_admin_gmail_token()
@@ -9293,7 +9293,7 @@ def debug_discount_emails():
         
         # Try Gmail search
         try:
-            messages = search_gmail_messages(user_record, query, max_results=100)
+            messages = search_gmail_messages(user_record, query, max_results=500)
             if messages:
                 result['email_search']['messages_found'] = len(messages.get('messages', []))
                 result['email_search']['gmail_api_success'] = True
@@ -9301,7 +9301,7 @@ def debug_discount_emails():
                 # Process all emails for ASIN extraction testing
                 if messages.get('messages'):
                     b008_found = False
-                    for i, msg in enumerate(messages['messages'][:20]):  # Test first 20
+                    for i, msg in enumerate(messages['messages'][:100]):  # Test first 100 for debugging
                         try:
                             email_data = get_gmail_message(user_record, msg['id'])
                             if email_data:
@@ -9379,7 +9379,7 @@ def debug_discount_emails():
         # Search 1: No date restriction
         try:
             no_date_query = f"from:{result['config']['sender_filter']} B008XQO7WA"
-            no_date_messages = search_gmail_messages(user_record, no_date_query, max_results=20)
+            no_date_messages = search_gmail_messages(user_record, no_date_query, max_results=500)
             
             result['b008_searches']['no_date_restriction'] = {
                 'query': no_date_query,
@@ -9388,7 +9388,7 @@ def debug_discount_emails():
             }
             
             if no_date_messages and no_date_messages.get('messages'):
-                for msg in no_date_messages['messages'][:5]:
+                for msg in no_date_messages['messages'][:50]:  # Show more results
                     try:
                         email_data = get_gmail_message(user_record, msg['id'])
                         if email_data:
@@ -9408,7 +9408,7 @@ def debug_discount_emails():
         try:
             today = datetime.now().strftime('%Y/%m/%d')
             today_query = f"from:{result['config']['sender_filter']} B008XQO7WA after:{today}"
-            today_messages = search_gmail_messages(user_record, today_query, max_results=10)
+            today_messages = search_gmail_messages(user_record, today_query, max_results=500)
             
             result['b008_searches']['today_only'] = {
                 'query': today_query,
@@ -9421,7 +9421,7 @@ def debug_discount_emails():
         # Search 3: All emails from sender today (to see what's actually there)
         try:
             all_today_query = f"from:{result['config']['sender_filter']} after:{today}"
-            all_today_messages = search_gmail_messages(user_record, all_today_query, max_results=50)
+            all_today_messages = search_gmail_messages(user_record, all_today_query, max_results=500)
             
             result['b008_searches']['all_today'] = {
                 'query': all_today_query,
@@ -12184,7 +12184,7 @@ def fetch_discount_alerts_from_gmail_api(gmail_config):
         
         
         # Process each message
-        for i, message in enumerate(messages['messages'][:50]):  # Limit to 50 for performance
+        for i, message in enumerate(messages['messages']):  # Process all messages
             try:
                 message_id = message['id']
                 email_data = get_gmail_message(user_record, message_id)

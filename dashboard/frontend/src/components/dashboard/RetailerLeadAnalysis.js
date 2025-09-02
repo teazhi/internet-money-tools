@@ -206,27 +206,22 @@ const RetailerLeadAnalysis = () => {
   };
 
   const renderTableCell = (columnKey, item, index) => {
-    console.log('Rendering cell:', columnKey, item);
     switch (columnKey) {
       case 'asin':
         return (
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
-            <button
-              type="button"
-              className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer bg-transparent border-none p-0"
-              onClick={() => {
-                console.log('ASIN clicked:', item.asin);
-                console.log('Opening URL:', `https://www.amazon.com/dp/${item.asin}`);
-                try {
-                  const newWindow = window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
-                  console.log('Window opened:', newWindow);
-                } catch (error) {
-                  console.error('Error opening window:', error);
-                }
+            <span
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                alert('ASIN clicked: ' + item.asin);
+                window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
               }}
+              style={{ pointerEvents: 'auto' }}
             >
               {item.asin}
-            </button>
+            </span>
           </td>
         );
       
@@ -234,15 +229,18 @@ const RetailerLeadAnalysis = () => {
         return (
           <td key={columnKey} className="px-3 py-3 text-center">
             {item.source_link ? (
-              <button
-                type="button"
-                className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center cursor-pointer bg-transparent border-none p-1"
-                onClick={() => {
+              <span
+                className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  alert('Source clicked: ' + item.source_link);
                   window.open(item.source_link, '_blank');
                 }}
+                style={{ pointerEvents: 'auto' }}
               >
                 <ExternalLink className="h-4 w-4" />
-              </button>
+              </span>
             ) : (
               <span className="text-gray-400">-</span>
             )}

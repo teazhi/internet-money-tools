@@ -210,18 +210,18 @@ const RetailerLeadAnalysis = () => {
       case 'asin':
         return (
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
-            <span
+            <div 
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
+              onMouseDown={(e) => {
                 e.stopPropagation();
-                alert('ASIN clicked: ' + item.asin);
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
                 window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
               }}
-              style={{ pointerEvents: 'auto' }}
             >
               {item.asin}
-            </span>
+            </div>
           </td>
         );
       

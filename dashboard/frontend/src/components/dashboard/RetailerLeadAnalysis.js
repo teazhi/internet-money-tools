@@ -533,6 +533,14 @@ const RetailerLeadAnalysis = () => {
               </div>
             </div>
 
+            {/* Debug test button */}
+            <button 
+              onClick={() => alert('Test button works!')}
+              className="mb-4 px-4 py-2 bg-red-500 text-white rounded"
+            >
+              Test Click (Click this first to see if events work)
+            </button>
+            
             <StandardTable
               data={filteredRecommendations || []}
               tableKey="lead-analysis"

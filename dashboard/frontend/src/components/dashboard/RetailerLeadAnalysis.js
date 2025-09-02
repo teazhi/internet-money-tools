@@ -212,7 +212,10 @@ const RetailerLeadAnalysis = () => {
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
             <div 
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer"
-              onClick={(e) => {
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              onMouseUp={(e) => {
                 e.stopPropagation();
                 window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
               }}
@@ -228,7 +231,10 @@ const RetailerLeadAnalysis = () => {
             {item.source_link ? (
               <div
                 className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center cursor-pointer"
-                onClick={(e) => {
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onMouseUp={(e) => {
                   e.stopPropagation();
                   window.open(item.source_link, '_blank');
                 }}

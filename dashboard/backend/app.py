@@ -15200,9 +15200,24 @@ def get_inventory_age_analysis():
             try:
                 velocity_data = analyzer.calculate_enhanced_velocity(asin, orders_df, target_date, user_timezone)
                 enhanced_analytics[asin]['velocity'] = velocity_data
+                
+                # Calculate restock data with monthly_purchase_adjustment
+                stock_info_for_asin = stock_info.get(asin, {})
+                restock_data = analyzer.calculate_optimal_restock_quantity(
+                    asin, velocity_data, stock_info_for_asin, 
+                    lead_time_days=90, purchase_analytics=purchase_insights
+                )
+                
+                # Update restock data with monthly_purchase_adjustment
+                enhanced_analytics[asin]['restock'].update({
+                    'monthly_purchase_adjustment': restock_data.get('monthly_purchase_adjustment', 0),
+                    'suggested_quantity': restock_data.get('suggested_quantity', 0)
+                })
+                
             except Exception as ve:
-                print(f"Warning: Failed to calculate velocity for {asin}: {ve}")
+                print(f"Warning: Failed to calculate velocity/restock for {asin}: {ve}")
                 enhanced_analytics[asin]['velocity'] = {'weighted_velocity': 0}
+                enhanced_analytics[asin]['restock']['monthly_purchase_adjustment'] = 0
         
         # Debug: Show what stock values we're actually getting
         print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")
@@ -15517,11 +15532,17 @@ def get_demo_inventory_age_analysis():
     # Create enhanced_analytics for frontend compatibility
     enhanced_analytics = {}
     for asin in demo_asins:
+        current_stock = random.randint(10, 200)
         enhanced_analytics[asin] = {
             'product_name': demo_product_names.get(asin, f'Demo Product {asin}'),
-            'current_stock': random.randint(10, 200),
+            'current_stock': current_stock,
             'velocity': {
                 'weighted_velocity': random.uniform(0.5, 5.0)
+            },
+            'restock': {
+                'current_stock': current_stock,
+                'monthly_purchase_adjustment': random.randint(0, 50),
+                'source': 'demo_data'
             }
         }
     

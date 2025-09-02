@@ -241,6 +241,7 @@ const AllProductAnalytics = () => {
       // Get real inventory data - current_stock should come directly from enhanced_analytics
       current_stock: allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0,
       velocity: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
+      amount_ordered: allProductsData?.enhanced_analytics?.[asin]?.restock?.monthly_purchase_adjustment || 0,
       days_left: Math.floor(Math.random() * 180) + 5,
       reorder_point: Math.floor(Math.random() * 50) + 10,
       last_cogs: Math.random() * 50 + 10,
@@ -274,6 +275,7 @@ const AllProductAnalytics = () => {
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false },
     current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
     velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
+    amount_ordered: { key: 'amount_ordered', label: 'Amount Ordered (2mo)', sortKey: 'amount_ordered', draggable: true },
     days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
     inventory_age: { key: 'inventory_age', label: 'Inventory Age', sortKey: 'estimated_age_days', draggable: true },
     last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'last_cogs', draggable: true },
@@ -477,6 +479,22 @@ const AllProductAnalytics = () => {
           </td>
         );
 
+      case 'amount_ordered':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm">
+            {item.amount_ordered > 0 ? (
+              <div className="flex items-center space-x-1">
+                <ShoppingCart className="h-3 w-3 text-purple-600" />
+                <span className="text-purple-700 font-medium">
+                  {item.amount_ordered}
+                </span>
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </td>
+        );
+
       case 'days_left':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
@@ -656,7 +674,7 @@ const AllProductAnalytics = () => {
                 data={inventoryTableData}
                 tableKey="all-products-inventory"
                 columns={getInventoryColumns()}
-                defaultColumnOrder={['product', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'last_cogs', 'reorder_point', 'status', 'actions']}
+                defaultColumnOrder={['product', 'current_stock', 'velocity', 'amount_ordered', 'days_left', 'inventory_age', 'last_cogs', 'reorder_point', 'status', 'actions']}
                 renderCell={renderInventoryCell}
                 enableSearch={true}
                 enableFilters={true}

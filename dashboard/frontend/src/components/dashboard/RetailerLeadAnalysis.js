@@ -212,10 +212,7 @@ const RetailerLeadAnalysis = () => {
           <td key={columnKey} className="px-3 py-3 whitespace-nowrap">
             <div 
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline cursor-pointer"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-              }}
-              onMouseUp={(e) => {
+              onClick={(e) => {
                 e.stopPropagation();
                 window.open(`https://www.amazon.com/dp/${item.asin}`, '_blank');
               }}
@@ -229,18 +226,15 @@ const RetailerLeadAnalysis = () => {
         return (
           <td key={columnKey} className="px-3 py-3 text-center">
             {item.source_link ? (
-              <span
+              <div
                 className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center cursor-pointer"
                 onClick={(e) => {
-                  e.preventDefault();
                   e.stopPropagation();
-                  alert('Source clicked: ' + item.source_link);
                   window.open(item.source_link, '_blank');
                 }}
-                style={{ pointerEvents: 'auto' }}
               >
                 <ExternalLink className="h-4 w-4" />
-              </span>
+              </div>
             ) : (
               <span className="text-gray-400">-</span>
             )}
@@ -533,14 +527,6 @@ const RetailerLeadAnalysis = () => {
               </div>
             </div>
 
-            {/* Debug test button */}
-            <button 
-              onClick={() => alert('Test button works!')}
-              className="mb-4 px-4 py-2 bg-red-500 text-white rounded"
-            >
-              Test Click (Click this first to see if events work)
-            </button>
-            
             <StandardTable
               data={filteredRecommendations || []}
               tableKey="lead-analysis"

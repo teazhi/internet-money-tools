@@ -26,6 +26,7 @@ const generateMockInventoryData = () => {
   };
 
   const ageAnalysis = {};
+  const enhancedAnalytics = {};
   const categoriesCount = {fresh: 1, moderate: 2, aged: 1, old: 1, ancient: 1};
   
   mockAsins.forEach((asin, index) => {
@@ -41,6 +42,21 @@ const generateMockInventoryData = () => {
       data_sources: ['mock_data'],
       age_range: {min: ageDays - 5, max: ageDays + 5, variance: 10},
       recommendations: [`Mock recommendation for ${category} inventory`]
+    };
+    
+    // Add enhanced analytics for mock data
+    const currentStock = Math.floor(Math.random() * 200) + 10;
+    enhancedAnalytics[asin] = {
+      product_name: `Mock Product ${asin}`,
+      current_stock: currentStock,
+      velocity: {
+        weighted_velocity: Math.random() * 5 + 0.5
+      },
+      restock: {
+        current_stock: currentStock,
+        monthly_purchase_adjustment: Math.floor(Math.random() * 50),
+        source: 'mock_data'
+      }
     };
   });
 
@@ -61,7 +77,8 @@ const generateMockInventoryData = () => {
     action_items: [],
     total_action_items: 0,
     demo_mode: true,
-    fallback_mode: true
+    fallback_mode: true,
+    enhanced_analytics: enhancedAnalytics
   };
 };
 
@@ -193,6 +210,11 @@ const AllProductAnalytics = () => {
       
       console.log('Has age_analysis?', !!dataToSet?.age_analysis);
       console.log('Final data type:', typeof dataToSet);
+      console.log('Has enhanced_analytics?', !!dataToSet?.enhanced_analytics);
+      if (dataToSet?.enhanced_analytics) {
+        const sampleAsin = Object.keys(dataToSet.enhanced_analytics)[0];
+        console.log('Sample enhanced_analytics entry:', sampleAsin, dataToSet.enhanced_analytics[sampleAsin]);
+      }
       
       setAllProductsData(dataToSet);
       
@@ -228,6 +250,13 @@ const AllProductAnalytics = () => {
     }
     
     console.log('Processing age_analysis with', Object.keys(allProductsData.age_analysis).length, 'items');
+    console.log('enhanced_analytics available?', !!allProductsData.enhanced_analytics);
+    
+    // Debug first item
+    const firstAsin = Object.keys(allProductsData.age_analysis)[0];
+    if (firstAsin && allProductsData.enhanced_analytics) {
+      console.log('First ASIN enhanced data:', firstAsin, allProductsData.enhanced_analytics[firstAsin]);
+    }
     
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,

@@ -15418,6 +15418,12 @@ def get_demo_analytics():
 def debug_all_product_analytics():
     """Debug endpoint to analyze All Product Analytics data flow"""
     try:
+        # Check authentication status
+        auth_status = {
+            'session_exists': 'discord_id' in session,
+            'discord_id': session.get('discord_id', 'Not logged in'),
+            'session_keys': list(session.keys())
+        }
         # Try to get demo data structure
         demo_response = None
         try:
@@ -15443,6 +15449,7 @@ def debug_all_product_analytics():
 
         # Analyze the structure
         debug_info = {
+            'auth_status': auth_status,
             'demo_endpoint_status': 'success' if 'age_analysis' in demo_response else 'failed',
             'demo_has_enhanced_analytics': 'enhanced_analytics' in demo_response,
             'demo_enhanced_analytics_sample': {},

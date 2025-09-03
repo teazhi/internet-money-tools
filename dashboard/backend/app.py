@@ -15020,6 +15020,14 @@ def get_inventory_age_analysis():
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
         
+        # Store auth success info for debug endpoint
+        from orders_analysis import _global_worksheet_debug
+        _global_worksheet_debug['auth_attempt'] = {
+            'discord_id': discord_id,
+            'user_found': bool(user_record),
+            'timestamp': datetime.now().isoformat()
+        }
+        
         if not user_record:
             return jsonify({'error': 'User not found'}), 404
         
@@ -15038,6 +15046,10 @@ def get_inventory_age_analysis():
         stock_url = get_user_sellerboard_stock_url(config_user_record)
         
         if not orders_url or not stock_url:
+            _global_worksheet_debug['auth_attempt']['sellerboard_config'] = {
+                'orders_url_configured': bool(orders_url),
+                'stock_url_configured': bool(stock_url)
+            }
             return jsonify({
                 'error': 'Sellerboard URLs not configured',
                 'message': 'Please configure your Sellerboard URLs in Settings to enable inventory age analysis.'

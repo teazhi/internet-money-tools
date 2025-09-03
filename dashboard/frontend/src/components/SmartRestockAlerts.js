@@ -60,7 +60,7 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
     );
   }
 
-  if (!imageUrl || (imgError && !fallbackUrl)) {
+  if (!imageUrl || imgError) {
     return (
       <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center" title={`Product: ${asin} - ${imgError ? 'Image failed to load' : 'No image available'}`}>
         <Package className="h-8 w-8 text-blue-600" />

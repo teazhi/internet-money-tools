@@ -15016,6 +15016,7 @@ def get_demo_user():
 @login_required
 def get_inventory_age_analysis():
     """Get comprehensive inventory age analysis"""
+    print(f"DEBUG: inventory-age endpoint called by user: {session.get('discord_id', 'unknown')}")
     try:
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
@@ -15386,6 +15387,16 @@ def get_inventory_age_analysis():
         import traceback
         print(f"Error in inventory age analysis: {e}")
         print(f"Traceback: {traceback.format_exc()}")
+        
+        # Store error info for debug endpoint
+        from orders_analysis import _global_worksheet_debug
+        _global_worksheet_debug['auth_endpoint_error'] = {
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'traceback': traceback.format_exc(),
+            'timestamp': datetime.now().isoformat()
+        }
+        
         return jsonify({
             'error': str(e),
             'message': 'Failed to perform inventory age analysis',

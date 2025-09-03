@@ -1096,6 +1096,7 @@ class EnhancedOrdersAnalysis:
             
             for worksheet_name in worksheet_names:
                 try:
+                    print(f"DEBUG: Processing worksheet '{worksheet_name}'")
                     
                     # Fetch worksheet data
                     range_ = f"'{worksheet_name}'!A1:Z"
@@ -1142,9 +1143,13 @@ class EnhancedOrdersAnalysis:
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
+                        print(f"DEBUG: Skipping worksheet '{worksheet_name}' - missing columns: {missing}")
+                        print(f"DEBUG: Available columns: {available_columns}")
+                        print(f"DEBUG: Expected columns: {expected_columns}")
                         continue
                     
                     # Worksheet has correct structure
+                    print(f"DEBUG: Successfully processing worksheet '{worksheet_name}' with columns: {available_columns}")
                     
                     # Create DataFrame
                     rows = []
@@ -1247,6 +1252,9 @@ class EnhancedOrdersAnalysis:
                     continue
             
             # All worksheets processed
+            print(f"DEBUG: Successfully processed {len(successful_sheets)} worksheets: {successful_sheets}")
+            print(f"DEBUG: Total COGS data entries: {len(combined_cogs_data)}")
+            print(f"DEBUG: Combined dataframe rows: {len(combined_dataframes)} sheets")
             # COGS data combined from all worksheets
             
             # Combine all DataFrames for purchase analytics

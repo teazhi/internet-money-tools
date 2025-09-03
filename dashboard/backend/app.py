@@ -15414,6 +15414,51 @@ def get_demo_analytics():
     target_date = date.today() - timedelta(days=1)
     return jsonify(get_dummy_analytics_data(target_date))
 
+@app.route('/api/debug/all-product-analytics', methods=['GET'])
+def debug_all_product_analytics():
+    """Debug endpoint to analyze All Product Analytics data flow"""
+    try:
+        # Try to get demo data structure
+        demo_response = None
+        try:
+            import requests
+            demo_response = requests.get('http://localhost:5000/api/demo/analytics/inventory-age').json()
+        except Exception as e:
+            demo_response = {'error': str(e)}
+        
+        # Analyze the structure
+        debug_info = {
+            'demo_endpoint_status': 'success' if 'age_analysis' in demo_response else 'failed',
+            'demo_has_enhanced_analytics': 'enhanced_analytics' in demo_response,
+            'demo_enhanced_analytics_sample': {},
+            'demo_amount_ordered_values': {},
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        if 'enhanced_analytics' in demo_response:
+            ea = demo_response['enhanced_analytics']
+            debug_info['demo_enhanced_analytics_count'] = len(ea)
+            
+            # Sample first 3 ASINs
+            for asin in list(ea.keys())[:3]:
+                asin_data = ea[asin]
+                debug_info['demo_enhanced_analytics_sample'][asin] = {
+                    'product_name': asin_data.get('product_name'),
+                    'current_stock': asin_data.get('current_stock'),
+                    'velocity_weighted': asin_data.get('velocity', {}).get('weighted_velocity'),
+                    'restock_structure': list(asin_data.get('restock', {}).keys()),
+                    'monthly_purchase_adjustment': asin_data.get('restock', {}).get('monthly_purchase_adjustment')
+                }
+                debug_info['demo_amount_ordered_values'][asin] = asin_data.get('restock', {}).get('monthly_purchase_adjustment', 'N/A')
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        })
+
 @app.route('/api/test/inventory-age-available', methods=['GET'])
 def test_inventory_age_available():
     """Simple test endpoint to verify inventory-age routes are deployed"""

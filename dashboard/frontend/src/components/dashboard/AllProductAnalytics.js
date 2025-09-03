@@ -208,13 +208,6 @@ const AllProductAnalytics = () => {
         }
       }
       
-      console.log('Has age_analysis?', !!dataToSet?.age_analysis);
-      console.log('Final data type:', typeof dataToSet);
-      console.log('Has enhanced_analytics?', !!dataToSet?.enhanced_analytics);
-      if (dataToSet?.enhanced_analytics) {
-        const sampleAsin = Object.keys(dataToSet.enhanced_analytics)[0];
-        console.log('Sample enhanced_analytics entry:', sampleAsin, dataToSet.enhanced_analytics[sampleAsin]);
-      }
       
       setAllProductsData(dataToSet);
       
@@ -239,24 +232,10 @@ const AllProductAnalytics = () => {
 
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
-    console.log('Preparing inventory table data...');
-    console.log('allProductsData:', allProductsData);
-    console.log('allProductsData type:', typeof allProductsData);
-    console.log('Has age_analysis?', !!allProductsData?.age_analysis);
-    
     if (!allProductsData?.age_analysis) {
-      console.log('No age_analysis found in allProductsData');
       return [];
     }
     
-    console.log('Processing age_analysis with', Object.keys(allProductsData.age_analysis).length, 'items');
-    console.log('enhanced_analytics available?', !!allProductsData.enhanced_analytics);
-    
-    // Debug first item
-    const firstAsin = Object.keys(allProductsData.age_analysis)[0];
-    if (firstAsin && allProductsData.enhanced_analytics) {
-      console.log('First ASIN enhanced data:', firstAsin, allProductsData.enhanced_analytics[firstAsin]);
-    }
     
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,

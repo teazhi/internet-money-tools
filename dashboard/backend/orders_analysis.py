@@ -9,6 +9,9 @@ import numpy as np
 from typing import Dict, Optional, List, Tuple
 from purchase_analytics import PurchaseAnalytics
 
+# Global variable to store worksheet debug info for debug endpoint
+_global_worksheet_debug = {}
+
 # Default URLs removed for security - users must configure their own URLs
 ORDERS_REPORT_URL = None
 STOCK_REPORT_URL = None
@@ -1066,6 +1069,16 @@ class EnhancedOrdersAnalysis:
         Returns:
             tuple: (cogs_data dict, combined_dataframe for purchase analytics)
         """
+        # Store debug info for endpoint access
+        self._worksheet_debug_info = {
+            'worksheets_found': [],
+            'worksheets_processed': [],
+            'worksheets_skipped': [],
+            'column_issues': {},
+            'expected_columns': set(),
+            'total_cogs_entries': 0,
+            'total_dataframes': 0
+        }
         try:
             import requests
             
@@ -1080,6 +1093,9 @@ class EnhancedOrdersAnalysis:
             sheets_info = r.json().get("sheets", [])
             worksheet_names = [sheet["properties"]["title"] for sheet in sheets_info]
             
+            # Store found worksheets for debug
+            self._worksheet_debug_info['worksheets_found'] = worksheet_names.copy()
+            
             # Expected column structure based on user's column mapping
             # Get the actual column names from user's mapping (excluding source field which we'll detect dynamically)
             expected_columns = set()
@@ -1087,6 +1103,9 @@ class EnhancedOrdersAnalysis:
             for field in required_fields:
                 mapped_column = column_mapping.get(field, field)  # Use mapping or fallback to field name
                 expected_columns.add(mapped_column)
+                
+            # Store expected columns for debug
+            self._worksheet_debug_info['expected_columns'] = list(expected_columns)
             
             
             
@@ -1143,13 +1162,16 @@ class EnhancedOrdersAnalysis:
                     
                     if not expected_columns.issubset(available_columns):
                         missing = expected_columns - available_columns
-                        print(f"DEBUG: Skipping worksheet '{worksheet_name}' - missing columns: {missing}")
-                        print(f"DEBUG: Available columns: {available_columns}")
-                        print(f"DEBUG: Expected columns: {expected_columns}")
+                        self._worksheet_debug_info['worksheets_skipped'].append(worksheet_name)
+                        self._worksheet_debug_info['column_issues'][worksheet_name] = {
+                            'available_columns': list(available_columns),
+                            'missing_columns': list(missing),
+                            'expected_columns': list(expected_columns)
+                        }
                         continue
                     
                     # Worksheet has correct structure
-                    print(f"DEBUG: Successfully processing worksheet '{worksheet_name}' with columns: {available_columns}")
+                    self._worksheet_debug_info['worksheets_processed'].append(worksheet_name)
                     
                     # Create DataFrame
                     rows = []
@@ -1252,9 +1274,14 @@ class EnhancedOrdersAnalysis:
                     continue
             
             # All worksheets processed
-            print(f"DEBUG: Successfully processed {len(successful_sheets)} worksheets: {successful_sheets}")
-            print(f"DEBUG: Total COGS data entries: {len(combined_cogs_data)}")
-            print(f"DEBUG: Combined dataframe rows: {len(combined_dataframes)} sheets")
+            self._worksheet_debug_info['total_cogs_entries'] = len(combined_cogs_data)
+            self._worksheet_debug_info['total_dataframes'] = len(combined_dataframes)
+            self._worksheet_debug_info['successful_sheets'] = successful_sheets.copy()
+            
+            # Store debug info globally for debug endpoint access
+            global _global_worksheet_debug
+            _global_worksheet_debug = self._worksheet_debug_info.copy()
+            
             # COGS data combined from all worksheets
             
             # Combine all DataFrames for purchase analytics

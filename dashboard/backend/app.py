@@ -15426,12 +15426,28 @@ def debug_all_product_analytics():
         except Exception as e:
             demo_response = {'error': str(e)}
         
+        # Try to get real endpoint worksheet debug info
+        worksheet_debug = None
+        try:
+            # Import the global debug info
+            from orders_analysis import _global_worksheet_debug
+            if _global_worksheet_debug:
+                worksheet_debug = _global_worksheet_debug.copy()
+            else:
+                worksheet_debug = {
+                    'note': 'No recent worksheet processing found',
+                    'instruction': 'Refresh All Product Analytics page while logged in to populate this data'
+                }
+        except Exception as e:
+            worksheet_debug = {'error': str(e)}
+
         # Analyze the structure
         debug_info = {
             'demo_endpoint_status': 'success' if 'age_analysis' in demo_response else 'failed',
             'demo_has_enhanced_analytics': 'enhanced_analytics' in demo_response,
             'demo_enhanced_analytics_sample': {},
             'demo_amount_ordered_values': {},
+            'worksheet_debug_info': worksheet_debug,
             'search_all_worksheets_info': {
                 'inventory_age_force_setting': True,
                 'purchase_analytics_method': '_analyze_recent_2_months_purchases',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
   ShoppingCart, 
@@ -12,6 +12,50 @@ import {
   Eye
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
+import { useProductImages } from '../../hooks/useProductImages';
+
+// Product image component with fallback
+const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
+  const [imgError, setImgError] = useState(false);
+  const imageUrl = batchImages?.[asin];
+  const isLoading = imagesLoading && !imageUrl;
+
+  if (!asin) {
+    return (
+      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <Package className="h-6 w-6 text-gray-400" />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+        <div className="h-5 w-5 bg-gray-300 rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!imageUrl || imgError) {
+    return (
+      <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center">
+        <Package className="h-6 w-6 text-blue-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-12 w-12 rounded-lg overflow-hidden border border-gray-200 bg-white">
+      <img
+        src={imageUrl}
+        alt={productName || `Product ${asin}`}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => setImgError(true)}
+      />
+    </div>
+  );
+};
 
 const RetailerLeadAnalysis = () => {
   const [selectedWorksheet, setSelectedWorksheet] = useState('');
@@ -23,6 +67,15 @@ const RetailerLeadAnalysis = () => {
   const [worksheets, setWorksheets] = useState([]);
   const [excludeKeywords, setExcludeKeywords] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Extract all ASINs for batch image loading
+  const allAsins = useMemo(() => {
+    if (!analysis?.recommendations) return [];
+    return analysis.recommendations.map(item => item.asin).filter(Boolean);
+  }, [analysis?.recommendations]);
+
+  // Use batch image loading for better performance
+  const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
   useEffect(() => {
     fetchWorksheets();
@@ -242,22 +295,50 @@ const RetailerLeadAnalysis = () => {
       case 'product_name':
         return (
           <td key={columnKey} className="px-3 py-3">
-            <div className="text-sm text-gray-900">
-              {item.product_name ? (
-                <span title={item.product_name}>
-                  {item.product_name.length > 80 ? 
-                    `${item.product_name.substring(0, 80)}...` : 
-                    item.product_name
-                  }
-                  {!item.in_inventory && (
-                    <span className="text-xs text-orange-500 ml-2">(New)</span>
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <a 
+                  href={`https://www.amazon.com/dp/${item.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  <ProductImage 
+                    asin={item.asin} 
+                    productName={item.product_name}
+                    batchImages={batchImages}
+                    imagesLoading={imagesLoading}
+                  />
+                </a>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-gray-900">
+                  {item.product_name ? (
+                    <a 
+                      href={`https://www.amazon.com/dp/${item.asin}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-600 transition-colors"
+                      title={item.product_name}
+                    >
+                      {item.product_name.length > 60 ? 
+                        `${item.product_name.substring(0, 60)}...` : 
+                        item.product_name
+                      }
+                      {!item.in_inventory && (
+                        <span className="text-xs text-orange-500 ml-2">(New)</span>
+                      )}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400 italic">
+                      {item.in_inventory ? 'Product name not available' : 'New Product (name not in sheet)'}
+                    </span>
                   )}
-                </span>
-              ) : (
-                <span className="text-gray-400 italic">
-                  {item.in_inventory ? 'Product name not available' : 'New Product (name not in sheet)'}
-                </span>
-              )}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {item.asin}
+                </div>
+              </div>
             </div>
           </td>
         );

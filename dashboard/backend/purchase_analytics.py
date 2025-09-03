@@ -464,106 +464,78 @@ class PurchaseAnalytics:
         return recommendations
     
     def _analyze_recent_2_months_purchases(self, df: pd.DataFrame) -> Dict:
-        """Analyze purchases from current month and previous month worksheets (by month name)"""
+        """Analyze purchases from ALL worksheets within the last 2 months by date range"""
         recent_purchases_data = {}
         
         try:
-            # Check if we have worksheet source information
-            if '_worksheet_source' not in df.columns:
-                pass  # Debug print removed
-                return self._analyze_by_date_fallback(df)
-            
-            # Get the list of unique worksheets
-            worksheets = df['_worksheet_source'].unique()
-            
-            # Get current month and previous month names
+            # Calculate 2-month cutoff date
             from datetime import datetime, timedelta
             current_date = datetime.now()
-            current_month = current_date.strftime('%B').upper()  # e.g., 'AUGUST'
-            previous_month = (current_date.replace(day=1) - timedelta(days=1)).strftime('%B').upper()  # e.g., 'JULY'
+            two_months_ago = current_date - timedelta(days=60)  # 2 months = ~60 days
             
-            
-            # Find worksheets that contain the current month or previous month names
-            current_month_sheets = [ws for ws in worksheets if current_month in ws.upper()]
-            previous_month_sheets = [ws for ws in worksheets if previous_month in ws.upper()]
-            
-            # Convert worksheets to a list for easier handling
-            worksheets_list = list(worksheets)
-            
-            # Strategy: Use first worksheet as current month, find July worksheet, or use first 2 worksheets
-            last_2_months_sheets = []
-            
-            # Always include the first worksheet (assumed to be current month)
-            if worksheets_list:
-                last_2_months_sheets.append(worksheets_list[0])
-            
-            # Look for July worksheet specifically
-            if previous_month_sheets:
-                # Add July worksheets
-                for july_sheet in previous_month_sheets:
-                    if july_sheet not in last_2_months_sheets:
-                        last_2_months_sheets.append(july_sheet)
+            # Check if we have date information for proper filtering
+            if 'date' not in df.columns:
+                # If no date column, fall back to worksheet-based analysis but use ALL worksheets
+                if '_worksheet_source' not in df.columns:
+                    return self._analyze_by_date_fallback(df)
+                
+                # Get all unique worksheets (not limited to 2)
+                all_worksheets = df['_worksheet_source'].unique()
+                recent_df = df[df['_worksheet_source'].isin(all_worksheets)]
             else:
-                # No July worksheet found, look for other worksheets that might contain July data
-                july_variants = ['JULY', 'July', 'july', '07', 'JUL', 'Jul']
-                july_found = False
+                # Filter by actual date range (last 2 months) from ALL worksheets
+                recent_df = df[df['date'] >= two_months_ago]
                 
-                for ws in worksheets_list:
-                    if any(variant in ws for variant in july_variants):
-                        if ws not in last_2_months_sheets:
-                            last_2_months_sheets.append(ws)
-                            july_found = True
-                            break
-                
-                if not july_found:
-                    # Still no July found, just use the next available worksheet
-                    for ws in worksheets_list[1:]:  # Skip first worksheet (already added)
-                        if ws not in last_2_months_sheets:
-                            last_2_months_sheets.append(ws)
-                            break
-            
-            # Ensure we have exactly the sheets we want (limit to 2 for now)
-            last_2_months_sheets = last_2_months_sheets[:2]
-            
-            
-            # If we only have 1 worksheet, that's okay - use what we have
-            if len(last_2_months_sheets) == 1:
-                pass  # Use the single available worksheet
-            
-            last_2_worksheets = last_2_months_sheets
-            
-            
-            # Filter to only data from the last 2 worksheets
-            recent_df = df[df['_worksheet_source'].isin(last_2_worksheets)]
+            # If we have worksheet source info, prioritize more recent worksheets if date filtering results in too much data
+            if '_worksheet_source' in df.columns and len(recent_df) > 1000:  # Only limit if we have excessive data
+                # Get worksheets sorted by most recent data
+                worksheet_latest_dates = recent_df.groupby('_worksheet_source')['date'].max().sort_values(ascending=False)
+                # Take up to 4 most recent worksheets (increased from 2) to ensure we don't miss purchases
+                recent_worksheets = worksheet_latest_dates.head(4).index.tolist()
+                recent_df = recent_df[recent_df['_worksheet_source'].isin(recent_worksheets)]
             
             if recent_df.empty:
                 pass  # Debug print removed
                 return {}
             
-            # Group by ASIN and sum amounts purchased from last 2 worksheets
-            recent_purchases = recent_df.groupby('asin').agg({
+            # Group by ASIN and sum amounts purchased from all relevant worksheets
+            agg_dict = {
                 'amount_purchased': 'sum',
                 'date': ['count', 'max', 'min'],  # count, most recent, and earliest date
                 'cogs': 'mean',  # average COGS for recent purchases
-                '_worksheet_source': lambda x: list(x.unique())  # which worksheets this ASIN appears in
-            }).reset_index()
+            }
+            
+            # Only include worksheet source if available
+            if '_worksheet_source' in recent_df.columns:
+                agg_dict['_worksheet_source'] = lambda x: list(x.unique())
+                
+            recent_purchases = recent_df.groupby('asin').agg(agg_dict).reset_index()
             
             # Flatten column names
-            recent_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'first_purchase_date', 'avg_cogs', 'source_worksheets']
+            if '_worksheet_source' in recent_df.columns:
+                recent_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'first_purchase_date', 'avg_cogs', 'source_worksheets']
+            else:
+                recent_purchases.columns = ['asin', 'total_qty_purchased', 'purchase_count', 'last_purchase_date', 'first_purchase_date', 'avg_cogs']
             
             # Convert to dictionary format
             for _, row in recent_purchases.iterrows():
                 asin = row['asin']
-                recent_purchases_data[asin] = {
+                result_data = {
                     'total_quantity_purchased': int(row['total_qty_purchased']),
                     'purchase_count': int(row['purchase_count']),
                     'last_purchase_date': row['last_purchase_date'].isoformat() if pd.notna(row['last_purchase_date']) else None,
                     'first_purchase_date': row['first_purchase_date'].isoformat() if pd.notna(row['first_purchase_date']) else None,
                     'avg_cogs_recent': float(row['avg_cogs']) if pd.notna(row['avg_cogs']) else 0,
-                    'source_worksheets': row['source_worksheets'],
-                    'analysis_period': f"Last 2 worksheets: {', '.join(last_2_worksheets)}",
-                    'worksheets_analyzed': last_2_worksheets
+                    'analysis_period': f"Last 2 months: {two_months_ago.strftime('%Y-%m-%d')} to {current_date.strftime('%Y-%m-%d')}",
+                    'days_analyzed': 60
                 }
+                
+                # Add worksheet info if available
+                if '_worksheet_source' in recent_df.columns and 'source_worksheets' in row:
+                    result_data['source_worksheets'] = row['source_worksheets']
+                    result_data['worksheets_analyzed'] = list(recent_df['_worksheet_source'].unique())
+                
+                recent_purchases_data[asin] = result_data
             
             pass  # Debug print removed
             return recent_purchases_data

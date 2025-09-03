@@ -11700,7 +11700,7 @@ def sync_leads_to_sheets():
         
         try:
             # Get column mapping
-            column_mapping = get_user_column_mapping(user_record)
+            column_mapping = get_user_column_mapping(config_user_record)
             
             # Check if user has search_all_worksheets enabled
             search_all_worksheets = get_user_field(config_user_record, 'settings.search_all_worksheets') or config_user_record.get('search_all_worksheets', True)  # Default to True
@@ -15432,6 +15432,11 @@ def debug_all_product_analytics():
             'demo_has_enhanced_analytics': 'enhanced_analytics' in demo_response,
             'demo_enhanced_analytics_sample': {},
             'demo_amount_ordered_values': {},
+            'search_all_worksheets_info': {
+                'inventory_age_force_setting': True,
+                'purchase_analytics_method': '_analyze_recent_2_months_purchases',
+                'expected_behavior': 'Now searches ALL worksheets within last 2 months by date range instead of limiting to 2 worksheets'
+            },
             'timestamp': datetime.now().isoformat()
         }
         

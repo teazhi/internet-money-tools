@@ -1784,6 +1784,7 @@ class EnhancedOrdersAnalysis:
                 'restock': restock_data,
                 'stock_info': asin_stock_info,
                 'product_name': asin_stock_info.get('Title', f'Product {asin}'),
+                'current_stock': restock_data.get('current_stock', 0),  # Add direct access to current_stock for frontend
                 'cogs_data': cogs_data.get(asin, {}),  # Include COGS and source link data
                 'purchase_analytics': {
                     'velocity_analysis': purchase_insights.get('purchase_velocity_analysis', {}).get(asin, {}),

@@ -15437,6 +15437,107 @@ def get_demo_analytics():
     target_date = date.today() - timedelta(days=1)
     return jsonify(get_dummy_analytics_data(target_date))
 
+@app.route('/api/debug/stock-analysis', methods=['GET'])
+def debug_stock_analysis():
+    """Debug endpoint to analyze stock data loading issues"""
+    try:
+        # Check if authenticated
+        if 'discord_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+            
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Handle parent-child relationship
+        config_user_record = user_record
+        parent_user_id = user_record.get('parent_user_id')
+        if parent_user_id:
+            parent_record = get_user_record(parent_user_id)
+            if parent_record:
+                config_user_record = parent_record
+                
+        # Get stock URL
+        stock_url = get_user_sellerboard_stock_url(config_user_record)
+        if not stock_url:
+            return jsonify({'error': 'Stock URL not configured'}), 400
+            
+        # Load stock data
+        from orders_analysis import OrdersAnalysis
+        analyzer = OrdersAnalysis(orders_url="dummy", stock_url=stock_url)
+        
+        # Download stock CSV
+        import pandas as pd
+        stock_df = analyzer.download_csv(stock_url)
+        
+        # Get stock info
+        stock_info = analyzer.get_stock_info(stock_df)
+        
+        # Analyze the data
+        debug_info = {
+            'stock_url_configured': bool(stock_url),
+            'stock_df_shape': stock_df.shape if stock_df is not None else None,
+            'stock_df_columns': list(stock_df.columns) if stock_df is not None else None,
+            'stock_info_count': len(stock_info),
+            'sample_asins': {},
+            'non_zero_stock_asins': [],
+            'zero_stock_asins': [],
+            'column_analysis': {}
+        }
+        
+        # Check if FBA/FBM Stock column exists
+        if stock_df is not None:
+            fba_stock_columns = [col for col in stock_df.columns if 'stock' in col.lower()]
+            debug_info['stock_related_columns'] = fba_stock_columns
+            
+            # Check specific column
+            if 'FBA/FBM Stock' in stock_df.columns:
+                debug_info['column_analysis']['FBA/FBM Stock'] = {
+                    'exists': True,
+                    'dtype': str(stock_df['FBA/FBM Stock'].dtype),
+                    'sample_values': stock_df['FBA/FBM Stock'].head(10).tolist(),
+                    'unique_count': stock_df['FBA/FBM Stock'].nunique(),
+                    'null_count': stock_df['FBA/FBM Stock'].isnull().sum()
+                }
+        
+        # Sample some ASINs from stock_info
+        for i, (asin, info) in enumerate(list(stock_info.items())[:10]):
+            stock_val = info.get('FBA/FBM Stock', 'NOT FOUND')
+            debug_info['sample_asins'][asin] = {
+                'FBA/FBM Stock': stock_val,
+                'extracted_stock': analyzer.extract_current_stock(info, debug_asin=asin),
+                'all_columns': list(info.keys())[:5]  # First 5 columns
+            }
+            
+        # Find ASINs with non-zero stock
+        for asin, info in stock_info.items():
+            stock = analyzer.extract_current_stock(info)
+            if stock > 0:
+                debug_info['non_zero_stock_asins'].append({
+                    'asin': asin,
+                    'stock': stock,
+                    'title': info.get('Title', 'Unknown')[:50]
+                })
+            elif stock == 0:
+                debug_info['zero_stock_asins'].append(asin)
+                
+        # Limit lists for response size
+        debug_info['non_zero_stock_asins'] = debug_info['non_zero_stock_asins'][:20]
+        debug_info['zero_stock_asins'] = debug_info['zero_stock_asins'][:20]
+        debug_info['total_non_zero_stock'] = len([1 for a, i in stock_info.items() if analyzer.extract_current_stock(i) > 0])
+        debug_info['total_zero_stock'] = len([1 for a, i in stock_info.items() if analyzer.extract_current_stock(i) == 0])
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/api/debug/all-product-analytics', methods=['GET'])
 def debug_all_product_analytics():
     """Debug endpoint to analyze All Product Analytics data flow"""

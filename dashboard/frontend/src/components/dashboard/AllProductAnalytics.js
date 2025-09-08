@@ -86,6 +86,7 @@ const AllProductAnalytics = () => {
   const [allProductsData, setAllProductsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
 
   // Fetch comprehensive product data
   const fetchAllProductsData = async () => {
@@ -215,6 +216,64 @@ const AllProductAnalytics = () => {
       setError(err.response?.data?.message || 'Failed to load product data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to extract URLs from a text string
+  const extractUrlsFromText = (text) => {
+    if (!text) return [];
+    
+    // Handle URLs that might be separated by spaces, semicolons, commas, or newlines
+    const urlRegex = /https?:\/\/[^\s;,\n]+/gi;
+    const urls = text.match(urlRegex) || [];
+    
+    // Clean URLs (remove trailing punctuation)
+    return urls.map(url => url.replace(/[.,;]+$/, ''));
+  };
+
+  // Function to handle restock button click
+  const handleRestockClick = async (asin) => {
+    setSourcesLoading(true);
+    
+    // Get existing source link from enhanced analytics
+    const existingSourceLink = allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null;
+    
+    // Strategy: Use existing source link immediately if available, then try to enhance with backend data
+    const extractedUrls = extractUrlsFromText(existingSourceLink);
+    
+    // If we have a direct source link, open it immediately
+    if (extractedUrls.length > 0) {
+      extractedUrls.forEach(url => {
+        window.open(url, '_blank');
+      });
+      setSourcesLoading(false);
+      return;
+    } else if (existingSourceLink && existingSourceLink.startsWith('http')) {
+      // Direct URL in source link
+      window.open(existingSourceLink, '_blank');
+      setSourcesLoading(false);
+      return;
+    }
+    
+    // If no direct source link available, try backend API (this might be slow)
+    try {
+      const response = await axios.get(`/api/asin/${asin}/purchase-sources`, { withCredentials: true });
+      const backendSources = response.data.sources || [];
+      
+      if (backendSources.length > 0) {
+        backendSources.forEach(source => {
+          window.open(source.url, '_blank');
+        });
+      } else {
+        // Last resort: open Amazon product page
+        window.open(`https://www.amazon.com/dp/${asin}`, '_blank');
+      }
+    } catch (error) {
+      console.log('Backend source lookup failed, opening Amazon page:', error);
+      // Fallback to Amazon product page
+      window.open(`https://www.amazon.com/dp/${asin}`, '_blank');
+    } finally {
+      setSourcesLoading(false);
     }
   };
 
@@ -561,7 +620,12 @@ const AllProductAnalytics = () => {
       case 'actions':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <button className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors">
+            <button 
+              onClick={() => handleRestockClick(item.asin)}
+              className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled={sourcesLoading}
+              title={allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link ? "Open supplier link" : "Find purchase sources"}
+            >
               <ShoppingCart className="h-3 w-3 mr-1" />
               Restock
             </button>

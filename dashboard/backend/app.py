@@ -15259,6 +15259,15 @@ def get_inventory_age_analysis():
         # CRITICAL: Include enhanced_analytics so frontend can access stock values and product names
         age_analysis['enhanced_analytics'] = enhanced_analytics
         
+        # Debug enhanced_analytics before JSON serialization
+        sample_asins = ["B004ZAKHHM", "B00F99VIUS", "B009I4G5JO"]
+        for asin in sample_asins:
+            if asin in enhanced_analytics:
+                stock_val = enhanced_analytics[asin].get('current_stock', 'NOT_FOUND')
+                print(f"DEBUG final response - {asin}: current_stock = {stock_val}")
+            else:
+                print(f"DEBUG final response - {asin}: NOT FOUND in enhanced_analytics")
+        
         # Debug: Log what we're returning
         print(f"DEBUG - Final response structure keys: {list(age_analysis.keys())}")
         print(f"DEBUG - Final response structure type: {type(age_analysis)}")

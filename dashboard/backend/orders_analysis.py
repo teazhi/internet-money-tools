@@ -628,6 +628,13 @@ class EnhancedOrdersAnalysis:
         # No complex calculations needed - just read directly from Sellerboard CSV
         current_stock = self.extract_current_stock(stock_info, debug_asin=asin)
         
+        # Debug stock extraction
+        if asin in ["B004ZAKHHM", "B09WW4J6NM", "B00F99VIUS"]:  # Sample ASINs for debugging
+            print(f"DEBUG calculate_optimal_restock for {asin}:")
+            print(f"  - stock_info keys: {list(stock_info.keys())[:10]}")
+            print(f"  - FBA/FBM Stock value: {stock_info.get('FBA/FBM Stock', 'NOT FOUND')}")
+            print(f"  - extracted current_stock: {current_stock}")
+        
         # Base velocity with trend adjustment
         base_velocity = velocity_data.get('weighted_velocity', 0)
         trend_factor = velocity_data.get('trend_factor', 1.0)
@@ -1530,6 +1537,13 @@ class EnhancedOrdersAnalysis:
         # Download stock report
         stock_df = self.download_csv(self.stock_url)
         stock_info = self.get_stock_info(stock_df)
+        
+        # Debug stock info loading
+        print(f"DEBUG: Stock file loaded with {len(stock_info)} ASINs")
+        if stock_info:
+            sample_asin = list(stock_info.keys())[0]
+            print(f"DEBUG: Sample ASIN '{sample_asin}' has columns: {list(stock_info[sample_asin].keys())}")
+            print(f"DEBUG: FBA/FBM Stock value: {stock_info[sample_asin].get('FBA/FBM Stock', 'NOT FOUND')}")
 
         # Fetch COGS data and purchase analytics 
         cogs_data = {}
@@ -1765,6 +1779,13 @@ class EnhancedOrdersAnalysis:
                 'Title': f'Product {asin}',
                 'source': 'out_of_stock_fallback'
             })
+            
+            # Debug stock info for sample ASINs
+            if asin in ["B004ZAKHHM", "B09WW4J6NM", "B00F99VIUS"]:
+                print(f"DEBUG analyze() for {asin}:")
+                print(f"  - asin in stock_info: {asin in stock_info}")
+                print(f"  - asin_stock_info keys: {list(asin_stock_info.keys())[:10]}")
+                print(f"  - FBA/FBM Stock: {asin_stock_info.get('FBA/FBM Stock', 'NOT FOUND')}")
             
             # Get priority score
             current_sales = today_sales.get(asin, 0)

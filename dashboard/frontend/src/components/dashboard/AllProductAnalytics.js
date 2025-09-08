@@ -232,11 +232,8 @@ const AllProductAnalytics = () => {
   };
 
   // Function to handle restock button click
-  const handleRestockClick = async (asin) => {
+  const handleRestockClick = async (asin, existingSourceLink) => {
     setSourcesLoading(true);
-    
-    // Get existing source link from enhanced analytics
-    const existingSourceLink = allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null;
     
     // Strategy: Use existing source link immediately if available, then try to enhance with backend data
     const extractedUrls = extractUrlsFromText(existingSourceLink);
@@ -620,8 +617,8 @@ const AllProductAnalytics = () => {
       case 'actions':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
-            <button 
-              onClick={() => handleRestockClick(item.asin)}
+            <button
+              onClick={() => handleRestockClick(item.asin, allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link || null)}
               className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
               disabled={sourcesLoading}
               title={allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link ? "Open supplier link" : "Find purchase sources"}

@@ -15137,49 +15137,9 @@ def get_inventory_age_analysis():
         print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
         print(f"Stock file: {len(stock_info)} products")
         
-        # Create enhanced_analytics by combining COGS file (for all ASINs) with Stock file (for accurate stock quantities)
-        enhanced_analytics = {}
-        
-        for _, cogs_row in cogs_df_filtered.iterrows():
-            asin = cogs_row.get(asin_col)
-            if asin:
-                # Extract product info from COGS data
-                product_name = cogs_row.get('Product Name') or cogs_row.get('Title') or f"Product {asin}"
-                
-                # Look for COGS value in COGS file
-                cogs_value = 0
-                for col, value in cogs_row.items():
-                    if any(term in col.lower() for term in ['cogs', 'cost', 'price']):
-                        try:
-                            cogs_value = float(value) if value else 0
-                            break
-                        except (ValueError, TypeError):
-                            continue
-                
-                # Get accurate stock quantity from stock file if available
-                current_stock = 0
-                if asin in stock_info:
-                    current_stock = stock_info[asin].get('current_stock', 0)
-                else:
-                    # ASIN not in stock file (likely out of stock), try COGS file as fallback
-                    for col, value in cogs_row.items():
-                        if any(term in col.lower() for term in ['stock', 'quantity', 'qty', 'units']):
-                            try:
-                                current_stock = int(float(value)) if value else 0
-                                break
-                            except (ValueError, TypeError):
-                                continue
-                
-                enhanced_analytics[asin] = {
-                    'product_name': product_name,
-                    'current_stock': current_stock,
-                    'cogs': cogs_value,
-                    'restock': {
-                        'current_stock': current_stock,
-                        'source': 'stock_file' if asin in stock_info else 'cogs_file'
-                    },
-                    'source': 'cogs_and_stock_combined'
-                }
+        # Use the enhanced_analytics that was already correctly created by OrdersAnalysis
+        # (The previous code here was overwriting the correctly calculated enhanced_analytics from analysis)
+        enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
         
         # Get other analysis data for compatibility
         restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}

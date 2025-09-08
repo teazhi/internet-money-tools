@@ -15478,7 +15478,7 @@ def debug_stock_analysis():
         # Analyze the data
         debug_info = {
             'stock_url_configured': bool(stock_url),
-            'stock_df_shape': stock_df.shape if stock_df is not None else None,
+            'stock_df_shape': list(stock_df.shape) if stock_df is not None else None,
             'stock_df_columns': list(stock_df.columns) if stock_df is not None else None,
             'stock_info_count': len(stock_info),
             'sample_asins': {},
@@ -15497,17 +15497,17 @@ def debug_stock_analysis():
                 debug_info['column_analysis']['FBA/FBM Stock'] = {
                     'exists': True,
                     'dtype': str(stock_df['FBA/FBM Stock'].dtype),
-                    'sample_values': stock_df['FBA/FBM Stock'].head(10).tolist(),
-                    'unique_count': stock_df['FBA/FBM Stock'].nunique(),
-                    'null_count': stock_df['FBA/FBM Stock'].isnull().sum()
+                    'sample_values': [float(x) if pd.notna(x) else None for x in stock_df['FBA/FBM Stock'].head(10)],
+                    'unique_count': int(stock_df['FBA/FBM Stock'].nunique()),
+                    'null_count': int(stock_df['FBA/FBM Stock'].isnull().sum())
                 }
         
         # Sample some ASINs from stock_info
         for i, (asin, info) in enumerate(list(stock_info.items())[:10]):
             stock_val = info.get('FBA/FBM Stock', 'NOT FOUND')
             debug_info['sample_asins'][asin] = {
-                'FBA/FBM Stock': stock_val,
-                'extracted_stock': analyzer.extract_current_stock(info, debug_asin=asin),
+                'FBA/FBM Stock': float(stock_val) if isinstance(stock_val, (int, float)) and pd.notna(stock_val) else str(stock_val),
+                'extracted_stock': float(analyzer.extract_current_stock(info, debug_asin=asin)),
                 'all_columns': list(info.keys())[:5]  # First 5 columns
             }
             
@@ -15517,7 +15517,7 @@ def debug_stock_analysis():
             if stock > 0:
                 debug_info['non_zero_stock_asins'].append({
                     'asin': asin,
-                    'stock': stock,
+                    'stock': float(stock),
                     'title': info.get('Title', 'Unknown')[:50]
                 })
             elif stock == 0:

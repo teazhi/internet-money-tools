@@ -1780,6 +1780,13 @@ class EnhancedOrdersAnalysis:
             # Calculate optimal restock quantity with purchase analytics and user's lead time
             restock_data = self.calculate_optimal_restock_quantity(asin, velocity_data, asin_stock_info, lead_time_days=user_lead_time, purchase_analytics=purchase_insights, stock_df=stock_df)
             
+            # Get current stock value for debugging
+            stock_value = restock_data.get('current_stock', 0)
+            
+            # Debug stock assignment for specific ASINs
+            if asin in ["B004ZAKHHM", "B00F99VIUS", "B009I4G5JO"] and stock_value > 0:
+                print(f"DEBUG enhanced_analytics for {asin}: current_stock = {stock_value}")
+            
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {
                 'current_sales': current_sales,
@@ -1788,7 +1795,7 @@ class EnhancedOrdersAnalysis:
                 'restock': restock_data,
                 'stock_info': asin_stock_info,
                 'product_name': asin_stock_info.get('Title', f'Product {asin}'),
-                'current_stock': restock_data.get('current_stock', 0),  # Add direct access to current_stock for frontend
+                'current_stock': stock_value,  # Add direct access to current_stock for frontend
                 'cogs_data': cogs_data.get(asin, {}),  # Include COGS and source link data
                 'purchase_analytics': {
                     'velocity_analysis': purchase_insights.get('purchase_velocity_analysis', {}).get(asin, {}),

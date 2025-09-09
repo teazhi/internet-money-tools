@@ -2954,7 +2954,11 @@ def get_user():
             'enable_source_links': get_user_enable_source_links(get_config_user_for_subuser(user_record)) if user_record else False,
             'search_all_worksheets': (get_user_field(get_config_user_for_subuser(user_record), 'integrations.google.search_all_worksheets') or get_config_user_for_subuser(user_record).get('search_all_worksheets', False)) if user_record else False,
             'disable_sp_api': (get_user_field(get_config_user_for_subuser(user_record), 'integrations.amazon.disable_sp_api') or get_config_user_for_subuser(user_record).get('disable_sp_api', False)) if user_record else False,
-            'amazon_lead_time_days': (get_user_field(get_config_user_for_subuser(user_record), 'integrations.amazon.lead_time_days') or get_config_user_for_subuser(user_record).get('amazon_lead_time_days', 90)) if user_record else 90
+            'amazon_lead_time_days': (get_user_field(get_config_user_for_subuser(user_record), 'integrations.amazon.lead_time_days') or get_config_user_for_subuser(user_record).get('amazon_lead_time_days', 90)) if user_record else 90,
+            # Add sheet configuration fields for SheetConfig component
+            'sheet_id': get_user_sheet_id(get_config_user_for_subuser(user_record)) if user_record else None,
+            'worksheet_title': get_user_worksheet_title(get_config_user_for_subuser(user_record)) if user_record else None,
+            'column_mapping': get_user_column_mapping(get_config_user_for_subuser(user_record)) if user_record else {}
         }
     }
     

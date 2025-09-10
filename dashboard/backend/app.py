@@ -15070,12 +15070,12 @@ def get_inventory_age_analysis():
         # Debug: Check what settings we're passing
         # Force search_all_worksheets for inventory age analysis to get complete purchase history
         user_settings = {
-            'access_token': (get_user_field(user_record, 'integrations.google.tokens') or {}).get('access_token'),
-            'google_tokens': get_user_google_tokens(user_record) or {},  # Add the full google_tokens dict
-            'sheet_id': get_user_field(user_record, 'files.sheet_id'),
-            'worksheet_title': get_user_field(user_record, 'integrations.google.worksheet_title'),
-            'column_mapping': get_user_column_mapping(user_record),
-            'amazon_lead_time_days': get_user_field(user_record, 'settings.amazon_lead_time_days') or user_record.get('amazon_lead_time_days', 90),
+            'access_token': (get_user_field(config_user_record, 'integrations.google.tokens') or {}).get('access_token'),
+            'google_tokens': get_user_google_tokens(config_user_record) or {},  # Add the full google_tokens dict
+            'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
+            'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
+            'column_mapping': get_user_column_mapping(config_user_record),
+            'amazon_lead_time_days': get_user_field(config_user_record, 'settings.amazon_lead_time_days') or config_user_record.get('amazon_lead_time_days', 90),
             'search_all_worksheets': True,  # Force all worksheets for inventory age analysis
             'enable_source_links': True,  # Enable Google Sheets integration
             'discord_id': discord_id

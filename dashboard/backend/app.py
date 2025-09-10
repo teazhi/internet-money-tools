@@ -10485,6 +10485,7 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
         try:
             print(f"[fetch_sellerboard_cogs_data_from_email] Trying email monitoring token directly")
             result = api_call(access_token)
+            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring api_call returned: {type(result)} - {result}")
             if result is not None:
                 return result
             
@@ -10511,7 +10512,17 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
                         print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for fallback")
             
             print(f"[fetch_sellerboard_cogs_data_from_email] Calling safe_google_api_call for fallback")
-            return safe_google_api_call(config_user_record, api_call)
+            
+            # Try refreshing the token first since we know it's likely expired
+            try:
+                print(f"[fetch_sellerboard_cogs_data_from_email] Proactively refreshing Google token")
+                new_access_token = refresh_google_token(config_user_record)
+                print(f"[fetch_sellerboard_cogs_data_from_email] Token refreshed successfully, trying API call")
+                return api_call(new_access_token)
+            except Exception as refresh_error:
+                print(f"[fetch_sellerboard_cogs_data_from_email] Token refresh failed: {refresh_error}")
+                # Fall back to the normal safe_google_api_call as a last resort
+                return safe_google_api_call(config_user_record, api_call)
         else:
             print(f"[fetch_sellerboard_cogs_data_from_email] No user record found for fallback")
             return None

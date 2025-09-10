@@ -286,6 +286,29 @@ const AllProductAnalytics = () => {
 
   const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
+  // Extract retailer name from URL
+  const extractRetailerFromUrl = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    
+    try {
+      // Handle URLs with or without protocol
+      const urlPattern = /(?:https?:\/\/)?(?:www\.)?([^\/\.\s]+)(?:\.[^\/\s]+)/;
+      const match = url.match(urlPattern);
+      
+      if (match && match[1]) {
+        // Extract the domain name before the TLD
+        const domain = match[1].toLowerCase();
+        
+        // Capitalize first letter for display
+        return domain.charAt(0).toUpperCase() + domain.slice(1);
+      }
+    } catch (e) {
+      console.error('Error extracting retailer from URL:', e);
+    }
+    
+    return null;
+  };
+
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
     if (!allProductsData?.age_analysis) {
@@ -310,10 +333,17 @@ const AllProductAnalytics = () => {
       reorder_point: Math.floor(Math.random() * 50) + 10,
       last_cogs: Math.random() * 50 + 10,
       supplier_info: 'Various',
-      // Retailer information from enhanced analytics
-      retailer: allProductsData?.enhanced_analytics?.[asin]?.retailer || 'Unknown',
-      retailer_display: allProductsData?.enhanced_analytics?.[asin]?.retailer_display || 'Unknown',
-      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || null,
+      // Retailer information extracted from source link
+      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+                   allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
+      retailer: extractRetailerFromUrl(
+        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
+      ) || 'Unknown',
+      retailer_display: extractRetailerFromUrl(
+        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
+      ) || 'Unknown',
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
@@ -363,11 +393,16 @@ const AllProductAnalytics = () => {
   });
 
   const getInventoryFilters = () => {
-    // Get unique retailers from inventory data
+    // Extract retailers directly from source links
+    const allSourceLinks = Object.values(allProductsData?.enhanced_analytics || {})
+      .map(item => item.source_link || item.cogs_data?.source_link)
+      .filter(link => link && typeof link === 'string');
+    
+    // Extract unique retailer names from URLs
     const uniqueRetailers = [...new Set(
-      inventoryTableData
-        .map(item => item.retailer_display)
-        .filter(retailer => retailer && retailer !== 'Unknown')
+      allSourceLinks
+        .map(link => extractRetailerFromUrl(link))
+        .filter(retailer => retailer !== null)
     )].sort();
     
     const retailerOptions = uniqueRetailers.map(retailer => ({

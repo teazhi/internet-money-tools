@@ -10456,8 +10456,44 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
             
             return safe_google_api_call(config_user_record, api_call)
         
-        # Use email monitoring OAuth token directly
-        return fetch_latest_sellerboard_cogs_email(access_token)
+        # Use email monitoring OAuth token with token refresh support
+        # Create a mock user record for token refresh if needed
+        mock_user_record = {
+            'integrations': {
+                'google': {
+                    'tokens': {
+                        'access_token': access_token,
+                        'refresh_token': None  # Email monitoring may not have refresh tokens
+                    }
+                }
+            }
+        }
+        
+        def api_call(token):
+            return fetch_latest_sellerboard_cogs_email(token)
+        
+        try:
+            return api_call(access_token)
+        except Exception as e:
+            error_str = str(e)
+            if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
+                print(f"Email monitoring token expired, trying main Google integration fallback")
+                # Fallback to main Google integration
+                user_record = get_user_record(discord_id)
+                if user_record:
+                    config_user_record = user_record
+                    if get_user_field(user_record, 'account.user_type') == 'subuser':
+                        parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+                        if parent_user_id:
+                            parent_record = get_user_record(parent_user_id)
+                            if parent_record:
+                                config_user_record = parent_record
+                    
+                    return safe_google_api_call(config_user_record, api_call)
+                else:
+                    raise
+            else:
+                raise
         
     except Exception as e:
         print(f"Error fetching COGS data from email: {e}")

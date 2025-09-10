@@ -369,19 +369,23 @@ const AllProductAnalytics = () => {
     competition: { key: 'competition', label: 'Competition', sortKey: null, draggable: true }
   });
 
-  const inventoryColumns = useMemo(() => ({
-    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/3' },
-    current_stock: { key: 'current_stock', label: 'Stock', sortKey: 'current_stock', draggable: true, width: 'w-16' },
-    velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true, width: 'w-20' },
-    amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
-    days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true, width: 'w-20' },
-    inventory_age: { key: 'inventory_age', label: 'Age', sortKey: 'estimated_age_days', draggable: true, width: 'w-24' },
-    last_cogs: { key: 'last_cogs', label: 'COGS', sortKey: 'last_cogs', draggable: true, width: 'w-20' },
-    retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true, width: 'w-24' },
-    reorder_point: { key: 'reorder_point', label: 'Reorder', sortKey: 'reorder_point', draggable: true, width: 'w-20' },
-    status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true, width: 'w-20' },
-    actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false, width: 'w-20' }
-  }), []);
+  const inventoryColumns = useMemo(() => {
+    const cols = {
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/3' },
+      current_stock: { key: 'current_stock', label: 'Stock', sortKey: 'current_stock', draggable: true, width: 'w-16' },
+      velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true, width: 'w-20' },
+      amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
+      days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true, width: 'w-20' },
+      inventory_age: { key: 'inventory_age', label: 'Age', sortKey: 'estimated_age_days', draggable: true, width: 'w-24' },
+      last_cogs: { key: 'last_cogs', label: 'COGS', sortKey: 'last_cogs', draggable: true, width: 'w-20' },
+      retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true, width: 'w-24' },
+      reorder_point: { key: 'reorder_point', label: 'Reorder', sortKey: 'reorder_point', draggable: true, width: 'w-20' },
+      status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true, width: 'w-20' },
+      actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false, width: 'w-20' }
+    };
+    console.log('Inventory columns configured:', cols);
+    return cols;
+  }, []);
 
   const getInsightsColumns = () => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },

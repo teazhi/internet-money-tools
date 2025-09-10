@@ -10484,32 +10484,37 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
         
         try:
             print(f"[fetch_sellerboard_cogs_data_from_email] Trying email monitoring token directly")
-            return api_call(access_token)
+            result = api_call(access_token)
+            if result is not None:
+                return result
+            
+            # If we got None (no result), fall back to main Google integration
+            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring returned None, trying main Google integration fallback")
         except Exception as e:
             error_str = str(e)
-            print(f"[fetch_sellerboard_cogs_data_from_email] Exception caught: {error_str}")
+            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring exception: {error_str}")
             if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
                 print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring token expired, trying main Google integration fallback")
-                # Fallback to main Google integration
-                user_record = get_user_record(discord_id)
-                if user_record:
-                    config_user_record = user_record
-                    if get_user_field(user_record, 'account.user_type') == 'subuser':
-                        parent_user_id = get_user_field(user_record, 'account.parent_user_id')
-                        if parent_user_id:
-                            parent_record = get_user_record(parent_user_id)
-                            if parent_record:
-                                config_user_record = parent_record
-                                print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for fallback")
-                    
-                    print(f"[fetch_sellerboard_cogs_data_from_email] Calling safe_google_api_call for fallback")
-                    return safe_google_api_call(config_user_record, api_call)
-                else:
-                    print(f"[fetch_sellerboard_cogs_data_from_email] No user record found for fallback")
-                    raise
             else:
-                print(f"[fetch_sellerboard_cogs_data_from_email] Non-auth error, re-raising")
-                raise
+                print(f"[fetch_sellerboard_cogs_data_from_email] Non-auth error in email monitoring, trying main Google integration fallback")
+        
+        # Fallback to main Google integration
+        user_record = get_user_record(discord_id)
+        if user_record:
+            config_user_record = user_record
+            if get_user_field(user_record, 'account.user_type') == 'subuser':
+                parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+                if parent_user_id:
+                    parent_record = get_user_record(parent_user_id)
+                    if parent_record:
+                        config_user_record = parent_record
+                        print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for fallback")
+            
+            print(f"[fetch_sellerboard_cogs_data_from_email] Calling safe_google_api_call for fallback")
+            return safe_google_api_call(config_user_record, api_call)
+        else:
+            print(f"[fetch_sellerboard_cogs_data_from_email] No user record found for fallback")
+            return None
         
     except Exception as e:
         print(f"Error fetching COGS data from email: {e}")

@@ -8974,6 +8974,7 @@ def analyze_discount_opportunities():
                 
                 # Additional debugging for recent purchases
                 if asin == 'B0017TF1E8':
+                    pass  # Debug point - can add logging here if needed
                 
                 # Determine if restocking is needed - loosened criteria
                 # Show opportunities if:

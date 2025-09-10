@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { 
   BarChart3, 
@@ -287,7 +287,7 @@ const AllProductAnalytics = () => {
   const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
   // Extract retailer name from URL
-  const extractRetailerFromUrl = (url) => {
+  const extractRetailerFromUrl = useCallback((url) => {
     if (!url || typeof url !== 'string') return null;
     
     try {
@@ -307,7 +307,7 @@ const AllProductAnalytics = () => {
     }
     
     return null;
-  };
+  }, []);
 
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
@@ -315,6 +315,13 @@ const AllProductAnalytics = () => {
       return [];
     }
     
+    // Debug: Check if enhanced_analytics has source links
+    if (allProductsData?.enhanced_analytics) {
+      const sampleAsin = Object.keys(allProductsData.enhanced_analytics)[0];
+      if (sampleAsin) {
+        console.log('Sample enhanced_analytics data:', allProductsData.enhanced_analytics[sampleAsin]);
+      }
+    }
     
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
@@ -334,21 +341,34 @@ const AllProductAnalytics = () => {
       last_cogs: Math.random() * 50 + 10,
       supplier_info: 'Various',
       // Retailer information extracted from source link
-      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-                   allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
-      retailer: extractRetailerFromUrl(
-        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
-      ) || 'Unknown',
-      retailer_display: extractRetailerFromUrl(
-        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
-      ) || 'Unknown',
+      source_link: (() => {
+        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null;
+        if (sourceLink && asin === Object.keys(allProductsData.age_analysis)[0]) {
+          console.log('Source link for', asin, ':', sourceLink);
+        }
+        return sourceLink;
+      })(),
+      retailer: (() => {
+        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link;
+        const retailer = extractRetailerFromUrl(sourceLink) || 'Unknown';
+        if (asin === Object.keys(allProductsData.age_analysis)[0]) {
+          console.log('Retailer for', asin, ':', retailer, 'from link:', sourceLink);
+        }
+        return retailer;
+      })(),
+      retailer_display: (() => {
+        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link;
+        const retailer = extractRetailerFromUrl(sourceLink) || 'Unknown';
+        return retailer;
+      })(),
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
     }));
-  }, [allProductsData]);
+  }, [allProductsData, extractRetailerFromUrl]);
 
   // Table configuration functions (placeholder for when data is available)
   const getOverviewColumns = () => ({
@@ -392,7 +412,7 @@ const AllProductAnalytics = () => {
     action: { key: 'action', label: 'Action', sortKey: null, draggable: false }
   });
 
-  const getInventoryFilters = () => {
+  const inventoryFilters = useMemo(() => {
     // Extract retailers directly from source links
     const allSourceLinks = Object.values(allProductsData?.enhanced_analytics || {})
       .map(item => item.source_link || item.cogs_data?.source_link)
@@ -445,7 +465,7 @@ const AllProductAnalytics = () => {
         filterFn: (item, value) => item.status === value
       }
     ];
-  };
+  }, [allProductsData?.enhanced_analytics, extractRetailerFromUrl]);
 
   const getInsightsFilters = () => [
     {
@@ -836,7 +856,7 @@ const AllProductAnalytics = () => {
                 enableFullscreen={true}
                 searchPlaceholder="Search by ASIN, product name..."
                 searchFields={['asin', 'product_name', 'retailer_display']}
-                filters={getInventoryFilters()}
+                filters={inventoryFilters}
                 emptyIcon={Package}
                 emptyTitle="No Inventory Data"
                 emptyDescription="No inventory information available"

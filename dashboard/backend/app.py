@@ -2270,7 +2270,7 @@ def safe_google_api_call(user_record, api_call_func):
     print(f"[safe_google_api_call] Starting API call with token: {access_token[:20] if access_token else 'None'}...")
     try:
         result = api_call_func(access_token)
-        print(f"[safe_google_api_call] API call succeeded")
+        print(f"[safe_google_api_call] API call succeeded, result type: {type(result)}, result preview: {str(result)[:200] if result else 'None'}")
         return result
     except Exception as e:
         # Check for various forms of authentication errors
@@ -10596,6 +10596,9 @@ def fetch_latest_sellerboard_cogs_email(access_token: str) -> Optional[Dict]:
         
         if not msg_response.ok:
             print(f"Failed to fetch message details: {msg_response.status_code}")
+            if msg_response.status_code == 401:
+                print("Gmail API authentication failed when fetching message details")
+                raise Exception(f"Gmail API 401 error when fetching message: {msg_response.text}")
             return None
             
         email_data = msg_response.json()
@@ -10634,6 +10637,9 @@ def fetch_latest_sellerboard_cogs_email(access_token: str) -> Optional[Dict]:
         
         if not attachment_response.ok:
             print(f"Failed to download attachment: {attachment_response.status_code}")
+            if attachment_response.status_code == 401:
+                print("Gmail API authentication failed when downloading attachment")
+                raise Exception(f"Gmail API 401 error when downloading attachment: {attachment_response.text}")
             return None
         
         attachment_data = attachment_response.json()

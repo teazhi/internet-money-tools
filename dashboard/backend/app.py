@@ -2221,11 +2221,14 @@ def validate_and_fix_token_data(tokens):
 
 
 def refresh_google_token(user_record):
+    print(f"[refresh_google_token] Starting token refresh for user: {get_user_field(user_record, 'identity.discord_id')}")
     google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
     refresh_token = google_tokens.get("refresh_token")
     if not refresh_token:
+        print(f"[refresh_google_token] No refresh token found")
         raise Exception("No refresh_token found. User must re-link Google account.")
 
+    print(f"[refresh_google_token] Using refresh token: {refresh_token[:20] if refresh_token else 'None'}...")
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id": GOOGLE_CLIENT_ID,
@@ -2234,6 +2237,7 @@ def refresh_google_token(user_record):
         "grant_type": "refresh_token"
     }
     resp = requests.post(token_url, data=payload)
+    print(f"[refresh_google_token] Token refresh response status: {resp.status_code}")
     resp.raise_for_status()
     new_tokens = resp.json()
     
@@ -2250,26 +2254,41 @@ def refresh_google_token(user_record):
     # Update the users config with the refreshed tokens
     users = get_users_config()
     discord_id = get_user_field(user_record, 'identity.discord_id')
+    print(f"[refresh_google_token] Updating user config for discord_id: {discord_id}")
     for i, user in enumerate(users):
         if get_user_field(user, 'identity.discord_id') == discord_id:
             users[i] = user_record
+            print(f"[refresh_google_token] Found and updated user at index {i}")
             break
     update_users_config(users)
+    print(f"[refresh_google_token] Token refresh completed successfully")
     return new_tokens["access_token"]
 
 def safe_google_api_call(user_record, api_call_func):
     google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
     access_token = google_tokens.get("access_token")
+    print(f"[safe_google_api_call] Starting API call with token: {access_token[:20] if access_token else 'None'}...")
     try:
-        return api_call_func(access_token)
+        result = api_call_func(access_token)
+        print(f"[safe_google_api_call] API call succeeded")
+        return result
     except Exception as e:
         # Check for various forms of authentication errors
         error_str = str(e)
+        print(f"[safe_google_api_call] API call failed with error: {error_str}")
         if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
-            print(f"Token refresh needed due to: {error_str}")
-            new_access = refresh_google_token(user_record)
-            return api_call_func(new_access)
+            print(f"[safe_google_api_call] Token refresh needed due to: {error_str}")
+            try:
+                new_access = refresh_google_token(user_record)
+                print(f"[safe_google_api_call] Token refreshed successfully, new token: {new_access[:20] if new_access else 'None'}...")
+                result = api_call_func(new_access)
+                print(f"[safe_google_api_call] Retry with new token succeeded")
+                return result
+            except Exception as refresh_error:
+                print(f"[safe_google_api_call] Token refresh or retry failed: {refresh_error}")
+                raise
         else:
+            print(f"[safe_google_api_call] Non-auth error, re-raising: {error_str}")
             raise
 
 @app.route('/auth/discord')

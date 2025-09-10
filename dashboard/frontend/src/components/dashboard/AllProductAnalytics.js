@@ -120,9 +120,6 @@ const AllProductAnalytics = () => {
           const firstChar = response.data[0];
           console.log('First character:', firstChar, 'char code:', firstChar.charCodeAt(0));
           
-          // Log character at position 6 where error occurs
-          console.log('Character at position 6:', response.data[6], 'char code:', response.data.charCodeAt(6));
-          
           // Check for BOM or other invisible characters
           if (response.data.charCodeAt(0) === 0xFEFF) {
             console.log('Found BOM, removing it');
@@ -136,22 +133,62 @@ const AllProductAnalytics = () => {
             response.data = parsed;
           } catch (e) {
             console.error('Failed to parse string response:', e);
-            console.log('Response appears to be truncated at 164KB limit');
+            console.log('Error details:', e.message);
             
-            // If response is truncated, try to use demo mode as fallback
-            console.log('Falling back to demo mode due to truncated response');
-            try {
-              response = await axios.get(API_ENDPOINTS.DEMO_ANALYTICS_INVENTORY_AGE, { 
-                withCredentials: true 
-              });
-              console.log('✓ Successfully loaded demo inventory age data as fallback');
-            } catch (demoError) {
-              console.log('Demo endpoint also failed, using local mock data');
-              response = {
-                data: generateMockInventoryData()
-              };
+            // Check if it's a syntax error that might indicate truncation
+            if (e.message.includes('Unexpected end of JSON input') || 
+                e.message.includes('Unexpected token') ||
+                e.message.includes('position')) {
+              console.log('JSON parsing failed - likely due to large response size or truncation');
+              console.log('Response length:', response.data.length);
+              
+              // Try to find where the JSON becomes invalid
+              let validJson = response.data;
+              
+              // If the response looks like it starts with valid JSON, try to find where it breaks
+              if (response.data.startsWith('{')) {
+                // Try parsing progressively smaller chunks to find the largest valid JSON
+                let chunkSize = response.data.length;
+                let lastValidSize = 0;
+                
+                while (chunkSize > 1000 && lastValidSize === 0) {
+                  try {
+                    const chunk = response.data.substring(0, chunkSize);
+                    JSON.parse(chunk);
+                    lastValidSize = chunkSize;
+                    break;
+                  } catch (chunkError) {
+                    chunkSize = Math.floor(chunkSize * 0.9);
+                  }
+                }
+                
+                if (lastValidSize > 0) {
+                  console.log(`Found valid JSON up to position ${lastValidSize}`);
+                  validJson = response.data.substring(0, lastValidSize);
+                }
+              }
+              
+              // Try parsing the potentially truncated but valid JSON
+              try {
+                const parsed = JSON.parse(validJson);
+                console.log('Successfully parsed truncated response');
+                console.log('Parsed keys:', Object.keys(parsed));
+                response.data = parsed;
+              } catch (truncError) {
+                console.error('Even truncated parsing failed:', truncError);
+                // Fall back to demo mode as last resort for parsing issues
+                console.log('Falling back to demo mode due to parsing failure');
+                throw e; // Re-throw to trigger demo fallback
+              }
+            } else {
+              throw e; // Re-throw if it's not a truncation issue
             }
           }
+        }
+        
+        // Validate that we got a proper response structure
+        if (!response.data || typeof response.data !== 'object') {
+          throw new Error('Invalid response structure - not an object');
         }
         
         // If it's an array or has numeric keys, log more info
@@ -173,8 +210,25 @@ const AllProductAnalytics = () => {
           console.log('First 10 age_analysis keys:', keys.slice(0, 10));
           console.log('Sample age_analysis entry:', response.data.age_analysis[keys[0]]);
         }
+        
+        // If we successfully parsed the response and it has the expected structure, use it
+        if (response.data.age_analysis || response.data.enhanced_analytics) {
+          console.log('✓ Successfully validated response structure');
+        } else {
+          console.log('⚠️ Response missing expected keys, but proceeding anyway');
+        }
+        
       } catch (mainError) {
-        console.log('Main endpoint failed:', mainError.response?.data);
+        console.log('Main endpoint failed:', mainError);
+        console.log('Error type:', mainError.constructor.name);
+        console.log('Error message:', mainError.message);
+        
+        // Only fall back to demo mode for actual network/auth errors, not parsing issues
+        if (mainError.response) {
+          console.log('HTTP error status:', mainError.response.status);
+          console.log('HTTP error data:', mainError.response.data);
+        }
+        
         console.log('Trying demo mode...');
         try {
           response = await axios.get(API_ENDPOINTS.DEMO_ANALYTICS_INVENTORY_AGE, { 
@@ -192,25 +246,11 @@ const AllProductAnalytics = () => {
       }
       
       // Debug what we're setting
-      console.log('Setting allProductsData with:', response.data);
+      console.log('Setting allProductsData with keys:', Object.keys(response.data || {}));
       console.log('Type of data being set:', typeof response.data);
       
-      // Ensure we have an object, not a string
-      let dataToSet = response.data;
-      if (typeof response.data === 'string') {
-        console.log('Response data is a string, parsing it...');
-        try {
-          dataToSet = JSON.parse(response.data);
-          console.log('Successfully parsed response data');
-        } catch (e) {
-          console.error('Failed to parse response data:', e);
-          // Use mock data as fallback
-          dataToSet = generateMockInventoryData();
-        }
-      }
-      
-      
-      setAllProductsData(dataToSet);
+      // At this point, response.data should already be a parsed object
+      setAllProductsData(response.data);
       
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load product data');

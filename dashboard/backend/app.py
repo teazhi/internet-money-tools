@@ -15214,8 +15214,33 @@ def get_inventory_age_analysis():
             enhanced_analytics[asin]['retailer_display'] = retailer_display
             enhanced_analytics[asin]['source_link'] = source_link
 
-        # CRITICAL: Include enhanced_analytics so frontend can access stock values and product names
-        age_analysis['enhanced_analytics'] = enhanced_analytics
+        # Optimize enhanced_analytics to reduce response size while keeping essential data
+        optimized_enhanced_analytics = {}
+        
+        for asin, data in enhanced_analytics.items():
+            # Keep only essential fields for the frontend
+            optimized_enhanced_analytics[asin] = {
+                'product_name': data.get('product_name', f'Product {asin}'),
+                'current_stock': data.get('restock', {}).get('current_stock', 0),
+                'retailer': data.get('retailer', 'Unknown'),
+                'retailer_display': data.get('retailer_display', 'Unknown'),
+                'source_link': data.get('source_link', ''),
+                'cogs_data': {
+                    'cogs': data.get('cogs_data', {}).get('cogs', 0),
+                    'source_link': data.get('cogs_data', {}).get('source_link', '')
+                },
+                'velocity': {
+                    'weighted_velocity': data.get('velocity', {}).get('weighted_velocity', 0)
+                },
+                'restock': {
+                    'current_stock': data.get('restock', {}).get('current_stock', 0),
+                    'monthly_purchase_adjustment': data.get('restock', {}).get('monthly_purchase_adjustment', 0),
+                    'suggested_quantity': data.get('restock', {}).get('suggested_quantity', 0)
+                }
+            }
+        
+        # CRITICAL: Include optimized enhanced_analytics so frontend can access essential data
+        age_analysis['enhanced_analytics'] = optimized_enhanced_analytics
         
         # Debug: Log the actual JSON structure being returned
         import json
@@ -15224,25 +15249,13 @@ def get_inventory_age_analysis():
         try:
             sanitized_age_analysis = sanitize_for_json(age_analysis)
             
-            # Check response size after sanitization
-            json_str = json.dumps(sanitized_age_analysis, indent=2)
+            # Check response size after sanitization (without indentation to reduce size)
+            json_str = json.dumps(sanitized_age_analysis)
             response_size = len(json_str)
             
-            # Check if response is unexpectedly large
-            if response_size > 50000:  # More than 50KB is suspicious for this endpoint
-                print(f"WARNING - Response size is unusually large: {response_size} bytes")
-                
-                # Try to identify what's causing the large response
-                for key, value in sanitized_age_analysis.items():
-                    try:
-                        key_size = len(json.dumps(value))
-                        if key_size > 10000:  # Log details for large sections
-                            if isinstance(value, dict):
-                                pass  # Large dict found
-                            elif isinstance(value, list):
-                                pass  # Large list found
-                    except Exception as e:
-                        pass  # Skip on serialization error
+            # Log response components for monitoring
+            if response_size > 1000000:  # Only warn for very large responses (>1MB)
+                print(f"INFO - Large response: {response_size} bytes")
             
             # Final check before returning
             if 'age_analysis' not in sanitized_age_analysis:
@@ -15264,31 +15277,9 @@ def get_inventory_age_analysis():
             # Check if the JSON string looks correct
             parsed_check = json.loads(json_string)
             
-            # If response is too large, try to reduce it
-            if len(json_string) > 150000:  # 150KB threshold
-                print("WARNING - Response too large, reducing data")
-                
-                # Keep only essential data for each product
-                reduced_age_analysis = {}
-                for asin, data in sanitized_age_analysis.get('age_analysis', {}).items():
-                    reduced_age_analysis[asin] = {
-                        'estimated_age_days': data.get('estimated_age_days'),
-                        'age_category': data.get('age_category'),
-                        'confidence_score': data.get('confidence_score'),
-                        'recommendations': data.get('recommendations', [])[:1]  # Keep only first recommendation
-                    }
-                
-                reduced_response = {
-                    'age_analysis': reduced_age_analysis,
-                    'summary': sanitized_age_analysis.get('summary'),
-                    'age_categories': sanitized_age_analysis.get('age_categories'),
-                    'generated_at': sanitized_age_analysis.get('generated_at'),
-                    'total_action_items': sanitized_age_analysis.get('total_action_items'),
-                    'enhanced_analytics': sanitized_age_analysis.get('enhanced_analytics'),  # Include for stock/names
-                    'reduced': True  # Flag to indicate reduced response
-                }
-                
-                json_string = json.dumps(reduced_response)
+            # Log response size but don't reduce data - frontend needs all the data
+            if len(json_string) > 500000:  # 500KB threshold 
+                print(f"INFO - Large response size: {len(json_string)} bytes with {len(sanitized_age_analysis.get('age_analysis', {}))} products")
             
             response = make_response(json_string)
             response.headers['Content-Type'] = 'application/json'

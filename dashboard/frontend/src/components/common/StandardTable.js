@@ -430,7 +430,7 @@ const StandardTable = ({
                 return (
                   <th 
                     key={columnKey}
-                    className={`relative px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 ${
+                    className={`relative px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 border-r border-gray-200 last:border-r-0 ${
                       column.width || ''
                     } ${
                       enableColumnReordering && column.draggable !== false && columnKey !== 'product' ? 'cursor-move hover:bg-gray-100' : ''

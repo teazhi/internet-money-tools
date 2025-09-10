@@ -420,7 +420,7 @@ const StandardTable = ({
       
       {/* Table */}
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 table-fixed">
           <thead className="bg-gray-50">
             <tr>
               {columnOrder.map((columnKey) => {
@@ -430,7 +430,9 @@ const StandardTable = ({
                 return (
                   <th 
                     key={columnKey}
-                    className={`relative px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 ${
+                    className={`relative px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 ${
+                      column.width || ''
+                    } ${
                       enableColumnReordering && column.draggable !== false && columnKey !== 'product' ? 'cursor-move hover:bg-gray-100' : ''
                     } ${
                       draggedColumn?.key === columnKey ? 'opacity-30 bg-gray-100' : ''

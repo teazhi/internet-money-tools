@@ -315,16 +315,6 @@ const AllProductAnalytics = () => {
       return [];
     }
     
-    // Debug: Check if enhanced_analytics has source links
-    if (allProductsData?.enhanced_analytics) {
-      const sampleAsin = Object.keys(allProductsData.enhanced_analytics)[0];
-      if (sampleAsin) {
-        console.log('Sample enhanced_analytics data:', allProductsData.enhanced_analytics[sampleAsin]);
-      }
-    }
-    
-    // Debug table data
-    console.log('Table data sample:', Object.entries(allProductsData.age_analysis).slice(0, 1).map(([asin]) => asin));
     
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
@@ -344,44 +334,21 @@ const AllProductAnalytics = () => {
       last_cogs: Math.random() * 50 + 10,
       supplier_info: 'Various',
       // Retailer information extracted from source link
-      source_link: (() => {
-        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null;
-        if (sourceLink && asin === Object.keys(allProductsData.age_analysis)[0]) {
-          console.log('Source link for', asin, ':', sourceLink);
-        }
-        return sourceLink;
-      })(),
-      retailer: (() => {
-        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link;
-        const retailer = extractRetailerFromUrl(sourceLink) || 'Unknown';
-        if (asin === Object.keys(allProductsData.age_analysis)[0]) {
-          console.log('Retailer for', asin, ':', retailer, 'from link:', sourceLink);
-        }
-        return retailer;
-      })(),
-      retailer_display: (() => {
-        const sourceLink = allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-                          allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link;
-        const retailer = extractRetailerFromUrl(sourceLink) || 'Unknown';
-        return retailer;
-      })(),
+      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+                   allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
+      retailer: extractRetailerFromUrl(
+        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
+      ) || 'Unknown',
+      retailer_display: extractRetailerFromUrl(
+        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
+        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
+      ) || 'Unknown',
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
     }));
   }, [allProductsData, extractRetailerFromUrl]);
-
-  // Debug: Log sample table row data
-  if (inventoryTableData.length > 0) {
-    console.log('Sample table row keys:', Object.keys(inventoryTableData[0]));
-    console.log('Sample table row retailer data:', {
-      retailer: inventoryTableData[0].retailer,
-      retailer_display: inventoryTableData[0].retailer_display,
-      source_link: inventoryTableData[0].source_link
-    });
-  }
 
   // Table configuration functions (placeholder for when data is available)
   const getOverviewColumns = () => ({
@@ -403,22 +370,18 @@ const AllProductAnalytics = () => {
   });
 
   const inventoryColumns = useMemo(() => ({
-    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false },
-    current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
-    velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
-    amount_ordered: { key: 'amount_ordered', label: 'Amount Ordered (2mo)', sortKey: 'amount_ordered', draggable: true },
-    days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
-    inventory_age: { key: 'inventory_age', label: 'Inventory Age', sortKey: 'estimated_age_days', draggable: true },
-    last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'last_cogs', draggable: true },
-    retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true },
-    reorder_point: { key: 'reorder_point', label: 'Reorder Point', sortKey: 'reorder_point', draggable: true },
-    status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true },
-    actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false }
+    product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/3' },
+    current_stock: { key: 'current_stock', label: 'Stock', sortKey: 'current_stock', draggable: true, width: 'w-16' },
+    velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true, width: 'w-20' },
+    amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
+    days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true, width: 'w-20' },
+    inventory_age: { key: 'inventory_age', label: 'Age', sortKey: 'estimated_age_days', draggable: true, width: 'w-24' },
+    last_cogs: { key: 'last_cogs', label: 'COGS', sortKey: 'last_cogs', draggable: true, width: 'w-20' },
+    retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true, width: 'w-24' },
+    reorder_point: { key: 'reorder_point', label: 'Reorder', sortKey: 'reorder_point', draggable: true, width: 'w-20' },
+    status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true, width: 'w-20' },
+    actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false, width: 'w-20' }
   }), []);
-
-  // Debug columns after creation
-  console.log('Inventory columns defined:', Object.keys(inventoryColumns));
-  console.log('Retailer column config:', inventoryColumns.retailer);
 
   const getInsightsColumns = () => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
@@ -598,7 +561,7 @@ const AllProductAnalytics = () => {
     switch (columnKey) {
       case 'product':
         return (
-          <td key={columnKey} className="px-3 py-2">
+          <td key={columnKey} className="px-2 py-1.5">
             <div className="flex items-center space-x-3">
               <div className="flex-shrink-0">
                 <a 
@@ -629,21 +592,21 @@ const AllProductAnalytics = () => {
 
       case 'current_stock':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {Math.round(item.current_stock)}
           </td>
         );
 
       case 'velocity':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {item.velocity.toFixed(1)}/day
           </td>
         );
 
       case 'amount_ordered':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             {item.amount_ordered > 0 ? (
               <div className="flex items-center space-x-1">
                 <ShoppingCart className="h-3 w-3 text-purple-600" />
@@ -659,14 +622,14 @@ const AllProductAnalytics = () => {
 
       case 'days_left':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {formatDays(item.days_left)}
           </td>
         );
 
       case 'inventory_age':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <div className="flex flex-col space-y-1">
               {item.estimated_age_days > 0 ? (
                 <>
@@ -687,7 +650,7 @@ const AllProductAnalytics = () => {
 
       case 'last_cogs':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="text-green-700 font-medium">
               {formatCurrency(item.last_cogs)}
             </div>
@@ -696,7 +659,7 @@ const AllProductAnalytics = () => {
 
       case 'retailer':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="flex items-center space-x-2">
               {item.source_link ? (
                 <a 
@@ -718,14 +681,14 @@ const AllProductAnalytics = () => {
 
       case 'reorder_point':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {Math.round(item.reorder_point)}
           </td>
         );
 
       case 'status':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(item.status)}`}>
               {item.status === 'critical' && <AlertTriangle className="h-3 w-3 mr-1" />}
               {item.status === 'warning' && <Clock className="h-3 w-3 mr-1" />}
@@ -736,7 +699,7 @@ const AllProductAnalytics = () => {
 
       case 'actions':
         return (
-          <td key={columnKey} className="px-3 py-2 whitespace-nowrap">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <button
               onClick={() => handleRestockClick(item.asin, allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link || null)}
               className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"

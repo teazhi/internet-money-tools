@@ -547,14 +547,14 @@ const AllProductAnalytics = () => {
 
   // Render functions for different tabs
   const renderOverviewCell = (columnKey, item) => (
-    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
       {/* Placeholder for overview data */}
       Coming Soon
     </td>
   );
 
   const renderPerformanceCell = (columnKey, item) => (
-    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
       {/* Placeholder for performance data */}
       Coming Soon
     </td>
@@ -564,7 +564,7 @@ const AllProductAnalytics = () => {
     switch (columnKey) {
       case 'product':
         return (
-          <td key={columnKey} className="px-2 py-1.5 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5">
             <div className="flex items-center space-x-3">
               <div className="flex-shrink-0">
                 <a 
@@ -595,21 +595,21 @@ const AllProductAnalytics = () => {
 
       case 'current_stock':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {Math.round(item.current_stock)}
           </td>
         );
 
       case 'velocity':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {item.velocity.toFixed(1)}/day
           </td>
         );
 
       case 'amount_ordered':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             {item.amount_ordered > 0 ? (
               <div className="flex items-center space-x-1">
                 <ShoppingCart className="h-3 w-3 text-purple-600" />
@@ -625,14 +625,14 @@ const AllProductAnalytics = () => {
 
       case 'days_left':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {formatDays(item.days_left)}
           </td>
         );
 
       case 'inventory_age':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <div className="flex flex-col space-y-1">
               {item.estimated_age_days > 0 ? (
                 <>
@@ -653,7 +653,7 @@ const AllProductAnalytics = () => {
 
       case 'last_cogs':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="text-green-700 font-medium">
               {formatCurrency(item.last_cogs)}
             </div>
@@ -662,7 +662,7 @@ const AllProductAnalytics = () => {
 
       case 'retailer':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="flex items-center space-x-2">
               {item.source_link ? (
                 <a 
@@ -684,14 +684,14 @@ const AllProductAnalytics = () => {
 
       case 'reorder_point':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {Math.round(item.reorder_point)}
           </td>
         );
 
       case 'status':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusStyles(item.status)}`}>
               {item.status === 'critical' && <AlertTriangle className="h-3 w-3 mr-1" />}
               {item.status === 'warning' && <Clock className="h-3 w-3 mr-1" />}
@@ -717,7 +717,7 @@ const AllProductAnalytics = () => {
 
       default:
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             -
           </td>
         );
@@ -725,7 +725,7 @@ const AllProductAnalytics = () => {
   };
 
   const renderInsightsCell = (columnKey, item) => (
-    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900 border-r border-gray-200">
+    <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
       {/* Placeholder for insights data */}
       Coming Soon
     </td>

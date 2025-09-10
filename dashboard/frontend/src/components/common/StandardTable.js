@@ -493,9 +493,22 @@ const StandardTable = ({
                   className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
                   {...(onRowClick ? { onClick: () => onRowClick(row) } : {})}
                 >
-                  {columnOrder.map((columnKey) => 
-                    renderCell(columnKey, row, index)
-                  )}
+                  {columnOrder.map((columnKey, colIndex) => {
+                    const cellContent = renderCell(columnKey, row, index);
+                    
+                    // If renderCell returns a <td> element, we need to add border class to it
+                    if (cellContent && cellContent.type === 'td') {
+                      const isLastColumn = colIndex === columnOrder.length - 1;
+                      const borderClass = isLastColumn ? '' : ' border-r border-gray-200';
+                      
+                      return React.cloneElement(cellContent, {
+                        key: cellContent.key || columnKey,
+                        className: `${cellContent.props.className || ''}${borderClass}`.trim()
+                      });
+                    }
+                    
+                    return cellContent;
+                  })}
                 </tr>
               ))
             ) : (

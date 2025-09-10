@@ -10395,15 +10395,18 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
     Returns data in same format as fetch_sellerboard_cogs_data for compatibility
     """
     try:
+        print(f"[fetch_sellerboard_cogs_data_from_email] Starting for user: {discord_id}")
         from email_monitoring_s3 import email_monitoring_manager
         
         # First try to get access token from email monitoring OAuth configs
         email_configs = email_monitoring_manager.get_email_configs(discord_id)
         access_token = None
         
+        print(f"[fetch_sellerboard_cogs_data_from_email] Found {len(email_configs)} email configs")
         for config in email_configs:
             if config.get('auth_type') == 'oauth' and config.get('oauth_access_token'):
                 access_token = config['oauth_access_token']
+                print(f"[fetch_sellerboard_cogs_data_from_email] Found email monitoring OAuth token")
                 
                 # Check if token needs refresh
                 if config.get('oauth_token_expires_at'):
@@ -10430,8 +10433,10 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
         
         # If no email monitoring OAuth token, try main Google integration
         if not access_token:
+            print(f"[fetch_sellerboard_cogs_data_from_email] No email monitoring token, trying main Google integration")
             user_record = get_user_record(discord_id)
             if not user_record:
+                print(f"[fetch_sellerboard_cogs_data_from_email] No user record found")
                 return None
             
             # Check for subuser and get parent config if needed
@@ -10442,10 +10447,13 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
                     parent_record = get_user_record(parent_user_id)
                     if parent_record:
                         config_user_record = parent_record
+                        print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for subuser")
             
             google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
+            current_token = google_tokens.get('access_token')
+            print(f"[fetch_sellerboard_cogs_data_from_email] Google token available: {bool(current_token)}")
             
-            if not google_tokens.get('access_token'):
+            if not current_token:
                 print("No Gmail access token available for COGS email processing")
                 print("💡 User needs to set up email monitoring OAuth or Google integration with Gmail permissions")
                 return None
@@ -10454,9 +10462,11 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
             def api_call(access_token):
                 return fetch_latest_sellerboard_cogs_email(access_token)
             
+            print(f"[fetch_sellerboard_cogs_data_from_email] Using safe_google_api_call with main Google integration")
             return safe_google_api_call(config_user_record, api_call)
         
         # Use email monitoring OAuth token with token refresh support
+        print(f"[fetch_sellerboard_cogs_data_from_email] Using email monitoring OAuth token")
         # Create a mock user record for token refresh if needed
         mock_user_record = {
             'integrations': {
@@ -10473,6 +10483,7 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
             return fetch_latest_sellerboard_cogs_email(token)
         
         try:
+            print(f"[fetch_sellerboard_cogs_data_from_email] Trying email monitoring token directly")
             return api_call(access_token)
         except Exception as e:
             error_str = str(e)

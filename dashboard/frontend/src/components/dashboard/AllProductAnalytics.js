@@ -323,6 +323,9 @@ const AllProductAnalytics = () => {
       }
     }
     
+    // Debug table data
+    console.log('Table data sample:', Object.entries(allProductsData.age_analysis).slice(0, 1).map(([asin]) => asin));
+    
     return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
       id: asin,
       asin,
@@ -370,6 +373,16 @@ const AllProductAnalytics = () => {
     }));
   }, [allProductsData, extractRetailerFromUrl]);
 
+  // Debug: Log sample table row data
+  if (inventoryTableData.length > 0) {
+    console.log('Sample table row keys:', Object.keys(inventoryTableData[0]));
+    console.log('Sample table row retailer data:', {
+      retailer: inventoryTableData[0].retailer,
+      retailer_display: inventoryTableData[0].retailer_display,
+      source_link: inventoryTableData[0].source_link
+    });
+  }
+
   // Table configuration functions (placeholder for when data is available)
   const getOverviewColumns = () => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
@@ -389,7 +402,7 @@ const AllProductAnalytics = () => {
     competition: { key: 'competition', label: 'Competition', sortKey: null, draggable: true }
   });
 
-  const getInventoryColumns = () => ({
+  const inventoryColumns = useMemo(() => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false },
     current_stock: { key: 'current_stock', label: 'Current Stock', sortKey: 'current_stock', draggable: true },
     velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true },
@@ -401,7 +414,11 @@ const AllProductAnalytics = () => {
     reorder_point: { key: 'reorder_point', label: 'Reorder Point', sortKey: 'reorder_point', draggable: true },
     status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true },
     actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false }
-  });
+  }), []);
+
+  // Debug columns after creation
+  console.log('Inventory columns defined:', Object.keys(inventoryColumns));
+  console.log('Retailer column config:', inventoryColumns.retailer);
 
   const getInsightsColumns = () => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
@@ -845,7 +862,7 @@ const AllProductAnalytics = () => {
               <StandardTable
                 data={inventoryTableData}
                 tableKey="all-products-inventory"
-                columns={getInventoryColumns()}
+                columns={inventoryColumns}
                 defaultColumnOrder={['product', 'current_stock', 'velocity', 'amount_ordered', 'days_left', 'inventory_age', 'last_cogs', 'retailer', 'reorder_point', 'status', 'actions']}
                 renderCell={renderInventoryCell}
                 enableSearch={true}

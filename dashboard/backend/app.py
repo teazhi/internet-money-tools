@@ -2246,7 +2246,14 @@ def refresh_google_token(user_record):
     google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
     google_tokens.update(new_tokens)
     set_user_field(user_record, 'integrations.google.tokens', google_tokens)
+    
+    # Update the users config with the refreshed tokens
     users = get_users_config()
+    discord_id = get_user_field(user_record, 'identity.discord_id')
+    for i, user in enumerate(users):
+        if get_user_field(user, 'identity.discord_id') == discord_id:
+            users[i] = user_record
+            break
     update_users_config(users)
     return new_tokens["access_token"]
 
@@ -2256,7 +2263,10 @@ def safe_google_api_call(user_record, api_call_func):
     try:
         return api_call_func(access_token)
     except Exception as e:
-        if "401" in str(e) or "Invalid Credentials" in str(e):
+        # Check for various forms of authentication errors
+        error_str = str(e)
+        if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
+            print(f"Token refresh needed due to: {error_str}")
             new_access = refresh_google_token(user_record)
             return api_call_func(new_access)
         else:
@@ -8507,45 +8517,7 @@ def filter_underpaid_reimbursements(aura_df, max_cogs_map: dict[str, float]):
     ]
     return pd.DataFrame(rows, columns=cols)
 
-def refresh_google_token(user_record):
-    """
-    Refresh the Google access token for a user record.
-    Updates the user record and returns the new access token.
-    """
-    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
-    refresh_token = google_tokens.get("refresh_token")
-    if not refresh_token:
-        raise Exception("No refresh_token found. User must re-link Google account.")
-
-    token_url = "https://oauth2.googleapis.com/token"
-    payload = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token"
-    }
-    resp = requests.post(token_url, data=payload)
-    resp.raise_for_status()
-    new_tokens = resp.json()
-    
-    # Keep the old refresh_token if Google didn't return a new one
-    if "refresh_token" not in new_tokens:
-        new_tokens["refresh_token"] = refresh_token
-
-    # Update the user record
-    google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
-    google_tokens.update(new_tokens)
-    set_user_field(user_record, 'integrations.google.tokens', google_tokens)
-    
-    # Update the users config
-    users = get_users_config()
-    for i, user in enumerate(users):
-        if get_user_field(user, 'identity.discord_id') == get_user_field(user_record, 'identity.discord_id'):
-            users[i] = user_record
-            break
-    update_users_config(users)
-    
-    return new_tokens["access_token"]
+# Duplicate function removed - using the one defined earlier in the file
 
 @app.route('/status', methods=['GET'])
 def status():
@@ -10528,6 +10500,8 @@ def fetch_latest_sellerboard_cogs_email(access_token: str) -> Optional[Dict]:
             print(f"Gmail search failed: {response.status_code} - {response.text}")
             if response.status_code == 401:
                 print("Gmail API authentication failed - user may need to re-authorize Google integration with Gmail permissions")
+                # Raise exception so safe_google_api_call can catch it and refresh token
+                raise Exception(f"Gmail API 401 error: {response.text}")
             return None
         
         search_results = response.json()

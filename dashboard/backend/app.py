@@ -15238,8 +15238,11 @@ def get_inventory_age_analysis():
                         key_size = len(json.dumps(value))
                         if key_size > 10000:  # Log details for large sections
                             if isinstance(value, dict):
+                                pass  # Large dict found
                             elif isinstance(value, list):
+                                pass  # Large list found
                     except Exception as e:
+                        pass  # Skip on serialization error
             
             # Final check before returning
             if 'age_analysis' not in sanitized_age_analysis:

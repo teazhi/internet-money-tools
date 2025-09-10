@@ -38,9 +38,6 @@ class InventoryAgeAnalyzer:
         try:
             age_analysis = {}
             
-            # Debug: Check what we're receiving
-            print(f"DEBUG - InventoryAgeAnalyzer: enhanced_analytics type: {type(enhanced_analytics)}")
-            print(f"DEBUG - InventoryAgeAnalyzer: enhanced_analytics keys sample: {list(enhanced_analytics.keys())[:5] if hasattr(enhanced_analytics, 'keys') else 'No keys method'}")
             
             for asin, product_data in enhanced_analytics.items():
                 age_info = self._calculate_product_age(
@@ -51,9 +48,6 @@ class InventoryAgeAnalyzer:
             # Generate summary statistics and insights
             summary = self._generate_age_summary(age_analysis)
             
-            # Debug: Check final age_analysis structure
-            print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis keys sample: {list(age_analysis.keys())[:5]}")
-            print(f"DEBUG - InventoryAgeAnalyzer: final age_analysis type: {type(age_analysis)}")
             
             # Ensure no pandas objects in the final return
             result = {
@@ -203,10 +197,6 @@ class InventoryAgeAnalyzer:
             if not product_stock:
                 return None
             
-            # Debug: Log available fields for first few products
-            if not hasattr(self, '_logged_stock_fields'):
-                self._logged_stock_fields = True
-                print(f"DEBUG - Stock data fields for {asin}: {list(product_stock.keys())[:20]}")
             
             # Look for various date fields that might indicate inventory creation/received dates
             date_fields = [

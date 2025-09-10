@@ -1116,7 +1116,6 @@ class EnhancedOrdersAnalysis:
             
             for worksheet_name in worksheet_names:
                 try:
-                    print(f"DEBUG: Processing worksheet '{worksheet_name}'")
                     
                     # Fetch worksheet data
                     range_ = f"'{worksheet_name}'!A1:Z"
@@ -1783,9 +1782,6 @@ class EnhancedOrdersAnalysis:
             # Get current stock value for debugging
             stock_value = restock_data.get('current_stock', 0)
             
-            # Debug stock assignment for specific ASINs
-            if asin in ["B004ZAKHHM", "B00F99VIUS", "B009I4G5JO"] and stock_value > 0:
-                print(f"DEBUG enhanced_analytics for {asin}: current_stock = {stock_value}")
             
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {

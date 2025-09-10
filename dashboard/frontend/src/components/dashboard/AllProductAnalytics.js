@@ -310,6 +310,10 @@ const AllProductAnalytics = () => {
       reorder_point: Math.floor(Math.random() * 50) + 10,
       last_cogs: Math.random() * 50 + 10,
       supplier_info: 'Various',
+      // Retailer information from enhanced analytics
+      retailer: allProductsData?.enhanced_analytics?.[asin]?.retailer || 'Unknown',
+      retailer_display: allProductsData?.enhanced_analytics?.[asin]?.retailer_display || 'Unknown',
+      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || null,
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
@@ -343,6 +347,7 @@ const AllProductAnalytics = () => {
     days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true },
     inventory_age: { key: 'inventory_age', label: 'Inventory Age', sortKey: 'estimated_age_days', draggable: true },
     last_cogs: { key: 'last_cogs', label: 'Last COGS', sortKey: 'last_cogs', draggable: true },
+    retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true },
     reorder_point: { key: 'reorder_point', label: 'Reorder Point', sortKey: 'reorder_point', draggable: true },
     status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true },
     actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false }
@@ -357,34 +362,55 @@ const AllProductAnalytics = () => {
     action: { key: 'action', label: 'Action', sortKey: null, draggable: false }
   });
 
-  const getInventoryFilters = () => [
-    {
-      key: 'age_category',
-      label: 'Inventory Age',
-      allLabel: 'All Ages',
-      options: [
-        { value: 'fresh', label: 'Fresh (0-30 days)' },
-        { value: 'moderate', label: 'Moderate (31-90 days)' },
-        { value: 'aged', label: 'Aged (91-180 days)' },
-        { value: 'old', label: 'Old (181-365 days)' },
-        { value: 'ancient', label: 'Ancient (365+ days)' },
-        { value: 'unknown', label: 'Unknown Age' }
-      ],
-      filterFn: (item, value) => item.age_category === value
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      allLabel: 'All Status',
-      options: [
-        { value: 'normal', label: 'Normal' },
-        { value: 'attention', label: 'Needs Attention' },
-        { value: 'warning', label: 'Warning' },
-        { value: 'critical', label: 'Critical' }
-      ],
-      filterFn: (item, value) => item.status === value
-    }
-  ];
+  const getInventoryFilters = () => {
+    // Get unique retailers from inventory data
+    const uniqueRetailers = [...new Set(
+      inventoryTableData
+        .map(item => item.retailer_display)
+        .filter(retailer => retailer && retailer !== 'Unknown')
+    )].sort();
+    
+    const retailerOptions = uniqueRetailers.map(retailer => ({
+      value: retailer,
+      label: retailer
+    }));
+
+    return [
+      {
+        key: 'retailer_display',
+        label: 'Retailer',
+        allLabel: 'All Retailers',
+        options: retailerOptions,
+        filterFn: (item, value) => item.retailer_display === value
+      },
+      {
+        key: 'age_category',
+        label: 'Inventory Age',
+        allLabel: 'All Ages',
+        options: [
+          { value: 'fresh', label: 'Fresh (0-30 days)' },
+          { value: 'moderate', label: 'Moderate (31-90 days)' },
+          { value: 'aged', label: 'Aged (91-180 days)' },
+          { value: 'old', label: 'Old (181-365 days)' },
+          { value: 'ancient', label: 'Ancient (365+ days)' },
+          { value: 'unknown', label: 'Unknown Age' }
+        ],
+        filterFn: (item, value) => item.age_category === value
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        allLabel: 'All Status',
+        options: [
+          { value: 'normal', label: 'Normal' },
+          { value: 'attention', label: 'Needs Attention' },
+          { value: 'warning', label: 'Warning' },
+          { value: 'critical', label: 'Critical' }
+        ],
+        filterFn: (item, value) => item.status === value
+      }
+    ];
+  };
 
   const getInsightsFilters = () => [
     {
@@ -596,6 +622,28 @@ const AllProductAnalytics = () => {
           </td>
         );
 
+      case 'retailer':
+        return (
+          <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm">
+            <div className="flex items-center space-x-2">
+              {item.source_link ? (
+                <a 
+                  href={item.source_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-md hover:bg-blue-200 transition-colors"
+                  title={`View on ${item.retailer_display}`}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  {item.retailer_display}
+                </a>
+              ) : (
+                <span className="text-gray-400">Unknown</span>
+              )}
+            </div>
+          </td>
+        );
+
       case 'reorder_point':
         return (
           <td key={columnKey} className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
@@ -743,7 +791,7 @@ const AllProductAnalytics = () => {
                 data={inventoryTableData}
                 tableKey="all-products-inventory"
                 columns={getInventoryColumns()}
-                defaultColumnOrder={['product', 'current_stock', 'velocity', 'amount_ordered', 'days_left', 'inventory_age', 'last_cogs', 'reorder_point', 'status', 'actions']}
+                defaultColumnOrder={['product', 'current_stock', 'velocity', 'amount_ordered', 'days_left', 'inventory_age', 'last_cogs', 'retailer', 'reorder_point', 'status', 'actions']}
                 renderCell={renderInventoryCell}
                 enableSearch={true}
                 enableFilters={true}
@@ -752,7 +800,7 @@ const AllProductAnalytics = () => {
                 enableColumnResetting={true}
                 enableFullscreen={true}
                 searchPlaceholder="Search by ASIN, product name..."
-                searchFields={['asin', 'product_name']}
+                searchFields={['asin', 'product_name', 'retailer_display']}
                 filters={getInventoryFilters()}
                 emptyIcon={Package}
                 emptyTitle="No Inventory Data"

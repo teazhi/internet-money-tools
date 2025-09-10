@@ -2221,14 +2221,11 @@ def validate_and_fix_token_data(tokens):
 
 
 def refresh_google_token(user_record):
-    print(f"[refresh_google_token] Starting token refresh for user: {get_user_field(user_record, 'identity.discord_id')}")
     google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
     refresh_token = google_tokens.get("refresh_token")
     if not refresh_token:
-        print(f"[refresh_google_token] No refresh token found")
         raise Exception("No refresh_token found. User must re-link Google account.")
 
-    print(f"[refresh_google_token] Using refresh token: {refresh_token[:20] if refresh_token else 'None'}...")
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id": GOOGLE_CLIENT_ID,
@@ -2237,7 +2234,6 @@ def refresh_google_token(user_record):
         "grant_type": "refresh_token"
     }
     resp = requests.post(token_url, data=payload)
-    print(f"[refresh_google_token] Token refresh response status: {resp.status_code}")
     resp.raise_for_status()
     new_tokens = resp.json()
     
@@ -2254,41 +2250,25 @@ def refresh_google_token(user_record):
     # Update the users config with the refreshed tokens
     users = get_users_config()
     discord_id = get_user_field(user_record, 'identity.discord_id')
-    print(f"[refresh_google_token] Updating user config for discord_id: {discord_id}")
     for i, user in enumerate(users):
         if get_user_field(user, 'identity.discord_id') == discord_id:
             users[i] = user_record
-            print(f"[refresh_google_token] Found and updated user at index {i}")
             break
     update_users_config(users)
-    print(f"[refresh_google_token] Token refresh completed successfully")
     return new_tokens["access_token"]
 
 def safe_google_api_call(user_record, api_call_func):
     google_tokens = get_user_field(user_record, 'integrations.google.tokens') or {}
     access_token = google_tokens.get("access_token")
-    print(f"[safe_google_api_call] Starting API call with token: {access_token[:20] if access_token else 'None'}...")
     try:
-        result = api_call_func(access_token)
-        print(f"[safe_google_api_call] API call succeeded, result type: {type(result)}, result preview: {str(result)[:200] if result else 'None'}")
-        return result
+        return api_call_func(access_token)
     except Exception as e:
         # Check for various forms of authentication errors
         error_str = str(e)
-        print(f"[safe_google_api_call] API call failed with error: {error_str}")
         if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
-            print(f"[safe_google_api_call] Token refresh needed due to: {error_str}")
-            try:
-                new_access = refresh_google_token(user_record)
-                print(f"[safe_google_api_call] Token refreshed successfully, new token: {new_access[:20] if new_access else 'None'}...")
-                result = api_call_func(new_access)
-                print(f"[safe_google_api_call] Retry with new token succeeded")
-                return result
-            except Exception as refresh_error:
-                print(f"[safe_google_api_call] Token refresh or retry failed: {refresh_error}")
-                raise
+            new_access = refresh_google_token(user_record)
+            return api_call_func(new_access)
         else:
-            print(f"[safe_google_api_call] Non-auth error, re-raising: {error_str}")
             raise
 
 @app.route('/auth/discord')
@@ -6520,14 +6500,12 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
         sheet_metadata = resp.json()
         worksheets = [sheet['properties']['title'] for sheet in sheet_metadata.get('sheets', [])]
         
-        print(f"DEBUG: Found {len(worksheets)} worksheets: {worksheets}")
         
         all_cogs_data = []
         processed_worksheets = 0
         
         for worksheet_name in worksheets:
             try:
-                print(f"DEBUG: Processing worksheet: {worksheet_name}")
                 
                 # Get worksheet data using HTTP API
                 range_name = f"'{worksheet_name}'!A1:Z1000"
@@ -6539,13 +6517,11 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
                 resp = requests.get(url, headers=headers)
                 
                 if resp.status_code != 200:
-                    print(f"DEBUG: Failed to fetch {worksheet_name}: {resp.status_code}")
                     continue
                 
                 data = resp.json()
                 values = data.get('values', [])
                 if not values or len(values) < 2:  # Need at least header + 1 data row
-                    print(f"DEBUG: Skipping {worksheet_name} - insufficient data")
                     continue
                 
                 # Convert to DataFrame
@@ -6567,7 +6543,6 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
                         break
                 
                 if not asin_col or not cogs_col:
-                    print(f"DEBUG: Skipping {worksheet_name} - missing ASIN ({asin_col}) or COGS ({cogs_col}) column")
                     continue
                 
                 # Filter rows with valid ASIN and COGS data
@@ -6575,7 +6550,6 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
                                (df[cogs_col].notna()) & (df[cogs_col] != '')]
                 
                 if valid_data.empty:
-                    print(f"DEBUG: Skipping {worksheet_name} - no valid ASIN/COGS pairs")
                     continue
                 
                 # Process valid rows
@@ -6595,17 +6569,13 @@ def fetch_flexible_cogs_from_all_worksheets(access_token, sheet_id, column_mappi
                             'worksheet': worksheet_name
                         })
                     except (ValueError, TypeError):
-                        print(f"DEBUG: Invalid COGS value in {worksheet_name}: {cogs}")
                         continue
                 
                 processed_worksheets += 1
-                print(f"DEBUG: Extracted {len(valid_data)} COGS entries from {worksheet_name}")
                 
             except Exception as e:
-                print(f"DEBUG: Error processing worksheet {worksheet_name}: {str(e)}")
                 continue
         
-        print(f"DEBUG: Successfully processed {processed_worksheets} worksheets, found {len(all_cogs_data)} total COGS entries")
         return all_cogs_data
         
     except Exception as e:
@@ -6753,11 +6723,8 @@ def manual_sellerboard_update():
                 })
             
             sellerboard_df = sb_df  # Use consistent variable name
-            print(f"DEBUG: Successfully loaded COGS data from email: {len(sellerboard_df)} rows, {len(sellerboard_df.columns)} columns")
-            print(f"DEBUG: COGS data columns: {list(sellerboard_df.columns)}")
             
             # Get Google Sheet data for COGS processing
-            print("DEBUG: Fetching Google Sheet data...")
             
             # Get column mapping for processing
             column_mapping = get_user_column_mapping(user_record)
@@ -6769,10 +6736,8 @@ def manual_sellerboard_update():
             use_all_worksheets = search_all_worksheets or full_update
             
             # Fetch COGS data from ALL worksheets if enabled or full update, otherwise just main worksheet
-            print(f"DEBUG: search_all_worksheets = {search_all_worksheets}, full_update = {full_update}, use_all_worksheets = {use_all_worksheets}")
             
             if use_all_worksheets:
-                print("DEBUG: Fetching COGS data from ALL worksheets with flexible column matching...")
                 
                 # Get fresh access token
                 access_token = refresh_google_token(user_record)
@@ -6795,23 +6760,18 @@ def manual_sellerboard_update():
                 
                 # Convert to DataFrame for processing
                 sheet_df = pd.DataFrame(cogs_data_all)
-                print(f"DEBUG: Fetched COGS data for {len(sheet_df)} products from ALL worksheets with flexible matching")
-                print(f"DEBUG: All worksheets DataFrame columns: {list(sheet_df.columns)}")
                 
                 # Data is already in standardized format from our custom function
                 asin_field = 'asin'
                 cogs_field = 'cogs'
-                print(f"DEBUG: Using standardized columns - ASIN: {asin_field}, COGS: {cogs_field}")
             else:
                 sheet_df = pd.DataFrame()  # Empty DataFrame if no data returned
                 
                 # If all worksheets approach failed, fallback to main worksheet
                 if sheet_df.empty:
-                    print("DEBUG: All worksheets approach found no valid data, falling back to main worksheet...")
                     use_all_worksheets = False
                 
             if not use_all_worksheets:
-                print("DEBUG: Fetching data from main worksheet only...")
                 # Fetch Google Sheet data (handles token refresh internally)
                 sheet_df = fetch_google_sheet_as_df(user_record, worksheet_title)
                 
@@ -6826,7 +6786,6 @@ def manual_sellerboard_update():
                         'details': f'No data found in worksheet "{worksheet_title}".'
                     })
                 
-                print(f"DEBUG: Fetched {len(sheet_df)} rows from main worksheet")
                 
                 # Set field mappings for main worksheet
                 asin_field = column_mapping.get("ASIN", "ASIN") 
@@ -6841,12 +6800,10 @@ def manual_sellerboard_update():
             if use_all_worksheets:
                 # When using all worksheets, we already have COGS-specific data
                 filtered_df = sheet_df.copy()
-                print(f"DEBUG: Using all worksheets COGS data - {len(filtered_df)} products")
             else:
                 # Apply date filtering for single worksheet
                 if full_update:
                     filtered_df = sheet_df.copy()
-                    print(f"DEBUG: Full update - processing all {len(filtered_df)} rows")
                 else:
                     # Quick update - only process recent data (last 30 days)
                     cutoff_date = datetime.now() - timedelta(days=30)
@@ -6854,10 +6811,8 @@ def manual_sellerboard_update():
                     if date_field in sheet_df.columns:
                         sheet_df[date_field] = pd.to_datetime(sheet_df[date_field], errors='coerce')
                         filtered_df = sheet_df[sheet_df[date_field] >= cutoff_date].copy()
-                        print(f"DEBUG: Quick update - processing {len(filtered_df)} rows from last 30 days")
                     else:
                         filtered_df = sheet_df.copy()
-                        print(f"DEBUG: No date field found, processing all {len(filtered_df)} rows")
             
             # Process COGS updates
             actual_updates = []
@@ -6915,7 +6870,6 @@ def manual_sellerboard_update():
                         
                     else:
                         # Existing product(s) - update ALL rows with this ASIN (multiple SKUs per ASIN)
-                        print(f"DEBUG: Found {len(existing)} rows with ASIN {asin}")
                         
                         # Process each row with this ASIN
                         for existing_idx, existing_row in existing.iterrows():
@@ -6958,10 +6912,8 @@ def manual_sellerboard_update():
                                 })
             
             # Also check Sellerboard products with Hide=yes for COGS updates from purchase data
-            print("DEBUG: Checking hidden Sellerboard products for COGS updates...")
             if 'Hide' in sellerboard_df.columns:
                 hidden_products = sellerboard_df[sellerboard_df['Hide'].str.upper() == 'YES']
-                print(f"DEBUG: Found {len(hidden_products)} hidden products in Sellerboard")
                 
                 for _, hidden_row in hidden_products.iterrows():
                     hidden_asin = str(hidden_row['ASIN']).strip()
@@ -7030,7 +6982,6 @@ def manual_sellerboard_update():
                         
                         seen_asins.add(hidden_asin)
             
-            print(f"DEBUG: COGS Update Summary:")
             print(f"  - Actual updates: {len(actual_updates)}")
             print(f"  - Potential updates: {len(potential_updates)}")
             print(f"  - New products: {len(new_products)}")
@@ -7038,7 +6989,6 @@ def manual_sellerboard_update():
             updated_sellerboard_data = sellerboard_df
             
             # Convert DataFrame to Excel for email attachment
-            print("DEBUG: Converting to Excel format...")
             excel_buffer = BytesIO()
             updated_sellerboard_data.to_excel(excel_buffer, index=False, engine='openpyxl')
             excel_buffer.seek(0)
@@ -7046,7 +6996,6 @@ def manual_sellerboard_update():
             excel_buffer.close()
             
             # Send email with updated file
-            print("DEBUG: Sending email with updated Sellerboard file...")
             user_email = get_user_field(user_record, 'identity.email')
             if not user_email:
                 return jsonify({
@@ -7142,7 +7091,6 @@ def manual_sellerboard_update():
                     'details': f'Resend API error: {response.status_code}'
                 })
             
-            print(f"DEBUG: Email sent successfully to {user_email}")
             
             return jsonify({
                 'success': True,
@@ -7158,7 +7106,6 @@ def manual_sellerboard_update():
             })
             
         except Exception as processing_error:
-            print(f"DEBUG: Error in dashboard COGS processing: {processing_error}")
             import traceback
             traceback.print_exc()
             
@@ -9027,9 +8974,6 @@ def analyze_discount_opportunities():
                 
                 # Additional debugging for recent purchases
                 if asin == 'B0017TF1E8':
-                    print(f"DEBUG: ASIN {asin} monthly_purchase_adjustment: {monthly_purchase_adjustment}")
-                    print(f"DEBUG: ASIN {asin} global_purchase_analytics keys: {list(global_purchase_analytics.keys()) if global_purchase_analytics else 'None'}")
-                    print(f"DEBUG: ASIN {asin} final recent_purchases: {recent_purchases}")
                 
                 # Determine if restocking is needed - loosened criteria
                 # Show opportunities if:
@@ -9071,7 +9015,6 @@ def analyze_discount_opportunities():
                     priority_score = 0  # Lower priority for items not needed
                 
                 # Debug logging for recent purchases
-                print(f"DEBUG: ASIN {asin} - recent_purchases: {recent_purchases}, restock_data keys: {list(restock_data.keys())}")
                 
                 opportunity = {
                     'asin': asin,
@@ -10395,18 +10338,15 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
     Returns data in same format as fetch_sellerboard_cogs_data for compatibility
     """
     try:
-        print(f"[fetch_sellerboard_cogs_data_from_email] Starting for user: {discord_id}")
         from email_monitoring_s3 import email_monitoring_manager
         
         # First try to get access token from email monitoring OAuth configs
         email_configs = email_monitoring_manager.get_email_configs(discord_id)
         access_token = None
         
-        print(f"[fetch_sellerboard_cogs_data_from_email] Found {len(email_configs)} email configs")
         for config in email_configs:
             if config.get('auth_type') == 'oauth' and config.get('oauth_access_token'):
                 access_token = config['oauth_access_token']
-                print(f"[fetch_sellerboard_cogs_data_from_email] Found email monitoring OAuth token")
                 
                 # Check if token needs refresh
                 if config.get('oauth_token_expires_at'):
@@ -10433,10 +10373,8 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
         
         # If no email monitoring OAuth token, try main Google integration
         if not access_token:
-            print(f"[fetch_sellerboard_cogs_data_from_email] No email monitoring token, trying main Google integration")
             user_record = get_user_record(discord_id)
             if not user_record:
-                print(f"[fetch_sellerboard_cogs_data_from_email] No user record found")
                 return None
             
             # Check for subuser and get parent config if needed
@@ -10447,11 +10385,9 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
                     parent_record = get_user_record(parent_user_id)
                     if parent_record:
                         config_user_record = parent_record
-                        print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for subuser")
             
             google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
             current_token = google_tokens.get('access_token')
-            print(f"[fetch_sellerboard_cogs_data_from_email] Google token available: {bool(current_token)}")
             
             if not current_token:
                 print("No Gmail access token available for COGS email processing")
@@ -10462,42 +10398,22 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
             def api_call(access_token):
                 return fetch_latest_sellerboard_cogs_email(access_token)
             
-            print(f"[fetch_sellerboard_cogs_data_from_email] Using safe_google_api_call with main Google integration")
             return safe_google_api_call(config_user_record, api_call)
         
         # Use email monitoring OAuth token with token refresh support
-        print(f"[fetch_sellerboard_cogs_data_from_email] Using email monitoring OAuth token")
-        # Create a mock user record for token refresh if needed
-        mock_user_record = {
-            'integrations': {
-                'google': {
-                    'tokens': {
-                        'access_token': access_token,
-                        'refresh_token': None  # Email monitoring may not have refresh tokens
-                    }
-                }
-            }
-        }
-        
         def api_call(token):
             return fetch_latest_sellerboard_cogs_email(token)
         
         try:
-            print(f"[fetch_sellerboard_cogs_data_from_email] Trying email monitoring token directly")
             result = api_call(access_token)
-            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring api_call returned: {type(result)} - {result}")
             if result is not None:
                 return result
-            
-            # If we got None (no result), fall back to main Google integration
-            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring returned None, trying main Google integration fallback")
         except Exception as e:
             error_str = str(e)
-            print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring exception: {error_str}")
             if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
-                print(f"[fetch_sellerboard_cogs_data_from_email] Email monitoring token expired, trying main Google integration fallback")
+                pass  # Fall through to main Google integration fallback
             else:
-                print(f"[fetch_sellerboard_cogs_data_from_email] Non-auth error in email monitoring, trying main Google integration fallback")
+                pass  # Fall through to main Google integration fallback
         
         # Fallback to main Google integration
         user_record = get_user_record(discord_id)
@@ -10509,22 +10425,15 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
                     parent_record = get_user_record(parent_user_id)
                     if parent_record:
                         config_user_record = parent_record
-                        print(f"[fetch_sellerboard_cogs_data_from_email] Using parent user config for fallback")
-            
-            print(f"[fetch_sellerboard_cogs_data_from_email] Calling safe_google_api_call for fallback")
             
             # Try refreshing the token first since we know it's likely expired
             try:
-                print(f"[fetch_sellerboard_cogs_data_from_email] Proactively refreshing Google token")
                 new_access_token = refresh_google_token(config_user_record)
-                print(f"[fetch_sellerboard_cogs_data_from_email] Token refreshed successfully, trying API call")
                 return api_call(new_access_token)
             except Exception as refresh_error:
-                print(f"[fetch_sellerboard_cogs_data_from_email] Token refresh failed: {refresh_error}")
                 # Fall back to the normal safe_google_api_call as a last resort
                 return safe_google_api_call(config_user_record, api_call)
         else:
-            print(f"[fetch_sellerboard_cogs_data_from_email] No user record found for fallback")
             return None
         
     except Exception as e:
@@ -15092,7 +15001,6 @@ def get_demo_user():
 @login_required
 def get_inventory_age_analysis():
     """Get comprehensive inventory age analysis"""
-    print(f"DEBUG: inventory-age endpoint called by user: {session.get('discord_id', 'unknown')}")
     try:
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
@@ -15153,7 +15061,6 @@ def get_inventory_age_analysis():
             'discord_id': discord_id
         }
         
-        print(f"DEBUG - Inventory Age Analysis user settings: sheet_id={bool(user_settings.get('sheet_id'))}, google_tokens={bool(get_user_field(config_user_record, 'integrations.google.tokens'))}")
         
         # Get COGS data directly from email for all products
         cogs_data = fetch_sellerboard_cogs_data_from_email(discord_id)
@@ -15227,13 +15134,11 @@ def get_inventory_age_analysis():
         print(f"  - {len(enhanced_analytics) - in_stock_count} products out of stock or unknown")
         
         # Verify we have the same data structure as Smart Restock Recommendations
-        print(f"DEBUG - Inventory age analysis:")
         print(f"  - enhanced_analytics: {len(enhanced_analytics)} products")
         print(f"  - restock_alerts: {len(restock_alerts)} products")
         
         # Compare current_stock values from both sources for first 3 products
         if enhanced_analytics and restock_alerts:
-            print("DEBUG - Current stock comparison (enhanced_analytics vs restock_alerts):")
             common_asins = set(enhanced_analytics.keys()) & set(restock_alerts.keys())
             for i, asin in enumerate(list(common_asins)[:3]):
                 enhanced_stock = enhanced_analytics[asin].get('restock', {}).get('current_stock', 'N/A')
@@ -15269,8 +15174,6 @@ def get_inventory_age_analysis():
                 enhanced_analytics[asin]['restock']['monthly_purchase_adjustment'] = 0
         
         # Debug: Show what stock values we're actually getting
-        print(f"DEBUG - Using enhanced_analytics data (same analyzer as Smart Restock)")
-        print(f"DEBUG - Sample stock values from enhanced_analytics:")
         for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:5]):
             stock_value = data.get('restock', {}).get('current_stock', 'NOT_FOUND')
             print(f"  {asin}: {stock_value} units")
@@ -15292,6 +15195,24 @@ def get_inventory_age_analysis():
         age_analysis['action_items'] = action_items[:20]  # Top 20 items needing action
         age_analysis['total_action_items'] = len(action_items)
         
+        # Add retailer information to enhanced_analytics
+        for asin, data in enhanced_analytics.items():
+            cogs_info = data.get('cogs_data', {})
+            source_link = cogs_info.get('source_link', '')
+            
+            # Extract retailer from source link
+            if source_link:
+                retailer = extract_website_name(source_link)
+                retailer_display = format_website_display_name(retailer)
+            else:
+                retailer = 'Unknown'
+                retailer_display = 'Unknown'
+            
+            # Add retailer info to enhanced_analytics
+            enhanced_analytics[asin]['retailer'] = retailer
+            enhanced_analytics[asin]['retailer_display'] = retailer_display
+            enhanced_analytics[asin]['source_link'] = source_link
+
         # CRITICAL: Include enhanced_analytics so frontend can access stock values and product names
         age_analysis['enhanced_analytics'] = enhanced_analytics
         
@@ -15300,18 +15221,11 @@ def get_inventory_age_analysis():
         for asin in sample_asins:
             if asin in enhanced_analytics:
                 stock_val = enhanced_analytics[asin].get('current_stock', 'NOT_FOUND')
-                print(f"DEBUG final response - {asin}: current_stock = {stock_val}")
             else:
-                print(f"DEBUG final response - {asin}: NOT FOUND in enhanced_analytics")
         
         # Debug: Log what we're returning
-        print(f"DEBUG - Final response structure keys: {list(age_analysis.keys())}")
-        print(f"DEBUG - Final response structure type: {type(age_analysis)}")
         if 'age_analysis' in age_analysis:
-            print(f"DEBUG - Number of products in age_analysis: {len(age_analysis['age_analysis'])}")
-            print(f"DEBUG - First 3 ASINs in age_analysis: {list(age_analysis['age_analysis'].keys())[:3]}")
         if 'summary' in age_analysis:
-            print(f"DEBUG - Summary keys: {list(age_analysis['summary'].keys())}")
         
         # Debug: Log the actual JSON structure being returned
         import json
@@ -15323,8 +15237,6 @@ def get_inventory_age_analysis():
             # Check response size after sanitization
             json_str = json.dumps(sanitized_age_analysis, indent=2)
             response_size = len(json_str)
-            print(f"DEBUG - JSON response size after sanitization: {response_size} bytes")
-            print(f"DEBUG - JSON response preview (first 500 chars): {json_str[:500]}")
             
             # Check if response is unexpectedly large
             if response_size > 50000:  # More than 50KB is suspicious for this endpoint
@@ -15334,14 +15246,10 @@ def get_inventory_age_analysis():
                 for key, value in sanitized_age_analysis.items():
                     try:
                         key_size = len(json.dumps(value))
-                        print(f"DEBUG - {key} size: {key_size} bytes")
                         if key_size > 10000:  # Log details for large sections
                             if isinstance(value, dict):
-                                print(f"DEBUG - {key} contains {len(value)} items")
                             elif isinstance(value, list):
-                                print(f"DEBUG - {key} contains {len(value)} items")
                     except Exception as e:
-                        print(f"DEBUG - {key} serialization error: {str(e)}")
             
             # Final check before returning
             if 'age_analysis' not in sanitized_age_analysis:
@@ -15359,12 +15267,9 @@ def get_inventory_age_analysis():
             
             # Try returning raw JSON response to bypass any jsonify issues
             json_string = json.dumps(sanitized_age_analysis)
-            print(f"DEBUG - JSON string first 500 chars: {json_string[:500]}")
-            print(f"DEBUG - JSON string length: {len(json_string)}")
             
             # Check if the JSON string looks correct
             parsed_check = json.loads(json_string)
-            print(f"DEBUG - Parsed JSON keys: {list(parsed_check.keys())}")
             
             # If response is too large, try to reduce it
             if len(json_string) > 150000:  # 150KB threshold
@@ -15391,7 +15296,6 @@ def get_inventory_age_analysis():
                 }
                 
                 json_string = json.dumps(reduced_response)
-                print(f"DEBUG - Reduced JSON string length: {len(json_string)}")
             
             response = make_response(json_string)
             response.headers['Content-Type'] = 'application/json'
@@ -15416,7 +15320,6 @@ def get_inventory_age_analysis():
                     except Exception as key_error:
                         problematic_keys.append(f"{key}: {str(key_error)}")
                 
-                print(f"DEBUG - Problematic keys: {problematic_keys}")
                 return jsonify({
                     'error': 'Response serialization failed',
                     'message': 'The response data contains non-serializable objects',

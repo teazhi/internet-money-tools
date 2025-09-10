@@ -10517,7 +10517,12 @@ def fetch_sellerboard_cogs_data_from_email(discord_id: str) -> Optional[Dict]:
             return None
         
     except Exception as e:
+        error_str = str(e)
         print(f"Error fetching COGS data from email: {e}")
+        # Re-raise 401 errors so they can be handled by safe_google_api_call
+        if any(indicator in error_str for indicator in ["401", "Invalid Credentials", "UNAUTHENTICATED", "authError"]):
+            print(f"[fetch_sellerboard_cogs_data_from_email] Re-raising 401 error for token refresh")
+            raise
         return None
 
 

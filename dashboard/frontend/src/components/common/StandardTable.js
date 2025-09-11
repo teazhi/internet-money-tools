@@ -392,11 +392,9 @@ const StandardTable = ({
         </div>
 
         {/* Scrollable Table Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-6">
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <TableContentFullscreen />
-            </div>
+        <div className="flex-1 overflow-hidden p-6">
+          <div className="h-full bg-white rounded-lg shadow-sm">
+            <TableContentFullscreen />
           </div>
         </div>
       </div>
@@ -593,10 +591,9 @@ const StandardTable = ({
   // Table content for fullscreen mode (without filters)
   function TableContentFullscreen() {
     return (
-      <div className="relative h-full">
-        <div className="absolute inset-0 overflow-auto">
-          <table className="min-w-full divide-y divide-gray-200 table-fixed">
-            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+      <div className="h-full overflow-auto">
+        <table className="min-w-full divide-y divide-gray-200 table-fixed">
+          <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
               {columnOrder.map((columnKey) => {
                 const column = columns[columnKey];
@@ -699,7 +696,6 @@ const StandardTable = ({
             )}
           </tbody>
         </table>
-        </div>
       </div>
     );
   }

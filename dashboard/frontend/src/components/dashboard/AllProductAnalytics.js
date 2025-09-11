@@ -369,9 +369,15 @@ const AllProductAnalytics = () => {
       current_stock: allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0,
       velocity: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
       amount_ordered: allProductsData?.enhanced_analytics?.[asin]?.restock?.monthly_purchase_adjustment || 0,
-      days_left: Math.floor(Math.random() * 180) + 5,
-      reorder_point: Math.floor(Math.random() * 50) + 10,
-      last_cogs: Math.random() * 50 + 10,
+      // Calculate days_left from current_stock and velocity
+      days_left: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity > 0 
+        ? Math.floor((allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0) / allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity)
+        : 999,
+      // Use suggested_quantity as reorder_point if available, otherwise calculate
+      reorder_point: allProductsData?.enhanced_analytics?.[asin]?.restock?.suggested_quantity || 
+        Math.floor((allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0) * 30),
+      // Use actual COGS data from enhanced_analytics
+      last_cogs: allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.cogs || 0,
       supplier_info: 'Various',
       // Retailer information extracted from source link
       source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 

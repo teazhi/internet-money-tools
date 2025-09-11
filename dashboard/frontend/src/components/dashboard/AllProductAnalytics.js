@@ -10,7 +10,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
-import { useProductImages } from '../../hooks/useProductImages';
+// Removed image fetching to improve performance
+// import { useProductImages } from '../../hooks/useProductImages';
 import { API_ENDPOINTS } from '../../config/api';
 
 // Mock data generator for when endpoints are unavailable
@@ -318,13 +319,13 @@ const AllProductAnalytics = () => {
     fetchAllProductsData();
   }, []);
 
-  // Extract ASINs for image loading
-  const allAsins = useMemo(() => {
-    if (!allProductsData?.age_analysis) return [];
-    return Object.keys(allProductsData.age_analysis);
-  }, [allProductsData]);
+  // Removed image loading for performance
+  // const allAsins = useMemo(() => {
+  //   if (!allProductsData?.age_analysis) return [];
+  //   return Object.keys(allProductsData.age_analysis);
+  // }, [allProductsData]);
 
-  const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
+  // const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
   // Extract retailer name from URL
   const extractRetailerFromUrl = useCallback((url) => {
@@ -522,35 +523,11 @@ const AllProductAnalytics = () => {
     }
   ];
 
-  // Product Image Component
+  // Product Image Component - Using only placeholder icons for performance
   const ProductImage = ({ asin }) => {
-    const imageUrl = batchImages?.[asin];
-    const isLoading = imagesLoading && !imageUrl;
-    
-    if (isLoading) {
-      return (
-        <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
-          <div className="h-4 w-4 bg-gray-300 rounded animate-pulse" />
-        </div>
-      );
-    }
-
-    if (!imageUrl) {
-      return (
-        <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center">
-          <Package className="h-6 w-6 text-blue-600" />
-        </div>
-      );
-    }
-
     return (
-      <div className="h-12 w-12 rounded-lg overflow-hidden border border-gray-200 bg-white">
-        <img
-          src={imageUrl}
-          alt={`Product ${asin}`}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+      <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center">
+        <Package className="h-6 w-6 text-blue-600" />
       </div>
     );
   };

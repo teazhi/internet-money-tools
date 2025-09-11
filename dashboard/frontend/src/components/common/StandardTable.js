@@ -310,32 +310,93 @@ const StandardTable = ({
   // Fullscreen wrapper
   if (isFullscreen) {
     return (
-      <div className="fixed inset-0 z-50 bg-white flex flex-col">
-        {/* Fullscreen Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">{title || 'Table View'}</h2>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setIsFullscreen(false)}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Exit fullscreen"
-            >
-              <Minimize2 className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => setIsFullscreen(false)}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
+      <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+        {/* Fixed Header Section */}
+        <div className="bg-white shadow-sm">
+          {/* Title Bar */}
+          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">{title || 'Table View'}</h2>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Exit fullscreen"
+              >
+                <Minimize2 className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
+          
+          {/* Filters Section - Sticky */}
+          {(enableSearch || enableFilters || enableColumnResetting) && (
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <div className="flex flex-col sm:flex-row gap-4">
+                {/* Search */}
+                {enableSearch && (
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder={searchPlaceholder}
+                      value={searchQuery}
+                      onChange={handleSearchChange}
+                      className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    />
+                  </div>
+                )}
+                
+                {/* Filters and Controls */}
+                <div className="flex items-center space-x-2">
+                  {enableFilters && filters.map(filter => (
+                    <div key={filter.key} className="flex items-center space-x-1">
+                      <Filter className="h-3 w-3 text-gray-400" />
+                      <select
+                        value={activeFilters[filter.key] || 'all'}
+                        onChange={(e) => setActiveFilters(prev => ({
+                          ...prev,
+                          [filter.key]: e.target.value
+                        }))}
+                        className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      >
+                        <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
+                        {filter.options.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                  
+                  {enableColumnResetting && (
+                    <button
+                      onClick={resetColumnOrder}
+                      className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      title="Reset column order"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset Columns
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Fullscreen Content */}
-        <div className="flex-1 overflow-auto bg-gray-50 p-6">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <TableContent />
+        {/* Scrollable Table Content */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-6">
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <TableContentFullscreen />
+            </div>
           </div>
         </div>
       </div>
@@ -526,6 +587,118 @@ const StandardTable = ({
         </table>
       </div>
       </>
+    );
+  }
+  
+  // Table content for fullscreen mode (without filters)
+  function TableContentFullscreen() {
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 table-fixed">
+          <thead className="bg-gray-50 sticky top-0 z-10">
+            <tr>
+              {columnOrder.map((columnKey) => {
+                const column = columns[columnKey];
+                if (!column) return null;
+                
+                return (
+                  <th 
+                    key={columnKey}
+                    className={`relative px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide transition-all duration-150 border-r border-gray-200 last:border-r-0 ${
+                      column.width || ''
+                    } ${
+                      enableColumnReordering && column.draggable !== false && columnKey !== 'product' ? 'cursor-move hover:bg-gray-100' : ''
+                    } ${
+                      draggedColumn?.key === columnKey ? 'opacity-30 bg-gray-100' : ''
+                    } ${
+                      dragOverColumn === columnKey && draggedColumn?.key !== columnKey 
+                        ? 'bg-blue-50' 
+                        : ''
+                    }`}
+                    draggable={enableColumnReordering && column.draggable !== false && columnKey !== 'product'}
+                    onDragStart={(e) => handleDragStart(e, columnKey)}
+                    onDragOver={handleDragOver}
+                    onDragEnter={(e) => handleDragEnter(e, columnKey)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, columnKey)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <>
+                      {/* Drop indicator - Left side */}
+                      {dragOverColumn === columnKey && dropIndicatorPosition === 'left' && draggedColumn?.key !== columnKey && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 z-10 shadow-lg" />
+                      )}
+                      
+                      {/* Drop indicator - Right side */}
+                      {dragOverColumn === columnKey && dropIndicatorPosition === 'right' && draggedColumn?.key !== columnKey && (
+                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-blue-500 z-10 shadow-lg" />
+                      )}
+                      
+                      <div className="flex items-center space-x-1 relative z-0">
+                        {enableColumnReordering && column.draggable !== false && columnKey !== 'product' && (
+                          <GripVertical className={`h-3 w-3 transition-colors ${
+                            draggedColumn?.key === columnKey ? 'text-gray-600' : 'text-gray-400'
+                          }`} />
+                        )}
+                        {enableSorting && column.sortKey ? (
+                          <button
+                            onClick={() => handleSort(columnKey)}
+                            className="flex items-center space-x-1 hover:text-gray-700 text-xs"
+                          >
+                            <span>{column.label}</span>
+                            {getSortIcon(columnKey)}
+                          </button>
+                        ) : (
+                          <span className="text-xs">{column.label}</span>
+                        )}
+                      </div>
+                    </>
+                  
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {processedData.length > 0 ? (
+              processedData.map((row, index) => (
+                <tr 
+                  key={row.id || index} 
+                  className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''}`}
+                  {...(onRowClick ? { onClick: () => onRowClick(row) } : {})}
+                >
+                  {columnOrder.map((columnKey, colIndex) => {
+                    const cellContent = renderCell(columnKey, row, index);
+                    
+                    // If renderCell returns a <td> element, we need to add border class to it
+                    if (cellContent && cellContent.type === 'td') {
+                      const isLastColumn = colIndex === columnOrder.length - 1;
+                      const borderClass = isLastColumn ? '' : ' border-r border-gray-200';
+                      
+                      return React.cloneElement(cellContent, {
+                        key: cellContent.key || columnKey,
+                        className: `${cellContent.props.className || ''}${borderClass}`.trim()
+                      });
+                    }
+                    
+                    return cellContent;
+                  })}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={columnOrder.length} className="px-3 py-8 text-center">
+                  <div className="flex flex-col items-center">
+                    <EmptyIcon className="h-8 w-8 text-gray-400 mb-2" />
+                    <h3 className="text-xs font-medium text-gray-900 mb-1">{emptyTitle}</h3>
+                    <p className="text-xs text-gray-500">{emptyDescription}</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     );
   }
 };

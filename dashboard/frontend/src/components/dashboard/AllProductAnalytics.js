@@ -272,23 +272,34 @@ const AllProductAnalytics = () => {
     return urls.map(url => url.replace(/[.,;]+$/, ''));
   };
 
-  // Function to handle restock button click
-  const handleRestockClick = async (asin, existingSourceLink) => {
+  // Function to handle restock button click - updated to handle multiple source links
+  const handleRestockClick = async (asin, product) => {
     setSourcesLoading(true);
     
-    // Strategy: Use existing source link immediately if available, then try to enhance with backend data
-    const extractedUrls = extractUrlsFromText(existingSourceLink);
+    // Get all source links from the product
+    const allSourceLinks = product.all_source_links || [];
+    const primarySourceLink = product.source_link;
     
-    // If we have a direct source link, open it immediately
-    if (extractedUrls.length > 0) {
-      extractedUrls.forEach(url => {
+    // Collect all unique URLs
+    const uniqueUrls = new Set();
+    
+    // Add all source links
+    allSourceLinks.forEach(link => {
+      if (link && link.trim() && link.startsWith('http')) {
+        uniqueUrls.add(link.trim());
+      }
+    });
+    
+    // Add primary source link if not already included
+    if (primarySourceLink && primarySourceLink.startsWith('http')) {
+      uniqueUrls.add(primarySourceLink);
+    }
+    
+    // If we have direct source links, open them
+    if (uniqueUrls.size > 0) {
+      Array.from(uniqueUrls).forEach(url => {
         window.open(url, '_blank');
       });
-      setSourcesLoading(false);
-      return;
-    } else if (existingSourceLink && existingSourceLink.startsWith('http')) {
-      // Direct URL in source link
-      window.open(existingSourceLink, '_blank');
       setSourcesLoading(false);
       return;
     }
@@ -380,17 +391,17 @@ const AllProductAnalytics = () => {
       // Use actual COGS data from enhanced_analytics
       last_cogs: allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.cogs || 0,
       supplier_info: 'Various',
-      // Retailer information extracted from source link
+      // Retailer information - now with all retailers
       source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
                    allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
-      retailer: extractRetailerFromUrl(
-        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
-      ) || 'Unknown',
-      retailer_display: extractRetailerFromUrl(
-        allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link
-      ) || 'Unknown',
+      all_source_links: allProductsData?.enhanced_analytics?.[asin]?.all_source_links || 
+                        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.all_sources || [],
+      retailer: allProductsData?.enhanced_analytics?.[asin]?.retailer || 
+                extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
+      retailer_display: allProductsData?.enhanced_analytics?.[asin]?.retailer_display || 
+                        extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
+      all_retailers: allProductsData?.enhanced_analytics?.[asin]?.all_retailers || ['Unknown'],
+      all_retailer_displays: allProductsData?.enhanced_analytics?.[asin]?.all_retailer_displays || ['Unknown'],
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
@@ -443,17 +454,22 @@ const AllProductAnalytics = () => {
   });
 
   const inventoryFilters = useMemo(() => {
-    // Extract retailers directly from source links
-    const allSourceLinks = Object.values(allProductsData?.enhanced_analytics || {})
-      .map(item => item.source_link || item.cogs_data?.source_link)
-      .filter(link => link && typeof link === 'string');
+    // Extract all unique retailers from all products
+    const allRetailers = new Set();
     
-    // Extract unique retailer names from URLs
-    const uniqueRetailers = [...new Set(
-      allSourceLinks
-        .map(link => extractRetailerFromUrl(link))
-        .filter(retailer => retailer !== null)
-    )].sort();
+    Object.values(allProductsData?.enhanced_analytics || {}).forEach(item => {
+      // Add retailers from all_retailer_displays
+      if (item.all_retailer_displays && Array.isArray(item.all_retailer_displays)) {
+        item.all_retailer_displays.forEach(retailer => {
+          if (retailer && retailer !== 'Unknown') {
+            allRetailers.add(retailer);
+          }
+        });
+      }
+    });
+    
+    // Convert to sorted array
+    const uniqueRetailers = [...allRetailers].sort();
     
     const retailerOptions = uniqueRetailers.map(retailer => ({
       value: retailer,
@@ -466,7 +482,14 @@ const AllProductAnalytics = () => {
         label: 'Retailer',
         allLabel: 'All Retailers',
         options: retailerOptions,
-        filterFn: (item, value) => item.retailer_display === value
+        filterFn: (item, value) => {
+          // Check if any of the product's retailers match the filter
+          if (item.all_retailer_displays && Array.isArray(item.all_retailer_displays)) {
+            return item.all_retailer_displays.includes(value);
+          }
+          // Fallback to single retailer check
+          return item.retailer_display === value;
+        }
       },
       {
         key: 'age_category',
@@ -685,19 +708,26 @@ const AllProductAnalytics = () => {
 
       case 'retailer':
         return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
-            <div className="flex items-center space-x-2">
-              {item.source_link ? (
-                <a 
-                  href={item.source_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-md hover:bg-blue-200 transition-colors"
-                  title={`View on ${item.retailer_display}`}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  {item.retailer_display}
-                </a>
+          <td key={columnKey} className="px-2 py-1.5 whitespace-normal text-sm">
+            <div className="flex flex-wrap gap-1">
+              {item.all_retailer_displays && item.all_retailer_displays.length > 0 && item.all_retailer_displays[0] !== 'Unknown' ? (
+                item.all_retailer_displays.map((retailer, idx) => {
+                  const sourceLink = item.all_source_links?.[idx] || item.source_link;
+                  return (
+                    <a 
+                      key={`${retailer}-${idx}`}
+                      href={sourceLink || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-md hover:bg-blue-200 transition-colors"
+                      title={`View on ${retailer}`}
+                      onClick={sourceLink ? undefined : (e) => e.preventDefault()}
+                    >
+                      <ExternalLink className="h-3 w-3 mr-1" />
+                      {retailer}
+                    </a>
+                  );
+                })
               ) : (
                 <span className="text-gray-400">Unknown</span>
               )}
@@ -727,10 +757,10 @@ const AllProductAnalytics = () => {
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
             <button
-              onClick={() => handleRestockClick(item.asin, allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link || null)}
+              onClick={() => handleRestockClick(item.asin, item)}
               className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
               disabled={sourcesLoading}
-              title={allProductsData?.enhanced_analytics?.[item.asin]?.cogs_data?.source_link ? "Open supplier link" : "Find purchase sources"}
+              title={item.all_source_links?.length > 0 ? `Open ${item.all_source_links.length} supplier link(s)` : "Find purchase sources"}
             >
               <ShoppingCart className="h-3 w-3 mr-1" />
               Restock

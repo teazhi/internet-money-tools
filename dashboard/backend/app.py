@@ -8233,49 +8233,125 @@ def extract_website_name(source_url):
     import re
     from urllib.parse import urlparse
     
-    # If it's a URL, extract domain
-    if source_url.startswith(('http://', 'https://')):
+    # Clean the input
+    source_url = str(source_url).strip()
+    
+    # First, try to extract URLs from the text (might contain multiple URLs or URLs within text)
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+'
+    urls_found = re.findall(url_pattern, source_url)
+    
+    # If we found URLs, process the first one
+    if urls_found:
+        url = urls_found[0]
+        if not url.startswith('http'):
+            url = 'http://' + url
+        
         try:
-            parsed = urlparse(source_url)
+            parsed = urlparse(url)
             domain = parsed.netloc.lower()
+            
             # Remove www. prefix
             if domain.startswith('www.'):
                 domain = domain[4:]
+            
+            # Remove port number if present
+            if ':' in domain:
+                domain = domain.split(':')[0]
+            
+            # Extract just the main domain name (not subdomains)
+            # This handles cases like "shop.example.com" -> "example.com"
+            parts = domain.split('.')
+            if len(parts) > 2:
+                # Check for common TLDs with two parts (e.g., .co.uk, .com.au)
+                if len(parts) >= 3 and parts[-2] in ['co', 'com', 'net', 'org', 'edu', 'gov'] and len(parts[-1]) == 2:
+                    domain = '.'.join(parts[-3:])
+                else:
+                    domain = '.'.join(parts[-2:])
+            
             return domain
         except:
-            return source_url
+            pass
     
-    # If it's not a URL, try to extract website name from text
+    # If it's a direct URL without http/https
+    if '.' in source_url and not ' ' in source_url and len(source_url) < 50:
+        # Might be a domain like "amazon.com" or "walmart.com"
+        domain = source_url.lower()
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        # Basic validation - should have valid TLD
+        if re.match(r'^[a-z0-9\-]+\.[a-z]{2,}(\.[a-z]{2,})?$', domain):
+            return domain
+    
+    # If not a URL, try to extract website name from text
     source_lower = source_url.lower().strip()
     
-    # Common website patterns
+    # Extended website patterns with more variations
     website_patterns = {
-        'amazon': ['amazon', 'amzn'],
-        'walmart': ['walmart', 'wmart'],
-        'costco': ['costco'],
-        'target': ['target'],
-        'ebay': ['ebay'],
-        'alibaba': ['alibaba', '1688'],
-        'aliexpress': ['aliexpress'],
-        'dhgate': ['dhgate'],
-        'wholesale': ['wholesale'],
-        'supplier': ['supplier'],
-        'manufacturer': ['manufacturer', 'factory']
+        'amazon.com': ['amazon', 'amzn', 'amazon.com', 'smile.amazon'],
+        'walmart.com': ['walmart', 'wmart', 'walmart.com', 'wal-mart'],
+        'costco.com': ['costco', 'costco.com', 'costco wholesale'],
+        'target.com': ['target', 'target.com', 'tgt.com'],
+        'ebay.com': ['ebay', 'ebay.com'],
+        'alibaba.com': ['alibaba', 'alibaba.com'],
+        '1688.com': ['1688', '1688.com'],
+        'aliexpress.com': ['aliexpress', 'ali express', 'aliexpress.com'],
+        'dhgate.com': ['dhgate', 'dhgate.com'],
+        'samsclub.com': ['sams club', "sam's club", 'samsclub'],
+        'homedepot.com': ['home depot', 'homedepot', 'home depot'],
+        'lowes.com': ['lowes', "lowe's", 'lowes.com'],
+        'bestbuy.com': ['best buy', 'bestbuy', 'bestbuy.com'],
+        'shopify.com': ['shopify', '.myshopify.com'],
+        'etsy.com': ['etsy', 'etsy.com'],
+        'wish.com': ['wish', 'wish.com'],
+        'taobao.com': ['taobao', 'taobao.com'],
+        'jd.com': ['jd.com', 'jingdong', 'jd global']
     }
     
+    # Check for pattern matches
     for website, patterns in website_patterns.items():
-        if any(pattern in source_lower for pattern in patterns):
-            return website
+        for pattern in patterns:
+            if pattern in source_lower:
+                return website
     
-    # If no pattern matches, return the original (truncated if too long)
-    return source_url[:20] + '...' if len(source_url) > 20 else source_url
+    # Try to extract any domain-like pattern from the text
+    domain_pattern = r'([a-zA-Z0-9\-]+\.(com|net|org|co|io|shop|store|biz|us|uk|ca|au|de|fr|jp|cn))'
+    domain_match = re.search(domain_pattern, source_url, re.IGNORECASE)
+    if domain_match:
+        return domain_match.group(1).lower()
+    
+    # Look for store names in common formats
+    store_patterns = [
+        r'from\s+([A-Za-z0-9\-]+)',  # "from StoreName"
+        r'at\s+([A-Za-z0-9\-]+)',    # "at StoreName"
+        r'@\s*([A-Za-z0-9\-]+)',     # "@StoreName"
+        r'^\s*([A-Za-z0-9\-]+)\s*$'  # Just the store name
+    ]
+    
+    for pattern in store_patterns:
+        match = re.search(pattern, source_url)
+        if match:
+            store = match.group(1).lower()
+            if len(store) > 2:  # Avoid single letters
+                return store
+    
+    # If source is just a single word (likely a store name)
+    words = source_url.split()
+    if len(words) == 1 and len(words[0]) > 2:
+        return words[0].lower()
+    
+    # Last resort - if it's short enough, return as is
+    if len(source_url) <= 20:
+        return source_url.lower()
+    
+    # Otherwise, indicate unknown
+    return "Unknown"
 
 def format_website_display_name(website_name):
     """Format website name for display"""
-    if not website_name:
+    if not website_name or website_name == "Unknown":
         return "Unknown"
     
-    # Special formatting for known websites
+    # Special formatting for known websites (expanded list)
     formatting_map = {
         'amazon.com': 'Amazon',
         'walmart.com': 'Walmart', 
@@ -8283,8 +8359,18 @@ def format_website_display_name(website_name):
         'target.com': 'Target',
         'ebay.com': 'eBay',
         'alibaba.com': 'Alibaba',
+        '1688.com': '1688',
         'aliexpress.com': 'AliExpress',
         'dhgate.com': 'DHgate',
+        'samsclub.com': "Sam's Club",
+        'homedepot.com': 'Home Depot',
+        'lowes.com': "Lowe's",
+        'bestbuy.com': 'Best Buy',
+        'shopify.com': 'Shopify',
+        'etsy.com': 'Etsy',
+        'wish.com': 'Wish',
+        'taobao.com': 'Taobao',
+        'jd.com': 'JD.com',
         'amazon': 'Amazon',
         'walmart': 'Walmart',
         'costco': 'Costco',
@@ -8298,7 +8384,37 @@ def format_website_display_name(website_name):
         'manufacturer': 'Manufacturer'
     }
     
-    return formatting_map.get(website_name.lower(), website_name.title())
+    # Check if it matches any known format
+    website_lower = website_name.lower()
+    if website_lower in formatting_map:
+        return formatting_map[website_lower]
+    
+    # If it's a domain, format it nicely
+    if '.' in website_name:
+        # Extract the main part of the domain
+        parts = website_name.split('.')
+        main_part = parts[0]
+        
+        # Check if the main part is in our map
+        if main_part in formatting_map:
+            return formatting_map[main_part]
+        
+        # Otherwise, capitalize the main part
+        # Handle special cases
+        if main_part == '1688':
+            return '1688'
+        elif '-' in main_part:
+            # Handle hyphenated domains like 'my-store' -> 'My Store'
+            return ' '.join(word.capitalize() for word in main_part.split('-'))
+        else:
+            return main_part.capitalize()
+    
+    # For non-domain strings, capitalize properly
+    if len(website_name) <= 20:
+        return website_name.title()
+    
+    # Default
+    return website_name
 
 # ─── UNDERPAID REIMBURSEMENTS HELPER FUNCTIONS ─────────────────────────────
 

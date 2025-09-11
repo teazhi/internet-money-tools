@@ -593,9 +593,10 @@ const StandardTable = ({
   // Table content for fullscreen mode (without filters)
   function TableContentFullscreen() {
     return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 table-fixed">
-          <thead className="bg-gray-50 sticky top-0 z-10">
+      <div className="relative h-full">
+        <div className="absolute inset-0 overflow-auto">
+          <table className="min-w-full divide-y divide-gray-200 table-fixed">
+            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
             <tr>
               {columnOrder.map((columnKey) => {
                 const column = columns[columnKey];
@@ -698,6 +699,7 @@ const StandardTable = ({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     );
   }

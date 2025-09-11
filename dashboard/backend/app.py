@@ -15193,12 +15193,38 @@ def get_inventory_age_analysis():
         # Still need orders analysis for sales data
         from orders_analysis import OrdersAnalysis
         analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=None, discord_id=discord_id)
-        analysis = analyzer.analyze(
-            for_date=target_date,
-            user_timezone=user_timezone,
-            user_settings=user_settings,
-            preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
-        )
+        
+        try:
+            analysis = analyzer.analyze(
+                for_date=target_date,
+                user_timezone=user_timezone,
+                user_settings=user_settings,
+                preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
+            )
+        except Exception as analysis_error:
+            error_message = str(analysis_error)
+            
+            # Handle specific Sellerboard URL errors
+            if '404 Client Error' in error_message and 'sellerboard.com' in error_message:
+                return jsonify({
+                    'error': 'Sellerboard URL not found (404)',
+                    'message': 'Your Sellerboard report URLs have expired or are invalid. Please update your Sellerboard URLs in Settings.',
+                    'action_required': 'update_sellerboard_urls',
+                    'details': 'Sellerboard report URLs typically expire after some time. You need to generate new URLs from your Sellerboard account.'
+                }), 400
+            elif 'sellerboard.com' in error_message:
+                return jsonify({
+                    'error': 'Sellerboard access error',
+                    'message': 'Unable to access Sellerboard data. Please check your URLs in Settings.',
+                    'action_required': 'check_sellerboard_urls',
+                    'details': error_message
+                }), 400
+            else:
+                return jsonify({
+                    'error': 'Analysis failed',
+                    'message': f'Unable to analyze sales data: {error_message}',
+                    'details': error_message
+                }), 500
         
         if not analysis:
             return jsonify({

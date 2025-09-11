@@ -224,10 +224,17 @@ const AllProductAnalytics = () => {
         console.log('Error type:', mainError.constructor.name);
         console.log('Error message:', mainError.message);
         
-        // Only fall back to demo mode for actual network/auth errors, not parsing issues
+        // Handle specific error types
         if (mainError.response) {
           console.log('HTTP error status:', mainError.response.status);
           console.log('HTTP error data:', mainError.response.data);
+          
+          // Check for specific Sellerboard URL errors
+          const errorData = mainError.response.data;
+          if (errorData && errorData.action_required === 'update_sellerboard_urls') {
+            // Don't fall back to demo mode for configuration issues
+            throw new Error(errorData.message || 'Sellerboard URLs need to be updated');
+          }
         }
         
         console.log('Trying demo mode...');
@@ -254,7 +261,19 @@ const AllProductAnalytics = () => {
       setAllProductsData(response.data);
       
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load product data');
+      console.log('Final error handler:', err);
+      
+      // Handle specific error messages
+      let errorMessage = err.message || err.response?.data?.message || 'Failed to load product data';
+      
+      // Check for Sellerboard URL errors
+      if (err.response?.data?.action_required === 'update_sellerboard_urls') {
+        errorMessage = `${err.response.data.message} Go to Settings to update your Sellerboard URLs.`;
+      } else if (errorMessage.includes('Sellerboard URLs need to be updated')) {
+        errorMessage = `${errorMessage} Please go to Settings to update your Sellerboard URLs.`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

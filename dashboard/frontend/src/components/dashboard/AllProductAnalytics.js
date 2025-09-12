@@ -51,12 +51,12 @@ const generateMockInventoryData = () => {
       recommendations: [`Mock recommendation for ${category} inventory`]
     };
     
-    // Add enhanced analytics for mock data
-    const currentStock = Math.floor(Math.random() * 200) + 10;
-    const velocity = Math.random() * 5 + 0.5;
-    const cogs = Math.random() * 30 + 5;
-    const sellingPrice = cogs * (1.5 + Math.random());
-    const fbaFee = sellingPrice * 0.15;
+    // Add enhanced analytics for mock data with safe calculations
+    const currentStock = Math.max(Math.floor(Math.random() * 200) + 10, 1);
+    const velocity = Math.max(Math.random() * 5 + 0.5, 0.1);
+    const cogs = Math.max(Math.random() * 30 + 5, 1);
+    const sellingPrice = Math.max(cogs * (1.5 + Math.random()), cogs + 1);
+    const fbaFee = Math.max(sellingPrice * 0.15, 0.01);
     
     enhancedAnalytics[asin] = {
       product_name: `Mock Product ${asin}`,
@@ -81,13 +81,13 @@ const generateMockInventoryData = () => {
       },
       profitability: {
         cogs: cogs,
-        profit_margin: ((sellingPrice - cogs - fbaFee) / sellingPrice) * 100,
-        profit_per_unit: sellingPrice - cogs - fbaFee,
-        roi: ((sellingPrice - cogs - fbaFee) / cogs) * 100
+        profit_margin: sellingPrice > 0 ? Math.max(((sellingPrice - cogs - fbaFee) / sellingPrice) * 100, -100) : 0,
+        profit_per_unit: Math.max(sellingPrice - cogs - fbaFee, -cogs),
+        roi: cogs > 0 ? Math.max(((sellingPrice - cogs - fbaFee) / cogs) * 100, -100) : 0
       },
       inventory_health: {
-        inventory_value: currentStock * cogs,
-        turnover_rate: (velocity * 30) / currentStock,
+        inventory_value: Math.max(currentStock * cogs, 0),
+        turnover_rate: currentStock > 0 ? Math.max((velocity * 30) / currentStock, 0) : 0,
         excess_inventory: currentStock > velocity * 90,
         stockout_risk: currentStock < velocity * 14
       },
@@ -398,8 +398,13 @@ const AllProductAnalytics = () => {
 
   // const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
-  // Export functionality
+  // Export functionality with robust error handling
   const handleExport = useCallback(async (filteredData) => {
+    if (!filteredData || filteredData.length === 0) {
+      alert('No data to export. Please check your filters and try again.');
+      return;
+    }
+
     setExportLoading(true);
     try {
       // Prepare CSV data
@@ -421,52 +426,88 @@ const AllProductAnalytics = () => {
         'Rating',
         'Reviews',
         'Inventory Value',
+        'Turnover Rate',
         'Retailer',
         'Status'
       ];
       
-      const rows = filteredData.map(item => [
-        item.asin,
-        item.product_name,
-        item.current_stock,
-        item.velocity.toFixed(2),
-        item.days_left,
-        item.estimated_age_days,
-        item.age_category,
-        item.last_cogs.toFixed(2),
-        item.selling_price?.toFixed(2) || 'N/A',
-        item.profit_margin?.toFixed(2) || 'N/A',
-        item.roi?.toFixed(2) || 'N/A',
-        item.units_sold_30d || 'N/A',
-        item.revenue_30d?.toFixed(2) || 'N/A',
-        item.bsr || 'N/A',
-        item.rating?.toFixed(1) || 'N/A',
-        item.reviews_count || 'N/A',
-        item.inventory_value?.toFixed(2) || 'N/A',
-        item.retailer_display,
-        item.status
-      ]);
+      const rows = filteredData.map(item => {
+        try {
+          return [
+            item.asin || '',
+            (item.product_name || '').replace(/"/g, '""'), // Escape quotes in product names
+            safeNumber(item.current_stock, 0),
+            safeNumber(item.velocity, 0).toFixed(2),
+            safeNumber(item.days_left, 999),
+            safeNumber(item.estimated_age_days, 0),
+            item.age_category || 'unknown',
+            safeNumber(item.last_cogs, 0).toFixed(2),
+            safeNumber(item.selling_price, 0) > 0 ? safeNumber(item.selling_price, 0).toFixed(2) : 'N/A',
+            safeNumber(item.profit_margin, 0) > 0 ? safeNumber(item.profit_margin, 0).toFixed(2) : 'N/A',
+            safeNumber(item.roi, 0) > 0 ? safeNumber(item.roi, 0).toFixed(2) : 'N/A',
+            safeNumber(item.units_sold_30d, 0) > 0 ? safeNumber(item.units_sold_30d, 0) : 'N/A',
+            safeNumber(item.revenue_30d, 0) > 0 ? safeNumber(item.revenue_30d, 0).toFixed(2) : 'N/A',
+            item.bsr && item.bsr > 0 ? safeNumber(item.bsr, 0) : 'N/A',
+            safeNumber(item.rating, 0) > 0 ? safeNumber(item.rating, 0).toFixed(1) : 'N/A',
+            safeNumber(item.reviews_count, 0) > 0 ? safeNumber(item.reviews_count, 0) : 'N/A',
+            safeNumber(item.inventory_value, 0).toFixed(2),
+            safeNumber(item.turnover_rate, 0).toFixed(1),
+            (item.retailer_display || 'Unknown').replace(/"/g, '""'), // Escape quotes
+            item.status || 'normal'
+          ];
+        } catch (rowError) {
+          console.warn('Error processing row for export:', item.asin, rowError);
+          return [
+            item.asin || '',
+            'Export Error',
+            '0', '0', '999', '0', 'unknown', '0', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', '0', '0', 'Unknown', 'normal'
+          ];
+        }
+      });
       
-      // Convert to CSV
+      // Convert to CSV with proper escaping
       const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => 
-          typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell
-        ).join(','))
+        ...rows.map(row => row.map(cell => {
+          const cellStr = String(cell);
+          // Escape commas, quotes, and newlines
+          if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+            return `"${cellStr.replace(/"/g, '""')}"`;
+          }
+          return cellStr;
+        }).join(','))
       ].join('\n');
+      
+      // Validate CSV content
+      if (csvContent.length < 100) { // Basic sanity check
+        throw new Error('Generated CSV content appears to be too small');
+      }
       
       // Download file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
+      
+      // Check if browser supports download
+      if (!link.download !== undefined) {
+        throw new Error('Browser does not support file downloads');
+      }
+      
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       link.setAttribute('download', `product_analytics_${new Date().toISOString().split('T')[0]}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
     } catch (error) {
       console.error('Export failed:', error);
+      alert(`Export failed: ${error.message}. Please try again or contact support.`);
     } finally {
       setExportLoading(false);
     }
@@ -495,78 +536,124 @@ const AllProductAnalytics = () => {
     return null;
   }, []);
 
+  // Safe number conversion with fallback
+  const safeNumber = (value, fallback = 0) => {
+    if (value === null || value === undefined || isNaN(Number(value))) {
+      return fallback;
+    }
+    const num = Number(value);
+    return isFinite(num) ? num : fallback;
+  };
+
+  // Safe division with infinity protection
+  const safeDivide = (numerator, denominator, fallback = 999) => {
+    const num = safeNumber(numerator, 0);
+    const den = safeNumber(denominator, 0);
+    if (den === 0) return fallback;
+    const result = num / den;
+    return isFinite(result) ? result : fallback;
+  };
+
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
     if (!allProductsData?.age_analysis) {
       return [];
     }
     
-    
-    return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => {
-      const enhancedData = allProductsData?.enhanced_analytics?.[asin];
-      const velocity = enhancedData?.velocity?.weighted_velocity || 0;
-      const currentStock = enhancedData?.current_stock || 0;
-      const salesData = enhancedData?.sales_data;
-      const profitability = enhancedData?.profitability;
-      const inventoryHealth = enhancedData?.inventory_health;
-      const ranking = enhancedData?.ranking;
-      
-      return {
-        id: asin,
-        asin,
-        product_name: enhancedData?.product_name || `Product ${asin}`,
-        age_info: ageInfo,
-        estimated_age_days: ageInfo.estimated_age_days || 0,
-        age_category: ageInfo.age_category || 'unknown',
-        confidence_score: ageInfo.confidence_score || 0,
-        // Basic inventory data
-        current_stock: currentStock,
-        velocity: velocity,
-        amount_ordered: enhancedData?.restock?.monthly_purchase_adjustment || 0,
-        // Calculate days_left from current_stock and velocity
-        days_left: velocity > 0 ? Math.floor(currentStock / velocity) : 999,
-        // Use suggested_quantity as reorder_point if available, otherwise calculate
-        reorder_point: enhancedData?.restock?.suggested_quantity || Math.floor(velocity * 30),
-        // Financial data
-        last_cogs: profitability?.cogs || enhancedData?.cogs_data?.cogs || 0,
-        selling_price: salesData?.selling_price || 0,
-        profit_margin: profitability?.profit_margin || 0,
-        profit_per_unit: profitability?.profit_per_unit || 0,
-        roi: profitability?.roi || 0,
-        // Sales performance
-        units_sold_30d: salesData?.units_sold_30d || 0,
-        units_sold_7d: salesData?.units_sold_7d || 0,
-        revenue_30d: salesData?.revenue_30d || 0,
-        revenue_7d: salesData?.revenue_7d || 0,
-        velocity_30d: enhancedData?.velocity?.velocity_30d || velocity,
-        velocity_7d: enhancedData?.velocity?.velocity_7d || velocity,
-        // Inventory health metrics
-        inventory_value: inventoryHealth?.inventory_value || (currentStock * (profitability?.cogs || 0)),
-        turnover_rate: inventoryHealth?.turnover_rate || (velocity * 30) / Math.max(currentStock, 1),
-        excess_inventory: inventoryHealth?.excess_inventory || false,
-        stockout_risk: inventoryHealth?.stockout_risk || false,
-        // Amazon ranking and reviews
-        bsr: ranking?.bsr || null,
-        bsr_category: ranking?.bsr_category || 'Unknown',
-        reviews_count: ranking?.reviews_count || 0,
-        rating: ranking?.rating || 0,
-        // Retailer information - now with unique retailers and their source links
-        source_link: enhancedData?.source_link || enhancedData?.cogs_data?.source_link || null,
-        all_source_links: enhancedData?.all_source_links || [],
-        retailer: enhancedData?.retailer || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
-        retailer_display: enhancedData?.retailer_display || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
-        all_retailers: enhancedData?.all_retailers || ['Unknown'],
-        all_retailer_displays: enhancedData?.all_retailer_displays || ['Unknown'],
-        retailer_to_source_map: enhancedData?.retailer_to_source_map || {},
-        // Status calculation with more nuanced logic
-        status: (() => {
-          if (ageInfo.age_category === 'ancient' || (inventoryHealth?.excess_inventory && velocity < 1)) return 'critical';
-          if (ageInfo.age_category === 'old' || inventoryHealth?.stockout_risk) return 'warning';
-          if (ageInfo.age_category === 'aged' || (profitability?.profit_margin && profitability.profit_margin < 15)) return 'attention';
-          return 'normal';
-        })()
-      };
-    });
+    try {
+      return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => {
+        // Safe extraction of nested data with null checks
+        const enhancedData = allProductsData?.enhanced_analytics?.[asin] || {};
+        const velocity = safeNumber(enhancedData?.velocity?.weighted_velocity, 0);
+        const currentStock = safeNumber(enhancedData?.current_stock, 0);
+        const salesData = enhancedData?.sales_data || {};
+        const profitability = enhancedData?.profitability || {};
+        const inventoryHealth = enhancedData?.inventory_health || {};
+        const ranking = enhancedData?.ranking || {};
+        
+        // Safe calculations with proper fallbacks
+        const cogs = safeNumber(profitability?.cogs || enhancedData?.cogs_data?.cogs, 0);
+        const sellingPrice = safeNumber(salesData?.selling_price, 0);
+        const profitMargin = safeNumber(profitability?.profit_margin, 0);
+        const roi = safeNumber(profitability?.roi, 0);
+        const bsr = safeNumber(ranking?.bsr, null);
+        const rating = safeNumber(ranking?.rating, 0);
+        const reviewsCount = safeNumber(ranking?.reviews_count, 0);
+        
+        // Safe inventory calculations
+        const inventoryValue = safeNumber(inventoryHealth?.inventory_value, 0) || (currentStock * cogs);
+        const turnoverRate = safeNumber(inventoryHealth?.turnover_rate, 0) || safeDivide(velocity * 30, currentStock, 0);
+        const daysLeft = safeDivide(currentStock, velocity, 999);
+        const reorderPoint = safeNumber(enhancedData?.restock?.suggested_quantity, 0) || Math.floor(velocity * 30);
+        
+        return {
+          id: asin,
+          asin,
+          product_name: enhancedData?.product_name || `Product ${asin}`,
+          age_info: ageInfo || {},
+          estimated_age_days: safeNumber(ageInfo?.estimated_age_days, 0),
+          age_category: ageInfo?.age_category || 'unknown',
+          confidence_score: safeNumber(ageInfo?.confidence_score, 0),
+          // Basic inventory data
+          current_stock: currentStock,
+          velocity: velocity,
+          amount_ordered: safeNumber(enhancedData?.restock?.monthly_purchase_adjustment, 0),
+          days_left: Math.floor(daysLeft),
+          reorder_point: Math.floor(reorderPoint),
+          // Financial data
+          last_cogs: cogs,
+          selling_price: sellingPrice,
+          profit_margin: profitMargin,
+          profit_per_unit: safeNumber(profitability?.profit_per_unit, 0),
+          roi: roi,
+          // Sales performance
+          units_sold_30d: safeNumber(salesData?.units_sold_30d, 0),
+          units_sold_7d: safeNumber(salesData?.units_sold_7d, 0),
+          revenue_30d: safeNumber(salesData?.revenue_30d, 0),
+          revenue_7d: safeNumber(salesData?.revenue_7d, 0),
+          velocity_30d: safeNumber(enhancedData?.velocity?.velocity_30d, velocity),
+          velocity_7d: safeNumber(enhancedData?.velocity?.velocity_7d, velocity),
+          // Inventory health metrics
+          inventory_value: inventoryValue,
+          turnover_rate: turnoverRate,
+          excess_inventory: Boolean(inventoryHealth?.excess_inventory),
+          stockout_risk: Boolean(inventoryHealth?.stockout_risk),
+          // Amazon ranking and reviews
+          bsr: bsr,
+          bsr_category: ranking?.bsr_category || 'Unknown',
+          reviews_count: reviewsCount,
+          rating: rating,
+          // Retailer information - now with unique retailers and their source links
+          source_link: enhancedData?.source_link || enhancedData?.cogs_data?.source_link || null,
+          all_source_links: Array.isArray(enhancedData?.all_source_links) ? enhancedData.all_source_links : [],
+          retailer: enhancedData?.retailer || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
+          retailer_display: enhancedData?.retailer_display || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
+          all_retailers: Array.isArray(enhancedData?.all_retailers) ? enhancedData.all_retailers : ['Unknown'],
+          all_retailer_displays: Array.isArray(enhancedData?.all_retailer_displays) ? enhancedData.all_retailer_displays : ['Unknown'],
+          retailer_to_source_map: enhancedData?.retailer_to_source_map || {},
+          // Status calculation with more nuanced logic
+          status: (() => {
+            try {
+              const ageCategory = ageInfo?.age_category || 'unknown';
+              const hasExcess = Boolean(inventoryHealth?.excess_inventory);
+              const hasStockoutRisk = Boolean(inventoryHealth?.stockout_risk);
+              const lowMargin = profitMargin > 0 && profitMargin < 15;
+              
+              if (ageCategory === 'ancient' || (hasExcess && velocity < 1)) return 'critical';
+              if (ageCategory === 'old' || hasStockoutRisk) return 'warning';
+              if (ageCategory === 'aged' || lowMargin) return 'attention';
+              return 'normal';
+            } catch (statusError) {
+              console.warn('Status calculation error for', asin, statusError);
+              return 'normal';
+            }
+          })()
+        };
+      });
+    } catch (error) {
+      console.error('Error processing inventory table data:', error);
+      return [];
+    }
   }, [allProductsData, extractRetailerFromUrl]);
 
   // Table configuration functions (placeholder for when data is available)
@@ -675,17 +762,23 @@ const AllProductAnalytics = () => {
         allLabel: 'All Retailers',
         options: retailerOptions,
         filterFn: (item, value) => {
-          // Check if any of the product's retailers match the filter
-          if (item.all_retailer_displays && Array.isArray(item.all_retailer_displays)) {
-            return item.all_retailer_displays.includes(value);
+          try {
+            if (!item || !value) return false;
+            // Check if any of the product's retailers match the filter
+            if (item.all_retailer_displays && Array.isArray(item.all_retailer_displays)) {
+              return item.all_retailer_displays.some(retailer => retailer === value);
+            }
+            // Fallback to single retailer check
+            return item.retailer_display === value;
+          } catch (error) {
+            console.warn('Retailer filter error:', error);
+            return false;
           }
-          // Fallback to single retailer check
-          return item.retailer_display === value;
         }
       },
       {
         key: 'age_category',
-        label: 'Inventory Age',
+        label: 'Age',
         allLabel: 'All Ages',
         options: [
           { value: 'fresh', label: 'Fresh (0-30 days)' },
@@ -695,7 +788,14 @@ const AllProductAnalytics = () => {
           { value: 'ancient', label: 'Ancient (365+ days)' },
           { value: 'unknown', label: 'Unknown Age' }
         ],
-        filterFn: (item, value) => item.age_category === value
+        filterFn: (item, value) => {
+          try {
+            return item?.age_category === value;
+          } catch (error) {
+            console.warn('Age category filter error:', error);
+            return false;
+          }
+        }
       },
       {
         key: 'status',
@@ -707,11 +807,18 @@ const AllProductAnalytics = () => {
           { value: 'warning', label: 'Warning' },
           { value: 'critical', label: 'Critical' }
         ],
-        filterFn: (item, value) => item.status === value
+        filterFn: (item, value) => {
+          try {
+            return item?.status === value;
+          } catch (error) {
+            console.warn('Status filter error:', error);
+            return false;
+          }
+        }
       },
       {
         key: 'profit_margin',
-        label: 'Profit Margin',
+        label: 'Margin',
         allLabel: 'All Margins',
         options: [
           { value: 'high', label: 'High (>30%)' },
@@ -720,19 +827,24 @@ const AllProductAnalytics = () => {
           { value: 'low', label: 'Low (<10%)' }
         ],
         filterFn: (item, value) => {
-          const margin = item.profit_margin || 0;
-          switch (value) {
-            case 'high': return margin > 30;
-            case 'good': return margin >= 20 && margin <= 30;
-            case 'fair': return margin >= 10 && margin < 20;
-            case 'low': return margin < 10;
-            default: return true;
+          try {
+            const margin = safeNumber(item?.profit_margin, 0);
+            switch (value) {
+              case 'high': return margin > 30;
+              case 'good': return margin >= 20 && margin <= 30;
+              case 'fair': return margin >= 10 && margin < 20;
+              case 'low': return margin < 10;
+              default: return true;
+            }
+          } catch (error) {
+            console.warn('Profit margin filter error:', error);
+            return false;
           }
         }
       },
       {
         key: 'velocity',
-        label: 'Sales Velocity',
+        label: 'Velocity',
         allLabel: 'All Velocities',
         options: [
           { value: 'fast', label: 'Fast (>5/day)' },
@@ -741,19 +853,24 @@ const AllProductAnalytics = () => {
           { value: 'very_slow', label: 'Very Slow (<0.5/day)' }
         ],
         filterFn: (item, value) => {
-          const velocity = item.velocity || 0;
-          switch (value) {
-            case 'fast': return velocity > 5;
-            case 'good': return velocity >= 2 && velocity <= 5;
-            case 'slow': return velocity >= 0.5 && velocity < 2;
-            case 'very_slow': return velocity < 0.5;
-            default: return true;
+          try {
+            const velocity = safeNumber(item?.velocity, 0);
+            switch (value) {
+              case 'fast': return velocity > 5;
+              case 'good': return velocity >= 2 && velocity <= 5;
+              case 'slow': return velocity >= 0.5 && velocity < 2;
+              case 'very_slow': return velocity < 0.5;
+              default: return true;
+            }
+          } catch (error) {
+            console.warn('Velocity filter error:', error);
+            return false;
           }
         }
       },
       {
         key: 'inventory_health',
-        label: 'Inventory Health',
+        label: 'Health',
         allLabel: 'All Health',
         options: [
           { value: 'healthy', label: 'Healthy' },
@@ -762,12 +879,22 @@ const AllProductAnalytics = () => {
           { value: 'slow_moving', label: 'Slow Moving' }
         ],
         filterFn: (item, value) => {
-          switch (value) {
-            case 'healthy': return !item.stockout_risk && !item.excess_inventory && item.turnover_rate >= 4;
-            case 'stockout_risk': return item.stockout_risk || item.days_left < 14;
-            case 'excess_inventory': return item.excess_inventory || item.days_left > 90;
-            case 'slow_moving': return item.turnover_rate < 4;
-            default: return true;
+          try {
+            const stockoutRisk = Boolean(item?.stockout_risk);
+            const excessInventory = Boolean(item?.excess_inventory);
+            const turnoverRate = safeNumber(item?.turnover_rate, 0);
+            const daysLeft = safeNumber(item?.days_left, 999);
+            
+            switch (value) {
+              case 'healthy': return !stockoutRisk && !excessInventory && turnoverRate >= 4;
+              case 'stockout_risk': return stockoutRisk || daysLeft < 14;
+              case 'excess_inventory': return excessInventory || daysLeft > 90;
+              case 'slow_moving': return turnoverRate < 4;
+              default: return true;
+            }
+          } catch (error) {
+            console.warn('Inventory health filter error:', error);
+            return false;
           }
         }
       }
@@ -833,16 +960,28 @@ const AllProductAnalytics = () => {
     return styles[status] || styles.normal;
   };
 
-  // Format currency
+  // Format currency with safe parsing
   const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
+    try {
+      const num = safeNumber(amount, 0);
+      return `$${num.toFixed(2)}`;
+    } catch (error) {
+      console.warn('Currency formatting error:', error);
+      return '$0.00';
+    }
   };
 
-  // Format days
+  // Format days with safe parsing
   const formatDays = (days) => {
-    if (days < 1) return '< 1 day';
-    if (days === 1) return '1 day';
-    return `${Math.round(days)} days`;
+    try {
+      const num = safeNumber(days, 0);
+      if (num < 1) return '< 1 day';
+      if (num === 1) return '1 day';
+      return `${Math.round(num)} days`;
+    } catch (error) {
+      console.warn('Days formatting error:', error);
+      return '0 days';
+    }
   };
 
   // Render functions for different tabs
@@ -861,7 +1000,17 @@ const AllProductAnalytics = () => {
   );
 
   const renderInventoryCell = (columnKey, item) => {
-    switch (columnKey) {
+    try {
+      // Safety check for item
+      if (!item || typeof item !== 'object') {
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-400">
+            -
+          </td>
+        );
+      }
+
+      switch (columnKey) {
       case 'product':
         return (
           <td key={columnKey} className="px-2 py-1.5">
@@ -1014,7 +1163,7 @@ const AllProductAnalytics = () => {
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="text-blue-700 font-medium">
-              {formatCurrency(item.selling_price)}
+              {item.selling_price > 0 ? formatCurrency(item.selling_price) : '-'}
             </div>
           </td>
         );
@@ -1022,40 +1171,48 @@ const AllProductAnalytics = () => {
       case 'profit_margin':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
-            <div className="flex items-center space-x-1">
-              {item.profit_margin > 25 ? (
-                <TrendingUp className="h-3 w-3 text-green-600" />
-              ) : item.profit_margin < 10 ? (
-                <TrendingDown className="h-3 w-3 text-red-600" />
-              ) : (
-                <Activity className="h-3 w-3 text-yellow-600" />
-              )}
-              <span className={`font-medium ${
-                item.profit_margin > 25 ? 'text-green-700' :
-                item.profit_margin < 10 ? 'text-red-700' : 'text-yellow-700'
-              }`}>
-                {item.profit_margin.toFixed(1)}%
-              </span>
-            </div>
+            {item.profit_margin > 0 ? (
+              <div className="flex items-center space-x-1">
+                {item.profit_margin > 25 ? (
+                  <TrendingUp className="h-3 w-3 text-green-600" />
+                ) : item.profit_margin < 10 ? (
+                  <TrendingDown className="h-3 w-3 text-red-600" />
+                ) : (
+                  <Activity className="h-3 w-3 text-yellow-600" />
+                )}
+                <span className={`font-medium ${
+                  item.profit_margin > 25 ? 'text-green-700' :
+                  item.profit_margin < 10 ? 'text-red-700' : 'text-yellow-700'
+                }`}>
+                  {safeNumber(item.profit_margin, 0).toFixed(1)}%
+                </span>
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
           </td>
         );
 
       case 'roi':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
-            <div className={`font-medium ${
-              item.roi > 50 ? 'text-green-700' :
-              item.roi < 20 ? 'text-red-700' : 'text-yellow-700'
-            }`}>
-              {item.roi.toFixed(1)}%
-            </div>
+            {item.roi > 0 ? (
+              <div className={`font-medium ${
+                item.roi > 50 ? 'text-green-700' :
+                item.roi < 20 ? 'text-red-700' : 'text-yellow-700'
+              }`}>
+                {safeNumber(item.roi, 0).toFixed(1)}%
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
           </td>
         );
 
       case 'units_sold_30d':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
-            {item.units_sold_30d}
+            {safeNumber(item.units_sold_30d, 0) > 0 ? safeNumber(item.units_sold_30d, 0).toLocaleString() : '-'}
           </td>
         );
 
@@ -1063,7 +1220,7 @@ const AllProductAnalytics = () => {
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="text-green-700 font-medium">
-              {formatCurrency(item.revenue_30d)}
+              {item.revenue_30d > 0 ? formatCurrency(safeNumber(item.revenue_30d, 0)) : '-'}
             </div>
           </td>
         );
@@ -1071,13 +1228,13 @@ const AllProductAnalytics = () => {
       case 'bsr':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
-            {item.bsr ? (
+            {item.bsr && item.bsr > 0 ? (
               <div className="flex items-center space-x-1">
                 <span className={`font-medium ${
                   item.bsr < 10000 ? 'text-green-700' :
                   item.bsr < 50000 ? 'text-yellow-700' : 'text-red-700'
                 }`}>
-                  #{item.bsr.toLocaleString()}
+                  #{safeNumber(item.bsr, 0).toLocaleString()}
                 </span>
               </div>
             ) : (
@@ -1095,7 +1252,7 @@ const AllProductAnalytics = () => {
                   item.rating >= 4.5 ? 'text-green-700' :
                   item.rating >= 4.0 ? 'text-yellow-700' : 'text-red-700'
                 }`}>
-                  {item.rating.toFixed(1)}
+                  {safeNumber(item.rating, 0).toFixed(1)}
                 </span>
                 <span className="text-yellow-500">★</span>
               </div>
@@ -1108,7 +1265,7 @@ const AllProductAnalytics = () => {
       case 'reviews_count':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
-            {item.reviews_count > 0 ? item.reviews_count.toLocaleString() : '-'}
+            {safeNumber(item.reviews_count, 0) > 0 ? safeNumber(item.reviews_count, 0).toLocaleString() : '-'}
           </td>
         );
 
@@ -1116,7 +1273,7 @@ const AllProductAnalytics = () => {
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
             <div className="text-purple-700 font-medium">
-              {formatCurrency(item.inventory_value)}
+              {formatCurrency(safeNumber(item.inventory_value, 0))}
             </div>
           </td>
         );
@@ -1128,7 +1285,7 @@ const AllProductAnalytics = () => {
               item.turnover_rate > 6 ? 'text-green-700' :
               item.turnover_rate > 4 ? 'text-yellow-700' : 'text-red-700'
             }`}>
-              {item.turnover_rate.toFixed(1)}x
+              {safeNumber(item.turnover_rate, 0).toFixed(1)}x
             </div>
           </td>
         );
@@ -1154,6 +1311,14 @@ const AllProductAnalytics = () => {
             -
           </td>
         );
+      }
+    } catch (error) {
+      console.warn('Render cell error for column:', columnKey, error);
+      return (
+        <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-red-400">
+          Error
+        </td>
+      );
     }
   };
 

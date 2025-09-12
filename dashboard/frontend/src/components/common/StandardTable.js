@@ -373,37 +373,47 @@ const StandardTable = ({
                 )}
                 
                 {/* Filters and Controls */}
-                <div className="flex items-center space-x-2">
-                  {enableFilters && filters.map(filter => (
-                    <div key={filter.key} className="flex items-center space-x-1">
-                      <Filter className="h-3 w-3 text-gray-400" />
-                      <select
-                        value={activeFilters[filter.key] || 'all'}
-                        onChange={(e) => setActiveFilters(prev => ({
-                          ...prev,
-                          [filter.key]: e.target.value
-                        }))}
-                        className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      >
-                        <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
-                        {filter.options.map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                <div className="flex flex-col gap-3">
+                  {/* Filters Section */}
+                  {enableFilters && filters.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-gray-600 mr-1">Filters:</span>
+                      {filters.map(filter => (
+                        <div key={filter.key} className="flex items-center space-x-1">
+                          <Filter className="h-3 w-3 text-gray-400" />
+                          <select
+                            value={activeFilters[filter.key] || 'all'}
+                            onChange={(e) => setActiveFilters(prev => ({
+                              ...prev,
+                              [filter.key]: e.target.value
+                            }))}
+                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white min-w-0"
+                            style={{ minWidth: '120px' }}
+                          >
+                            <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
+                            {filter.options.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                   
+                  {/* Controls Section */}
                   {enableColumnResetting && (
-                    <button
-                      onClick={resetColumnOrder}
-                      className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      title="Reset column order"
-                    >
-                      <RotateCcw className="h-3 w-3 mr-1" />
-                      Reset Columns
-                    </button>
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={resetColumnOrder}
+                        className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        title="Reset column order"
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Reset Columns
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -463,37 +473,47 @@ const StandardTable = ({
           )}
           
           {/* Filters and Controls */}
-          <div className="flex items-center space-x-2">
-            {enableFilters && filters.map(filter => (
-              <div key={filter.key} className="flex items-center space-x-1">
-                <Filter className="h-3 w-3 text-gray-400" />
-                <select
-                  value={activeFilters[filter.key] || 'all'}
-                  onChange={(e) => setActiveFilters(prev => ({
-                    ...prev,
-                    [filter.key]: e.target.value
-                  }))}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
-                  {filter.options.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+          <div className="flex flex-col gap-3">
+            {/* Filters Section */}
+            {enableFilters && filters.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-gray-600 mr-1">Filters:</span>
+                {filters.map(filter => (
+                  <div key={filter.key} className="flex items-center space-x-1">
+                    <Filter className="h-3 w-3 text-gray-400" />
+                    <select
+                      value={activeFilters[filter.key] || 'all'}
+                      onChange={(e) => setActiveFilters(prev => ({
+                        ...prev,
+                        [filter.key]: e.target.value
+                      }))}
+                      className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-0"
+                      style={{ minWidth: '120px' }}
+                    >
+                      <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
+                      {filter.options.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             
+            {/* Controls Section */}
             {enableColumnResetting && (
-              <button
-                onClick={resetColumnOrder}
-                className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                title="Reset column order"
-              >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Reset Columns
-              </button>
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={resetColumnOrder}
+                  className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  title="Reset column order"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Reset Columns
+                </button>
+              </div>
             )}
           </div>
         </div>

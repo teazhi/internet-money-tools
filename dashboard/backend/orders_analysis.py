@@ -1812,13 +1812,15 @@ class EnhancedOrdersAnalysis:
             ]
             # Only include products with velocity > 0 in alerts
             if priority_data['category'] in alert_categories and velocity_data.get('weighted_velocity', 0) > 0:
+                # Safely get product info, handling case where ASIN might not be in stock_info
+                asin_stock_info = stock_info.get(asin, {})
                 alert = {
                     'asin': asin,
-                    'product_name': stock_info[asin].get('Title', f'Product {asin}'),
+                    'product_name': asin_stock_info.get('Title', f'Product {asin}'),
                     'category': priority_data['category'],
                     'priority_score': priority_data['score'],
                     'current_stock': restock_data['current_stock'],
-                    'days_left': self.get_days_left_value(stock_info[asin]),
+                    'days_left': self.get_days_left_value(asin_stock_info),
                     'suggested_quantity': restock_data['suggested_quantity'],
                     'velocity': velocity_data['weighted_velocity'],
                     'trend': velocity_data['trend_direction'],

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -10,7 +10,9 @@ import {
   Package,
   Maximize2,
   Minimize2,
-  X
+  X,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 
 /**
@@ -70,6 +72,8 @@ const StandardTable = ({
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dropIndicatorPosition, setDropIndicatorPosition] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const filterPanelRef = useRef(null);
   
   // Column ordering - ensure 'product' is always first and excluded from reordering
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -95,26 +99,45 @@ const StandardTable = ({
     setActiveFilters(initialFilters);
   }, [filters]);
   
-  // Handle escape key for fullscreen
+  // Handle escape key for fullscreen and clicking outside filter panel
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
+      if (e.key === 'Escape') {
+        if (isFullscreen) {
+          setIsFullscreen(false);
+        }
+        if (isFilterPanelOpen) {
+          setIsFilterPanelOpen(false);
+        }
+      }
+    };
+    
+    const handleClickOutside = (e) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target)) {
+        setIsFilterPanelOpen(false);
       }
     };
 
     if (isFullscreen) {
-      document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
 
+    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('mousedown', handleClickOutside);
+
     return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
       document.body.style.overflow = 'auto';
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, isFilterPanelOpen]);
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    return Object.values(activeFilters).filter(value => value && value !== 'all').length;
+  }, [activeFilters]);
   
   // Sorting function
   const handleSort = (key) => {
@@ -372,48 +395,85 @@ const StandardTable = ({
                   </div>
                 )}
                 
-                {/* Filters and Controls */}
-                <div className="flex flex-col gap-3">
-                  {/* Filters Section */}
+                {/* Filter and Control Section */}
+                <div className="flex items-center justify-between">
+                  {/* Filter Button and Panel */}
                   {enableFilters && filters.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-gray-600 mr-1">Filters:</span>
-                      {filters.map(filter => (
-                        <div key={filter.key} className="flex items-center space-x-1">
-                          <Filter className="h-3 w-3 text-gray-400" />
-                          <select
-                            value={activeFilters[filter.key] || 'all'}
-                            onChange={(e) => setActiveFilters(prev => ({
-                              ...prev,
-                              [filter.key]: e.target.value
-                            }))}
-                            className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white min-w-0"
-                            style={{ minWidth: '120px' }}
-                          >
-                            <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
-                            {filter.options.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                    <div className="relative" ref={filterPanelRef}>
+                      <button
+                        onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+                        className={`flex items-center px-3 py-2 text-sm border rounded-md transition-colors ${
+                          activeFilterCount > 0
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Filter className="h-4 w-4 mr-2" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                        <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${isFilterPanelOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Filter Panel */}
+                      {isFilterPanelOpen && (
+                        <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                          <div className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>
+                              {activeFilterCount > 0 && (
+                                <button
+                                  onClick={() => setActiveFilters({})}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  Clear All
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-4">
+                              {filters.map(filter => (
+                                <div key={filter.key}>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    {filter.label}
+                                  </label>
+                                  <select
+                                    value={activeFilters[filter.key] || 'all'}
+                                    onChange={(e) => setActiveFilters(prev => ({
+                                      ...prev,
+                                      [filter.key]: e.target.value
+                                    }))}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  >
+                                    <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
+                                    {filter.options.map(option => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                   
                   {/* Controls Section */}
                   {enableColumnResetting && (
-                    <div className="flex items-center justify-end">
-                      <button
-                        onClick={resetColumnOrder}
-                        className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        title="Reset column order"
-                      >
-                        <RotateCcw className="h-3 w-3 mr-1" />
-                        Reset Columns
-                      </button>
-                    </div>
+                    <button
+                      onClick={resetColumnOrder}
+                      className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      title="Reset column order"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Reset Columns
+                    </button>
                   )}
                 </div>
               </div>
@@ -472,48 +532,85 @@ const StandardTable = ({
             </div>
           )}
           
-          {/* Filters and Controls */}
-          <div className="flex flex-col gap-3">
-            {/* Filters Section */}
+          {/* Filter and Control Section */}
+          <div className="flex items-center justify-between">
+            {/* Filter Button and Panel */}
             {enableFilters && filters.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-gray-600 mr-1">Filters:</span>
-                {filters.map(filter => (
-                  <div key={filter.key} className="flex items-center space-x-1">
-                    <Filter className="h-3 w-3 text-gray-400" />
-                    <select
-                      value={activeFilters[filter.key] || 'all'}
-                      onChange={(e) => setActiveFilters(prev => ({
-                        ...prev,
-                        [filter.key]: e.target.value
-                      }))}
-                      className="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-0"
-                      style={{ minWidth: '120px' }}
-                    >
-                      <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
-                      {filter.options.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+              <div className="relative">
+                <button
+                  onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
+                  className={`flex items-center px-3 py-2 text-sm border rounded-md transition-colors ${
+                    activeFilterCount > 0
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${isFilterPanelOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Filter Panel */}
+                {isFilterPanelOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>
+                        {activeFilterCount > 0 && (
+                          <button
+                            onClick={() => setActiveFilters({})}
+                            className="text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {filters.map(filter => (
+                          <div key={filter.key}>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              {filter.label}
+                            </label>
+                            <select
+                              value={activeFilters[filter.key] || 'all'}
+                              onChange={(e) => setActiveFilters(prev => ({
+                                ...prev,
+                                [filter.key]: e.target.value
+                              }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
+                              {filter.options.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
             
             {/* Controls Section */}
             {enableColumnResetting && (
-              <div className="flex items-center justify-end">
-                <button
-                  onClick={resetColumnOrder}
-                  className="flex items-center px-2 py-1.5 text-xs text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  title="Reset column order"
-                >
-                  <RotateCcw className="h-3 w-3 mr-1" />
-                  Reset Columns
-                </button>
-              </div>
+              <button
+                onClick={resetColumnOrder}
+                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Reset column order"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset Columns
+              </button>
             )}
           </div>
         </div>

@@ -15194,7 +15194,14 @@ def get_inventory_age_analysis():
         
         # Still need orders analysis for sales data
         from orders_analysis import OrdersAnalysis
+        
+        # Pass COGS data to analyzer so it can use the full product list
         analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=None, discord_id=discord_id)
+        
+        # Set the COGS data on the analyzer (if there's a method for it)
+        # This ensures the analyzer has access to all 699 products
+        if hasattr(analyzer, 'set_cogs_data'):
+            analyzer.set_cogs_data(cogs_data['data'])
         
         try:
             analysis = analyzer.analyze(
@@ -15239,10 +15246,20 @@ def get_inventory_age_analysis():
         
         # Use both COGS and stock files strategically
         import pandas as pd
-        cogs_df = pd.DataFrame(cogs_data['data'])
+        
+        try:
+            cogs_df = pd.DataFrame(cogs_data['data'])
+            print(f"Created DataFrame from COGS data: {cogs_df.shape}")
+        except Exception as df_error:
+            print(f"Error creating DataFrame from COGS data: {str(df_error)}")
+            return jsonify({
+                'error': 'Failed to process COGS data',
+                'message': 'Unable to create DataFrame from COGS data',
+                'details': str(df_error)
+            }), 500
         
         # Filter COGS data to exclude hidden products
-        asin_col = cogs_data['asin_column']
+        asin_col = cogs_data.get('asin_column', 'ASIN')
         
         # Check for Hide column and filter out hidden products
         hide_col = None
@@ -15259,61 +15276,38 @@ def get_inventory_age_analysis():
             print("No Hide column found in COGS file")
         
         # Get stock data from stock file for accurate stock quantities
-        stock_df = analyzer.download_csv(stock_url)
-        stock_info = analyzer.get_stock_info(stock_df)
+        try:
+            stock_df = analyzer.download_csv(stock_url)
+            stock_info = analyzer.get_stock_info(stock_df)
+            print(f"Downloaded stock data successfully: {len(stock_info)} products")
+        except Exception as stock_error:
+            print(f"Error downloading stock data: {str(stock_error)}")
+            return jsonify({
+                'error': 'Failed to download stock data',
+                'message': 'Unable to access Sellerboard stock data',
+                'details': str(stock_error)
+            }), 500
         
         print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
         print(f"Stock file: {len(stock_info)} products")
         
-        # Use the enhanced_analytics that was already correctly created by OrdersAnalysis
-        # (The previous code here was overwriting the correctly calculated enhanced_analytics from analysis)
+        # Extract the results from analysis
         enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
-        
-        # Get other analysis data for compatibility
         restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
         purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
         
-        # Debug the enhanced_analytics structure
-        print(f"Enhanced analytics type: {type(enhanced_analytics)}")
-        if enhanced_analytics:
-            first_asin = list(enhanced_analytics.keys())[0] if enhanced_analytics else None
-            if first_asin:
-                print(f"Sample ASIN {first_asin} data structure:")
-                print(f"  Type: {type(enhanced_analytics[first_asin])}")
-                if isinstance(enhanced_analytics[first_asin], dict):
-                    print(f"  Keys: {list(enhanced_analytics[first_asin].keys())[:10]}")  # First 10 keys
-                    if 'restock' in enhanced_analytics[first_asin]:
-                        print(f"  Restock type: {type(enhanced_analytics[first_asin]['restock'])}")
-                        if isinstance(enhanced_analytics[first_asin]['restock'], dict):
-                            print(f"  Restock keys: {list(enhanced_analytics[first_asin]['restock'].keys())}")
+        print(f"Analysis returned enhanced_analytics with {len(enhanced_analytics)} products")
+        print(f"COGS data originally had {cogs_data['total_products']} products")
         
-        print(f"Combined COGS + Stock data: {len(enhanced_analytics)} total products")
-        
-        try:
-            in_stock_count = sum(1 for data in enhanced_analytics.values() if data.get('restock', {}).get('current_stock', 0) > 0)
-            print(f"  - {in_stock_count} products with stock > 0")
-            print(f"  - {len(enhanced_analytics) - in_stock_count} products out of stock or unknown")
-        except Exception as stock_count_error:
-            print(f"Error counting stock: {str(stock_count_error)}")
-            # Debug the data structure
-            for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:3]):
-                print(f"Debug ASIN {asin} structure: {type(data)} - keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-                if isinstance(data, dict) and 'restock' in data:
-                    print(f"  restock keys: {list(data['restock'].keys()) if isinstance(data['restock'], dict) else 'restock not a dict'}")
-            in_stock_count = 0
-        
-        # Verify we have the same data structure as Smart Restock Recommendations
-        print(f"  - enhanced_analytics: {len(enhanced_analytics)} products")
-        print(f"  - restock_alerts: {len(restock_alerts)} products")
-        
-        # Compare current_stock values from both sources for first 3 products
-        if enhanced_analytics and restock_alerts:
-            common_asins = set(enhanced_analytics.keys()) & set(restock_alerts.keys())
-            for i, asin in enumerate(list(common_asins)[:3]):
-                enhanced_stock = enhanced_analytics[asin].get('restock', {}).get('current_stock', 'N/A')
-                alert_stock = restock_alerts[asin].get('current_stock', 'N/A')
-                print(f"  {asin}: enhanced={enhanced_stock}, alert={alert_stock}")
-        print()
+        # Debug: Why are products missing?
+        if len(enhanced_analytics) < cogs_data['total_products']:
+            print(f"WARNING: {cogs_data['total_products'] - len(enhanced_analytics)} products missing from enhanced_analytics!")
+            # Check first few ASINs from COGS that might be missing
+            cogs_asins = set(item.get(cogs_data.get('asin_column', 'ASIN')) for item in cogs_data['data'][:50] if item.get(cogs_data.get('asin_column', 'ASIN')))
+            analytics_asins = set(enhanced_analytics.keys())
+            missing_asins = cogs_asins - analytics_asins
+            if missing_asins:
+                print(f"Sample missing ASINs: {list(missing_asins)[:5]}")
         
         # Download raw orders data for velocity inference using the same analyzer
         try:

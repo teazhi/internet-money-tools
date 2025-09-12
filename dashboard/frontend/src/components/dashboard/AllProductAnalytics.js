@@ -291,32 +291,32 @@ const AllProductAnalytics = () => {
     return urls.map(url => url.replace(/[.,;]+$/, ''));
   };
 
-  // Function to handle restock button click - updated to handle multiple source links
+  // Function to handle restock button click - now opens only one link per unique retailer
   const handleRestockClick = async (asin, product) => {
     setSourcesLoading(true);
     
-    // Get all source links from the product
-    const allSourceLinks = product.all_source_links || [];
+    // Get unique source links (one per retailer) from the product
+    const uniqueSourceLinks = product.all_source_links || [];
     const primarySourceLink = product.source_link;
     
-    // Collect all unique URLs
-    const uniqueUrls = new Set();
+    // Collect valid URLs (these are already unique per retailer from backend)
+    const validUrls = [];
     
-    // Add all source links
-    allSourceLinks.forEach(link => {
+    // Add all unique source links (already filtered by backend to one per retailer)
+    uniqueSourceLinks.forEach(link => {
       if (link && link.trim() && link.startsWith('http')) {
-        uniqueUrls.add(link.trim());
+        validUrls.push(link.trim());
       }
     });
     
-    // Add primary source link if not already included
-    if (primarySourceLink && primarySourceLink.startsWith('http')) {
-      uniqueUrls.add(primarySourceLink);
+    // Add primary source link if not already included and is valid
+    if (primarySourceLink && primarySourceLink.startsWith('http') && !validUrls.includes(primarySourceLink)) {
+      validUrls.push(primarySourceLink);
     }
     
-    // If we have direct source links, open them
-    if (uniqueUrls.size > 0) {
-      Array.from(uniqueUrls).forEach(url => {
+    // If we have source links, open them (one per unique retailer)
+    if (validUrls.length > 0) {
+      validUrls.forEach(url => {
         window.open(url, '_blank');
       });
       setSourcesLoading(false);
@@ -410,17 +410,17 @@ const AllProductAnalytics = () => {
       // Use actual COGS data from enhanced_analytics
       last_cogs: allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.cogs || 0,
       supplier_info: 'Various',
-      // Retailer information - now with all retailers
+      // Retailer information - now with unique retailers and their source links
       source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
                    allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
-      all_source_links: allProductsData?.enhanced_analytics?.[asin]?.all_source_links || 
-                        allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.all_sources || [],
+      all_source_links: allProductsData?.enhanced_analytics?.[asin]?.all_source_links || [],
       retailer: allProductsData?.enhanced_analytics?.[asin]?.retailer || 
                 extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
       retailer_display: allProductsData?.enhanced_analytics?.[asin]?.retailer_display || 
                         extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
       all_retailers: allProductsData?.enhanced_analytics?.[asin]?.all_retailers || ['Unknown'],
       all_retailer_displays: allProductsData?.enhanced_analytics?.[asin]?.all_retailer_displays || ['Unknown'],
+      retailer_to_source_map: allProductsData?.enhanced_analytics?.[asin]?.retailer_to_source_map || {},
       status: ageInfo.age_category === 'ancient' ? 'critical' : 
               ageInfo.age_category === 'old' ? 'warning' :
               ageInfo.age_category === 'aged' ? 'attention' : 'normal'
@@ -730,20 +730,23 @@ const AllProductAnalytics = () => {
           <td key={columnKey} className="px-2 py-1.5 whitespace-normal text-sm">
             <div className="flex flex-wrap gap-1">
               {item.all_retailer_displays && item.all_retailer_displays.length > 0 && item.all_retailer_displays[0] !== 'Unknown' ? (
-                item.all_retailer_displays.map((retailer, idx) => {
-                  const sourceLink = item.all_source_links?.[idx] || item.source_link;
+                item.all_retailer_displays.map((retailerDisplay, idx) => {
+                  // Get the corresponding retailer key and its source link
+                  const retailerKey = item.all_retailers?.[idx];
+                  const sourceLink = item.retailer_to_source_map?.[retailerKey] || item.all_source_links?.[idx] || item.source_link;
+                  
                   return (
                     <a 
-                      key={`${retailer}-${idx}`}
+                      key={`${retailerDisplay}-${idx}`}
                       href={sourceLink || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-md hover:bg-blue-200 transition-colors"
-                      title={`View on ${retailer}`}
+                      title={`View on ${retailerDisplay}`}
                       onClick={sourceLink ? undefined : (e) => e.preventDefault()}
                     >
                       <ExternalLink className="h-3 w-3 mr-1" />
-                      {retailer}
+                      {retailerDisplay}
                     </a>
                   );
                 })
@@ -779,7 +782,7 @@ const AllProductAnalytics = () => {
               onClick={() => handleRestockClick(item.asin, item)}
               className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
               disabled={sourcesLoading}
-              title={item.all_source_links?.length > 0 ? `Open ${item.all_source_links.length} supplier link(s)` : "Find purchase sources"}
+              title={item.all_source_links?.length > 0 ? `Open ${item.all_source_links.length} retailer link(s)` : "Find purchase sources"}
             >
               <ShoppingCart className="h-3 w-3 mr-1" />
               Restock

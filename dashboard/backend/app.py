@@ -15346,12 +15346,11 @@ def get_inventory_age_analysis():
             all_sources = cogs_info.get('all_sources', [])
             primary_source = cogs_info.get('source_link', '')
             
-            # Extract retailers from all sources
-            all_retailers = []
-            all_retailer_displays = []
-            seen_retailers = set()
+            # Extract retailers from all sources, keeping only one source link per unique retailer
+            retailer_to_source = {}  # Maps retailer to its source link
+            retailer_displays = {}   # Maps retailer to its display name
             
-            # Process all sources to get unique retailers
+            # Process all sources to get unique retailers with their source links
             sources_to_process = all_sources if all_sources else ([primary_source] if primary_source else [])
             
             for source in sources_to_process:
@@ -15359,24 +15358,30 @@ def get_inventory_age_analysis():
                     retailer = extract_website_name(source)
                     retailer_display = format_website_display_name(retailer)
                     
-                    # Only add unique retailers
-                    if retailer not in seen_retailers and retailer != 'Unknown':
-                        seen_retailers.add(retailer)
-                        all_retailers.append(retailer)
-                        all_retailer_displays.append(retailer_display)
+                    # Only keep the first source link for each unique retailer
+                    if retailer != 'Unknown' and retailer not in retailer_to_source:
+                        retailer_to_source[retailer] = source
+                        retailer_displays[retailer] = retailer_display
+            
+            # Convert to lists for the response
+            all_retailers = list(retailer_to_source.keys())
+            all_retailer_displays = [retailer_displays[r] for r in all_retailers]
+            unique_source_links = list(retailer_to_source.values())
             
             # If no retailers found, add Unknown
             if not all_retailers:
                 all_retailers = ['Unknown']
                 all_retailer_displays = ['Unknown']
+                unique_source_links = []
             
             # Add retailer info to enhanced_analytics
-            enhanced_analytics[asin]['retailer'] = all_retailers[0]  # Primary retailer for backward compatibility
-            enhanced_analytics[asin]['retailer_display'] = all_retailer_displays[0]  # Primary display
+            enhanced_analytics[asin]['retailer'] = all_retailers[0] if all_retailers else 'Unknown'  # Primary retailer for backward compatibility
+            enhanced_analytics[asin]['retailer_display'] = all_retailer_displays[0] if all_retailer_displays else 'Unknown'  # Primary display
             enhanced_analytics[asin]['all_retailers'] = all_retailers
             enhanced_analytics[asin]['all_retailer_displays'] = all_retailer_displays
             enhanced_analytics[asin]['source_link'] = primary_source
-            enhanced_analytics[asin]['all_source_links'] = all_sources if all_sources else []
+            enhanced_analytics[asin]['all_source_links'] = unique_source_links  # Only unique retailer links
+            enhanced_analytics[asin]['retailer_to_source_map'] = retailer_to_source  # For frontend mapping
 
         # Optimize enhanced_analytics to reduce response size while keeping essential data
         optimized_enhanced_analytics = {}
@@ -15392,6 +15397,7 @@ def get_inventory_age_analysis():
                 'all_retailer_displays': data.get('all_retailer_displays', ['Unknown']),
                 'source_link': data.get('source_link', ''),
                 'all_source_links': data.get('all_source_links', []),
+                'retailer_to_source_map': data.get('retailer_to_source_map', {}),
                 'cogs_data': {
                     'cogs': data.get('cogs_data', {}).get('cogs', 0),
                     'source_link': data.get('cogs_data', {}).get('source_link', ''),

@@ -307,6 +307,24 @@ const StandardTable = ({
     return filtered;
   }, [data, searchQuery, activeFilters, sortConfig, searchFields, columns, enableSearch, enableFilters, enableSorting, filters]);
   
+  // Memoize the search input to prevent focus loss
+  const searchInput = useMemo(() => {
+    if (!enableSearch) return null;
+    
+    return (
+      <div className="flex-1 relative">
+        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+        <input
+          type="text"
+          placeholder={searchPlaceholder}
+          value={searchQuery}
+          onChange={handleSearchChange}
+          className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+    );
+  }, [enableSearch, searchPlaceholder, searchQuery, handleSearchChange]);
+  
   // Fullscreen wrapper
   if (isFullscreen) {
     return (
@@ -343,10 +361,12 @@ const StandardTable = ({
                   <div className="flex-1 relative">
                     <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
                     <input
+                      key="table-search-input-fullscreen"
                       type="text"
                       placeholder={searchPlaceholder}
                       value={searchQuery}
                       onChange={handleSearchChange}
+                      autoComplete="off"
                       className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                     />
                   </div>
@@ -431,10 +451,12 @@ const StandardTable = ({
             <div className="flex-1 relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
               <input
+                key="table-search-input"
                 type="text"
                 placeholder={searchPlaceholder}
                 value={searchQuery}
                 onChange={handleSearchChange}
+                autoComplete="off"
                 className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>

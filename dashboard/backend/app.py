@@ -15118,6 +15118,8 @@ def get_demo_user():
 @login_required
 def get_inventory_age_analysis():
     """Get comprehensive inventory age analysis"""
+    import traceback
+    
     try:
         discord_id = session['discord_id']
         user_record = get_user_record(discord_id)
@@ -15271,10 +15273,34 @@ def get_inventory_age_analysis():
         restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
         purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
         
+        # Debug the enhanced_analytics structure
+        print(f"Enhanced analytics type: {type(enhanced_analytics)}")
+        if enhanced_analytics:
+            first_asin = list(enhanced_analytics.keys())[0] if enhanced_analytics else None
+            if first_asin:
+                print(f"Sample ASIN {first_asin} data structure:")
+                print(f"  Type: {type(enhanced_analytics[first_asin])}")
+                if isinstance(enhanced_analytics[first_asin], dict):
+                    print(f"  Keys: {list(enhanced_analytics[first_asin].keys())[:10]}")  # First 10 keys
+                    if 'restock' in enhanced_analytics[first_asin]:
+                        print(f"  Restock type: {type(enhanced_analytics[first_asin]['restock'])}")
+                        if isinstance(enhanced_analytics[first_asin]['restock'], dict):
+                            print(f"  Restock keys: {list(enhanced_analytics[first_asin]['restock'].keys())}")
+        
         print(f"Combined COGS + Stock data: {len(enhanced_analytics)} total products")
-        in_stock_count = sum(1 for data in enhanced_analytics.values() if data['current_stock'] > 0)
-        print(f"  - {in_stock_count} products with stock > 0")
-        print(f"  - {len(enhanced_analytics) - in_stock_count} products out of stock or unknown")
+        
+        try:
+            in_stock_count = sum(1 for data in enhanced_analytics.values() if data.get('restock', {}).get('current_stock', 0) > 0)
+            print(f"  - {in_stock_count} products with stock > 0")
+            print(f"  - {len(enhanced_analytics) - in_stock_count} products out of stock or unknown")
+        except Exception as stock_count_error:
+            print(f"Error counting stock: {str(stock_count_error)}")
+            # Debug the data structure
+            for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:3]):
+                print(f"Debug ASIN {asin} structure: {type(data)} - keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                if isinstance(data, dict) and 'restock' in data:
+                    print(f"  restock keys: {list(data['restock'].keys()) if isinstance(data['restock'], dict) else 'restock not a dict'}")
+            in_stock_count = 0
         
         # Verify we have the same data structure as Smart Restock Recommendations
         print(f"  - enhanced_analytics: {len(enhanced_analytics)} products")
@@ -15290,31 +15316,68 @@ def get_inventory_age_analysis():
         print()
         
         # Download raw orders data for velocity inference using the same analyzer
-        orders_df = analyzer.download_csv(orders_url)
+        try:
+            orders_df = analyzer.download_csv(orders_url)
+            print(f"Orders CSV downloaded successfully: {orders_df.shape}")
+        except Exception as orders_error:
+            print(f"Error downloading orders CSV: {str(orders_error)}")
+            return jsonify({
+                'error': 'Failed to download orders data',
+                'message': 'Unable to access Sellerboard orders data for inventory age analysis.',
+                'details': str(orders_error)
+            }), 500
         
         # Calculate velocity for each product and add to enhanced_analytics
-        for asin in enhanced_analytics.keys():
-            try:
-                velocity_data = analyzer.calculate_enhanced_velocity(asin, orders_df, target_date, user_timezone)
-                enhanced_analytics[asin]['velocity'] = velocity_data
-                
-                # Calculate restock data with monthly_purchase_adjustment
-                stock_info_for_asin = stock_info.get(asin, {})
-                restock_data = analyzer.calculate_optimal_restock_quantity(
-                    asin, velocity_data, stock_info_for_asin, 
-                    lead_time_days=90, purchase_analytics=purchase_insights
-                )
-                
-                # Update restock data with monthly_purchase_adjustment
-                enhanced_analytics[asin]['restock'].update({
-                    'monthly_purchase_adjustment': restock_data.get('monthly_purchase_adjustment', 0),
-                    'suggested_quantity': restock_data.get('suggested_quantity', 0)
-                })
-                
-            except Exception as ve:
-                print(f"Warning: Failed to calculate velocity/restock for {asin}: {ve}")
-                enhanced_analytics[asin]['velocity'] = {'weighted_velocity': 0}
-                enhanced_analytics[asin]['restock']['monthly_purchase_adjustment'] = 0
+        try:
+            for asin in list(enhanced_analytics.keys()):  # Use list() to avoid dict size changed during iteration
+                try:
+                    # First ensure the ASIN data is properly structured
+                    if not isinstance(enhanced_analytics[asin], dict):
+                        print(f"Warning: ASIN {asin} data is not a dict: {type(enhanced_analytics[asin])}")
+                        enhanced_analytics[asin] = {'velocity': {'weighted_velocity': 0}, 'restock': {'current_stock': 0}}
+                        continue
+                    
+                    velocity_data = analyzer.calculate_enhanced_velocity(asin, orders_df, target_date, user_timezone)
+                    enhanced_analytics[asin]['velocity'] = velocity_data
+                    
+                    # Calculate restock data with monthly_purchase_adjustment
+                    stock_info_for_asin = stock_info.get(asin, {})
+                    restock_data = analyzer.calculate_optimal_restock_quantity(
+                        asin, velocity_data, stock_info_for_asin, 
+                        lead_time_days=90, purchase_analytics=purchase_insights
+                    )
+                    
+                    # Ensure restock key exists before updating
+                    if 'restock' not in enhanced_analytics[asin]:
+                        enhanced_analytics[asin]['restock'] = {}
+                    
+                    # Update restock data with monthly_purchase_adjustment
+                    enhanced_analytics[asin]['restock'].update({
+                        'monthly_purchase_adjustment': restock_data.get('monthly_purchase_adjustment', 0),
+                        'suggested_quantity': restock_data.get('suggested_quantity', 0)
+                    })
+                    
+                except Exception as ve:
+                    print(f"Warning: Failed to calculate velocity/restock for {asin}: {ve}")
+                    # Ensure velocity and restock data exist
+                    if not isinstance(enhanced_analytics[asin], dict):
+                        enhanced_analytics[asin] = {}
+                    if 'velocity' not in enhanced_analytics[asin]:
+                        enhanced_analytics[asin]['velocity'] = {'weighted_velocity': 0}
+                    if 'restock' not in enhanced_analytics[asin]:
+                        enhanced_analytics[asin]['restock'] = {}
+                    if 'current_stock' not in enhanced_analytics[asin]['restock']:
+                        enhanced_analytics[asin]['restock']['current_stock'] = 0
+                    enhanced_analytics[asin]['restock']['monthly_purchase_adjustment'] = 0
+        except Exception as velocity_loop_error:
+            print(f"Error in velocity calculation loop: {str(velocity_loop_error)}")
+            import traceback
+            print(f"Velocity loop traceback: {traceback.format_exc()}")
+            return jsonify({
+                'error': 'Failed to calculate product velocities',
+                'message': 'Unable to process velocity calculations for inventory age analysis.',
+                'details': str(velocity_loop_error)
+            }), 500
         
         # Debug: Show what stock values we're actually getting
         for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:5]):
@@ -15324,64 +15387,97 @@ def get_inventory_age_analysis():
         age_analysis_source = enhanced_analytics
         
         # Perform age analysis using the same current_stock values as Smart Restock
-        age_analysis = age_analyzer.analyze_inventory_age(
-            enhanced_analytics=age_analysis_source,
-            purchase_insights=purchase_insights,
-            stock_data=stock_info,
-            orders_data=orders_df
-        )
+        try:
+            age_analysis = age_analyzer.analyze_inventory_age(
+                enhanced_analytics=age_analysis_source,
+                purchase_insights=purchase_insights,
+                stock_data=stock_info,
+                orders_data=orders_df
+            )
+        except Exception as age_analysis_error:
+            print(f"Error during age analysis: {str(age_analysis_error)}")
+            import traceback
+            print(f"Age analysis traceback: {traceback.format_exc()}")
+            # Return error response instead of continuing
+            return jsonify({
+                'error': 'Inventory age analysis failed',
+                'message': 'Unable to complete inventory age analysis due to data processing error.',
+                'details': str(age_analysis_error)
+            }), 500
         
         # Get products needing action
-        action_items = age_analyzer.get_products_needing_action(age_analysis, enhanced_analytics)
+        try:
+            action_items = age_analyzer.get_products_needing_action(age_analysis, enhanced_analytics)
+        except Exception as action_items_error:
+            print(f"Error getting products needing action: {str(action_items_error)}")
+            action_items = []
         
         # Add action items to response
         age_analysis['action_items'] = action_items[:20]  # Top 20 items needing action
         age_analysis['total_action_items'] = len(action_items)
         
         # Add retailer information to enhanced_analytics
-        for asin, data in enhanced_analytics.items():
-            cogs_info = data.get('cogs_data', {})
-            
-            # Get all sources for this product
-            all_sources = cogs_info.get('all_sources', [])
-            primary_source = cogs_info.get('source_link', '')
-            
-            # Extract retailers from all sources, keeping only one source link per unique retailer
-            retailer_to_source = {}  # Maps retailer to its source link
-            retailer_displays = {}   # Maps retailer to its display name
-            
-            # Process all sources to get unique retailers with their source links
-            sources_to_process = all_sources if all_sources else ([primary_source] if primary_source else [])
-            
-            for source in sources_to_process:
-                if source and source.strip():
-                    retailer = extract_website_name(source)
-                    retailer_display = format_website_display_name(retailer)
+        try:
+            for asin, data in enhanced_analytics.items():
+                try:
+                    cogs_info = data.get('cogs_data', {})
                     
-                    # Only keep the first source link for each unique retailer
-                    if retailer != 'Unknown' and retailer not in retailer_to_source:
-                        retailer_to_source[retailer] = source
-                        retailer_displays[retailer] = retailer_display
-            
-            # Convert to lists for the response
-            all_retailers = list(retailer_to_source.keys())
-            all_retailer_displays = [retailer_displays[r] for r in all_retailers]
-            unique_source_links = list(retailer_to_source.values())
-            
-            # If no retailers found, add Unknown
-            if not all_retailers:
-                all_retailers = ['Unknown']
-                all_retailer_displays = ['Unknown']
-                unique_source_links = []
-            
-            # Add retailer info to enhanced_analytics
-            enhanced_analytics[asin]['retailer'] = all_retailers[0] if all_retailers else 'Unknown'  # Primary retailer for backward compatibility
-            enhanced_analytics[asin]['retailer_display'] = all_retailer_displays[0] if all_retailer_displays else 'Unknown'  # Primary display
-            enhanced_analytics[asin]['all_retailers'] = all_retailers
-            enhanced_analytics[asin]['all_retailer_displays'] = all_retailer_displays
-            enhanced_analytics[asin]['source_link'] = primary_source
-            enhanced_analytics[asin]['all_source_links'] = unique_source_links  # Only unique retailer links
-            enhanced_analytics[asin]['retailer_to_source_map'] = retailer_to_source  # For frontend mapping
+                    # Get all sources for this product
+                    all_sources = cogs_info.get('all_sources', [])
+                    primary_source = cogs_info.get('source_link', '')
+                    
+                    # Extract retailers from all sources, keeping only one source link per unique retailer
+                    retailer_to_source = {}  # Maps retailer to its source link
+                    retailer_displays = {}   # Maps retailer to its display name
+                    
+                    # Process all sources to get unique retailers with their source links
+                    sources_to_process = all_sources if all_sources else ([primary_source] if primary_source else [])
+                    
+                    for source in sources_to_process:
+                        if source and source.strip():
+                            retailer = extract_website_name(source)
+                            retailer_display = format_website_display_name(retailer)
+                            
+                            # Only keep the first source link for each unique retailer
+                            if retailer != 'Unknown' and retailer not in retailer_to_source:
+                                retailer_to_source[retailer] = source
+                                retailer_displays[retailer] = retailer_display
+                    
+                    # Convert to lists for the response
+                    all_retailers = list(retailer_to_source.keys())
+                    all_retailer_displays = [retailer_displays[r] for r in all_retailers]
+                    unique_source_links = list(retailer_to_source.values())
+                    
+                    # If no retailers found, add Unknown
+                    if not all_retailers:
+                        all_retailers = ['Unknown']
+                        all_retailer_displays = ['Unknown']
+                        unique_source_links = []
+                    
+                    # Add retailer info to enhanced_analytics
+                    enhanced_analytics[asin]['retailer'] = all_retailers[0] if all_retailers else 'Unknown'  # Primary retailer for backward compatibility
+                    enhanced_analytics[asin]['retailer_display'] = all_retailer_displays[0] if all_retailer_displays else 'Unknown'  # Primary display
+                    enhanced_analytics[asin]['all_retailers'] = all_retailers
+                    enhanced_analytics[asin]['all_retailer_displays'] = all_retailer_displays
+                    enhanced_analytics[asin]['source_link'] = primary_source
+                    enhanced_analytics[asin]['all_source_links'] = unique_source_links  # Only unique retailer links
+                    enhanced_analytics[asin]['retailer_to_source_map'] = retailer_to_source  # For frontend mapping
+                    
+                except Exception as retailer_error:
+                    print(f"Error processing retailer for ASIN {asin}: {str(retailer_error)}")
+                    # Set default values on error
+                    enhanced_analytics[asin]['retailer'] = 'Unknown'
+                    enhanced_analytics[asin]['retailer_display'] = 'Unknown'
+                    enhanced_analytics[asin]['all_retailers'] = ['Unknown']
+                    enhanced_analytics[asin]['all_retailer_displays'] = ['Unknown']
+                    enhanced_analytics[asin]['source_link'] = ''
+                    enhanced_analytics[asin]['all_source_links'] = []
+                    enhanced_analytics[asin]['retailer_to_source_map'] = {}
+                    
+        except Exception as retailer_processing_error:
+            print(f"Error in retailer processing loop: {str(retailer_processing_error)}")
+            import traceback
+            print(f"Retailer processing traceback: {traceback.format_exc()}")
 
         # Optimize enhanced_analytics to reduce response size while keeping essential data
         optimized_enhanced_analytics = {}

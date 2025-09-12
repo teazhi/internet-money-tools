@@ -57,6 +57,9 @@ class InventoryAgeAnalyzer:
                 'generated_at': datetime.now().isoformat()
             }
             
+            # Additional safety: Convert any remaining pandas/numpy types
+            result = self._ensure_json_serializable(result)
+            
             # Debug: Check for any pandas objects in the result
             def check_for_pandas_objects(obj, path=""):
                 import pandas as pd
@@ -213,13 +216,20 @@ class InventoryAgeAnalyzer:
                 if field in product_stock and product_stock[field]:
                     try:
                         date_value = pd.to_datetime(product_stock[field])
-                        age_days = (datetime.now() - date_value).days
+                        
+                        # Convert pandas timestamp to Python datetime
+                        if hasattr(date_value, 'to_pydatetime'):
+                            date_value_dt = date_value.to_pydatetime()
+                        else:
+                            date_value_dt = date_value
+                        
+                        age_days = (datetime.now() - date_value_dt).days
                         
                         return {
                             'age_days': age_days,
                             'method': f'stock_data_{field.lower()}',
                             'confidence': 0.7,
-                            'source_date': date_value.isoformat(),
+                            'source_date': date_value_dt.isoformat(),
                             'field_used': field
                         }
                     except:
@@ -250,7 +260,14 @@ class InventoryAgeAnalyzer:
             if not asin_orders.empty and 'Datetime' in asin_orders.columns:
                 # Find the first sale date - this gives us a minimum age
                 first_sale = asin_orders['Datetime'].min()
-                first_sale_age = (datetime.now() - first_sale).days
+                
+                # Convert pandas timestamp to Python datetime
+                if hasattr(first_sale, 'to_pydatetime'):
+                    first_sale_dt = first_sale.to_pydatetime()
+                else:
+                    first_sale_dt = first_sale
+                
+                first_sale_age = (datetime.now() - first_sale_dt).days
                 
                 # Estimate when inventory was likely received (before first sale)
                 # Add buffer time for listing creation, processing, etc.
@@ -261,7 +278,7 @@ class InventoryAgeAnalyzer:
                     'age_days': estimated_age,
                     'method': 'first_sale_inference',
                     'confidence': 0.5,
-                    'source_date': first_sale.isoformat(),
+                    'source_date': first_sale_dt.isoformat(),
                     'buffer_days': estimated_buffer_days
                 }
             
@@ -539,6 +556,27 @@ class InventoryAgeAnalyzer:
         action_items.sort(key=lambda x: x['urgency_score'], reverse=True)
         
         return action_items
+    
+    def _ensure_json_serializable(self, obj):
+        """Ensure all data is JSON serializable by converting pandas/numpy types"""
+        import pandas as pd
+        import numpy as np
+        
+        if isinstance(obj, dict):
+            return {k: self._ensure_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._ensure_json_serializable(item) for item in obj]
+        elif isinstance(obj, (pd.DataFrame, pd.Series)):
+            # Convert pandas objects to dict/list
+            return obj.to_dict() if hasattr(obj, 'to_dict') else str(obj)
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+        elif hasattr(obj, 'item'):  # numpy scalar
+            return obj.item()
+        elif pd.isna(obj) if 'pd' in locals() else False:
+            return None
+        else:
+            return obj
     
     def _calculate_action_urgency(self, age_days: int, current_stock: float, 
                                 velocity: float, category: str) -> float:

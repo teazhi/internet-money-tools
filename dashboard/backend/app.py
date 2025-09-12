@@ -15204,13 +15204,21 @@ def get_inventory_age_analysis():
             analyzer.set_cogs_data(cogs_data['data'])
         
         try:
+            print(f"Starting OrdersAnalysis.analyze() with preserve_purchase_history=True")
             analysis = analyzer.analyze(
                 for_date=target_date,
                 user_timezone=user_timezone,
                 user_settings=user_settings,
                 preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
             )
+            print(f"OrdersAnalysis.analyze() completed successfully")
+            print(f"Analysis result type: {type(analysis)}")
+            if analysis:
+                print(f"Analysis keys: {list(analysis.keys())[:10]}")  # First 10 keys
         except Exception as analysis_error:
+            print(f"ERROR in OrdersAnalysis.analyze(): {str(analysis_error)}")
+            import traceback
+            print(f"Analysis error traceback: {traceback.format_exc()}")
             error_message = str(analysis_error)
             
             # Handle specific Sellerboard URL errors
@@ -15236,9 +15244,18 @@ def get_inventory_age_analysis():
                 }), 500
         
         if not analysis:
+            print("ERROR: Analysis returned None or empty result")
             return jsonify({
                 'error': 'No sales data available',
                 'message': 'Unable to retrieve sales data for analysis.'
+            }), 500
+        
+        # Validate analysis structure
+        if not isinstance(analysis, dict):
+            print(f"ERROR: Analysis returned non-dict type: {type(analysis)}")
+            return jsonify({
+                'error': 'Invalid analysis result',
+                'message': f'Analysis returned unexpected type: {type(analysis)}'
             }), 500
         
         # Initialize age analyzer
@@ -15292,9 +15309,25 @@ def get_inventory_age_analysis():
         print(f"Stock file: {len(stock_info)} products")
         
         # Extract the results from analysis
-        enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
-        restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
-        purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
+        try:
+            enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
+            restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
+            purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
+            
+            print(f"Successfully extracted data from analysis:")
+            print(f"  enhanced_analytics: {len(enhanced_analytics)} items")
+            print(f"  restock_alerts: {len(restock_alerts)} items") 
+            print(f"  purchase_insights: {len(purchase_insights)} items")
+            
+        except Exception as extract_error:
+            print(f"ERROR extracting data from analysis: {str(extract_error)}")
+            import traceback
+            print(f"Extract error traceback: {traceback.format_exc()}")
+            return jsonify({
+                'error': 'Failed to extract analysis results',
+                'message': 'Unable to process analysis data structure',
+                'details': str(extract_error)
+            }), 500
         
         print(f"Analysis returned enhanced_analytics with {len(enhanced_analytics)} products")
         print(f"COGS data originally had {cogs_data['total_products']} products")

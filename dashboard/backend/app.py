@@ -15195,30 +15195,16 @@ def get_inventory_age_analysis():
         # Still need orders analysis for sales data
         from orders_analysis import OrdersAnalysis
         
-        # Pass COGS data to analyzer so it can use the full product list
         analyzer = OrdersAnalysis(orders_url=orders_url, stock_url=stock_url, cogs_url=None, discord_id=discord_id)
         
-        # Set the COGS data on the analyzer (if there's a method for it)
-        # This ensures the analyzer has access to all 699 products
-        if hasattr(analyzer, 'set_cogs_data'):
-            analyzer.set_cogs_data(cogs_data['data'])
-        
         try:
-            print(f"Starting OrdersAnalysis.analyze() with preserve_purchase_history=True")
             analysis = analyzer.analyze(
                 for_date=target_date,
                 user_timezone=user_timezone,
                 user_settings=user_settings,
                 preserve_purchase_history=True  # Keep all purchase history for inventory age analysis
             )
-            print(f"OrdersAnalysis.analyze() completed successfully")
-            print(f"Analysis result type: {type(analysis)}")
-            if analysis:
-                print(f"Analysis keys: {list(analysis.keys())[:10]}")  # First 10 keys
         except Exception as analysis_error:
-            print(f"ERROR in OrdersAnalysis.analyze(): {str(analysis_error)}")
-            import traceback
-            print(f"Analysis error traceback: {traceback.format_exc()}")
             error_message = str(analysis_error)
             
             # Handle specific Sellerboard URL errors
@@ -15244,18 +15230,9 @@ def get_inventory_age_analysis():
                 }), 500
         
         if not analysis:
-            print("ERROR: Analysis returned None or empty result")
             return jsonify({
                 'error': 'No sales data available',
                 'message': 'Unable to retrieve sales data for analysis.'
-            }), 500
-        
-        # Validate analysis structure
-        if not isinstance(analysis, dict):
-            print(f"ERROR: Analysis returned non-dict type: {type(analysis)}")
-            return jsonify({
-                'error': 'Invalid analysis result',
-                'message': f'Analysis returned unexpected type: {type(analysis)}'
             }), 500
         
         # Initialize age analyzer
@@ -15266,9 +15243,7 @@ def get_inventory_age_analysis():
         
         try:
             cogs_df = pd.DataFrame(cogs_data['data'])
-            print(f"Created DataFrame from COGS data: {cogs_df.shape}")
         except Exception as df_error:
-            print(f"Error creating DataFrame from COGS data: {str(df_error)}")
             return jsonify({
                 'error': 'Failed to process COGS data',
                 'message': 'Unable to create DataFrame from COGS data',
@@ -15287,67 +15262,29 @@ def get_inventory_age_analysis():
         
         if hide_col:
             cogs_df_filtered = cogs_df[cogs_df[hide_col] != 'Yes']
-            print(f"Filtered out {len(cogs_df) - len(cogs_df_filtered)} hidden products from COGS file")
         else:
             cogs_df_filtered = cogs_df
-            print("No Hide column found in COGS file")
         
         # Get stock data from stock file for accurate stock quantities
         try:
             stock_df = analyzer.download_csv(stock_url)
             stock_info = analyzer.get_stock_info(stock_df)
-            print(f"Downloaded stock data successfully: {len(stock_info)} products")
         except Exception as stock_error:
-            print(f"Error downloading stock data: {str(stock_error)}")
             return jsonify({
                 'error': 'Failed to download stock data',
                 'message': 'Unable to access Sellerboard stock data',
                 'details': str(stock_error)
             }), 500
         
-        print(f"COGS file: {len(cogs_df_filtered)} products (after filtering)")
-        print(f"Stock file: {len(stock_info)} products")
-        
         # Extract the results from analysis
-        try:
-            enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
-            restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
-            purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
-            
-            print(f"Successfully extracted data from analysis:")
-            print(f"  enhanced_analytics: {len(enhanced_analytics)} items")
-            print(f"  restock_alerts: {len(restock_alerts)} items") 
-            print(f"  purchase_insights: {len(purchase_insights)} items")
-            
-        except Exception as extract_error:
-            print(f"ERROR extracting data from analysis: {str(extract_error)}")
-            import traceback
-            print(f"Extract error traceback: {traceback.format_exc()}")
-            return jsonify({
-                'error': 'Failed to extract analysis results',
-                'message': 'Unable to process analysis data structure',
-                'details': str(extract_error)
-            }), 500
-        
-        print(f"Analysis returned enhanced_analytics with {len(enhanced_analytics)} products")
-        print(f"COGS data originally had {cogs_data['total_products']} products")
-        
-        # Debug: Why are products missing?
-        if len(enhanced_analytics) < cogs_data['total_products']:
-            print(f"WARNING: {cogs_data['total_products'] - len(enhanced_analytics)} products missing from enhanced_analytics!")
-            # Check first few ASINs from COGS that might be missing
-            cogs_asins = set(item.get(cogs_data.get('asin_column', 'ASIN')) for item in cogs_data['data'][:50] if item.get(cogs_data.get('asin_column', 'ASIN')))
-            analytics_asins = set(enhanced_analytics.keys())
-            missing_asins = cogs_asins - analytics_asins
-            if missing_asins:
-                print(f"Sample missing ASINs: {list(missing_asins)[:5]}")
+        enhanced_analytics = analysis.get('enhanced_analytics', {}) if analysis else {}
+        restock_alerts = analysis.get('restock_alerts', {}) if analysis else {}
+        purchase_insights = analysis.get('purchase_insights', {}) if analysis else {}
         
         # Download raw orders data for velocity inference using the same analyzer
         try:
             orders_df = analyzer.download_csv(orders_url)
-            print(f"Orders CSV downloaded successfully: {orders_df.shape}")
         except Exception as orders_error:
-            print(f"Error downloading orders CSV: {str(orders_error)}")
             return jsonify({
                 'error': 'Failed to download orders data',
                 'message': 'Unable to access Sellerboard orders data for inventory age analysis.',
@@ -15360,7 +15297,6 @@ def get_inventory_age_analysis():
                 try:
                     # First ensure the ASIN data is properly structured
                     if not isinstance(enhanced_analytics[asin], dict):
-                        print(f"Warning: ASIN {asin} data is not a dict: {type(enhanced_analytics[asin])}")
                         enhanced_analytics[asin] = {'velocity': {'weighted_velocity': 0}, 'restock': {'current_stock': 0}}
                         continue
                     
@@ -15385,7 +15321,6 @@ def get_inventory_age_analysis():
                     })
                     
                 except Exception as ve:
-                    print(f"Warning: Failed to calculate velocity/restock for {asin}: {ve}")
                     # Ensure velocity and restock data exist
                     if not isinstance(enhanced_analytics[asin], dict):
                         enhanced_analytics[asin] = {}
@@ -15397,19 +15332,11 @@ def get_inventory_age_analysis():
                         enhanced_analytics[asin]['restock']['current_stock'] = 0
                     enhanced_analytics[asin]['restock']['monthly_purchase_adjustment'] = 0
         except Exception as velocity_loop_error:
-            print(f"Error in velocity calculation loop: {str(velocity_loop_error)}")
-            import traceback
-            print(f"Velocity loop traceback: {traceback.format_exc()}")
             return jsonify({
                 'error': 'Failed to calculate product velocities',
                 'message': 'Unable to process velocity calculations for inventory age analysis.',
                 'details': str(velocity_loop_error)
             }), 500
-        
-        # Debug: Show what stock values we're actually getting
-        for i, (asin, data) in enumerate(list(enhanced_analytics.items())[:5]):
-            stock_value = data.get('restock', {}).get('current_stock', 'NOT_FOUND')
-            print(f"  {asin}: {stock_value} units")
         
         age_analysis_source = enhanced_analytics
         
@@ -15422,10 +15349,6 @@ def get_inventory_age_analysis():
                 orders_data=orders_df
             )
         except Exception as age_analysis_error:
-            print(f"Error during age analysis: {str(age_analysis_error)}")
-            import traceback
-            print(f"Age analysis traceback: {traceback.format_exc()}")
-            # Return error response instead of continuing
             return jsonify({
                 'error': 'Inventory age analysis failed',
                 'message': 'Unable to complete inventory age analysis due to data processing error.',
@@ -15436,7 +15359,6 @@ def get_inventory_age_analysis():
         try:
             action_items = age_analyzer.get_products_needing_action(age_analysis, enhanced_analytics)
         except Exception as action_items_error:
-            print(f"Error getting products needing action: {str(action_items_error)}")
             action_items = []
         
         # Add action items to response
@@ -15491,7 +15413,6 @@ def get_inventory_age_analysis():
                     enhanced_analytics[asin]['retailer_to_source_map'] = retailer_to_source  # For frontend mapping
                     
                 except Exception as retailer_error:
-                    print(f"Error processing retailer for ASIN {asin}: {str(retailer_error)}")
                     # Set default values on error
                     enhanced_analytics[asin]['retailer'] = 'Unknown'
                     enhanced_analytics[asin]['retailer_display'] = 'Unknown'
@@ -15502,9 +15423,7 @@ def get_inventory_age_analysis():
                     enhanced_analytics[asin]['retailer_to_source_map'] = {}
                     
         except Exception as retailer_processing_error:
-            print(f"Error in retailer processing loop: {str(retailer_processing_error)}")
-            import traceback
-            print(f"Retailer processing traceback: {traceback.format_exc()}")
+            pass  # Continue without retailer information if processing fails
 
         # Optimize enhanced_analytics to reduce response size while keeping essential data
         optimized_enhanced_analytics = {}
@@ -15539,92 +15458,22 @@ def get_inventory_age_analysis():
         # CRITICAL: Include optimized enhanced_analytics so frontend can access essential data
         age_analysis['enhanced_analytics'] = optimized_enhanced_analytics
         
-        # Debug: Log the actual JSON structure being returned
-        import json
-        
         # Sanitize the entire response to ensure JSON compatibility
         try:
             sanitized_age_analysis = sanitize_for_json(age_analysis)
             
-            # Check response size after sanitization (without indentation to reduce size)
-            json_str = json.dumps(sanitized_age_analysis)
-            response_size = len(json_str)
-            
-            # Log response components for monitoring
-            if response_size > 1000000:  # Only warn for very large responses (>1MB)
-                print(f"INFO - Large response: {response_size} bytes")
-            
-            # Final check before returning
-            if 'age_analysis' not in sanitized_age_analysis:
-                print(f"ERROR - Missing 'age_analysis' key in response. Keys found: {list(sanitized_age_analysis.keys())}")
-            
-            # Check if the response looks like an array (numeric keys)
-            if all(key.isdigit() for key in list(str(k) for k in sanitized_age_analysis.keys())[:10]):
-                print(f"ERROR - Response has numeric keys, suggesting DataFrame serialization!")
-                print(f"First 10 keys: {list(sanitized_age_analysis.keys())[:10]}")
-                return jsonify({
-                    'error': 'Invalid response structure',
-                    'message': 'Response contains array-like structure instead of expected format',
-                    'debug_keys': list(sanitized_age_analysis.keys())[:10]
-                }), 500
-            
-            # Try returning raw JSON response to bypass any jsonify issues
-            json_string = json.dumps(sanitized_age_analysis)
-            
-            # Check if the JSON string looks correct
-            parsed_check = json.loads(json_string)
-            
-            # Log response size but don't reduce data - frontend needs all the data
-            if len(json_string) > 500000:  # 500KB threshold 
-                print(f"INFO - Large response size: {len(json_string)} bytes with {len(sanitized_age_analysis.get('age_analysis', {}))} products")
-            
-            response = make_response(json_string)
-            response.headers['Content-Type'] = 'application/json'
-            return response
+            # Return the sanitized response
+            return jsonify(sanitized_age_analysis)
                         
-        except ValueError as sanitize_error:
-            print(f"ERROR - Data sanitization failed: {str(sanitize_error)}")
-            return jsonify({
-                'error': 'Response contains non-serializable data structures',
-                'message': str(sanitize_error),
-                'suggestion': 'Check for pandas DataFrames or other non-JSON types in the response data'
-            }), 500
         except Exception as json_error:
-            print(f"ERROR - JSON serialization failed: {str(json_error)}")
-            # Try to debug what exactly is causing the serialization failure
-            try:
-                # Test each top-level key individually to identify the problematic data
-                problematic_keys = []
-                for key, value in age_analysis.items():
-                    try:
-                        json.dumps(value)
-                    except Exception as key_error:
-                        problematic_keys.append(f"{key}: {str(key_error)}")
-                
-                return jsonify({
-                    'error': 'Response serialization failed',
-                    'message': 'The response data contains non-serializable objects',
-                    'problematic_keys': problematic_keys
-                }), 500
-            except Exception:
-                return jsonify({
-                    'error': 'Response serialization failed',
-                    'message': 'The response data contains non-serializable objects'
-                }), 500
+            return jsonify({
+                'error': 'Response serialization failed',
+                'message': 'The response data contains non-serializable objects',
+                'details': str(json_error)
+            }), 500
         
     except Exception as e:
         import traceback
-        print(f"Error in inventory age analysis: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        
-        # Store error info for debug endpoint
-        from orders_analysis import _global_worksheet_debug
-        _global_worksheet_debug['auth_endpoint_error'] = {
-            'error': str(e),
-            'error_type': type(e).__name__,
-            'traceback': traceback.format_exc(),
-            'timestamp': datetime.now().isoformat()
-        }
         
         return jsonify({
             'error': str(e),

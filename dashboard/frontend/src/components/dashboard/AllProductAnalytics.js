@@ -7,7 +7,13 @@ import {
   Calendar,
   ShoppingCart,
   Clock,
-  ExternalLink
+  ExternalLink,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Download,
+  Filter,
+  Activity
 } from 'lucide-react';
 import StandardTable from '../common/StandardTable';
 // Removed image fetching to improve performance
@@ -47,16 +53,49 @@ const generateMockInventoryData = () => {
     
     // Add enhanced analytics for mock data
     const currentStock = Math.floor(Math.random() * 200) + 10;
+    const velocity = Math.random() * 5 + 0.5;
+    const cogs = Math.random() * 30 + 5;
+    const sellingPrice = cogs * (1.5 + Math.random());
+    const fbaFee = sellingPrice * 0.15;
+    
     enhancedAnalytics[asin] = {
       product_name: `Mock Product ${asin}`,
       current_stock: currentStock,
       velocity: {
-        weighted_velocity: Math.random() * 5 + 0.5
+        weighted_velocity: velocity,
+        velocity_30d: velocity * 0.9,
+        velocity_7d: velocity * 1.1
       },
       restock: {
         current_stock: currentStock,
         monthly_purchase_adjustment: Math.floor(Math.random() * 50),
         source: 'mock_data'
+      },
+      sales_data: {
+        units_sold_30d: Math.floor(velocity * 30),
+        units_sold_7d: Math.floor(velocity * 7),
+        revenue_30d: velocity * 30 * sellingPrice,
+        revenue_7d: velocity * 7 * sellingPrice,
+        selling_price: sellingPrice,
+        fba_fee: fbaFee
+      },
+      profitability: {
+        cogs: cogs,
+        profit_margin: ((sellingPrice - cogs - fbaFee) / sellingPrice) * 100,
+        profit_per_unit: sellingPrice - cogs - fbaFee,
+        roi: ((sellingPrice - cogs - fbaFee) / cogs) * 100
+      },
+      inventory_health: {
+        inventory_value: currentStock * cogs,
+        turnover_rate: (velocity * 30) / currentStock,
+        excess_inventory: currentStock > velocity * 90,
+        stockout_risk: currentStock < velocity * 14
+      },
+      ranking: {
+        bsr: Math.floor(Math.random() * 100000) + 1000,
+        bsr_category: 'Electronics',
+        reviews_count: Math.floor(Math.random() * 1000) + 10,
+        rating: 3.5 + Math.random() * 1.5
       }
     };
   });
@@ -88,6 +127,8 @@ const AllProductAnalytics = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState('all');
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Fetch comprehensive product data
   const fetchAllProductsData = async () => {
@@ -357,6 +398,80 @@ const AllProductAnalytics = () => {
 
   // const { images: batchImages, loading: imagesLoading } = useProductImages(allAsins);
 
+  // Export functionality
+  const handleExport = useCallback(async (filteredData) => {
+    setExportLoading(true);
+    try {
+      // Prepare CSV data
+      const headers = [
+        'ASIN',
+        'Product Name',
+        'Current Stock',
+        'Velocity (per day)',
+        'Days Left',
+        'Age (days)',
+        'Age Category',
+        'COGS',
+        'Selling Price',
+        'Profit Margin %',
+        'ROI %',
+        'Units Sold (30d)',
+        'Revenue (30d)',
+        'BSR',
+        'Rating',
+        'Reviews',
+        'Inventory Value',
+        'Retailer',
+        'Status'
+      ];
+      
+      const rows = filteredData.map(item => [
+        item.asin,
+        item.product_name,
+        item.current_stock,
+        item.velocity.toFixed(2),
+        item.days_left,
+        item.estimated_age_days,
+        item.age_category,
+        item.last_cogs.toFixed(2),
+        item.selling_price?.toFixed(2) || 'N/A',
+        item.profit_margin?.toFixed(2) || 'N/A',
+        item.roi?.toFixed(2) || 'N/A',
+        item.units_sold_30d || 'N/A',
+        item.revenue_30d?.toFixed(2) || 'N/A',
+        item.bsr || 'N/A',
+        item.rating?.toFixed(1) || 'N/A',
+        item.reviews_count || 'N/A',
+        item.inventory_value?.toFixed(2) || 'N/A',
+        item.retailer_display,
+        item.status
+      ]);
+      
+      // Convert to CSV
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => 
+          typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell
+        ).join(','))
+      ].join('\n');
+      
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `product_analytics_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setExportLoading(false);
+    }
+  }, []);
+
   // Extract retailer name from URL
   const extractRetailerFromUrl = useCallback((url) => {
     if (!url || typeof url !== 'string') return null;
@@ -387,44 +502,71 @@ const AllProductAnalytics = () => {
     }
     
     
-    return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => ({
-      id: asin,
-      asin,
-      product_name: allProductsData?.enhanced_analytics?.[asin]?.product_name || 
-                   `Product ${asin}`,
-      age_info: ageInfo,
-      estimated_age_days: ageInfo.estimated_age_days || 0,
-      age_category: ageInfo.age_category || 'unknown',
-      confidence_score: ageInfo.confidence_score || 0,
-      // Get real inventory data - current_stock should come directly from enhanced_analytics
-      current_stock: allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0,
-      velocity: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0,
-      amount_ordered: allProductsData?.enhanced_analytics?.[asin]?.restock?.monthly_purchase_adjustment || 0,
-      // Calculate days_left from current_stock and velocity
-      days_left: allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity > 0 
-        ? Math.floor((allProductsData?.enhanced_analytics?.[asin]?.current_stock || 0) / allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity)
-        : 999,
-      // Use suggested_quantity as reorder_point if available, otherwise calculate
-      reorder_point: allProductsData?.enhanced_analytics?.[asin]?.restock?.suggested_quantity || 
-        Math.floor((allProductsData?.enhanced_analytics?.[asin]?.velocity?.weighted_velocity || 0) * 30),
-      // Use actual COGS data from enhanced_analytics
-      last_cogs: allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.cogs || 0,
-      supplier_info: 'Various',
-      // Retailer information - now with unique retailers and their source links
-      source_link: allProductsData?.enhanced_analytics?.[asin]?.source_link || 
-                   allProductsData?.enhanced_analytics?.[asin]?.cogs_data?.source_link || null,
-      all_source_links: allProductsData?.enhanced_analytics?.[asin]?.all_source_links || [],
-      retailer: allProductsData?.enhanced_analytics?.[asin]?.retailer || 
-                extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
-      retailer_display: allProductsData?.enhanced_analytics?.[asin]?.retailer_display || 
-                        extractRetailerFromUrl(allProductsData?.enhanced_analytics?.[asin]?.source_link) || 'Unknown',
-      all_retailers: allProductsData?.enhanced_analytics?.[asin]?.all_retailers || ['Unknown'],
-      all_retailer_displays: allProductsData?.enhanced_analytics?.[asin]?.all_retailer_displays || ['Unknown'],
-      retailer_to_source_map: allProductsData?.enhanced_analytics?.[asin]?.retailer_to_source_map || {},
-      status: ageInfo.age_category === 'ancient' ? 'critical' : 
-              ageInfo.age_category === 'old' ? 'warning' :
-              ageInfo.age_category === 'aged' ? 'attention' : 'normal'
-    }));
+    return Object.entries(allProductsData.age_analysis).map(([asin, ageInfo]) => {
+      const enhancedData = allProductsData?.enhanced_analytics?.[asin];
+      const velocity = enhancedData?.velocity?.weighted_velocity || 0;
+      const currentStock = enhancedData?.current_stock || 0;
+      const salesData = enhancedData?.sales_data;
+      const profitability = enhancedData?.profitability;
+      const inventoryHealth = enhancedData?.inventory_health;
+      const ranking = enhancedData?.ranking;
+      
+      return {
+        id: asin,
+        asin,
+        product_name: enhancedData?.product_name || `Product ${asin}`,
+        age_info: ageInfo,
+        estimated_age_days: ageInfo.estimated_age_days || 0,
+        age_category: ageInfo.age_category || 'unknown',
+        confidence_score: ageInfo.confidence_score || 0,
+        // Basic inventory data
+        current_stock: currentStock,
+        velocity: velocity,
+        amount_ordered: enhancedData?.restock?.monthly_purchase_adjustment || 0,
+        // Calculate days_left from current_stock and velocity
+        days_left: velocity > 0 ? Math.floor(currentStock / velocity) : 999,
+        // Use suggested_quantity as reorder_point if available, otherwise calculate
+        reorder_point: enhancedData?.restock?.suggested_quantity || Math.floor(velocity * 30),
+        // Financial data
+        last_cogs: profitability?.cogs || enhancedData?.cogs_data?.cogs || 0,
+        selling_price: salesData?.selling_price || 0,
+        profit_margin: profitability?.profit_margin || 0,
+        profit_per_unit: profitability?.profit_per_unit || 0,
+        roi: profitability?.roi || 0,
+        // Sales performance
+        units_sold_30d: salesData?.units_sold_30d || 0,
+        units_sold_7d: salesData?.units_sold_7d || 0,
+        revenue_30d: salesData?.revenue_30d || 0,
+        revenue_7d: salesData?.revenue_7d || 0,
+        velocity_30d: enhancedData?.velocity?.velocity_30d || velocity,
+        velocity_7d: enhancedData?.velocity?.velocity_7d || velocity,
+        // Inventory health metrics
+        inventory_value: inventoryHealth?.inventory_value || (currentStock * (profitability?.cogs || 0)),
+        turnover_rate: inventoryHealth?.turnover_rate || (velocity * 30) / Math.max(currentStock, 1),
+        excess_inventory: inventoryHealth?.excess_inventory || false,
+        stockout_risk: inventoryHealth?.stockout_risk || false,
+        // Amazon ranking and reviews
+        bsr: ranking?.bsr || null,
+        bsr_category: ranking?.bsr_category || 'Unknown',
+        reviews_count: ranking?.reviews_count || 0,
+        rating: ranking?.rating || 0,
+        // Retailer information - now with unique retailers and their source links
+        source_link: enhancedData?.source_link || enhancedData?.cogs_data?.source_link || null,
+        all_source_links: enhancedData?.all_source_links || [],
+        retailer: enhancedData?.retailer || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
+        retailer_display: enhancedData?.retailer_display || extractRetailerFromUrl(enhancedData?.source_link) || 'Unknown',
+        all_retailers: enhancedData?.all_retailers || ['Unknown'],
+        all_retailer_displays: enhancedData?.all_retailer_displays || ['Unknown'],
+        retailer_to_source_map: enhancedData?.retailer_to_source_map || {},
+        // Status calculation with more nuanced logic
+        status: (() => {
+          if (ageInfo.age_category === 'ancient' || (inventoryHealth?.excess_inventory && velocity < 1)) return 'critical';
+          if (ageInfo.age_category === 'old' || inventoryHealth?.stockout_risk) return 'warning';
+          if (ageInfo.age_category === 'aged' || (profitability?.profit_margin && profitability.profit_margin < 15)) return 'attention';
+          return 'normal';
+        })()
+      };
+    });
   }, [allProductsData, extractRetailerFromUrl]);
 
   // Table configuration functions (placeholder for when data is available)
@@ -448,13 +590,28 @@ const AllProductAnalytics = () => {
 
   const inventoryColumns = useMemo(() => {
     const cols = {
-      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/3' },
+      product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/4' },
       current_stock: { key: 'current_stock', label: 'Stock', sortKey: 'current_stock', draggable: true, width: 'w-16' },
       velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true, width: 'w-20' },
-      amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
       days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true, width: 'w-20' },
       inventory_age: { key: 'inventory_age', label: 'Age', sortKey: 'estimated_age_days', draggable: true, width: 'w-24' },
-      last_cogs: { key: 'last_cogs', label: 'COGS', sortKey: 'last_cogs', draggable: true, width: 'w-20' },
+      // Financial columns
+      selling_price: { key: 'selling_price', label: 'Price', sortKey: 'selling_price', draggable: true, width: 'w-18' },
+      last_cogs: { key: 'last_cogs', label: 'COGS', sortKey: 'last_cogs', draggable: true, width: 'w-18' },
+      profit_margin: { key: 'profit_margin', label: 'Margin %', sortKey: 'profit_margin', draggable: true, width: 'w-20' },
+      roi: { key: 'roi', label: 'ROI %', sortKey: 'roi', draggable: true, width: 'w-18' },
+      // Sales performance
+      units_sold_30d: { key: 'units_sold_30d', label: 'Units (30d)', sortKey: 'units_sold_30d', draggable: true, width: 'w-20' },
+      revenue_30d: { key: 'revenue_30d', label: 'Revenue (30d)', sortKey: 'revenue_30d', draggable: true, width: 'w-24' },
+      // Amazon metrics
+      bsr: { key: 'bsr', label: 'BSR', sortKey: 'bsr', draggable: true, width: 'w-20' },
+      rating: { key: 'rating', label: 'Rating', sortKey: 'rating', draggable: true, width: 'w-18' },
+      reviews_count: { key: 'reviews_count', label: 'Reviews', sortKey: 'reviews_count', draggable: true, width: 'w-18' },
+      // Inventory health
+      inventory_value: { key: 'inventory_value', label: 'Inv. Value', sortKey: 'inventory_value', draggable: true, width: 'w-20' },
+      turnover_rate: { key: 'turnover_rate', label: 'Turnover', sortKey: 'turnover_rate', draggable: true, width: 'w-20' },
+      // Existing columns
+      amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
       retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true, width: 'w-24' },
       reorder_point: { key: 'reorder_point', label: 'Reorder', sortKey: 'reorder_point', draggable: true, width: 'w-20' },
       status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true, width: 'w-20' },
@@ -462,6 +619,22 @@ const AllProductAnalytics = () => {
     };
     return cols;
   }, []);
+
+  // Dynamic column order based on selected metric
+  const getColumnOrder = useMemo(() => {
+    switch (selectedMetric) {
+      case 'inventory':
+        return ['product', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'amount_ordered', 'reorder_point', 'retailer', 'status', 'actions'];
+      case 'profitability':
+        return ['product', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'status', 'actions'];
+      case 'sales':
+        return ['product', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'status', 'actions'];
+      case 'amazon':
+        return ['product', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'status', 'actions'];
+      default:
+        return ['product', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'status', 'actions'];
+    }
+  }, [selectedMetric]);
 
   const getInsightsColumns = () => ({
     product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: true },
@@ -535,6 +708,68 @@ const AllProductAnalytics = () => {
           { value: 'critical', label: 'Critical' }
         ],
         filterFn: (item, value) => item.status === value
+      },
+      {
+        key: 'profit_margin',
+        label: 'Profit Margin',
+        allLabel: 'All Margins',
+        options: [
+          { value: 'high', label: 'High (>30%)' },
+          { value: 'good', label: 'Good (20-30%)' },
+          { value: 'fair', label: 'Fair (10-20%)' },
+          { value: 'low', label: 'Low (<10%)' }
+        ],
+        filterFn: (item, value) => {
+          const margin = item.profit_margin || 0;
+          switch (value) {
+            case 'high': return margin > 30;
+            case 'good': return margin >= 20 && margin <= 30;
+            case 'fair': return margin >= 10 && margin < 20;
+            case 'low': return margin < 10;
+            default: return true;
+          }
+        }
+      },
+      {
+        key: 'velocity',
+        label: 'Sales Velocity',
+        allLabel: 'All Velocities',
+        options: [
+          { value: 'fast', label: 'Fast (>5/day)' },
+          { value: 'good', label: 'Good (2-5/day)' },
+          { value: 'slow', label: 'Slow (0.5-2/day)' },
+          { value: 'very_slow', label: 'Very Slow (<0.5/day)' }
+        ],
+        filterFn: (item, value) => {
+          const velocity = item.velocity || 0;
+          switch (value) {
+            case 'fast': return velocity > 5;
+            case 'good': return velocity >= 2 && velocity <= 5;
+            case 'slow': return velocity >= 0.5 && velocity < 2;
+            case 'very_slow': return velocity < 0.5;
+            default: return true;
+          }
+        }
+      },
+      {
+        key: 'inventory_health',
+        label: 'Inventory Health',
+        allLabel: 'All Health',
+        options: [
+          { value: 'healthy', label: 'Healthy' },
+          { value: 'stockout_risk', label: 'Stockout Risk' },
+          { value: 'excess_inventory', label: 'Excess Inventory' },
+          { value: 'slow_moving', label: 'Slow Moving' }
+        ],
+        filterFn: (item, value) => {
+          switch (value) {
+            case 'healthy': return !item.stockout_risk && !item.excess_inventory && item.turnover_rate >= 4;
+            case 'stockout_risk': return item.stockout_risk || item.days_left < 14;
+            case 'excess_inventory': return item.excess_inventory || item.days_left > 90;
+            case 'slow_moving': return item.turnover_rate < 4;
+            default: return true;
+          }
+        }
       }
     ];
   }, [allProductsData?.enhanced_analytics, extractRetailerFromUrl]);
@@ -775,6 +1010,129 @@ const AllProductAnalytics = () => {
           </td>
         );
 
+      case 'selling_price':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className="text-blue-700 font-medium">
+              {formatCurrency(item.selling_price)}
+            </div>
+          </td>
+        );
+
+      case 'profit_margin':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className="flex items-center space-x-1">
+              {item.profit_margin > 25 ? (
+                <TrendingUp className="h-3 w-3 text-green-600" />
+              ) : item.profit_margin < 10 ? (
+                <TrendingDown className="h-3 w-3 text-red-600" />
+              ) : (
+                <Activity className="h-3 w-3 text-yellow-600" />
+              )}
+              <span className={`font-medium ${
+                item.profit_margin > 25 ? 'text-green-700' :
+                item.profit_margin < 10 ? 'text-red-700' : 'text-yellow-700'
+              }`}>
+                {item.profit_margin.toFixed(1)}%
+              </span>
+            </div>
+          </td>
+        );
+
+      case 'roi':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className={`font-medium ${
+              item.roi > 50 ? 'text-green-700' :
+              item.roi < 20 ? 'text-red-700' : 'text-yellow-700'
+            }`}>
+              {item.roi.toFixed(1)}%
+            </div>
+          </td>
+        );
+
+      case 'units_sold_30d':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
+            {item.units_sold_30d}
+          </td>
+        );
+
+      case 'revenue_30d':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className="text-green-700 font-medium">
+              {formatCurrency(item.revenue_30d)}
+            </div>
+          </td>
+        );
+
+      case 'bsr':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            {item.bsr ? (
+              <div className="flex items-center space-x-1">
+                <span className={`font-medium ${
+                  item.bsr < 10000 ? 'text-green-700' :
+                  item.bsr < 50000 ? 'text-yellow-700' : 'text-red-700'
+                }`}>
+                  #{item.bsr.toLocaleString()}
+                </span>
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </td>
+        );
+
+      case 'rating':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            {item.rating > 0 ? (
+              <div className="flex items-center space-x-1">
+                <span className={`font-medium ${
+                  item.rating >= 4.5 ? 'text-green-700' :
+                  item.rating >= 4.0 ? 'text-yellow-700' : 'text-red-700'
+                }`}>
+                  {item.rating.toFixed(1)}
+                </span>
+                <span className="text-yellow-500">★</span>
+              </div>
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </td>
+        );
+
+      case 'reviews_count':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
+            {item.reviews_count > 0 ? item.reviews_count.toLocaleString() : '-'}
+          </td>
+        );
+
+      case 'inventory_value':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className="text-purple-700 font-medium">
+              {formatCurrency(item.inventory_value)}
+            </div>
+          </td>
+        );
+
+      case 'turnover_rate':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm">
+            <div className={`font-medium ${
+              item.turnover_rate > 6 ? 'text-green-700' :
+              item.turnover_rate > 4 ? 'text-yellow-700' : 'text-red-700'
+            }`}>
+              {item.turnover_rate.toFixed(1)}x
+            </div>
+          </td>
+        );
+
       case 'actions':
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
@@ -810,12 +1168,46 @@ const AllProductAnalytics = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center space-x-3">
-        <BarChart3 className="h-8 w-8 text-builders-500" />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">All Product Analytics</h1>
-          <p className="text-gray-600">Comprehensive analytics dashboard for all your products</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <BarChart3 className="h-8 w-8 text-builders-500" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">All Product Analytics</h1>
+            <p className="text-gray-600">Comprehensive analytics dashboard for all your products</p>
+          </div>
         </div>
+        
+        {/* Header Controls */}
+        {!loading && !error && allProductsData && allProductsData.age_analysis && (
+          <div className="flex items-center space-x-3">
+            {/* Metric Selector */}
+            <div className="flex items-center space-x-2">
+              <Filter className="h-4 w-4 text-gray-500" />
+              <select
+                value={selectedMetric}
+                onChange={(e) => setSelectedMetric(e.target.value)}
+                className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Metrics</option>
+                <option value="inventory">Inventory Focus</option>
+                <option value="profitability">Profitability Focus</option>
+                <option value="sales">Sales Performance</option>
+                <option value="amazon">Amazon Metrics</option>
+              </select>
+            </div>
+            
+            {/* Export Button */}
+            <button
+              onClick={() => handleExport(inventoryTableData)}
+              disabled={exportLoading}
+              className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+              title="Export filtered data to CSV"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {exportLoading ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </div>
+        )}
       </div>
 
 
@@ -904,7 +1296,7 @@ const AllProductAnalytics = () => {
                 data={inventoryTableData}
                 tableKey="all-products-inventory"
                 columns={inventoryColumns}
-                defaultColumnOrder={['product', 'current_stock', 'velocity', 'amount_ordered', 'days_left', 'inventory_age', 'last_cogs', 'retailer', 'reorder_point', 'status', 'actions']}
+                defaultColumnOrder={getColumnOrder}
                 renderCell={renderInventoryCell}
                 enableSearch={true}
                 enableFilters={true}

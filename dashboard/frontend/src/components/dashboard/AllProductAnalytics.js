@@ -1460,17 +1460,17 @@ const AllProductAnalytics = () => {
                     <div className="text-xs text-yellow-600 mt-2">Under 14 days left</div>
                   </div>
                   
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-lg font-semibold text-green-900">
-                          {inventoryTableData.filter(item => item.profit_margin > 25).length}
+                        <div className="text-lg font-semibold text-purple-900">
+                          {inventoryTableData.filter(item => item.days_left <= 30 && item.days_left > 14).length}
                         </div>
-                        <div className="text-sm text-green-700">High Margin</div>
+                        <div className="text-sm text-purple-700">Restock Soon</div>
                       </div>
-                      <TrendingUp className="h-8 w-8 text-green-600" />
+                      <ShoppingCart className="h-8 w-8 text-purple-600" />
                     </div>
-                    <div className="text-xs text-green-600 mt-2">Over 25% profit margin</div>
+                    <div className="text-xs text-purple-600 mt-2">14-30 days of stock left</div>
                   </div>
                   
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

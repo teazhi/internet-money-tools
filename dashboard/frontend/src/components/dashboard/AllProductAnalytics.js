@@ -589,7 +589,7 @@ const AllProductAnalytics = () => {
         return {
           id: asin,
           asin,
-          product_name: enhancedData?.product_name || `Product ${asin}`,
+          product_name: enhancedData?.product_name || enhancedData?.cogs_data?.product_name || `Product ${asin}`,
           age_info: ageInfo || {},
           estimated_age_days: safeNumber(ageInfo?.estimated_age_days, 0),
           age_category: ageInfo?.age_category || 'unknown',

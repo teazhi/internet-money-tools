@@ -1013,8 +1013,8 @@ const AllProductAnalytics = () => {
       switch (columnKey) {
       case 'product':
         return (
-          <td key={columnKey} className="px-2 py-1.5">
-            <div className="flex items-center space-x-3">
+          <td key={columnKey} className="px-2 py-1.5 h-16">
+            <div className="flex items-center space-x-3 h-full">
               <div className="flex-shrink-0">
                 <a 
                   href={`https://www.amazon.com/dp/${item.asin}`}
@@ -1025,18 +1025,26 @@ const AllProductAnalytics = () => {
                   <ProductImage asin={item.asin} />
                 </a>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-gray-900">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="text-sm font-medium text-gray-900 leading-tight">
                   <a 
                     href={`https://www.amazon.com/dp/${item.asin}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-blue-600 transition-colors"
+                    className="hover:text-blue-600 transition-colors block line-clamp-2 overflow-hidden"
+                    title={item.product_name}
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      maxHeight: '2.5rem'
+                    }}
                   >
                     {item.product_name}
                   </a>
                 </div>
-                <div className="text-xs text-gray-500">{item.asin}</div>
+                <div className="text-xs text-gray-500 truncate">{item.asin}</div>
               </div>
             </div>
           </td>

@@ -837,6 +837,8 @@ def set_user_google_tokens(user, tokens):
 
 def set_user_sheet_config(user, sheet_id, worksheet_title=None, column_mapping=None):
     """Set user's Google Sheet configuration"""
+    # Update both new and old locations for backward compatibility during migration
+    user = set_user_field(user, 'files.sheet_id', sheet_id)
     user = set_user_field(user, 'integrations.google.sheet_id', sheet_id)
     if worksheet_title:
         user = set_user_field(user, 'integrations.google.worksheet_title', worksheet_title)
@@ -3170,9 +3172,10 @@ def disconnect_google():
     if not user_record:
         return jsonify({'error': 'User not found'}), 404
     
-    # Remove Google tokens and sheet configuration
+    # Remove Google tokens and sheet configuration from both locations
     set_user_field(user_record, 'integrations.google.tokens', {})
     set_user_field(user_record, 'files.sheet_id', None)
+    set_user_field(user_record, 'integrations.google.sheet_id', None)
     set_user_field(user_record, 'integrations.google.worksheet_title', None)
     set_user_field(user_record, 'integrations.google.column_mapping', {})
     
@@ -3409,7 +3412,9 @@ def configure_sheet():
     if not user_record:
         return jsonify({'error': 'User profile not found'}), 404
     
+    # Update both new and old locations for backward compatibility during migration
     set_user_field(user_record, 'files.sheet_id', spreadsheet_id)
+    set_user_field(user_record, 'integrations.google.sheet_id', spreadsheet_id)
     set_user_field(user_record, 'integrations.google.worksheet_title', worksheet_title)
     set_user_field(user_record, 'integrations.google.column_mapping', column_mapping)
     

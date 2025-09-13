@@ -1432,37 +1432,60 @@ const AllProductAnalytics = () => {
                   </div>
                 )}
 
-                {/* Summary Stats */}
-                {allProductsData.summary && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="text-lg font-semibold text-blue-900">
-                        {allProductsData.summary.total_products}
+                {/* Quick Action Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-red-900">
+                          {inventoryTableData.filter(item => item.status === 'critical').length}
+                        </div>
+                        <div className="text-sm text-red-700">Critical Issues</div>
                       </div>
-                      <div className="text-sm text-blue-700">Total Products</div>
+                      <AlertTriangle className="h-8 w-8 text-red-600" />
                     </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <div className="text-lg font-semibold text-green-900">
-                        {allProductsData.summary.average_age_days} days
-                      </div>
-                      <div className="text-sm text-green-700">Avg. Inventory Age</div>
-                    </div>
-                    <div className="bg-yellow-50 rounded-lg p-4">
-                      <div className="text-lg font-semibold text-yellow-900">
-                        {Math.round(allProductsData.summary.coverage_percentage)}%
-                      </div>
-                      <div className="text-sm text-yellow-700">Age Data Coverage</div>
-                    </div>
-                    <div className="bg-red-50 rounded-lg p-4">
-                      <div className="text-lg font-semibold text-red-900">
-                        {(allProductsData.summary.categories_breakdown?.aged || 0) + 
-                         (allProductsData.summary.categories_breakdown?.old || 0) + 
-                         (allProductsData.summary.categories_breakdown?.ancient || 0)}
-                      </div>
-                      <div className="text-sm text-red-700">Aged Products</div>
-                    </div>
+                    <div className="text-xs text-red-600 mt-2">Needs immediate attention</div>
                   </div>
-                )}
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-yellow-900">
+                          {inventoryTableData.filter(item => item.stockout_risk || item.days_left < 14).length}
+                        </div>
+                        <div className="text-sm text-yellow-700">Low Stock</div>
+                      </div>
+                      <Clock className="h-8 w-8 text-yellow-600" />
+                    </div>
+                    <div className="text-xs text-yellow-600 mt-2">Under 14 days left</div>
+                  </div>
+                  
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-green-900">
+                          {inventoryTableData.filter(item => item.profit_margin > 25).length}
+                        </div>
+                        <div className="text-sm text-green-700">High Margin</div>
+                      </div>
+                      <TrendingUp className="h-8 w-8 text-green-600" />
+                    </div>
+                    <div className="text-xs text-green-600 mt-2">Over 25% profit margin</div>
+                  </div>
+                  
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-blue-900">
+                          ${inventoryTableData.reduce((sum, item) => sum + (item.inventory_value || 0), 0).toLocaleString()}
+                        </div>
+                        <div className="text-sm text-blue-700">Total Inventory</div>
+                      </div>
+                      <DollarSign className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <div className="text-xs text-blue-600 mt-2">Current inventory value</div>
+                  </div>
+                </div>
               </div>
 
               <StandardTable

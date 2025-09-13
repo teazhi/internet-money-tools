@@ -134,10 +134,23 @@ const StandardTable = ({
     };
   }, [isFullscreen, isFilterPanelOpen]);
 
-  // Count active filters
+  // Count active filters (memoized for performance)
   const activeFilterCount = useMemo(() => {
     return Object.values(activeFilters).filter(value => value && value !== 'all').length;
   }, [activeFilters]);
+
+  // Memoize filter change handler to prevent re-renders
+  const handleFilterChange = useCallback((filterKey, value) => {
+    setActiveFilters(prev => ({
+      ...prev,
+      [filterKey]: value
+    }));
+  }, []);
+
+  // Memoize clear all filters handler
+  const handleClearAllFilters = useCallback(() => {
+    setActiveFilters({});
+  }, []);
   
   // Sorting function
   const handleSort = (key) => {
@@ -420,21 +433,21 @@ const StandardTable = ({
 
                       {/* Filter Panel */}
                       {isFilterPanelOpen && (
-                        <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0">
+                        <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0 animate-in fade-in duration-150">
                           <div className="p-4">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>
                               {activeFilterCount > 0 && (
                                 <button
-                                  onClick={() => setActiveFilters({})}
-                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                  onClick={handleClearAllFilters}
+                                  className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
                                 >
                                   Clear All
                                 </button>
                               )}
                             </div>
                             
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                               {filters.map(filter => (
                                 <div key={filter.key}>
                                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -442,11 +455,8 @@ const StandardTable = ({
                                   </label>
                                   <select
                                     value={activeFilters[filter.key] || 'all'}
-                                    onChange={(e) => setActiveFilters(prev => ({
-                                      ...prev,
-                                      [filter.key]: e.target.value
-                                    }))}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    onChange={(e) => handleFilterChange(filter.key, e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                   >
                                     <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
                                     {filter.options.map(option => (
@@ -557,21 +567,21 @@ const StandardTable = ({
 
                 {/* Filter Panel */}
                 {isFilterPanelOpen && (
-                  <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0">
+                  <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0 animate-in fade-in duration-150">
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>
                         {activeFilterCount > 0 && (
                           <button
-                            onClick={() => setActiveFilters({})}
-                            className="text-xs text-gray-500 hover:text-gray-700"
+                            onClick={handleClearAllFilters}
+                            className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
                           >
                             Clear All
                           </button>
                         )}
                       </div>
                       
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {filters.map(filter => (
                           <div key={filter.key}>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -579,11 +589,8 @@ const StandardTable = ({
                             </label>
                             <select
                               value={activeFilters[filter.key] || 'all'}
-                              onChange={(e) => setActiveFilters(prev => ({
-                                ...prev,
-                                [filter.key]: e.target.value
-                              }))}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              onChange={(e) => handleFilterChange(filter.key, e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                             >
                               <option value="all">{filter.allLabel || `All ${filter.label}`}</option>
                               {filter.options.map(option => (

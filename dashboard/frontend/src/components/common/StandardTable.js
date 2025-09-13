@@ -420,7 +420,7 @@ const StandardTable = ({
 
                       {/* Filter Panel */}
                       {isFilterPanelOpen && (
-                        <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                        <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0">
                           <div className="p-4">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>
@@ -557,7 +557,7 @@ const StandardTable = ({
 
                 {/* Filter Panel */}
                 {isFilterPanelOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <div className="absolute top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 left-0 right-auto sm:left-auto sm:right-0">
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-sm font-medium text-gray-900">Filter Options</h4>

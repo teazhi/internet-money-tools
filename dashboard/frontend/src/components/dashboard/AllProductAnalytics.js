@@ -554,6 +554,70 @@ const AllProductAnalytics = () => {
     return isFinite(result) ? result : fallback;
   };
 
+  // Helper function to calculate priority score and category (from SmartRestockAlerts)
+  const calculatePriority = (currentStock, velocity, daysLeft, ageCategory, profitMargin) => {
+    let priorityScore = 0;
+    let category = 'normal';
+    let emoji = '📊';
+    
+    // Base score from days left
+    if (daysLeft <= 7) priorityScore += 50;
+    else if (daysLeft <= 14) priorityScore += 35;
+    else if (daysLeft <= 30) priorityScore += 20;
+    else if (daysLeft <= 60) priorityScore += 10;
+    
+    // Velocity impact
+    if (velocity > 5) priorityScore += 20; // High velocity
+    else if (velocity > 2) priorityScore += 10; // Moderate velocity
+    else if (velocity < 0.5) priorityScore -= 10; // Very low velocity
+    
+    // Age category impact
+    if (ageCategory === 'ancient') priorityScore += 25;
+    else if (ageCategory === 'old') priorityScore += 15;
+    else if (ageCategory === 'aged') priorityScore += 10;
+    
+    // Profitability impact
+    if (profitMargin > 30) priorityScore += 15; // High margin products get priority
+    else if (profitMargin > 20) priorityScore += 10;
+    else if (profitMargin < 10) priorityScore -= 5; // Low margin products lower priority
+    
+    // Stock level impact
+    if (currentStock <= 5) priorityScore += 20;
+    else if (currentStock <= 10) priorityScore += 10;
+    
+    // Determine category and emoji based on score
+    if (priorityScore >= 70) {
+      category = velocity > 2 ? 'critical_high_velocity' : 'critical_low_velocity';
+      emoji = '🚨';
+    } else if (priorityScore >= 50) {
+      category = velocity > 3 ? 'warning_high_velocity' : 'warning_moderate';
+      emoji = '⚠️';
+    } else if (priorityScore >= 30) {
+      category = 'opportunity_high_velocity';
+      emoji = '💡';
+    }
+    
+    return { priorityScore, category, emoji };
+  };
+
+  // Helper function to get priority category label
+  const getCategoryLabel = (category) => {
+    switch (category) {
+      case 'critical_high_velocity':
+        return 'CRITICAL - High Velocity';
+      case 'critical_low_velocity':
+        return 'CRITICAL - Low Velocity';
+      case 'warning_high_velocity':
+        return 'HIGH PRIORITY';
+      case 'warning_moderate':
+        return 'MODERATE PRIORITY';
+      case 'opportunity_high_velocity':
+        return 'OPPORTUNITY';
+      default:
+        return 'MONITOR';
+    }
+  };
+
   // Prepare table data for inventory tab
   const inventoryTableData = useMemo(() => {
     if (!allProductsData?.age_analysis) {
@@ -586,6 +650,15 @@ const AllProductAnalytics = () => {
         const daysLeft = safeDivide(currentStock, velocity, 999);
         const reorderPoint = safeNumber(enhancedData?.restock?.suggested_quantity, 0) || Math.floor(velocity * 30);
         
+        // Calculate priority information
+        const { priorityScore, category: priorityCategory, emoji } = calculatePriority(
+          currentStock, 
+          velocity, 
+          daysLeft, 
+          ageInfo?.age_category, 
+          profitMargin
+        );
+        
         return {
           id: asin,
           asin,
@@ -594,6 +667,11 @@ const AllProductAnalytics = () => {
           estimated_age_days: safeNumber(ageInfo?.estimated_age_days, 0),
           age_category: ageInfo?.age_category || 'unknown',
           confidence_score: safeNumber(ageInfo?.confidence_score, 0),
+          // Priority information
+          priority_score: priorityScore,
+          priority_category: priorityCategory,
+          priority_emoji: emoji,
+          priority_label: getCategoryLabel(priorityCategory),
           // Basic inventory data
           current_stock: currentStock,
           velocity: velocity,
@@ -678,6 +756,7 @@ const AllProductAnalytics = () => {
   const inventoryColumns = useMemo(() => {
     const cols = {
       product: { key: 'product', label: 'Product', sortKey: 'product_name', draggable: false, width: 'w-1/4' },
+      priority: { key: 'priority', label: 'Restock Priority', sortKey: 'priority_score', draggable: true, width: 'w-32' },
       current_stock: { key: 'current_stock', label: 'Stock', sortKey: 'current_stock', draggable: true, width: 'w-16' },
       velocity: { key: 'velocity', label: 'Velocity', sortKey: 'velocity', draggable: true, width: 'w-20' },
       days_left: { key: 'days_left', label: 'Days Left', sortKey: 'days_left', draggable: true, width: 'w-20' },
@@ -711,15 +790,15 @@ const AllProductAnalytics = () => {
   const getColumnOrder = useMemo(() => {
     switch (selectedMetric) {
       case 'inventory':
-        return ['product', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'amount_ordered', 'reorder_point', 'retailer', 'status', 'actions'];
+        return ['product', 'priority', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'amount_ordered', 'reorder_point', 'retailer', 'status', 'actions'];
       case 'profitability':
-        return ['product', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'status', 'actions'];
+        return ['product', 'priority', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'status', 'actions'];
       case 'sales':
-        return ['product', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'status', 'actions'];
+        return ['product', 'priority', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'status', 'actions'];
       case 'amazon':
-        return ['product', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'status', 'actions'];
+        return ['product', 'priority', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'status', 'actions'];
       default:
-        return ['product', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'status', 'actions'];
+        return ['product', 'priority', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'status', 'actions'];
     }
   }, [selectedMetric]);
 
@@ -756,6 +835,23 @@ const AllProductAnalytics = () => {
     }));
 
     return [
+      {
+        key: 'priority',
+        label: 'Restock Priority',
+        allLabel: 'All Priorities',
+        options: [
+          { value: 'critical', label: 'Critical Only' },
+          { value: 'warning', label: 'High Priority Only' },
+          { value: 'opportunity', label: 'Opportunities Only' }
+        ],
+        filterFn: (item, value) => {
+          if (!item.priority_category) return value === 'none';
+          if (value === 'critical') return item.priority_category.includes('critical');
+          if (value === 'warning') return item.priority_category.includes('warning');
+          if (value === 'opportunity') return item.priority_category.includes('opportunity');
+          return true;
+        }
+      },
       {
         key: 'retailer_display',
         label: 'Retailer',
@@ -1046,6 +1142,26 @@ const AllProductAnalytics = () => {
                 </div>
                 <div className="text-xs text-gray-500 truncate">{item.asin}</div>
               </div>
+            </div>
+          </td>
+        );
+        
+      case 'priority':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+              item.priority_category.includes('critical') 
+                ? 'bg-red-100 text-red-800'
+                : item.priority_category.includes('warning')
+                ? 'bg-yellow-100 text-yellow-800'
+                : item.priority_category.includes('opportunity')
+                ? 'bg-green-100 text-green-800'
+                : 'bg-gray-100 text-gray-800'
+            }`}>
+              {item.priority_emoji} {item.priority_label}
+            </span>
+            <div className="text-xs text-gray-500 mt-1">
+              Score: {item.priority_score.toFixed(1)}
             </div>
           </td>
         );

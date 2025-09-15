@@ -30,7 +30,6 @@ import {
 
 import Overview from './dashboard/Overview';
 import EnhancedAnalytics from './dashboard/EnhancedAnalytics';
-import SmartRestockRecommendations from './dashboard/SmartRestockRecommendations';
 import RetailerLeadAnalysis from './dashboard/RetailerLeadAnalysis';
 import DiscountOpportunities from './dashboard/DiscountOpportunities';
 import AllProductAnalytics from './dashboard/AllProductAnalytics';
@@ -551,7 +550,6 @@ const Dashboard = () => {
               {hasFeatureAccess('smart_restock') && (
                 <>
                   <Route path="/enhanced-analytics" element={<EnhancedAnalytics />} />
-                  <Route path="/smart-restock" element={<SmartRestockRecommendations />} />
                   <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
                   <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
                   <Route path="/all-product-analytics" element={<AllProductAnalytics />} />

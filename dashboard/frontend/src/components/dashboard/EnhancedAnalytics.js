@@ -10,14 +10,6 @@ import {
 const EnhancedAnalytics = () => {
   const analytics = [
     {
-      id: 'smart-restock',
-      name: 'Smart Restock Recommendations',
-      description: 'AI-powered inventory recommendations based on sales velocity and trends',
-      icon: TrendingUp,
-      color: 'bg-blue-500',
-      href: '/dashboard/smart-restock'
-    },
-    {
       id: 'lead-analysis',
       name: 'Lead Analysis',
       description: 'Analyze competitor prices and identify buying opportunities',
@@ -36,7 +28,7 @@ const EnhancedAnalytics = () => {
     {
       id: 'all-product-analytics',
       name: 'All Product Analytics',
-      description: 'Comprehensive analytics dashboard for all your products',
+      description: 'Comprehensive analytics dashboard with inventory insights and restock recommendations',
       icon: BarChart3,
       color: 'bg-orange-500',
       href: '/dashboard/all-product-analytics'
@@ -111,7 +103,7 @@ const EnhancedAnalytics = () => {
             <h4 className="text-sm font-medium text-blue-900">Analytics Overview</h4>
             <p className="text-sm text-blue-700 mt-1">
               Each analytics tool provides unique insights to help optimize your Amazon business. 
-              Start with Smart Restock Recommendations for inventory planning or Lead Analysis for competitive pricing insights.
+              Start with All Product Analytics for comprehensive inventory and restock insights, or Lead Analysis for competitive pricing.
             </p>
           </div>
         </div>

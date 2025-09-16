@@ -798,13 +798,13 @@ const AllProductAnalytics = () => {
       case 'inventory':
         return ['product', 'priority', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'suggested_units', 'amount_ordered', 'reorder_point', 'retailer', 'status', 'actions'];
       case 'profitability':
-        return ['product', 'priority', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'suggested_units', 'status', 'actions'];
+        return ['product', 'priority', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'suggested_units', 'amount_ordered', 'status', 'actions'];
       case 'sales':
-        return ['product', 'priority', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'suggested_units', 'status', 'actions'];
+        return ['product', 'priority', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'suggested_units', 'amount_ordered', 'status', 'actions'];
       case 'amazon':
-        return ['product', 'priority', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'suggested_units', 'status', 'actions'];
+        return ['product', 'priority', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'suggested_units', 'amount_ordered', 'status', 'actions'];
       default:
-        return ['product', 'priority', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'suggested_units', 'status', 'actions'];
+        return ['product', 'priority', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'suggested_units', 'amount_ordered', 'status', 'actions'];
     }
   }, [selectedMetric]);
 

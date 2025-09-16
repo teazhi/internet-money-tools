@@ -34,6 +34,7 @@ const generateMockInventoryData = () => {
 
   const ageAnalysis = {};
   const enhancedAnalytics = {};
+  const ordersData = {};
   const categoriesCount = {fresh: 1, moderate: 2, aged: 1, old: 1, ancient: 1};
   
   mockAsins.forEach((asin, index) => {
@@ -58,6 +59,19 @@ const generateMockInventoryData = () => {
     const sellingPrice = Math.max(cogs * (1.5 + Math.random()), cogs + 1);
     const fbaFee = Math.max(sellingPrice * 0.15, 0.01);
     
+    // Add Sellerboard Orders mock data
+    ordersData[asin] = {
+      units_sold_30d: Math.floor(velocity * 30) + Math.floor(Math.random() * 10), // Slightly different from velocity calculation
+      units_sold_7d: Math.floor(velocity * 7) + Math.floor(Math.random() * 3),
+      revenue_30d: (velocity * 30 + Math.floor(Math.random() * 10)) * sellingPrice,
+      revenue_7d: (velocity * 7 + Math.floor(Math.random() * 3)) * sellingPrice,
+      orders_count_30d: Math.floor((velocity * 30) / (1 + Math.random() * 2)), // Average order size variation
+      orders_count_7d: Math.floor((velocity * 7) / (1 + Math.random() * 2)),
+      average_order_size: 1 + Math.random() * 2,
+      last_updated: new Date().toISOString(),
+      source: 'sellerboard_orders'
+    };
+
     enhancedAnalytics[asin] = {
       product_name: `Mock Product ${asin}`,
       current_stock: currentStock,
@@ -72,10 +86,6 @@ const generateMockInventoryData = () => {
         source: 'mock_data'
       },
       sales_data: {
-        units_sold_30d: Math.floor(velocity * 30),
-        units_sold_7d: Math.floor(velocity * 7),
-        revenue_30d: velocity * 30 * sellingPrice,
-        revenue_7d: velocity * 7 * sellingPrice,
         selling_price: sellingPrice,
         fba_fee: fbaFee
       },
@@ -102,6 +112,7 @@ const generateMockInventoryData = () => {
 
   return {
     age_analysis: ageAnalysis,
+    orders_data: ordersData, // Add orders data to the return
     summary: {
       total_products: mockAsins.length,
       products_with_age_data: mockAsins.length,
@@ -635,6 +646,9 @@ const AllProductAnalytics = () => {
         const inventoryHealth = enhancedData?.inventory_health || {};
         const ranking = enhancedData?.ranking || {};
         
+        // Get Sellerboard Orders data for units sold
+        const ordersData = allProductsData?.orders_data?.[asin] || enhancedData?.orders_data || {};
+        
         // Safe calculations with proper fallbacks
         const cogs = safeNumber(profitability?.cogs || enhancedData?.cogs_data?.cogs, 0);
         const sellingPrice = safeNumber(salesData?.selling_price, 0);
@@ -689,11 +703,11 @@ const AllProductAnalytics = () => {
           profit_margin: profitMargin,
           profit_per_unit: safeNumber(profitability?.profit_per_unit, 0),
           roi: roi,
-          // Sales performance
-          units_sold_30d: safeNumber(salesData?.units_sold_30d, 0),
-          units_sold_7d: safeNumber(salesData?.units_sold_7d, 0),
-          revenue_30d: safeNumber(salesData?.revenue_30d, 0),
-          revenue_7d: safeNumber(salesData?.revenue_7d, 0),
+          // Sales performance (prioritize Sellerboard Orders data)
+          units_sold_30d: safeNumber(ordersData?.units_sold_30d || salesData?.units_sold_30d, 0),
+          units_sold_7d: safeNumber(ordersData?.units_sold_7d || salesData?.units_sold_7d, 0),
+          revenue_30d: safeNumber(ordersData?.revenue_30d || salesData?.revenue_30d, 0),
+          revenue_7d: safeNumber(ordersData?.revenue_7d || salesData?.revenue_7d, 0),
           velocity_30d: safeNumber(enhancedData?.velocity?.velocity_30d, velocity),
           velocity_7d: safeNumber(enhancedData?.velocity?.velocity_7d, velocity),
           // Inventory health metrics

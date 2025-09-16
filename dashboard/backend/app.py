@@ -10826,7 +10826,7 @@ def get_expected_arrivals():
         
         # If email COGS failed, check Google Sheets requirement
         if not inventory_data:
-            if not sheet_id or not google_tokens.get('access_token'):
+            if not sheet_id or not google_tokens.get('refresh_token'):
                 return jsonify({
                     "error": "No COGS data source available. Email processing failed (likely missing Gmail permissions) and Google Sheets not configured.",
                     "suggestion": "Go to Settings → Google Integration and ensure Gmail permissions are granted, or configure Google Sheets for COGS data"
@@ -10984,32 +10984,61 @@ def get_expected_arrivals():
                 "message": f"No recent purchases found in the {analysis_period_msg}"
             }), 200
 
-        # Get ALL Sellerboard data (not just current inventory) to check for any listings
-        sellerboard_url = get_user_sellerboard_stock_url(config_user_record)
-        if not sellerboard_url:
-            return jsonify({"error": "Sellerboard stock URL not configured"}), 400
-
         # Get COGS URL for complete inventory data (includes out-of-stock items)
         sellerboard_cogs_url = get_user_sellerboard_cogs_url(config_user_record)
+        sellerboard_stock_url = get_user_sellerboard_stock_url(config_user_record)
 
         # Get inventory data (ASINs that have Amazon listings)
         all_known_asins = set()
         
-        if sellerboard_cogs_url and inventory_data:
-            # Use Sellerboard COGS data (complete inventory)
-            asin_column = inventory_data['asin_column']
-            
-            for product in inventory_data['data']:
-                asin = product.get(asin_column)
-                if asin and str(asin).strip():
-                    all_known_asins.add(str(asin).upper())
-            
-        else:
-            # Fallback to original Sellerboard Analytics approach
+        # First try COGS data (from email or direct URL fetch)
+        if sellerboard_cogs_url:
+            if inventory_data:
+                # Use email-fetched COGS data
+                asin_column = inventory_data['asin_column']
+                
+                for product in inventory_data['data']:
+                    asin = product.get(asin_column)
+                    if asin and str(asin).strip():
+                        all_known_asins.add(str(asin).upper())
+            else:
+                # Email failed, but we have COGS URL - fetch directly from COGS URL
+                try:
+                    print(f"📥 Email COGS failed, fetching directly from COGS URL: {sellerboard_cogs_url}")
+                    from orders_analysis import OrdersAnalysis
+                    cogs_analysis = OrdersAnalysis()
+                    
+                    # Fetch COGS data directly from URL
+                    cogs_inventory_data = cogs_analysis.fetch_sellerboard_data(sellerboard_cogs_url)
+                    
+                    if cogs_inventory_data and 'data' in cogs_inventory_data:
+                        asin_column = cogs_inventory_data.get('asin_column', 'ASIN')
+                        
+                        for product in cogs_inventory_data['data']:
+                            asin = product.get(asin_column)
+                            if asin and str(asin).strip():
+                                all_known_asins.add(str(asin).upper())
+                        
+                        print(f"✅ Successfully fetched {len(all_known_asins)} ASINs from COGS URL")
+                    else:
+                        print(f"❌ Failed to get valid data from COGS URL")
+                        raise Exception("No valid data returned from COGS URL")
+                        
+                except Exception as cogs_error:
+                    print(f"❌ COGS URL fetch failed: {cogs_error}")
+                    # Fall through to stock-based approach
+                    pass
+        
+        # If COGS approach failed or unavailable, fallback to Stock-based approach
+        if not all_known_asins:
+            if not sellerboard_stock_url:
+                return jsonify({"error": "Neither Sellerboard COGS nor Stock URL is configured"}), 400
+                
             try:
+                print(f"📥 Falling back to Stock-based analysis: {sellerboard_stock_url}")
                 # Get complete Sellerboard analysis (includes all ASINs with any history)
-                # Create a new analysis instance with the sellerboard URL
-                sellerboard_analysis = OrdersAnalysis(orders_url=sellerboard_url, stock_url=sellerboard_url)
+                # Create a new analysis instance with the stock URL
+                sellerboard_analysis = OrdersAnalysis(orders_url=sellerboard_stock_url, stock_url=sellerboard_stock_url)
                 from datetime import date
                 inventory_analysis = sellerboard_analysis.analyze(for_date=date.today())
                 
@@ -11025,6 +11054,7 @@ def get_expected_arrivals():
                 for asin_key in basic_analytics.keys():
                     all_known_asins.add(asin_key.upper())
                 
+                print(f"✅ Stock-based analysis found {len(all_known_asins)} ASINs")
                 
             except Exception as e:
                 return jsonify({"error": f"Failed to fetch Sellerboard data: {str(e)}"}), 500
@@ -11070,6 +11100,14 @@ def get_expected_arrivals():
         # Sort by most recent purchase date
         missing_listings.sort(key=lambda x: x.get('last_purchase_date', ''), reverse=True)
 
+        # Determine what data source was actually used
+        if inventory_data:
+            data_source = "sellerboard_cogs_email"
+        elif sellerboard_cogs_url and all_known_asins:
+            data_source = "sellerboard_cogs_url"
+        else:
+            data_source = "sellerboard_stock_analytics"
+
         # Prepare response data
         response_data = {
             "missing_listings": missing_listings,
@@ -11081,7 +11119,7 @@ def get_expected_arrivals():
             "analyzed_at": datetime.now().isoformat(),
             "analysis_period": "Current month only" if scope == 'current_month' else "Last 2 months",
             "message": f"Found {len(missing_listings)} purchased items without Amazon listings ({analysis_period_msg})",
-            "inventory_source": "sellerboard_cogs" if sellerboard_cogs_url else "sellerboard_analytics",
+            "inventory_source": data_source,
             "total_inventory_asins": len(all_known_asins)
         }
         

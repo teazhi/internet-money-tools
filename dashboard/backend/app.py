@@ -4650,7 +4650,7 @@ def get_orders_analytics():
         
         # Add AI-powered summary if enabled and data is available
         try:
-            if ai_analytics.client and 'orders_df' in locals() and 'orders_df' is not None:
+            if ai_analytics.client and 'orders_df' in locals() and locals()['orders_df'] is not None:
                 # Generate AI summary for the dashboard
                 if hasattr(locals()['orders_df'], 'empty') and not locals()['orders_df'].empty:
                     ai_summary = ai_analytics.generate_order_insights(

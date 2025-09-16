@@ -1,0 +1,7 @@
+# AI Analytics Dependencies
+keywordsai>=1.0.0
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Optional: For enhanced data processing
+scikit-learn>=1.1.0

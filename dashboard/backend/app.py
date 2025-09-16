@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, session, redirect, url_for, send_from
 from flask_cors import CORS
 from typing import Optional, Dict, List
 import os
+import sys
 import json
 import requests
 import boto3
@@ -28,6 +29,7 @@ from inventory_age_analysis import InventoryAgeAnalyzer
 import atexit
 from email_monitor import EmailMonitor, CHECK_INTERVAL
 from email_monitor_s3_general import EmailMonitorS3
+from ai_analytics import AIAnalytics
 from email_monitoring_s3 import email_monitoring_manager
 
 def sanitize_for_json(obj):
@@ -163,6 +165,9 @@ def invalidate_file_listing_cache(bucket, prefix=""):
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'development-key-change-in-production')
+
+# Initialize AI Analytics
+ai_analytics = AIAnalytics()
 
 # Initialize encryption key for email credentials
 ENCRYPTION_KEY = os.getenv('EMAIL_ENCRYPTION_KEY')
@@ -4643,6 +4648,27 @@ def get_orders_analytics():
         analysis['is_yesterday'] = is_date_yesterday(target_date, user_timezone)
         analysis['user_timezone'] = user_timezone
         
+        # Add AI-powered summary if enabled and data is available
+        try:
+            if ai_analytics.client and 'orders_df' in locals() and 'orders_df' is not None:
+                # Generate AI summary for the dashboard
+                if hasattr(locals()['orders_df'], 'empty') and not locals()['orders_df'].empty:
+                    ai_summary = ai_analytics.generate_order_insights(
+                        locals()['orders_df'], 
+                        locals().get('cogs_data', {})
+                    )
+                    analysis['ai_insights'] = {
+                        'summary': ai_summary.get('insights', [])[:3],  # Top 3 insights
+                        'top_recommendation': ai_summary.get('recommendations', [])[:1],  # Top recommendation
+                        'enabled': True
+                    }
+                else:
+                    analysis['ai_insights'] = {'enabled': True, 'summary': [], 'top_recommendation': []}
+            else:
+                analysis['ai_insights'] = {'enabled': False, 'summary': [], 'top_recommendation': []}
+        except Exception as ai_error:
+            # AI insights are optional - don't break the main response
+            analysis['ai_insights'] = {'enabled': False, 'error': str(ai_error)}
         
         # Cache the successful analysis for future requests
         try:
@@ -4670,6 +4696,270 @@ def get_orders_analytics():
                 'error_type': type(e).__name__,
                 'timestamp': datetime.now().isoformat()
             }
+        }), 500
+
+@app.route('/api/analytics/ai-insights')
+@login_required
+def get_ai_insights():
+    """Generate AI-powered insights from order analytics"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Get date parameter
+        target_date_str = request.args.get('date')
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        else:
+            target_date = date.today() - timedelta(days=1)
+        
+        # Get user data for analysis
+        user_record = get_user_record(discord_id)
+        config_user_record = user_record
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Import analysis module
+        sys.path.append(os.path.join(os.path.dirname(__file__)))
+        import orders_analysis
+        analysis = orders_analysis.OrdersAnalysis()
+        
+        # Get orders and COGS data
+        orders_df = None
+        cogs_data = {}
+        
+        try:
+            # Get data using existing analytics pipeline
+            user_settings = {
+                'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or False,
+                'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or False,
+                'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
+                'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
+                'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
+                'column_mapping': get_user_column_mapping(config_user_record),
+                'discord_id': discord_id,
+                'sellerboard_orders_url': get_user_sellerboard_orders_url(config_user_record),
+                'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
+            }
+            
+            # Fetch orders and analysis data
+            result = analysis.analyze_orders(
+                target_date=target_date,
+                user_settings=user_settings,
+                return_dataframes=True
+            )
+            
+            if 'orders_df' in result:
+                orders_df = result['orders_df']
+                cogs_data = result.get('cogs_data', {})
+            
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch data for AI analysis: {str(e)}'}), 500
+        
+        # Generate AI insights if we have data
+        if orders_df is not None and not orders_df.empty:
+            insights = ai_analytics.generate_order_insights(orders_df, cogs_data)
+            insights['date'] = target_date.isoformat()
+            insights['total_orders'] = len(orders_df)
+            insights['ai_enabled'] = ai_analytics.client is not None
+        else:
+            insights = {
+                'insights': ['No order data available for the selected date'],
+                'recommendations': [],
+                'warnings': [],
+                'opportunities': [],
+                'date': target_date.isoformat(),
+                'total_orders': 0,
+                'ai_enabled': ai_analytics.client is not None
+            }
+        
+        return jsonify(insights)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'AI insights generation failed: {str(e)}',
+            'ai_enabled': ai_analytics.client is not None
+        }), 500
+
+@app.route('/api/analytics/restock-ai')
+@login_required
+def get_ai_restocking():
+    """Get AI-powered restocking recommendations"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Get user configuration
+        user_record = get_user_record(discord_id)
+        config_user_record = user_record
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Get lead time setting
+        lead_time_days = get_user_field(config_user_record, 'integrations.amazon.lead_time_days') or 90
+        
+        # Import analysis module
+        sys.path.append(os.path.join(os.path.dirname(__file__)))
+        import orders_analysis
+        analysis = orders_analysis.OrdersAnalysis()
+        
+        # Get historical orders data (last 30 days)
+        end_date = date.today()
+        start_date = end_date - timedelta(days=30)
+        
+        orders_data = []
+        current_date = start_date
+        while current_date <= end_date:
+            try:
+                user_settings = {
+                    'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or False,
+                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or False,
+                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
+                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
+                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
+                    'column_mapping': get_user_column_mapping(config_user_record),
+                    'discord_id': discord_id,
+                    'sellerboard_orders_url': get_user_sellerboard_orders_url(config_user_record),
+                    'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
+                }
+                
+                result = analysis.analyze_orders(
+                    target_date=current_date,
+                    user_settings=user_settings,
+                    return_dataframes=True
+                )
+                
+                if 'orders_df' in result and not result['orders_df'].empty:
+                    orders_data.append(result['orders_df'])
+                    
+            except Exception:
+                pass  # Skip failed dates
+            
+            current_date += timedelta(days=1)
+        
+        # Combine all orders data
+        if orders_data:
+            combined_orders = pd.concat(orders_data, ignore_index=True)
+            
+            # Get current stock levels (mock data for now - would come from inventory system)
+            stock_levels = {}
+            for asin in combined_orders['ASIN'].unique():
+                stock_levels[asin] = 50  # Mock stock level
+            
+            # Generate AI recommendations
+            recommendations = ai_analytics.predict_restocking_needs(
+                combined_orders, stock_levels, lead_time_days
+            )
+            
+            return jsonify({
+                'recommendations': recommendations,
+                'lead_time_days': lead_time_days,
+                'analysis_period': f'{start_date.isoformat()} to {end_date.isoformat()}',
+                'ai_enabled': ai_analytics.client is not None
+            })
+        else:
+            return jsonify({
+                'recommendations': [],
+                'lead_time_days': lead_time_days,
+                'analysis_period': f'{start_date.isoformat()} to {end_date.isoformat()}',
+                'message': 'No order data available for analysis',
+                'ai_enabled': ai_analytics.client is not None
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'AI restocking analysis failed: {str(e)}',
+            'ai_enabled': ai_analytics.client is not None
+        }), 500
+
+@app.route('/api/analytics/profit-optimization')
+@login_required
+def get_profit_optimization():
+    """Get AI-powered profit optimization recommendations"""
+    try:
+        discord_id = session['discord_id']
+        
+        # Get user data (similar to insights endpoint)
+        user_record = get_user_record(discord_id)
+        config_user_record = user_record
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Import analysis module
+        sys.path.append(os.path.join(os.path.dirname(__file__)))
+        import orders_analysis
+        analysis = orders_analysis.OrdersAnalysis()
+        
+        # Get last 7 days of data for profit analysis
+        end_date = date.today()
+        start_date = end_date - timedelta(days=7)
+        
+        all_orders = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            try:
+                user_settings = {
+                    'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or False,
+                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or False,
+                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
+                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
+                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
+                    'column_mapping': get_user_column_mapping(config_user_record),
+                    'discord_id': discord_id,
+                    'sellerboard_orders_url': get_user_sellerboard_orders_url(config_user_record),
+                    'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
+                }
+                
+                result = analysis.analyze_orders(
+                    target_date=current_date,
+                    user_settings=user_settings,
+                    return_dataframes=True
+                )
+                
+                if 'orders_df' in result and not result['orders_df'].empty:
+                    all_orders.append(result['orders_df'])
+                    
+            except Exception:
+                pass
+            
+            current_date += timedelta(days=1)
+        
+        # Analyze profit optimization
+        if all_orders:
+            combined_orders = pd.concat(all_orders, ignore_index=True)
+            cogs_data = {}  # Would be populated from the analysis results
+            
+            optimization = ai_analytics.analyze_profit_optimization(combined_orders, cogs_data)
+            optimization['analysis_period'] = f'{start_date.isoformat()} to {end_date.isoformat()}'
+            optimization['ai_enabled'] = ai_analytics.client is not None
+            
+            return jsonify(optimization)
+        else:
+            return jsonify({
+                'opportunities': [],
+                'analysis_period': f'{start_date.isoformat()} to {end_date.isoformat()}',
+                'message': 'No order data available for profit analysis',
+                'ai_enabled': ai_analytics.client is not None
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'Profit optimization analysis failed: {str(e)}',
+            'ai_enabled': ai_analytics.client is not None
         }), 500
 
 def allowed_file(filename):

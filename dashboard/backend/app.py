@@ -4962,6 +4962,21 @@ def get_profit_optimization():
             'ai_enabled': ai_analytics.client is not None
         }), 500
 
+@app.route('/api/ai-status')
+def get_ai_status():
+    """Get AI configuration status (no auth required)"""
+    import os
+    return jsonify({
+        'ai_enabled': ai_analytics.client is not None,
+        'keywordsai_sdk_available': ai_analytics.__class__.__module__ is not None,
+        'api_key_configured': bool(os.getenv('KEYWORDS_AI_API_KEY')),
+        'api_key_preview': os.getenv('KEYWORDS_AI_API_KEY', '')[:8] + '...' if os.getenv('KEYWORDS_AI_API_KEY') else None,
+        'debug_info': {
+            'client_type': type(ai_analytics.client).__name__ if ai_analytics.client else None,
+            'initialization_successful': ai_analytics.client is not None
+        }
+    })
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xlsm', 'xls'}

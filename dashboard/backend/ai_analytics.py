@@ -23,10 +23,26 @@ class AIAnalytics:
         self.api_key = api_key or os.getenv('KEYWORDS_AI_API_KEY')
         self.client = None
         
+        # Debug information
+        print(f"AI Analytics initialization:")
+        print(f"  - KeywordsAI SDK available: {KeywordsAI is not None}")
+        print(f"  - API key provided: {'Yes' if self.api_key else 'No'}")
+        if self.api_key:
+            print(f"  - API key starts with: {self.api_key[:8]}...")
+        
         if KeywordsAI and self.api_key:
-            self.client = KeywordsAI(api_key=self.api_key)
+            try:
+                self.client = KeywordsAI(api_key=self.api_key)
+                print("  ✅ AI Analytics enabled successfully")
+            except Exception as e:
+                print(f"  ❌ Failed to initialize Keywords.ai client: {e}")
         else:
-            print("AI Analytics disabled - Keywords.ai not configured")
+            reasons = []
+            if not KeywordsAI:
+                reasons.append("KeywordsAI SDK not available")
+            if not self.api_key:
+                reasons.append("No API key found")
+            print(f"  ❌ AI Analytics disabled - {', '.join(reasons)}")
     
     def generate_order_insights(self, orders_df: pd.DataFrame, cogs_data: Dict[str, dict]) -> Dict[str, Any]:
         """Generate AI-powered insights from order data"""

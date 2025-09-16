@@ -4966,16 +4966,69 @@ def get_profit_optimization():
 def get_ai_status():
     """Get AI configuration status (no auth required)"""
     import os
+    import subprocess
+    import sys
+    
+    # Try to import keywordsai and get detailed info
+    keywordsai_available = False
+    import_error = None
+    try:
+        import keywordsai
+        keywordsai_available = True
+        keywordsai_version = getattr(keywordsai, '__version__', 'unknown')
+    except ImportError as e:
+        import_error = str(e)
+        keywordsai_version = None
+    except Exception as e:
+        import_error = f"Unexpected error: {e}"
+        keywordsai_version = None
+    
+    # Check if keywordsai is installed via pip
+    try:
+        result = subprocess.run([sys.executable, '-m', 'pip', 'show', 'keywordsai'], 
+                              capture_output=True, text=True, timeout=10)
+        pip_info = result.stdout if result.returncode == 0 else f"Not found: {result.stderr}"
+    except Exception as e:
+        pip_info = f"Error checking pip: {e}"
+    
     return jsonify({
         'ai_enabled': ai_analytics.client is not None,
-        'keywordsai_sdk_available': ai_analytics.__class__.__module__ is not None,
+        'keywordsai_sdk_available': keywordsai_available,
+        'keywordsai_version': keywordsai_version,
+        'import_error': import_error,
+        'pip_info': pip_info,
         'api_key_configured': bool(os.getenv('KEYWORDS_AI_API_KEY')),
         'api_key_preview': os.getenv('KEYWORDS_AI_API_KEY', '')[:8] + '...' if os.getenv('KEYWORDS_AI_API_KEY') else None,
+        'python_version': sys.version,
+        'python_path': sys.executable,
         'debug_info': {
             'client_type': type(ai_analytics.client).__name__ if ai_analytics.client else None,
             'initialization_successful': ai_analytics.client is not None
         }
     })
+
+@app.route('/api/install-keywordsai')
+def install_keywordsai():
+    """Emergency endpoint to install keywordsai (no auth required)"""
+    import subprocess
+    import sys
+    
+    try:
+        result = subprocess.run([
+            sys.executable, '-m', 'pip', 'install', 'keywordsai==1.0.3'
+        ], capture_output=True, text=True, timeout=60)
+        
+        return jsonify({
+            'success': result.returncode == 0,
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'return_code': result.returncode
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 def allowed_file(filename):
     """Check if file extension is allowed"""

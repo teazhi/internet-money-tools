@@ -13,8 +13,13 @@ import numpy as np
 # Keywords.ai integration
 try:
     from keywordsai import KeywordsAI
-except ImportError:
-    print("Keywords.ai SDK not installed. Run: pip install keywordsai")
+    print("✅ Keywords.ai SDK imported successfully")
+except ImportError as e:
+    print(f"❌ Keywords.ai SDK import failed: {e}")
+    print("   Make sure keywordsai is in requirements.txt and properly installed")
+    KeywordsAI = None
+except Exception as e:
+    print(f"❌ Unexpected error importing Keywords.ai: {e}")
     KeywordsAI = None
 
 class AIAnalytics:

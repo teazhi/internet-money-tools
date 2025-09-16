@@ -10,17 +10,50 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-# Keywords.ai integration
+# Keywords.ai integration with multiple fallback strategies
+KeywordsAI = None
+import_status = "unknown"
+
+# Strategy 1: Try standard import
 try:
     from keywordsai import KeywordsAI
-    print("✅ Keywords.ai SDK imported successfully")
+    print("✅ Keywords.ai SDK imported successfully (standard import)")
+    import_status = "success"
 except ImportError as e:
-    print(f"❌ Keywords.ai SDK import failed: {e}")
-    print("   Make sure keywordsai is in requirements.txt and properly installed")
-    KeywordsAI = None
+    print(f"❌ Standard import failed: {e}")
+    import_status = f"import_error: {e}"
+    
+    # Strategy 2: Try direct SDK import
+    try:
+        from keywordsai_sdk import KeywordsAI
+        print("✅ Keywords.ai SDK imported successfully (direct SDK import)")
+        import_status = "success_direct"
+    except ImportError as e2:
+        print(f"❌ Direct SDK import also failed: {e2}")
+        import_status = f"both_failed: {e} | {e2}"
+    except Exception as e2:
+        print(f"❌ Unexpected error with direct import: {e2}")
+        import_status = f"unexpected_direct: {e2}"
+        
 except Exception as e:
     print(f"❌ Unexpected error importing Keywords.ai: {e}")
-    KeywordsAI = None
+    import_status = f"unexpected: {e}"
+
+# Final fallback: Create a mock class for graceful degradation
+if KeywordsAI is None:
+    print("⚠️  Creating mock KeywordsAI class for graceful fallback")
+    
+    class MockKeywordsAI:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+            print(f"MockKeywordsAI initialized (API key provided: {'Yes' if api_key else 'No'})")
+        
+        def generate(self, **kwargs):
+            print("MockKeywordsAI.generate() called - AI features disabled")
+            raise Exception("Keywords.ai not available - AI features disabled")
+    
+    # Don't use mock for now, keep as None to indicate unavailable
+    # KeywordsAI = MockKeywordsAI
 
 class AIAnalytics:
     def __init__(self, api_key: Optional[str] = None):

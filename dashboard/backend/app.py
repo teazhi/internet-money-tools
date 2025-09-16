@@ -4991,11 +4991,20 @@ def get_ai_status():
     except Exception as e:
         pip_info = f"Error checking pip: {e}"
     
+    # Get import status from ai_analytics module
+    import_status = "unknown"
+    try:
+        from ai_analytics import import_status as ai_import_status
+        import_status = ai_import_status
+    except:
+        pass
+    
     return jsonify({
         'ai_enabled': ai_analytics.client is not None,
         'keywordsai_sdk_available': keywordsai_available,
         'keywordsai_version': keywordsai_version,
         'import_error': import_error,
+        'import_status': import_status,
         'pip_info': pip_info,
         'api_key_configured': bool(os.getenv('KEYWORDS_AI_API_KEY')),
         'api_key_preview': os.getenv('KEYWORDS_AI_API_KEY', '')[:8] + '...' if os.getenv('KEYWORDS_AI_API_KEY') else None,
@@ -5014,8 +5023,9 @@ def install_keywordsai():
     import sys
     
     try:
+        # Try upgrading to latest version to fix import issues
         result = subprocess.run([
-            sys.executable, '-m', 'pip', 'install', 'keywordsai==1.0.3'
+            sys.executable, '-m', 'pip', 'install', '--upgrade', 'keywordsai'
         ], capture_output=True, text=True, timeout=60)
         
         return jsonify({

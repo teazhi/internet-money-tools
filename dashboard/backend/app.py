@@ -10992,42 +10992,45 @@ def get_expected_arrivals():
         all_known_asins = set()
         
         # First try COGS data (from email or direct URL fetch)
-        if sellerboard_cogs_url:
-            if inventory_data:
-                # Use email-fetched COGS data
-                asin_column = inventory_data['asin_column']
+        if inventory_data:
+            # Use email-fetched COGS data (highest priority)
+            print(f"📥 Using email-fetched COGS data: {inventory_data.get('filename', 'unknown')}")
+            asin_column = inventory_data['asin_column']
+            
+            for product in inventory_data['data']:
+                asin = product.get(asin_column)
+                if asin and str(asin).strip():
+                    all_known_asins.add(str(asin).upper())
+            
+            print(f"✅ Email COGS processing found {len(all_known_asins)} ASINs")
+            
+        elif sellerboard_cogs_url:
+            # Email failed, but we have COGS URL - fetch directly from COGS URL
+            try:
+                print(f"📥 Email COGS failed, fetching directly from COGS URL: {sellerboard_cogs_url}")
+                from orders_analysis import OrdersAnalysis
+                cogs_analysis = OrdersAnalysis()
                 
-                for product in inventory_data['data']:
-                    asin = product.get(asin_column)
-                    if asin and str(asin).strip():
-                        all_known_asins.add(str(asin).upper())
-            else:
-                # Email failed, but we have COGS URL - fetch directly from COGS URL
-                try:
-                    print(f"📥 Email COGS failed, fetching directly from COGS URL: {sellerboard_cogs_url}")
-                    from orders_analysis import OrdersAnalysis
-                    cogs_analysis = OrdersAnalysis()
+                # Fetch COGS data directly from URL
+                cogs_inventory_data = cogs_analysis.fetch_sellerboard_data(sellerboard_cogs_url)
+                
+                if cogs_inventory_data and 'data' in cogs_inventory_data:
+                    asin_column = cogs_inventory_data.get('asin_column', 'ASIN')
                     
-                    # Fetch COGS data directly from URL
-                    cogs_inventory_data = cogs_analysis.fetch_sellerboard_data(sellerboard_cogs_url)
+                    for product in cogs_inventory_data['data']:
+                        asin = product.get(asin_column)
+                        if asin and str(asin).strip():
+                            all_known_asins.add(str(asin).upper())
                     
-                    if cogs_inventory_data and 'data' in cogs_inventory_data:
-                        asin_column = cogs_inventory_data.get('asin_column', 'ASIN')
-                        
-                        for product in cogs_inventory_data['data']:
-                            asin = product.get(asin_column)
-                            if asin and str(asin).strip():
-                                all_known_asins.add(str(asin).upper())
-                        
-                        print(f"✅ Successfully fetched {len(all_known_asins)} ASINs from COGS URL")
-                    else:
-                        print(f"❌ Failed to get valid data from COGS URL")
-                        raise Exception("No valid data returned from COGS URL")
-                        
-                except Exception as cogs_error:
-                    print(f"❌ COGS URL fetch failed: {cogs_error}")
-                    # Fall through to stock-based approach
-                    pass
+                    print(f"✅ Successfully fetched {len(all_known_asins)} ASINs from COGS URL")
+                else:
+                    print(f"❌ Failed to get valid data from COGS URL")
+                    raise Exception("No valid data returned from COGS URL")
+                    
+            except Exception as cogs_error:
+                print(f"❌ COGS URL fetch failed: {cogs_error}")
+                # Fall through to stock-based approach
+                pass
         
         # If COGS approach failed or unavailable, fallback to Stock-based approach
         if not all_known_asins:
@@ -11101,12 +11104,15 @@ def get_expected_arrivals():
         missing_listings.sort(key=lambda x: x.get('last_purchase_date', ''), reverse=True)
 
         # Determine what data source was actually used
-        if inventory_data:
+        if inventory_data and all_known_asins:
             data_source = "sellerboard_cogs_email"
+            print(f"🎯 Final data source: Email COGS ({len(all_known_asins)} ASINs)")
         elif sellerboard_cogs_url and all_known_asins:
             data_source = "sellerboard_cogs_url"
+            print(f"🎯 Final data source: Direct COGS URL ({len(all_known_asins)} ASINs)")
         else:
             data_source = "sellerboard_stock_analytics"
+            print(f"🎯 Final data source: Stock Analytics ({len(all_known_asins)} ASINs)")
 
         # Prepare response data
         response_data = {

@@ -675,10 +675,10 @@ const AllProductAnalytics = () => {
           // Basic inventory data
           current_stock: currentStock,
           velocity: velocity,
-          amount_ordered: safeNumber(
-            enhancedData?.restock?.monthly_purchase_adjustment || 
-            enhancedData?.monthly_purchase_adjustment ||
-            ageInfo?.monthly_purchase_adjustment ||
+          amount_ordered: safeNumber(enhancedData?.restock?.monthly_purchase_adjustment, 0),
+          suggested_quantity: safeNumber(
+            enhancedData?.restock?.suggested_quantity ||
+            allProductsData?.restock_alerts?.[asin]?.suggested_quantity ||
             0, 0
           ),
           days_left: Math.floor(daysLeft),
@@ -782,9 +782,9 @@ const AllProductAnalytics = () => {
       inventory_value: { key: 'inventory_value', label: 'Inv. Value', sortKey: 'inventory_value', draggable: true, width: 'w-20' },
       turnover_rate: { key: 'turnover_rate', label: 'Turnover', sortKey: 'turnover_rate', draggable: true, width: 'w-20' },
       // Existing columns
-      amount_ordered: { key: 'amount_ordered', label: 'Units (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
+      suggested_units: { key: 'suggested_units', label: 'Suggested Units', sortKey: 'suggested_quantity', draggable: true, width: 'w-24' },
+      amount_ordered: { key: 'amount_ordered', label: 'Ordered (2mo)', sortKey: 'amount_ordered', draggable: true, width: 'w-20' },
       retailer: { key: 'retailer', label: 'Retailer', sortKey: 'retailer_display', draggable: true, width: 'w-24' },
-      source: { key: 'source', label: 'Source', sortKey: 'source_link', draggable: true, width: 'w-32' },
       reorder_point: { key: 'reorder_point', label: 'Reorder', sortKey: 'reorder_point', draggable: true, width: 'w-20' },
       status: { key: 'status', label: 'Status', sortKey: 'status', draggable: true, width: 'w-20' },
       actions: { key: 'actions', label: 'Actions', sortKey: null, draggable: false, width: 'w-20' }
@@ -796,15 +796,15 @@ const AllProductAnalytics = () => {
   const getColumnOrder = useMemo(() => {
     switch (selectedMetric) {
       case 'inventory':
-        return ['product', 'priority', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'amount_ordered', 'reorder_point', 'retailer', 'source', 'status', 'actions'];
+        return ['product', 'priority', 'current_stock', 'velocity', 'days_left', 'inventory_age', 'turnover_rate', 'suggested_units', 'amount_ordered', 'reorder_point', 'retailer', 'status', 'actions'];
       case 'profitability':
-        return ['product', 'priority', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'source', 'status', 'actions'];
+        return ['product', 'priority', 'selling_price', 'last_cogs', 'profit_margin', 'roi', 'revenue_30d', 'units_sold_30d', 'inventory_value', 'suggested_units', 'status', 'actions'];
       case 'sales':
-        return ['product', 'priority', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'source', 'status', 'actions'];
+        return ['product', 'priority', 'units_sold_30d', 'revenue_30d', 'velocity', 'selling_price', 'profit_margin', 'current_stock', 'suggested_units', 'status', 'actions'];
       case 'amazon':
-        return ['product', 'priority', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'source', 'status', 'actions'];
+        return ['product', 'priority', 'bsr', 'rating', 'reviews_count', 'units_sold_30d', 'revenue_30d', 'velocity', 'suggested_units', 'status', 'actions'];
       default:
-        return ['product', 'priority', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'source', 'status', 'actions'];
+        return ['product', 'priority', 'current_stock', 'velocity', 'profit_margin', 'units_sold_30d', 'days_left', 'inventory_age', 'bsr', 'suggested_units', 'status', 'actions'];
     }
   }, [selectedMetric]);
 
@@ -1146,7 +1146,24 @@ const AllProductAnalytics = () => {
                     {item.product_name}
                   </a>
                 </div>
-                <div className="text-xs text-gray-500 truncate">{item.asin}</div>
+                <div className="text-xs text-gray-500">
+                  {item.asin}
+                  {(item.source_link || 
+                    item.all_source_links?.[0]) && (
+                    <>
+                      {' • '}
+                      <a 
+                        href={item.source_link || item.all_source_links?.[0] || `https://www.amazon.com/dp/${item.asin}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800"
+                        title="View source"
+                      >
+                        <ExternalLink className="inline h-2 w-2" />
+                      </a>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </td>
@@ -1183,6 +1200,18 @@ const AllProductAnalytics = () => {
         return (
           <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap text-sm text-gray-900">
             {item.velocity.toFixed(1)}/day
+          </td>
+        );
+
+      case 'suggested_units':
+        return (
+          <td key={columnKey} className="px-2 py-1.5 whitespace-nowrap">
+            <div className="text-sm font-bold text-builders-600">
+              {item.suggested_quantity || 0}
+            </div>
+            <div className="text-xs text-gray-500">
+              units
+            </div>
           </td>
         );
 
@@ -1417,28 +1446,6 @@ const AllProductAnalytics = () => {
             }`}>
               {safeNumber(item.turnover_rate, 0).toFixed(1)}x
             </div>
-          </td>
-        );
-
-      case 'source':
-        return (
-          <td key={columnKey} className="px-2 py-1.5 whitespace-normal text-sm">
-            {item.source_link ? (
-              <a 
-                href={item.source_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-md hover:bg-blue-200 transition-colors max-w-full"
-                title={`View source: ${item.source_link}`}
-              >
-                <ExternalLink className="h-3 w-3 mr-1 flex-shrink-0" />
-                <span className="truncate">
-                  {item.source_link.length > 20 ? `${item.source_link.substring(0, 20)}...` : item.source_link}
-                </span>
-              </a>
-            ) : (
-              <span className="text-gray-400 text-xs">No source</span>
-            )}
           </td>
         );
 

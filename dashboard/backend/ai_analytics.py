@@ -71,7 +71,7 @@ except ImportError as e:
                 }
                 
                 response = requests.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self.base_url}/api/chat/completions",
                     headers=headers,
                     json=data,
                     timeout=30

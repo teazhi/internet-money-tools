@@ -39,8 +39,8 @@ python-amazon-sp-api==1.8.22
 # Security
 cryptography>=3.4.8
 
-# AI Analytics - Use latest stable version
-keywordsai>=1.0.4
+# AI Analytics - Pin to working version
+keywordsai==1.0.3
 
 # Supporting libraries
 certifi==2025.1.31

@@ -5023,9 +5023,9 @@ def install_keywordsai():
     import sys
     
     try:
-        # Try upgrading to latest version to fix import issues
+        # Try force reinstalling to fix import issues
         result = subprocess.run([
-            sys.executable, '-m', 'pip', 'install', '--upgrade', 'keywordsai'
+            sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-cache-dir', 'keywordsai==1.0.3'
         ], capture_output=True, text=True, timeout=60)
         
         return jsonify({

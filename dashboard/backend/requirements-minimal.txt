@@ -5,4 +5,4 @@ requests==2.31.0
 python-dotenv==1.0.0
 pandas==2.2.3
 pytz==2025.1
-keywordsai>=1.0.4
+keywordsai==1.0.3

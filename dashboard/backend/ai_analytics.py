@@ -10,52 +10,112 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-# Keywords.ai integration with multiple fallback strategies
+# Keywords.ai integration with import error handling
 KeywordsAI = None
 import_status = "unknown"
 
-# Strategy 1: Try standard import
+# Strategy 1: Fix the import error by pre-patching missing Evaluator
 try:
-    from keywordsai import KeywordsAI
-    print("✅ Keywords.ai SDK imported successfully (standard import)")
-    import_status = "success"
-except ImportError as e:
-    print(f"❌ Standard import failed: {e}")
-    import_status = f"import_error: {e}"
+    # Pre-patch the missing Evaluator class to fix import error
+    import sys
+    import types
     
-    # Strategy 2: Try direct SDK import
+    # Create the missing module structure if it doesn't exist
+    if 'keywordsai_sdk' not in sys.modules:
+        keywordsai_sdk = types.ModuleType('keywordsai_sdk')
+        sys.modules['keywordsai_sdk'] = keywordsai_sdk
+    
+    if 'keywordsai_sdk.keywordsai_types' not in sys.modules:
+        keywordsai_types = types.ModuleType('keywordsai_sdk.keywordsai_types')
+        sys.modules['keywordsai_sdk.keywordsai_types'] = keywordsai_types
+    
+    if 'keywordsai_sdk.keywordsai_types.dataset_types' not in sys.modules:
+        dataset_types = types.ModuleType('keywordsai_sdk.keywordsai_types.dataset_types')
+        
+        # Add the missing Evaluator class
+        class Evaluator:
+            pass
+        
+        dataset_types.Evaluator = Evaluator
+        sys.modules['keywordsai_sdk.keywordsai_types.dataset_types'] = dataset_types
+    
+    # Now try importing
+    from keywordsai import KeywordsAI
+    print("✅ Keywords.ai SDK imported successfully (with patch)")
+    import_status = "success_patched"
+    
+except ImportError as e:
+    print(f"❌ Patched import still failed: {e}")
+    import_status = f"patch_failed: {e}"
+    
+    # Strategy 2: Try importing just the core client
     try:
-        from keywordsai_sdk import KeywordsAI
-        print("✅ Keywords.ai SDK imported successfully (direct SDK import)")
-        import_status = "success_direct"
-    except ImportError as e2:
-        print(f"❌ Direct SDK import also failed: {e2}")
-        import_status = f"both_failed: {e} | {e2}"
+        # Try importing the minimal client directly
+        import requests
+        
+        class SimpleKeywordsAI:
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.base_url = "https://api.keywordsai.co"
+                
+            def generate(self, messages, model="gpt-4-turbo-preview", **kwargs):
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                data = {
+                    "model": model,
+                    "messages": messages,
+                    **kwargs
+                }
+                
+                response = requests.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                )
+                response.raise_for_status()
+                return response.json()
+        
+        KeywordsAI = SimpleKeywordsAI
+        print("✅ Using simplified Keywords.ai client")
+        import_status = "success_simple"
+        
     except Exception as e2:
-        print(f"❌ Unexpected error with direct import: {e2}")
-        import_status = f"unexpected_direct: {e2}"
+        print(f"❌ Simplified client also failed: {e2}")
+        import_status = f"all_failed: {e} | {e2}"
         
 except Exception as e:
-    print(f"❌ Unexpected error importing Keywords.ai: {e}")
-    import_status = f"unexpected: {e}"
-
-# Final fallback: Create a mock class for graceful degradation
-if KeywordsAI is None:
-    print("⚠️  Creating mock KeywordsAI class for graceful fallback")
-    
-    class MockKeywordsAI:
-        def __init__(self, api_key=None):
-            self.api_key = api_key
-            print(f"MockKeywordsAI initialized (API key provided: {'Yes' if api_key else 'No'})")
-        
-        def generate(self, **kwargs):
-            print("MockKeywordsAI.generate() called - AI features disabled")
-            raise Exception("Keywords.ai not available - AI features disabled")
-    
-    # Don't use mock for now, keep as None to indicate unavailable
-    # KeywordsAI = MockKeywordsAI
+    print(f"❌ Unexpected error with patch approach: {e}")
+    import_status = f"patch_error: {e}"
 
 class AIAnalytics:
+    def _parse_response(self, response, as_json=True):
+        """Parse response from either official SDK or simplified client"""
+        try:
+            # Get the content from response
+            content = None
+            if hasattr(response, 'choices'):
+                # Official SDK response format
+                content = response.choices[0].message.content
+            elif isinstance(response, dict) and 'choices' in response:
+                # Simplified client response format
+                content = response['choices'][0]['message']['content']
+            else:
+                print(f"Unexpected response format: {response}")
+                return {} if as_json else ""
+            
+            if as_json:
+                return json.loads(content)
+            else:
+                return content
+                
+        except Exception as e:
+            print(f"Error parsing AI response: {e}")
+            return {} if as_json else ""
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize AI Analytics with Keywords.ai"""
         self.api_key = api_key or os.getenv('KEYWORDS_AI_API_KEY')
@@ -122,7 +182,7 @@ class AIAnalytics:
                 response_format={"type": "json_object"}
             )
             
-            return json.loads(response.choices[0].message.content)
+            return self._parse_response(response, as_json=True)
             
         except Exception as e:
             print(f"AI insights generation failed: {e}")
@@ -171,7 +231,7 @@ class AIAnalytics:
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = self._parse_response(response, as_json=True)
             return result.get('recommendations', [])
             
         except Exception as e:
@@ -210,7 +270,7 @@ class AIAnalytics:
                 response_format={"type": "json_object"}
             )
             
-            return json.loads(response.choices[0].message.content)
+            return self._parse_response(response, as_json=True)
             
         except Exception as e:
             print(f"Profit optimization analysis failed: {e}")
@@ -246,7 +306,7 @@ class AIAnalytics:
                 temperature=0.7
             )
             
-            return response.choices[0].message.content
+            return self._parse_response(response, as_json=False)
             
         except Exception as e:
             print(f"Weekly summary generation failed: {e}")
@@ -285,7 +345,8 @@ class AIAnalytics:
                 response_format={"type": "json_object"}
             )
             
-            return json.loads(response.choices[0].message.content).get('anomalies', [])
+            result = self._parse_response(response, as_json=True)
+            return result.get('anomalies', [])
             
         except Exception as e:
             print(f"Anomaly analysis failed: {e}")

@@ -1783,6 +1783,38 @@ class EnhancedOrdersAnalysis:
             stock_value = restock_data.get('current_stock', 0)
             
             
+            # Calculate actual units sold in last 30 and 7 days for the frontend
+            # This is different from velocity which is daily average
+            try:
+                # Get orders for last 30 days
+                start_date_30d = for_date - timedelta(days=29)  # 30 days including today
+                orders_30d = self.get_orders_for_date_range(orders_df, start_date_30d, for_date, user_timezone)
+                sales_30d = self.asin_sales_count(orders_30d)
+                units_sold_30d = sales_30d.get(asin, 0)
+                
+                # Get orders for last 7 days
+                start_date_7d = for_date - timedelta(days=6)  # 7 days including today
+                orders_7d = self.get_orders_for_date_range(orders_df, start_date_7d, for_date, user_timezone)
+                sales_7d = self.asin_sales_count(orders_7d)
+                units_sold_7d = sales_7d.get(asin, 0)
+                
+                # Calculate revenue if we have price data
+                selling_price = 0
+                if cogs_data.get(asin, {}).get('selling_price'):
+                    selling_price = float(cogs_data[asin]['selling_price'])
+                elif asin_stock_info.get('Price'):
+                    selling_price = float(asin_stock_info['Price'])
+                
+                revenue_30d = units_sold_30d * selling_price if selling_price > 0 else 0
+                revenue_7d = units_sold_7d * selling_price if selling_price > 0 else 0
+                
+            except Exception as e:
+                print(f"Error calculating sales data for {asin}: {e}")
+                units_sold_30d = 0
+                units_sold_7d = 0
+                revenue_30d = 0
+                revenue_7d = 0
+
             # Combine all data including COGS and purchase analytics data if available
             enhanced_analytics[asin] = {
                 'current_sales': current_sales,
@@ -1793,6 +1825,13 @@ class EnhancedOrdersAnalysis:
                 'product_name': asin_stock_info.get('Title', f'Product {asin}'),
                 'current_stock': stock_value,  # Add direct access to current_stock for frontend
                 'cogs_data': cogs_data.get(asin, {}),  # Include COGS and source link data
+                'sales_data': {  # Add sales data for frontend
+                    'units_sold_30d': units_sold_30d,
+                    'units_sold_7d': units_sold_7d,
+                    'revenue_30d': revenue_30d,
+                    'revenue_7d': revenue_7d,
+                    'selling_price': selling_price
+                },
                 'purchase_analytics': {
                     'velocity_analysis': purchase_insights.get('purchase_velocity_analysis', {}).get(asin, {}),
                     'urgency_scoring': purchase_insights.get('restock_urgency_scoring', {}).get(asin, {}),

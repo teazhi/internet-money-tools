@@ -7,9 +7,27 @@ const AIInsights = ({ selectedDate, analyticsData }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showFullInsights, setShowFullInsights] = useState(false);
+  const [aiStatus, setAiStatus] = useState(null);
 
-  // Check if AI is enabled from the main analytics data
-  const aiEnabled = analyticsData?.ai_insights?.enabled || false;
+  // Check if AI is enabled - try multiple possible fields or use cached status
+  const aiEnabled = aiStatus?.ai_enabled || analyticsData?.ai_enabled || analyticsData?.ai_insights?.enabled || false;
+
+  // Check AI status if not available in analytics data
+  useEffect(() => {
+    const checkAiStatus = async () => {
+      if (!analyticsData?.ai_enabled && !analyticsData?.ai_insights?.enabled && !aiStatus) {
+        try {
+          const response = await axios.get('/api/analytics/ai-status', { withCredentials: true });
+          setAiStatus(response.data);
+        } catch (err) {
+          // Silent fail - AI status check is not critical
+          console.log('AI status check failed:', err);
+        }
+      }
+    };
+    
+    checkAiStatus();
+  }, [analyticsData, aiStatus]);
 
   useEffect(() => {
     // If AI insights are already included in analytics data, use them

@@ -25,7 +25,9 @@ import {
   Zap,
   TestTube,
   ShoppingBag,
-  Mail
+  Mail,
+  Brain,
+  Sparkles
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -46,6 +48,9 @@ import PurchaseManager from './dashboard/PurchaseManager';
 import EmailMonitoring from './EmailMonitoring';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
+import AIInsights from './AIInsights';
+import AIInsightsPage from './dashboard/AIInsightsPage';
+import AIRestockPage from './dashboard/AIRestockPage';
 
 const Dashboard = () => {
   const { user, logout, refreshUser } = useAuth();
@@ -129,6 +134,23 @@ const Dashboard = () => {
       icon: TrendingUp, 
       current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics'),
       beta: isFeatureBeta('smart_restock')
+    }] : []),
+    
+    // AI-Powered Features
+    ...(hasFeatureAccess('ai_analytics') || true ? [{
+      name: 'AI Insights', 
+      href: '/dashboard/ai-insights', 
+      icon: Brain, 
+      current: location.pathname === '/dashboard/ai-insights',
+      beta: true
+    }] : []),
+    
+    ...(hasFeatureAccess('ai_analytics') || true ? [{
+      name: 'AI Restock', 
+      href: '/dashboard/ai-restock', 
+      icon: Sparkles, 
+      current: location.pathname === '/dashboard/ai-restock',
+      beta: true
     }] : []),
     
     ...(hasFeatureAccess('missing_listings') ? [{
@@ -555,6 +577,10 @@ const Dashboard = () => {
                   <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
                 </>
               )}
+              
+              {/* AI-powered routes */}
+              <Route path="/ai-insights" element={<AIInsightsPage />} />
+              <Route path="/ai-restock" element={<AIRestockPage />} />
               
               {hasFeatureAccess('missing_listings') && (
                 <Route path="/missing-listings" element={<MissingListings />} />

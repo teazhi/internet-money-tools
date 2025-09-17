@@ -4730,43 +4730,37 @@ def get_ai_insights():
         import orders_analysis
         analysis = orders_analysis.OrdersAnalysis()
         
-        # Get orders and COGS data
-        orders_df = None
-        cogs_data = {}
-        
+        # Get analytics data using the same logic as the main analytics endpoint
         try:
-            # Get data using existing analytics pipeline
-            user_settings = {
-                'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or False,
-                'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or False,
-                'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
-                'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                'column_mapping': get_user_column_mapping(config_user_record),
-                'discord_id': discord_id,
-                'sellerboard_orders_url': get_user_sellerboard_orders_url(config_user_record),
-                'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
-            }
+            # Check cache first
+            cache_key = get_cache_key(discord_id, target_date)
+            analytics_data = get_cached_data(cache_key)
             
-            # Fetch orders and analysis data
-            result = analysis.analyze(
-                for_date=target_date,
-                user_settings=user_settings,
-                preserve_purchase_history=True
-            )
-            
-            if 'orders_df' in result:
-                orders_df = result['orders_df']
-                cogs_data = result.get('cogs_data', {})
-            
+            if not analytics_data:
+                # If not cached, we need to compute it (simplified version for AI use)
+                # Just get basic sales data for AI analysis
+                orders_url = get_user_sellerboard_orders_url(config_user_record)
+                if not orders_url:
+                    return jsonify({'error': 'No orders URL configured'}), 400
+                    
+                analysis.orders_url = orders_url
+                stock_url = get_user_sellerboard_stock_url(config_user_record)
+                if stock_url:
+                    analysis.stock_url = stock_url
+                    
+                # Get analytics data
+                analytics_data = analysis.analyze(target_date)
+                
         except Exception as e:
             return jsonify({'error': f'Failed to fetch data for AI analysis: {str(e)}'}), 500
         
-        # Generate AI insights if we have data
-        if orders_df is not None and not orders_df.empty:
-            insights = ai_analytics.generate_order_insights(orders_df, cogs_data)
+        # Generate AI insights if we have analytics data
+        if analytics_data and analytics_data.get('today_sales'):
+            # Convert structured data to format AI function expects
+            total_orders = sum(analytics_data.get('today_sales', {}).values())
+            insights = ai_analytics.generate_insights_from_analytics(analytics_data)
             insights['date'] = target_date.isoformat()
-            insights['total_orders'] = len(orders_df)
+            insights['total_orders'] = total_orders
             insights['ai_enabled'] = ai_analytics.client is not None
         else:
             insights = {
@@ -4832,32 +4826,37 @@ def get_ai_restocking():
                     'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
                 }
                 
-                result = analysis.analyze_orders(
-                    target_date=current_date,
-                    user_settings=user_settings,
-                    return_dataframes=True
-                )
-                
-                if 'orders_df' in result and not result['orders_df'].empty:
-                    orders_data.append(result['orders_df'])
+                # Simplified: just get orders data for this date
+                analysis.orders_url = get_user_sellerboard_orders_url(config_user_record) 
+                if analysis.orders_url:
+                    daily_data = analysis.analyze(current_date)
+                    if daily_data.get('today_sales'):
+                        orders_data.append(daily_data)
                     
             except Exception:
                 pass  # Skip failed dates
             
             current_date += timedelta(days=1)
         
-        # Combine all orders data
+        # Combine all sales data
         if orders_data:
-            combined_orders = pd.concat(orders_data, ignore_index=True)
+            # Aggregate sales data across all dates
+            all_sales = {}
+            all_stock_info = {}
             
-            # Get current stock levels (mock data for now - would come from inventory system)
-            stock_levels = {}
-            for asin in combined_orders['ASIN'].unique():
-                stock_levels[asin] = 50  # Mock stock level
+            for daily_data in orders_data:
+                for asin, count in daily_data.get('today_sales', {}).items():
+                    all_sales[asin] = all_sales.get(asin, 0) + count
+                    
+                # Also collect stock information if available
+                enhanced = daily_data.get('enhanced_analytics', {})
+                for asin, data in enhanced.items():
+                    if asin not in all_stock_info:
+                        all_stock_info[asin] = data
             
-            # Generate AI recommendations
-            recommendations = ai_analytics.predict_restocking_needs(
-                combined_orders, stock_levels, lead_time_days
+            # Generate AI recommendations using structured data
+            recommendations = ai_analytics.predict_restocking_from_analytics(
+                all_sales, all_stock_info, lead_time_days
             )
             
             return jsonify({
@@ -4924,10 +4923,10 @@ def get_profit_optimization():
                     'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
                 }
                 
-                result = analysis.analyze_orders(
-                    target_date=current_date,
+                result = analysis.analyze(
+                    for_date=current_date,
                     user_settings=user_settings,
-                    return_dataframes=True
+                    preserve_purchase_history=True
                 )
                 
                 if 'orders_df' in result and not result['orders_df'].empty:

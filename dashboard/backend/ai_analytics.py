@@ -513,3 +513,131 @@ class AIAnalytics:
                         })
         
         return anomalies[:10]  # Limit to top 10 anomalies
+
+    def generate_insights_from_analytics(self, analytics_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate AI insights from structured analytics data instead of raw DataFrame"""
+        if not self.client:
+            return {
+                "insights": ["AI insights not available - Keywords.ai not configured"],
+                "recommendations": [],
+                "warnings": [],
+                "opportunities": [],
+                "ai_enabled": False
+            }
+        
+        try:
+            # Extract key metrics from analytics data
+            today_sales = analytics_data.get('today_sales', {})
+            stock_info = analytics_data.get('enhanced_analytics', {})
+            low_stock = analytics_data.get('low_stock', {})
+            
+            # Calculate summary statistics
+            total_orders = sum(today_sales.values())
+            total_products = len(today_sales)
+            top_products = sorted(today_sales.items(), key=lambda x: x[1], reverse=True)[:10]
+            
+            # Build context for AI
+            prompt = f"""
+            Analyze this e-commerce performance data and provide actionable insights:
+            
+            Sales Performance:
+            - Total Orders: {total_orders}
+            - Active Products: {total_products}
+            - Top Sellers: {json.dumps(dict(top_products[:5]), indent=2)}
+            
+            Inventory Alerts:
+            - Low Stock Items: {len(low_stock)}
+            - Stock Alerts: {json.dumps(list(low_stock.keys())[:5]) if low_stock else 'None'}
+            
+            Enhanced Analytics Available: {bool(stock_info)}
+            
+            Provide insights in JSON format with:
+            - insights: array of key observations
+            - recommendations: array of actionable suggestions
+            - warnings: array of urgent issues
+            - opportunities: array of growth opportunities
+            
+            Focus on practical, specific advice for an Amazon seller.
+            """
+            
+            response = self.client.generate(
+                messages=[{"role": "user", "content": prompt}],
+                model="gpt-4-turbo-preview", 
+                temperature=0.5,
+                response_format={"type": "json_object"}
+            )
+            
+            result = self._parse_response(response, as_json=True)
+            result['ai_enabled'] = True
+            return result
+            
+        except Exception as e:
+            print(f"AI insights generation failed: {e}")
+            return {
+                "insights": [f"AI analysis encountered an error: {str(e)[:100]}"],
+                "recommendations": ["Review your data sources and try again"],
+                "warnings": [],
+                "opportunities": [],
+                "ai_enabled": True,
+                "error": str(e)
+            }
+
+    def predict_restocking_from_analytics(self, sales_data: Dict[str, int], stock_info: Dict[str, dict], lead_time_days: int = 90) -> List[Dict[str, Any]]:
+        """Predict restocking needs from structured analytics data"""
+        if not self.client:
+            return []
+        
+        try:
+            # Build velocity data from sales 
+            velocity_data = []
+            for asin, total_sales in sales_data.items():
+                # Estimate daily velocity (30-day period)
+                daily_velocity = total_sales / 30.0
+                
+                # Get stock info if available
+                stock_data = stock_info.get(asin, {})
+                current_stock = stock_data.get('restock', {}).get('current_stock', 50)  # Default fallback
+                
+                velocity_data.append({
+                    'asin': asin,
+                    'daily_velocity': daily_velocity,
+                    'current_stock': current_stock,
+                    'total_sales_30d': total_sales
+                })
+            
+            # Sort by urgency (high velocity, low stock)
+            velocity_data.sort(key=lambda x: x['daily_velocity'] / max(x['current_stock'], 1), reverse=True)
+            
+            prompt = f"""
+            Based on this sales velocity and stock data, provide restocking recommendations:
+            
+            Sales & Stock Analysis (Top 20 products):
+            {json.dumps(velocity_data[:20], indent=2)}
+            
+            Lead Time: {lead_time_days} days
+            
+            For each product that needs restocking, provide:
+            - asin
+            - product_name (use ASIN if unknown)
+            - recommended_order_quantity 
+            - urgency (critical/high/medium/low)
+            - reasoning (why this quantity and urgency)
+            - estimated_runout_days
+            
+            Focus on products with high velocity or low stock relative to demand.
+            Respond with JSON: {{"recommendations": [...]}}
+            """
+            
+            response = self.client.generate(
+                messages=[{"role": "user", "content": prompt}],
+                model="gpt-4-turbo-preview",
+                temperature=0.5,
+                response_format={"type": "json_object"}
+            )
+            
+            result = self._parse_response(response, as_json=True)
+            return result.get('recommendations', [])
+            
+        except Exception as e:
+            print(f"Restocking prediction from analytics failed: {e}")
+            return []

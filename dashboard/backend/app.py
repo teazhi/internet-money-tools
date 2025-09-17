@@ -4749,10 +4749,10 @@ def get_ai_insights():
             }
             
             # Fetch orders and analysis data
-            result = analysis.analyze_orders(
-                target_date=target_date,
+            result = analysis.analyze(
+                for_date=target_date,
                 user_settings=user_settings,
-                return_dataframes=True
+                preserve_purchase_history=True
             )
             
             if 'orders_df' in result:

@@ -10173,6 +10173,116 @@ def check_stale_opportunities():
     except Exception as e:
         return jsonify({'error': f'Error checking cache status: {str(e)}'}), 500
 
+@app.route('/api/distill/generate-template', methods=['POST'])
+@login_required
+def generate_distill_template():
+    """Generate a Distill monitor template based on retailer and product info"""
+    try:
+        data = request.get_json()
+        retailer = data.get('retailer', '').lower()
+        asin = data.get('asin', '')
+        note = data.get('note', '')
+        source_link = data.get('source_link', '')
+        coupon_count = data.get('coupon_count', '1')  # For Vitacost
+        
+        if not retailer or not asin or not source_link:
+            return jsonify({'error': 'Retailer, ASIN, and source link are required'}), 400
+        
+        # Define Distill template structure based on retailer
+        templates = {
+            'walmart': {
+                'name': f'Walmart - {asin} - {note}' if note else f'Walmart - {asin}',
+                'url': source_link,
+                'selector': '.price-now, .price-characteristic, [data-automation-id="product-price"]',
+                'conditions': [
+                    {'type': 'text_contains', 'value': '$'},
+                    {'type': 'price_decrease', 'threshold': 10}
+                ]
+            },
+            'lowes': {
+                'name': f'Lowes - {asin} - {note}' if note else f'Lowes - {asin}',
+                'url': source_link,
+                'selector': '.art-pd-contractPrice, .price-format__main-price, .aPrice',
+                'conditions': [
+                    {'type': 'text_contains', 'value': '$'},
+                    {'type': 'price_decrease', 'threshold': 10}
+                ]
+            },
+            'vitacost': {
+                'name': f'Vitacost - {asin} - {note} - {coupon_count} coupon{"s" if coupon_count != "1" else ""}' if note else f'Vitacost - {asin} - {coupon_count} coupon{"s" if coupon_count != "1" else ""}',
+                'url': source_link,
+                'selector': '.price-info .price, .pdp-pricing__sale-price, .price--sale',
+                'conditions': [
+                    {'type': 'text_contains', 'value': '$'},
+                    {'type': 'coupon_available', 'count': coupon_count}
+                ]
+            },
+            'zoro': {
+                'name': f'Zoro - {asin} - {note}' if note else f'Zoro - {asin}',
+                'url': source_link,
+                'selector': '.price__value, .price-box__price, [data-za="product-price"]',
+                'conditions': [
+                    {'type': 'text_contains', 'value': '$'},
+                    {'type': 'price_decrease', 'threshold': 15}
+                ]
+            },
+            'misc': {
+                'name': f'Misc - {asin} - {note}' if note else f'Misc - {asin}',
+                'url': source_link,
+                'selector': '[class*="price"], [id*="price"], .price, .cost',
+                'conditions': [
+                    {'type': 'text_change'},
+                    {'type': 'text_contains', 'value': '$'}
+                ]
+            }
+        }
+        
+        template = templates.get(retailer)
+        if not template:
+            return jsonify({'error': f'Unknown retailer: {retailer}'}), 400
+        
+        # Generate Distill XML format
+        xml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<distill version="1">
+  <monitor>
+    <name>{template['name']}</name>
+    <url>{template['url']}</url>
+    <check_interval>3600</check_interval>
+    <selector>{template['selector']}</selector>
+    <asin>{asin}</asin>
+    <note>{note}</note>
+    <retailer>{retailer.title()}</retailer>
+    <conditions>
+'''
+        
+        for condition in template['conditions']:
+            if condition['type'] == 'text_contains':
+                xml_content += f'      <condition type="text_contains" value="{condition["value"]}" />\n'
+            elif condition['type'] == 'price_decrease':
+                xml_content += f'      <condition type="price_decrease" threshold="{condition["threshold"]}" />\n'
+            elif condition['type'] == 'text_change':
+                xml_content += '      <condition type="text_change" />\n'
+            elif condition['type'] == 'coupon_available' and retailer == 'vitacost':
+                xml_content += f'      <condition type="coupon_available" count="{condition["count"]}" />\n'
+        
+        xml_content += '''    </conditions>
+    <actions>
+      <action type="email" />
+      <action type="notification" />
+    </actions>
+  </monitor>
+</distill>'''
+        
+        # Create response with file download
+        response = make_response(xml_content)
+        response.headers['Content-Type'] = 'application/xml'
+        response.headers['Content-Disposition'] = f'attachment; filename="distill_{retailer}_{asin}.xml"'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({'error': f'Error generating Distill template: {str(e)}'}), 500
+
 # ===== FEATURE FLAG SYSTEM =====
 
 def init_feature_flags():

@@ -8,7 +8,9 @@ import {
   Package,
   Clock,
   RefreshCw,
-  Mail
+  Mail,
+  FileDown,
+  X
 } from 'lucide-react';
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
@@ -66,6 +68,14 @@ const DiscountOpportunities = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [retailerFilter, setRetailerFilter] = useState('');
   const [stats, setStats] = useState(null);
+  const [showDistillModal, setShowDistillModal] = useState(false);
+  const [distillFormData, setDistillFormData] = useState({
+    retailer: '',
+    asin: '',
+    note: '',
+    sourceLink: '',
+    couponCount: '1'
+  });
 
 
 
@@ -176,6 +186,44 @@ const DiscountOpportunities = () => {
         return 'text-gray-700 bg-gray-100';
       default:
         return 'text-blue-700 bg-blue-100';
+    }
+  };
+
+  const handleDistillFormSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const response = await axios.post('/api/distill/generate-template', {
+        retailer: distillFormData.retailer,
+        asin: distillFormData.asin,
+        note: distillFormData.note,
+        source_link: distillFormData.sourceLink,
+        coupon_count: distillFormData.retailer === 'vitacost' ? distillFormData.couponCount : null
+      }, {
+        withCredentials: true,
+        responseType: 'blob'
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `distill_${distillFormData.retailer}_${distillFormData.asin}.xml`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      // Close modal and reset form
+      setShowDistillModal(false);
+      setDistillFormData({
+        retailer: '',
+        asin: '',
+        note: '',
+        sourceLink: '',
+        couponCount: '1'
+      });
+    } catch (error) {
+      alert('Failed to generate Distill template: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -483,6 +531,16 @@ const DiscountOpportunities = () => {
               </div>
               
               <div className="flex items-center space-x-3">
+                {/* Distill Template Button */}
+                <button
+                  onClick={() => setShowDistillModal(true)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                  title="Create a Distill monitor template"
+                >
+                  <FileDown className="h-4 w-4" />
+                  <span>Distill Template</span>
+                </button>
+                
                 {/* Retailer Filter */}
                 <select
                   value={retailerFilter}
@@ -581,6 +639,119 @@ const DiscountOpportunities = () => {
             </div>
           )}
         </div>
+        
+        {/* Distill Template Modal */}
+        {showDistillModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Create Distill Monitor Template</h3>
+                <button
+                  onClick={() => setShowDistillModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <form onSubmit={handleDistillFormSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Retailer *
+                  </label>
+                  <select
+                    value={distillFormData.retailer}
+                    onChange={(e) => setDistillFormData({...distillFormData, retailer: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select a retailer</option>
+                    <option value="lowes">Lowes</option>
+                    <option value="misc">Misc</option>
+                    <option value="vitacost">Vitacost</option>
+                    <option value="walmart">Walmart</option>
+                    <option value="zoro">Zoro</option>
+                  </select>
+                </div>
+                
+                {distillFormData.retailer === 'vitacost' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Number of Coupons *
+                    </label>
+                    <select
+                      value={distillFormData.couponCount}
+                      onChange={(e) => setDistillFormData({...distillFormData, couponCount: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="1">1 coupon</option>
+                      <option value="2">2 coupons</option>
+                      <option value="3">3 coupons</option>
+                    </select>
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    ASIN *
+                  </label>
+                  <input
+                    type="text"
+                    value={distillFormData.asin}
+                    onChange={(e) => setDistillFormData({...distillFormData, asin: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., B08XYZ123"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Note
+                  </label>
+                  <input
+                    type="text"
+                    value={distillFormData.note}
+                    onChange={(e) => setDistillFormData({...distillFormData, note: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Optional note about the product"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Source Link *
+                  </label>
+                  <input
+                    type="url"
+                    value={distillFormData.sourceLink}
+                    onChange={(e) => setDistillFormData({...distillFormData, sourceLink: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://..."
+                    required
+                  />
+                </div>
+                
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowDistillModal(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                  >
+                    Download Template
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
     </div>
   );
 };

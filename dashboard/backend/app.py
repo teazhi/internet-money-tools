@@ -10188,95 +10188,117 @@ def generate_distill_template():
         if not retailer or not asin or not source_link:
             return jsonify({'error': 'Retailer, ASIN, and source link are required'}), 400
         
-        # Define Distill template structure based on retailer
-        templates = {
-            'walmart': {
-                'name': f'Walmart - {asin} - {note}' if note else f'Walmart - {asin}',
-                'url': source_link,
-                'selector': '.price-now, .price-characteristic, [data-automation-id="product-price"]',
-                'conditions': [
-                    {'type': 'text_contains', 'value': '$'},
-                    {'type': 'price_decrease', 'threshold': 10}
-                ]
-            },
-            'lowes': {
-                'name': f'Lowes - {asin} - {note}' if note else f'Lowes - {asin}',
-                'url': source_link,
-                'selector': '.art-pd-contractPrice, .price-format__main-price, .aPrice',
-                'conditions': [
-                    {'type': 'text_contains', 'value': '$'},
-                    {'type': 'price_decrease', 'threshold': 10}
-                ]
-            },
-            'vitacost': {
-                'name': f'Vitacost - {asin} - {note} - {coupon_count} coupon{"s" if coupon_count != "1" else ""}' if note else f'Vitacost - {asin} - {coupon_count} coupon{"s" if coupon_count != "1" else ""}',
-                'url': source_link,
-                'selector': '.price-info .price, .pdp-pricing__sale-price, .price--sale',
-                'conditions': [
-                    {'type': 'text_contains', 'value': '$'},
-                    {'type': 'coupon_available', 'count': coupon_count}
-                ]
-            },
-            'zoro': {
-                'name': f'Zoro - {asin} - {note}' if note else f'Zoro - {asin}',
-                'url': source_link,
-                'selector': '.price__value, .price-box__price, [data-za="product-price"]',
-                'conditions': [
-                    {'type': 'text_contains', 'value': '$'},
-                    {'type': 'price_decrease', 'threshold': 15}
-                ]
-            },
-            'misc': {
-                'name': f'Misc - {asin} - {note}' if note else f'Misc - {asin}',
-                'url': source_link,
-                'selector': '[class*="price"], [id*="price"], .price, .cost',
-                'conditions': [
-                    {'type': 'text_change'},
-                    {'type': 'text_contains', 'value': '$'}
-                ]
+        # Define Distill JSON templates based on actual monitor files
+        if retailer == 'walmart':
+            monitor_data = {
+                "client": {"web": 1},
+                "data": [{
+                    "name": f"Walmart (ASIN: {asin}) (Note: {note})",
+                    "uri": source_link,
+                    "content_type": 2,
+                    "config": "{\"ignoreEmptyText\":true,\"includeStyle\":false,\"dataAttr\":\"text\",\"selections\":[{\"frames\":[{\"index\":0,\"excludes\":[],\"includes\":[{\"type\":\"css\",\"expr\":\"h1\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\"[for='fulfillment-Shipping']\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\".lh-solid.w_yTSq\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\"[data-testid='product-seller-info']\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]}]}],\"dynamic\":true,\"delay\":2}],\"incognito\":false,\"regexp\":{\"expr\":\"\",\"flags\":\"gim\"},\"blockAdsAndCookies\":true}",
+                    "schedule": "{\"type\":\"INTERVAL\",\"params\":{\"interval\":43862}}",
+                    "tags": ["Walmart"],
+                    "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "datasource_id": None,
+                    "rule": {
+                        "config": "{\"rules\":[\"or\",[\"and\",[\"match_regex\",\"$new\",{\"expr\":\"\\\\bSold and shipped by Walmart\\\\.com\\\\b\",\"flags\":\"gms\"}],[\"not_match_regex\",\"$new\",{\"expr\":\"\\\\b(?:Only \\\\d+ left|Not available|Out of stock|Low stock)\\\\b\",\"flags\":\"gms\"}]]],\"numberFormat\":\"1,.\"}",
+                        "version": "2.0.0"
+                    }
+                }]
             }
-        }
-        
-        template = templates.get(retailer)
-        if not template:
+            
+        elif retailer == 'lowes':
+            monitor_data = {
+                "client": {"web": 1},
+                "data": [{
+                    "name": f"Lowes (ASIN: {asin}) (Note: {note})",
+                    "uri": source_link,
+                    "content_type": 2,
+                    "config": "{\"ignoreEmptyText\":true,\"includeStyle\":false,\"dataAttr\":\"text\",\"selections\":[{\"frames\":[{\"index\":0,\"excludes\":[],\"includes\":[{\"type\":\"css\",\"expr\":\"h1\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\"[role='radiogroup']\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]}]}],\"dynamic\":true,\"delay\":2}],\"incognito\":false,\"regexp\":{\"expr\":\"\",\"flags\":\"gim\"}}",
+                    "schedule": "{\"type\":\"INTERVAL\",\"params\":{\"interval\":43862}}",
+                    "tags": ["Lowes"],
+                    "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "datasource_id": None,
+                    "rule": {
+                        "config": "{\"rules\":[\"or\",[\"and\",[\"match_regex\",\"$new\",{\"expr\":\"\\\\b(1\\\\d|[2-9]\\\\d+|\\\\d{1,3}(?:,\\\\d{3})+)\\\\+? Available\\\\b\",\"flags\":\"gms\"}]]],\"numberFormat\":\"1,.\"}",
+                        "version": "2.0.0"
+                    }
+                }]
+            }
+            
+        elif retailer == 'vitacost':
+            # Different regex patterns based on coupon count
+            regex_patterns = {
+                '1': ".*%",
+                '2': ".*%.*%", 
+                '3': ".*%.*%.*%"
+            }
+            coupon_text = "coupon" if coupon_count == '1' else "coupons"
+            
+            monitor_data = {
+                "client": {"web": 1},
+                "data": [{
+                    "name": f"Vitacost (ASIN: {asin}) (Note: {coupon_count} {coupon_text} {note})",
+                    "uri": source_link,
+                    "content_type": 2,
+                    "config": "{\"ignoreEmptyText\":true,\"includeStyle\":false,\"dataAttr\":\"text\",\"selections\":[{\"frames\":[{\"index\":0,\"excludes\":[],\"includes\":[{\"type\":\"css\",\"expr\":\"h1\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\".savings-messages\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]}]}],\"dynamic\":true,\"delay\":2}],\"incognito\":false,\"regexp\":{\"expr\":\"\",\"flags\":\"gim\"}}",
+                    "schedule": "{\"type\":\"INTERVAL\",\"params\":{\"interval\":43862}}",
+                    "tags": ["Vitacost"],
+                    "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "datasource_id": None,
+                    "rule": {
+                        "config": f"{{\"rules\":[\"or\",[\"and\",[\"match_regex\",\"$new\",{{\"expr\":\"{regex_patterns.get(coupon_count, '.*%')}\",\"flags\":\"gms\"}}]]],\"numberFormat\":\"1,.\"}}",
+                        "version": "2.0.0"
+                    }
+                }]
+            }
+            
+        elif retailer == 'zoro':
+            monitor_data = {
+                "client": {"web": 1},
+                "data": [{
+                    "name": f"Zoro (ASIN: {asin}) (Note: {note})",
+                    "uri": source_link,
+                    "content_type": 2,
+                    "config": "{\"ignoreEmptyText\":true,\"includeStyle\":false,\"dataAttr\":\"text\",\"selections\":[{\"frames\":[{\"index\":0,\"excludes\":[],\"includes\":[{\"type\":\"css\",\"expr\":\".product-information [class*='text-body']~ div:nth-child(2)\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\"h1\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]}]}],\"dynamic\":true,\"delay\":2}],\"incognito\":false,\"regexp\":{\"expr\":\"\",\"flags\":\"gim\"}}",
+                    "schedule": "{\"type\":\"INTERVAL\",\"params\":{\"interval\":43862}}",
+                    "tags": ["Zoro"],
+                    "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "datasource_id": None,
+                    "rule": {
+                        "config": "{\"rules\":[\"or\",[\"and\",[\"match_regex\",\"$new\",{\"expr\":\"\\\\bIn Stock\\\\b\",\"flags\":\"gms\"}]]],\"numberFormat\":\"1,.\"}",
+                        "version": "2.0.0"
+                    }
+                }]
+            }
+            
+        elif retailer == 'misc':
+            # Generic monitor for miscellaneous retailers
+            monitor_data = {
+                "client": {"web": 1},
+                "data": [{
+                    "name": f"Misc (ASIN: {asin}) (Note: {note})",
+                    "uri": source_link,
+                    "content_type": 2,
+                    "config": "{\"ignoreEmptyText\":true,\"includeStyle\":false,\"dataAttr\":\"text\",\"selections\":[{\"frames\":[{\"index\":0,\"excludes\":[],\"includes\":[{\"type\":\"css\",\"expr\":\"h1\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]},{\"type\":\"css\",\"expr\":\"[class*='price'], [id*='price'], .price, .cost\",\"fields\":[{\"name\":\"text\",\"type\":\"builtin\"}]}]}],\"dynamic\":true,\"delay\":2}],\"incognito\":false,\"regexp\":{\"expr\":\"\",\"flags\":\"gim\"}}",
+                    "schedule": "{\"type\":\"INTERVAL\",\"params\":{\"interval\":43862}}",
+                    "tags": ["Misc"],
+                    "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "datasource_id": None,
+                    "rule": {
+                        "config": "{\"rules\":[\"or\",[\"and\",[\"match_regex\",\"$new\",{\"expr\":\".*\",\"flags\":\"gms\"}]]],\"numberFormat\":\"1,.\"}",
+                        "version": "2.0.0"
+                    }
+                }]
+            }
+        else:
             return jsonify({'error': f'Unknown retailer: {retailer}'}), 400
         
-        # Generate Distill XML format
-        xml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
-<distill version="1">
-  <monitor>
-    <name>{template['name']}</name>
-    <url>{template['url']}</url>
-    <check_interval>3600</check_interval>
-    <selector>{template['selector']}</selector>
-    <asin>{asin}</asin>
-    <note>{note}</note>
-    <retailer>{retailer.title()}</retailer>
-    <conditions>
-'''
-        
-        for condition in template['conditions']:
-            if condition['type'] == 'text_contains':
-                xml_content += f'      <condition type="text_contains" value="{condition["value"]}" />\n'
-            elif condition['type'] == 'price_decrease':
-                xml_content += f'      <condition type="price_decrease" threshold="{condition["threshold"]}" />\n'
-            elif condition['type'] == 'text_change':
-                xml_content += '      <condition type="text_change" />\n'
-            elif condition['type'] == 'coupon_available' and retailer == 'vitacost':
-                xml_content += f'      <condition type="coupon_available" count="{condition["count"]}" />\n'
-        
-        xml_content += '''    </conditions>
-    <actions>
-      <action type="email" />
-      <action type="notification" />
-    </actions>
-  </monitor>
-</distill>'''
-        
-        # Create response with file download
-        response = make_response(xml_content)
-        response.headers['Content-Type'] = 'application/xml'
-        response.headers['Content-Disposition'] = f'attachment; filename="distill_{retailer}_{asin}.xml"'
+        # Create response with JSON file download
+        response = make_response(json.dumps(monitor_data, indent=4))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = f'attachment; filename="{retailer.title()}_Monitor_{asin}.json"'
         
         return response
         

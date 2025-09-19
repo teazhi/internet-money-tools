@@ -208,7 +208,7 @@ const DiscountOpportunities = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `distill_${distillFormData.retailer}_${distillFormData.asin}.xml`);
+      link.setAttribute('download', `${distillFormData.retailer.charAt(0).toUpperCase() + distillFormData.retailer.slice(1)}_Monitor_${distillFormData.asin}.json`);
       document.body.appendChild(link);
       link.click();
       link.remove();

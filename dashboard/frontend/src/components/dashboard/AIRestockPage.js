@@ -31,6 +31,34 @@ const AIRestockPage = () => {
     }
   };
 
+  const exportToCSV = () => {
+    if (recommendations.length === 0) return;
+    
+    // Create CSV content
+    const headers = ['ASIN', 'Recommended Quantity', 'Urgency', 'Estimated Runout Days', 'Reasoning'];
+    const csvContent = [
+      headers.join(','),
+      ...recommendations.map(rec => [
+        rec.asin || '',
+        rec.recommended_order_quantity || 0,
+        rec.urgency || '',
+        rec.estimated_runout_days || '',
+        `"${(rec.reasoning || '').replace(/"/g, '""')}"`
+      ].join(','))
+    ].join('\n');
+    
+    // Download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `restock-recommendations-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getUrgencyColor = (urgency) => {
     switch(urgency?.toLowerCase()) {
       case 'critical': return 'text-red-600 bg-red-50 border-red-200';
@@ -69,7 +97,25 @@ const AIRestockPage = () => {
             </p>
           </div>
           
-          <div className="text-right">
+          <div className="text-right space-y-2">
+            <div className="flex items-center justify-end space-x-4">
+              {recommendations.length > 0 && (
+                <button
+                  onClick={exportToCSV}
+                  className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                >
+                  <span>📊</span>
+                  <span>Export CSV</span>
+                </button>
+              )}
+              <button
+                onClick={fetchRestockRecommendations}
+                disabled={loading}
+                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {loading ? 'Analyzing...' : 'Refresh'}
+              </button>
+            </div>
             <div className="flex items-center space-x-2 text-sm text-indigo-200">
               <Clock className="h-4 w-4" />
               <span>Lead Time: {leadTime} days</span>

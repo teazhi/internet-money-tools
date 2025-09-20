@@ -48,8 +48,6 @@ import PurchaseManager from './dashboard/PurchaseManager';
 import EmailMonitoring from './EmailMonitoring';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
-import AIInsights from './AIInsights';
-import AIInsightsPage from './dashboard/AIInsightsPage';
 import AIRestockPage from './dashboard/AIRestockPage';
 
 const Dashboard = () => {
@@ -137,14 +135,6 @@ const Dashboard = () => {
     }] : []),
     
     // AI-Powered Features
-    ...(hasFeatureAccess('ai_analytics') || true ? [{
-      name: 'AI Insights', 
-      href: '/dashboard/ai-insights', 
-      icon: Brain, 
-      current: location.pathname === '/dashboard/ai-insights',
-      beta: true
-    }] : []),
-    
     ...(hasFeatureAccess('ai_analytics') || true ? [{
       name: 'AI Restock', 
       href: '/dashboard/ai-restock', 
@@ -579,7 +569,6 @@ const Dashboard = () => {
               )}
               
               {/* AI-powered routes */}
-              <Route path="/ai-insights" element={<AIInsightsPage />} />
               <Route path="/ai-restock" element={<AIRestockPage />} />
               
               {hasFeatureAccess('missing_listings') && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Target, 
   TrendingDown, 
@@ -10,7 +10,11 @@ import {
   RefreshCw,
   Mail,
   FileDown,
-  X
+  X,
+  Upload,
+  CheckCircle,
+  XCircle,
+  FileText
 } from 'lucide-react';
 import axios from 'axios';
 import StandardTable from '../common/StandardTable';
@@ -76,6 +80,10 @@ const DiscountOpportunities = () => {
     sourceLink: '',
     couponCount: '1'
   });
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
 
 
@@ -226,6 +234,63 @@ const DiscountOpportunities = () => {
       alert('Failed to generate Distill template: ' + (error.response?.data?.message || error.message));
     }
   };
+
+  const handleFileUpload = useCallback(async (file) => {
+    if (!file || !file.name.endsWith('.json')) {
+      alert('Please upload a JSON file');
+      return;
+    }
+
+    setAnalysisLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('distill_monitors', file);
+      
+      const response = await axios.post('/api/distill/analyze-monitors', formData, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setAnalysisResults(response.data);
+      setShowAnalysisModal(true);
+    } catch (error) {
+      alert('Failed to analyze Distill monitors: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileUpload(files[0]);
+    }
+  }, [handleFileUpload]);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  const handleFileInputChange = useCallback((e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      handleFileUpload(files[0]);
+    }
+    // Reset input
+    e.target.value = '';
+  }, [handleFileUpload]);
 
   const formatTimeAgo = (timestamp) => {
     if (!timestamp) return 'Unknown';
@@ -541,6 +606,25 @@ const DiscountOpportunities = () => {
                   <span>Distill Template</span>
                 </button>
                 
+                {/* Analyze Monitors Button */}
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileInputChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    id="distill-file-input"
+                  />
+                  <label
+                    htmlFor="distill-file-input"
+                    className="flex items-center space-x-2 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm cursor-pointer"
+                    title="Analyze your Distill monitors against Google Sheet"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span>Analyze Monitors</span>
+                  </label>
+                </div>
+                
                 {/* Retailer Filter */}
                 <select
                   value={retailerFilter}
@@ -614,6 +698,46 @@ const DiscountOpportunities = () => {
             </div>
           )}
 
+          {/* Monitor Analysis Drop Zone */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="mb-4">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Monitor Analysis</h3>
+              <p className="text-sm text-gray-600">
+                Upload your Distill monitors JSON file to compare ASINs against your Google Sheets inventory
+              </p>
+            </div>
+            
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                dragOver 
+                  ? 'border-blue-400 bg-blue-50' 
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {analysisLoading ? (
+                <div className="flex flex-col items-center">
+                  <RefreshCw className="h-12 w-12 text-blue-500 animate-spin mb-4" />
+                  <p className="text-gray-600">Analyzing monitors...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <Upload className="h-12 w-12 text-gray-400 mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-2">
+                    Drop your Distill monitors JSON file here
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    or click the "Analyze Monitors" button above
+                  </p>
+                  <div className="text-xs text-gray-400">
+                    Supports: .json files from Distill export
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Opportunities Table */}
           {!loading && !error && (
@@ -749,6 +873,120 @@ const DiscountOpportunities = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        
+        {/* Analysis Results Modal */}
+        {showAnalysisModal && analysisResults && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Monitor Analysis Results</h3>
+                <button
+                  onClick={() => setShowAnalysisModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <FileText className="h-8 w-8 text-blue-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">Total Monitors</p>
+                      <p className="text-2xl font-bold text-blue-600">{analysisResults.total_monitors}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-8 w-8 text-green-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900">Found in Sheets</p>
+                      <p className="text-2xl font-bold text-green-600">{analysisResults.found_in_sheets}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <XCircle className="h-8 w-8 text-red-600 mr-3" />
+                    <div>
+                      <p className="text-sm font-medium text-red-900">Not in Sheets</p>
+                      <p className="text-2xl font-bold text-red-600">{analysisResults.not_in_sheets}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* ASINs Found in Sheets */}
+              {analysisResults.asins_found_in_sheets && analysisResults.asins_found_in_sheets.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-md font-semibold text-green-800 mb-3 flex items-center">
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    ASINs Found in Google Sheets ({analysisResults.asins_found_in_sheets.length})
+                  </h4>
+                  <div className="bg-green-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {analysisResults.asins_found_in_sheets.map((asinData, index) => (
+                        <div key={index} className="text-sm">
+                          <span className="font-mono text-green-700">{asinData.asin}</span>
+                          <span className="text-green-600 ml-2">({asinData.worksheet})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* ASINs Not Found in Sheets */}
+              {analysisResults.asins_not_in_sheets && analysisResults.asins_not_in_sheets.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-md font-semibold text-red-800 mb-3 flex items-center">
+                    <XCircle className="h-5 w-5 mr-2" />
+                    ASINs Not Found in Google Sheets ({analysisResults.asins_not_in_sheets.length})
+                  </h4>
+                  <div className="bg-red-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {analysisResults.asins_not_in_sheets.map((asin, index) => (
+                        <span key={index} className="text-sm font-mono text-red-700">{asin}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Sheet ASINs Not in Monitors */}
+              {analysisResults.sheet_asins_not_in_monitors && analysisResults.sheet_asins_not_in_monitors.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-md font-semibold text-yellow-800 mb-3 flex items-center">
+                    <AlertTriangle className="h-5 w-5 mr-2" />
+                    ASINs in Sheets but Not Monitored ({analysisResults.sheet_asins_not_in_monitors.length})
+                  </h4>
+                  <div className="bg-yellow-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {analysisResults.sheet_asins_not_in_monitors.map((asinData, index) => (
+                        <div key={index} className="text-sm">
+                          <span className="font-mono text-yellow-700">{asinData.asin}</span>
+                          <span className="text-yellow-600 ml-2">({asinData.worksheet})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowAnalysisModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

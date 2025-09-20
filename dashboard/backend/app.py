@@ -10305,6 +10305,184 @@ def generate_distill_template():
     except Exception as e:
         return jsonify({'error': f'Error generating Distill template: {str(e)}'}), 500
 
+@app.route('/api/distill/analyze-monitors', methods=['POST'])
+@login_required
+def analyze_distill_monitors():
+    """Analyze uploaded Distill monitors JSON against Google Sheets inventory"""
+    try:
+        # Check if file was uploaded
+        if 'distill_monitors' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['distill_monitors']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.endswith('.json'):
+            return jsonify({'error': 'File must be a JSON file'}), 400
+        
+        # Parse the JSON file
+        try:
+            monitors_data = json.load(file)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid JSON file'}), 400
+        
+        # Extract ASINs from monitor names
+        import re
+        asin_pattern = r'\bB[0-9A-Z]{9}\b'
+        distill_asins = []
+        
+        # Handle different JSON structures
+        if isinstance(monitors_data, dict) and 'data' in monitors_data:
+            # Standard Distill export format
+            for monitor in monitors_data.get('data', []):
+                name = monitor.get('name', '')
+                asins = re.findall(asin_pattern, name)
+                distill_asins.extend(asins)
+        elif isinstance(monitors_data, list):
+            # Array of monitors
+            for monitor in monitors_data:
+                name = monitor.get('name', '')
+                asins = re.findall(asin_pattern, name)
+                distill_asins.extend(asins)
+        else:
+            return jsonify({'error': 'Unrecognized JSON format'}), 400
+        
+        # Remove duplicates while preserving order
+        distill_asins = list(dict.fromkeys(distill_asins))
+        
+        if not distill_asins:
+            return jsonify({'error': 'No ASINs found in monitor names'}), 400
+        
+        # Get user's Google Sheets access (same as retailer lead analysis)
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # For subusers, use parent's Google access (same pattern as retailer leads)
+        config_user_record = user_record
+        if user_record and get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Check if user has Google tokens (same as retailer leads)
+        if not get_user_field(config_user_record, 'integrations.google.tokens'):
+            return jsonify({'error': 'Google account not linked. Please link your Google account in Settings.'}), 400
+        
+        # Target Google Sheet ID
+        TARGET_SHEET_ID = '1Q5weSRaRd7r1zdiA2bwWwcWIwP6pxplGYmY7k9a3aqw'
+        
+        # Get fresh Google access token (same as retailer leads)
+        access_token = refresh_google_token(config_user_record)
+        if not access_token:
+            return jsonify({'error': 'Failed to refresh Google access token'}), 400
+        
+        # Get all worksheets in the target sheet
+        headers = {"Authorization": f"Bearer {access_token}"}
+        sheets_url = f"https://sheets.googleapis.com/v4/spreadsheets/{TARGET_SHEET_ID}"
+        
+        response = requests.get(sheets_url, headers=headers)
+        if response.status_code != 200:
+            return jsonify({'error': f'Failed to access Google Sheet: {response.text}'}), 400
+        
+        sheet_info = response.json()
+        worksheets = sheet_info.get('sheets', [])
+        
+        # Search for ASINs across all worksheets
+        asins_found_in_sheets = []
+        all_sheet_asins = []
+        
+        for worksheet in worksheets:
+            worksheet_title = worksheet['properties']['title']
+            
+            # Skip system worksheets
+            if worksheet_title.lower() in ['metadata', 'settings', 'config']:
+                continue
+            
+            # Get worksheet data
+            range_name = f"{worksheet_title}!A:Z"  # Get first 26 columns
+            values_url = f"https://sheets.googleapis.com/v4/spreadsheets/{TARGET_SHEET_ID}/values/{range_name}"
+            
+            try:
+                response = requests.get(values_url, headers=headers)
+                if response.status_code == 200:
+                    worksheet_data = response.json()
+                    values = worksheet_data.get('values', [])
+                    
+                    # Search for ASINs in all cells
+                    for row in values:
+                        for cell in row:
+                            if cell and isinstance(cell, str):
+                                # Find ASINs in this cell
+                                cell_asins = re.findall(asin_pattern, cell)
+                                for asin in cell_asins:
+                                    all_sheet_asins.append({
+                                        'asin': asin,
+                                        'worksheet': worksheet_title
+                                    })
+                                    
+                                    # Check if this ASIN is in our Distill monitors
+                                    if asin in distill_asins:
+                                        asins_found_in_sheets.append({
+                                            'asin': asin,
+                                            'worksheet': worksheet_title
+                                        })
+            except Exception as e:
+                # Continue with other worksheets if one fails
+                pass
+        
+        # Remove duplicates from sheet ASINs
+        unique_sheet_asins = []
+        seen_sheet_asins = set()
+        for asin_data in all_sheet_asins:
+            key = f"{asin_data['asin']}-{asin_data['worksheet']}"
+            if key not in seen_sheet_asins:
+                seen_sheet_asins.add(key)
+                unique_sheet_asins.append(asin_data)
+        
+        # Remove duplicates from found ASINs
+        unique_found_asins = []
+        seen_found_asins = set()
+        for asin_data in asins_found_in_sheets:
+            key = f"{asin_data['asin']}-{asin_data['worksheet']}"
+            if key not in seen_found_asins:
+                seen_found_asins.add(key)
+                unique_found_asins.append(asin_data)
+        
+        # Find ASINs that are NOT in sheets
+        found_asin_list = [item['asin'] for item in unique_found_asins]
+        asins_not_in_sheets = [asin for asin in distill_asins if asin not in found_asin_list]
+        
+        # Find ASINs that are in sheets but NOT in monitors
+        sheet_asin_list = [item['asin'] for item in unique_sheet_asins]
+        sheet_asins_not_in_monitors = []
+        for asin_data in unique_sheet_asins:
+            if asin_data['asin'] not in distill_asins:
+                sheet_asins_not_in_monitors.append(asin_data)
+        
+        # Prepare response
+        results = {
+            'total_monitors': len(distill_asins),
+            'found_in_sheets': len(unique_found_asins),
+            'not_in_sheets': len(asins_not_in_sheets),
+            'asins_found_in_sheets': unique_found_asins,
+            'asins_not_in_sheets': asins_not_in_sheets,
+            'sheet_asins_not_in_monitors': sheet_asins_not_in_monitors,
+            'total_sheet_asins': len(unique_sheet_asins)
+        }
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error analyzing monitors: {str(e)}'}), 500
+
 # ===== FEATURE FLAG SYSTEM =====
 
 def init_feature_flags():

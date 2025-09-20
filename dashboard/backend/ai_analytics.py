@@ -147,7 +147,8 @@ class AIAnalytics:
             print(f"  - API key starts with: {self.api_key[:8]}...")
             print(f"  - API key ends with: ...{self.api_key[-4:]}")
             print(f"  - Contains spaces: {'Yes' if ' ' in self.api_key else 'No'}")
-            print(f"  - Contains newlines: {'Yes' if '\n' in self.api_key else 'No'}")
+            newline_check = '\n' in self.api_key
+            print(f"  - Contains newlines: {'Yes' if newline_check else 'No'}")
         
         if KeywordsAI and self.api_key:
             try:

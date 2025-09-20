@@ -10310,43 +10310,58 @@ def generate_distill_template():
 def analyze_distill_monitors():
     """Analyze uploaded Distill monitors JSON against Google Sheets inventory"""
     try:
-        # Check if file was uploaded
+        # Check if files were uploaded
         if 'distill_monitors' not in request.files:
-            return jsonify({'error': 'No file uploaded'}), 400
+            return jsonify({'error': 'No files uploaded'}), 400
         
-        file = request.files['distill_monitors']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+        # Handle multiple files
+        files = request.files.getlist('distill_monitors')
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': 'No files selected'}), 400
         
-        if not file.filename.endswith('.json'):
-            return jsonify({'error': 'File must be a JSON file'}), 400
+        # Validate all files are JSON
+        invalid_files = [file.filename for file in files if not file.filename.endswith('.json')]
+        if invalid_files:
+            return jsonify({'error': f'All files must be JSON files. Invalid: {", ".join(invalid_files)}'}), 400
         
-        # Parse the JSON file
-        try:
-            monitors_data = json.load(file)
-        except json.JSONDecodeError:
-            return jsonify({'error': 'Invalid JSON file'}), 400
+        # Parse all JSON files and combine monitors
+        all_monitors_data = []
+        file_names = []
         
-        # Extract ASINs from monitor names
+        for file in files:
+            try:
+                file_data = json.load(file)
+                all_monitors_data.append(file_data)
+                file_names.append(file.filename)
+            except json.JSONDecodeError:
+                return jsonify({'error': f'Invalid JSON file: {file.filename}'}), 400
+        
+        # Extract ASINs from monitor names across all files
         import re
         asin_pattern = r'\bB[0-9A-Z]{9}\b'
         distill_asins = []
+        total_monitors_processed = 0
         
-        # Handle different JSON structures
-        if isinstance(monitors_data, dict) and 'data' in monitors_data:
-            # Standard Distill export format
-            for monitor in monitors_data.get('data', []):
-                name = monitor.get('name', '')
-                asins = re.findall(asin_pattern, name)
-                distill_asins.extend(asins)
-        elif isinstance(monitors_data, list):
-            # Array of monitors
-            for monitor in monitors_data:
-                name = monitor.get('name', '')
-                asins = re.findall(asin_pattern, name)
-                distill_asins.extend(asins)
-        else:
-            return jsonify({'error': 'Unrecognized JSON format'}), 400
+        # Process each file
+        for file_data in all_monitors_data:
+            # Handle different JSON structures
+            if isinstance(file_data, dict) and 'data' in file_data:
+                # Standard Distill export format
+                monitors = file_data.get('data', [])
+                total_monitors_processed += len(monitors)
+                for monitor in monitors:
+                    name = monitor.get('name', '')
+                    asins = re.findall(asin_pattern, name)
+                    distill_asins.extend(asins)
+            elif isinstance(file_data, list):
+                # Array of monitors
+                total_monitors_processed += len(file_data)
+                for monitor in file_data:
+                    name = monitor.get('name', '')
+                    asins = re.findall(asin_pattern, name)
+                    distill_asins.extend(asins)
+            else:
+                return jsonify({'error': f'Unrecognized JSON format in one of the files'}), 400
         
         # Remove duplicates while preserving order
         distill_asins = list(dict.fromkeys(distill_asins))
@@ -10468,6 +10483,9 @@ def analyze_distill_monitors():
         # Prepare response
         results = {
             'total_monitors': len(distill_asins),
+            'total_monitors_processed': total_monitors_processed,
+            'files_processed': len(files),
+            'file_names': file_names,
             'found_in_sheets': len(unique_found_asins),
             'not_in_sheets': len(asins_not_in_sheets),
             'asins_found_in_sheets': unique_found_asins,

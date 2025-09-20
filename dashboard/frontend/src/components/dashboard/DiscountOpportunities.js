@@ -906,13 +906,30 @@ const DiscountOpportunities = () => {
                 </button>
               </div>
               
+              {/* File Processing Info */}
+              {analysisResults.files_processed > 1 && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Files Processed</h4>
+                  <p className="text-sm text-gray-600 mb-2">
+                    {analysisResults.files_processed} files • {analysisResults.total_monitors_processed} total monitors • {analysisResults.total_monitors} unique ASINs
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {analysisResults.file_names.map((fileName, index) => (
+                      <span key={index} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        {fileName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="flex items-center">
                     <FileText className="h-8 w-8 text-blue-600 mr-3" />
                     <div>
-                      <p className="text-sm font-medium text-blue-900">Total Monitors</p>
+                      <p className="text-sm font-medium text-blue-900">Unique ASINs</p>
                       <p className="text-2xl font-bold text-blue-600">{analysisResults.total_monitors}</p>
                     </div>
                   </div>

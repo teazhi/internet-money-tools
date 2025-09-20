@@ -566,7 +566,17 @@ class AIAnalytics:
 
     def predict_restocking_from_analytics(self, sales_data: Dict[str, int], stock_info: Dict[str, dict], lead_time_days: int = 90) -> List[Dict[str, Any]]:
         """Predict restocking needs from structured analytics data"""
+        print(f"AI Analytics predict_restocking_from_analytics called:")
+        print(f"  - Client available: {self.client is not None}")
+        print(f"  - Sales data entries: {len(sales_data)}")
+        print(f"  - Stock info entries: {len(stock_info)}")
+        
         if not self.client:
+            print("  - No AI client, returning empty list")
+            return []
+        
+        if not sales_data:
+            print("  - No sales data, returning empty list")
             return []
         
         try:
@@ -586,6 +596,9 @@ class AIAnalytics:
                     'current_stock': current_stock,
                     'total_sales_30d': total_sales
                 })
+            
+            print(f"  - Built velocity data for {len(velocity_data)} products")
+            print(f"  - Sample velocity data: {velocity_data[:2] if velocity_data else 'None'}")
             
             # Sort by urgency (high velocity, low stock)
             velocity_data.sort(key=lambda x: x['daily_velocity'] / max(x['current_stock'], 1), reverse=True)
@@ -620,6 +633,8 @@ class AIAnalytics:
             Respond with JSON: {{"recommendations": [...]}}
             """
             
+            print(f"  - Sending prompt to AI (length: {len(prompt)} chars)")
+            
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
                 model="gpt-4o-mini",
@@ -627,9 +642,17 @@ class AIAnalytics:
                 response_format={"type": "json_object"}
             )
             
+            print(f"  - Got AI response")
             result = self._parse_response(response, as_json=True)
-            return result.get('recommendations', [])
+            recommendations = result.get('recommendations', [])
+            print(f"  - Parsed {len(recommendations)} recommendations from AI")
+            if recommendations:
+                print(f"  - Sample recommendation: {recommendations[0]}")
+            
+            return recommendations
             
         except Exception as e:
             print(f"Restocking prediction from analytics failed: {e}")
+            import traceback
+            traceback.print_exc()
             return []

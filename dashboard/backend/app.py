@@ -4730,31 +4730,32 @@ def get_ai_restocking():
         
         orders_data = []
         current_date = start_date
+        successful_days = 0
+        
+        print(f"AI Restock data collection:")
+        print(f"  - Date range: {start_date} to {end_date}")
+        print(f"  - Orders URL: {get_user_sellerboard_orders_url(config_user_record)}")
+        
         while current_date <= end_date:
             try:
-                user_settings = {
-                    'enable_source_links': get_user_field(config_user_record, 'settings.enable_source_links') or False,
-                    'search_all_worksheets': get_user_field(config_user_record, 'settings.search_all_worksheets') or False,
-                    'sheet_id': get_user_field(config_user_record, 'files.sheet_id'),
-                    'worksheet_title': get_user_field(config_user_record, 'integrations.google.worksheet_title'),
-                    'google_tokens': get_user_field(config_user_record, 'integrations.google.tokens') or {},
-                    'column_mapping': get_user_column_mapping(config_user_record),
-                    'discord_id': discord_id,
-                    'sellerboard_orders_url': get_user_sellerboard_orders_url(config_user_record),
-                    'sellerboard_stock_url': get_user_sellerboard_stock_url(config_user_record)
-                }
-                
                 # Simplified: just get orders data for this date
                 analysis.orders_url = get_user_sellerboard_orders_url(config_user_record) 
                 if analysis.orders_url:
                     daily_data = analysis.analyze(current_date)
                     if daily_data.get('today_sales'):
                         orders_data.append(daily_data)
+                        successful_days += 1
+                        if successful_days <= 3:  # Only log first few days
+                            print(f"  - {current_date}: {len(daily_data.get('today_sales', {}))} products sold")
                     
-            except Exception:
+            except Exception as e:
+                if successful_days <= 3:  # Only log first few errors
+                    print(f"  - {current_date}: Failed to get data - {e}")
                 pass  # Skip failed dates
             
             current_date += timedelta(days=1)
+        
+        print(f"  - Successfully collected data for {successful_days} days out of {(end_date - start_date).days + 1}")
         
         # Combine all sales data
         if orders_data:
@@ -4772,10 +4773,19 @@ def get_ai_restocking():
                     if asin not in all_stock_info:
                         all_stock_info[asin] = data
             
+            # Debug logging
+            print(f"AI Restock Debug:")
+            print(f"  - Total sales data entries: {len(all_sales)}")
+            print(f"  - Total stock data entries: {len(all_stock_info)}")
+            print(f"  - Sample sales data: {dict(list(all_sales.items())[:3])}")
+            print(f"  - AI client available: {ai_analytics.client is not None}")
+            
             # Generate AI recommendations using structured data
             recommendations = ai_analytics.predict_restocking_from_analytics(
                 all_sales, all_stock_info, lead_time_days
             )
+            
+            print(f"  - AI returned {len(recommendations)} recommendations")
             
             return jsonify({
                 'recommendations': recommendations,

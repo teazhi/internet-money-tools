@@ -235,9 +235,19 @@ const DiscountOpportunities = () => {
     }
   };
 
-  const handleFileUpload = useCallback(async (file) => {
-    if (!file || !file.name.endsWith('.json')) {
-      alert('Please upload a JSON file');
+  const handleFileUpload = useCallback(async (files) => {
+    // Convert single file to array for consistency
+    const fileArray = Array.isArray(files) ? files : [files];
+    
+    // Validate all files are JSON
+    const invalidFiles = fileArray.filter(file => !file.name.endsWith('.json'));
+    if (invalidFiles.length > 0) {
+      alert(`Please upload only JSON files. Invalid files: ${invalidFiles.map(f => f.name).join(', ')}`);
+      return;
+    }
+
+    if (fileArray.length === 0) {
+      alert('Please select at least one JSON file');
       return;
     }
 
@@ -245,7 +255,11 @@ const DiscountOpportunities = () => {
     
     try {
       const formData = new FormData();
-      formData.append('distill_monitors', file);
+      
+      // Append all files
+      fileArray.forEach((file, index) => {
+        formData.append(`distill_monitors`, file);
+      });
       
       const response = await axios.post('/api/distill/analyze-monitors', formData, {
         withCredentials: true,
@@ -269,7 +283,7 @@ const DiscountOpportunities = () => {
     
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      handleFileUpload(files[0]);
+      handleFileUpload(files);
     }
   }, [handleFileUpload]);
 
@@ -286,7 +300,7 @@ const DiscountOpportunities = () => {
   const handleFileInputChange = useCallback((e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      handleFileUpload(files[0]);
+      handleFileUpload(files);
     }
     // Reset input
     e.target.value = '';
@@ -611,6 +625,7 @@ const DiscountOpportunities = () => {
                   <input
                     type="file"
                     accept=".json"
+                    multiple
                     onChange={handleFileInputChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     id="distill-file-input"
@@ -703,7 +718,7 @@ const DiscountOpportunities = () => {
             <div className="mb-4">
               <h3 className="text-lg font-medium text-gray-900 mb-2">Monitor Analysis</h3>
               <p className="text-sm text-gray-600">
-                Upload your Distill monitors JSON file to compare ASINs against your Google Sheets inventory
+                Upload your Distill monitors JSON files to compare ASINs against your Google Sheets inventory
               </p>
             </div>
             
@@ -726,13 +741,13 @@ const DiscountOpportunities = () => {
                 <div className="flex flex-col items-center">
                   <Upload className="h-12 w-12 text-gray-400 mb-4" />
                   <p className="text-lg font-medium text-gray-900 mb-2">
-                    Drop your Distill monitors JSON file here
+                    Drop your Distill monitors JSON files here
                   </p>
                   <p className="text-sm text-gray-500 mb-4">
                     or click the "Analyze Monitors" button above
                   </p>
                   <div className="text-xs text-gray-400">
-                    Supports: .json files from Distill export
+                    Supports: Multiple .json files from Distill export
                   </div>
                 </div>
               )}

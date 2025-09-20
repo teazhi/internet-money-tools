@@ -58,7 +58,7 @@ except ImportError as e:
                 self.api_key = api_key
                 self.base_url = "https://api.keywordsai.co"
                 
-            def generate(self, messages, model="gpt-4-turbo-preview", **kwargs):
+            def generate(self, messages, model="gpt-4o-mini", **kwargs):
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
@@ -70,26 +70,41 @@ except ImportError as e:
                     **kwargs
                 }
                 
-                # Debug logging
-                print(f"Keywords.ai API Request:")
-                print(f"  URL: {self.base_url}/api/chat/completions")
-                print(f"  Headers: {dict(headers)}")
-                print(f"  API Key length: {len(self.api_key) if self.api_key else 'None'}")
-                print(f"  API Key prefix: {self.api_key[:8] if self.api_key else 'None'}...")
-                
-                response = requests.post(
+                # Try multiple possible endpoints
+                possible_endpoints = [
                     f"{self.base_url}/api/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=30
-                )
+                    f"{self.base_url}/v1/chat/completions", 
+                    f"{self.base_url}/chat/completions"
+                ]
                 
-                # Debug response
-                print(f"  Response status: {response.status_code}")
-                if response.status_code != 200:
-                    print(f"  Response text: {response.text}")
+                response = None
+                last_error = None
                 
-                response.raise_for_status()
+                for endpoint in possible_endpoints:
+                    try:
+                        print(f"Trying endpoint: {endpoint}")
+                        response = requests.post(
+                            endpoint,
+                            headers=headers,
+                            json=data,
+                            timeout=30
+                        )
+                        if response.status_code == 200:
+                            print(f"✅ Success with endpoint: {endpoint}")
+                            break
+                        else:
+                            print(f"❌ Failed with {response.status_code}: {endpoint}")
+                            last_error = response
+                    except Exception as e:
+                        print(f"❌ Exception with {endpoint}: {e}")
+                        last_error = e
+                
+                if response is None or response.status_code != 200:
+                    if last_error and hasattr(last_error, 'raise_for_status'):
+                        last_error.raise_for_status()
+                    else:
+                        raise Exception(f"All endpoints failed. Last error: {last_error}")
+                
                 return response.json()
         
         KeywordsAI = SimpleKeywordsAI
@@ -159,7 +174,7 @@ class AIAnalytics:
                 try:
                     test_response = self.client.generate(
                         messages=[{"role": "user", "content": "Say 'test' in JSON format"}],
-                        model="gpt-3.5-turbo",  # Use cheaper model for testing
+                        model="gpt-4o-mini",  # Use current model for testing
                         response_format={"type": "json_object"}
                     )
                     print("  ✅ API key validation successful")
@@ -211,7 +226,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.7,
                 response_format={"type": "json_object"}
             )
@@ -260,7 +275,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.5,
                 response_format={"type": "json_object"}
             )
@@ -299,7 +314,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.6,
                 response_format={"type": "json_object"}
             )
@@ -336,7 +351,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.7
             )
             
@@ -374,7 +389,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.5,
                 response_format={"type": "json_object"}
             )
@@ -596,7 +611,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview", 
+                model="gpt-4o-mini", 
                 temperature=0.5,
                 response_format={"type": "json_object"}
             )
@@ -664,7 +679,7 @@ class AIAnalytics:
             
             response = self.client.generate(
                 messages=[{"role": "user", "content": prompt}],
-                model="gpt-4-turbo-preview",
+                model="gpt-4o-mini",
                 temperature=0.5,
                 response_format={"type": "json_object"}
             )

@@ -70,12 +70,25 @@ except ImportError as e:
                     **kwargs
                 }
                 
+                # Debug logging
+                print(f"Keywords.ai API Request:")
+                print(f"  URL: {self.base_url}/api/chat/completions")
+                print(f"  Headers: {dict(headers)}")
+                print(f"  API Key length: {len(self.api_key) if self.api_key else 'None'}")
+                print(f"  API Key prefix: {self.api_key[:8] if self.api_key else 'None'}...")
+                
                 response = requests.post(
                     f"{self.base_url}/api/chat/completions",
                     headers=headers,
                     json=data,
                     timeout=30
                 )
+                
+                # Debug response
+                print(f"  Response status: {response.status_code}")
+                if response.status_code != 200:
+                    print(f"  Response text: {response.text}")
+                
                 response.raise_for_status()
                 return response.json()
         
@@ -121,17 +134,37 @@ class AIAnalytics:
         self.api_key = api_key or os.getenv('KEYWORDS_AI_API_KEY')
         self.client = None
         
+        # Clean the API key
+        if self.api_key:
+            self.api_key = self.api_key.strip()
+        
         # Debug information
         print(f"AI Analytics initialization:")
         print(f"  - KeywordsAI SDK available: {KeywordsAI is not None}")
         print(f"  - API key provided: {'Yes' if self.api_key else 'No'}")
         if self.api_key:
+            print(f"  - API key length: {len(self.api_key)}")
             print(f"  - API key starts with: {self.api_key[:8]}...")
+            print(f"  - API key ends with: ...{self.api_key[-4:]}")
+            print(f"  - Contains spaces: {'Yes' if ' ' in self.api_key else 'No'}")
+            print(f"  - Contains newlines: {'Yes' if '\n' in self.api_key else 'No'}")
         
         if KeywordsAI and self.api_key:
             try:
                 self.client = KeywordsAI(api_key=self.api_key)
                 print("  ✅ AI Analytics enabled successfully")
+                
+                # Test the API key with a simple request
+                try:
+                    test_response = self.client.generate(
+                        messages=[{"role": "user", "content": "Say 'test' in JSON format"}],
+                        model="gpt-3.5-turbo",  # Use cheaper model for testing
+                        response_format={"type": "json_object"}
+                    )
+                    print("  ✅ API key validation successful")
+                except Exception as test_e:
+                    print(f"  ⚠️ API key validation failed: {test_e}")
+                    
             except Exception as e:
                 print(f"  ❌ Failed to initialize Keywords.ai client: {e}")
         else:

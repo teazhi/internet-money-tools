@@ -18185,11 +18185,18 @@ def update_seller_costs():
         except Exception as e:
             return jsonify({'error': f'Failed to read Excel file: {str(e)}'}), 400
         
-        # Check for required columns
-        required_columns = ['ASIN', 'Product Name']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            return jsonify({'error': f'Missing required columns: {missing_columns}'}), 400
+        # Check for required columns (case-insensitive)
+        df_columns_lower = [col.lower() for col in df.columns]
+        
+        # Find ASIN column (case-insensitive)
+        asin_column = None
+        for col in df.columns:
+            if col.lower() == 'asin':
+                asin_column = col
+                break
+        
+        if not asin_column:
+            return jsonify({'error': 'Missing required column: ASIN (or Asin)'}), 400
         
         # Add Seller New Cost column if it doesn't exist
         if 'Seller New Cost' not in df.columns:
@@ -18222,7 +18229,7 @@ def update_seller_costs():
         not_found_asins = []
         
         for index, row in df.iterrows():
-            asin = str(row['ASIN']).strip().upper()
+            asin = str(row[asin_column]).strip().upper()
             
             if asin in cogs_data:
                 # Get the most recent COGS value

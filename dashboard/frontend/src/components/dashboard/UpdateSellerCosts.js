@@ -172,7 +172,7 @@ const UpdateSellerCosts = () => {
       <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
         <h4 className="text-sm font-medium text-blue-900 mb-2">File Requirements:</h4>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Excel file must contain "ASIN" and "Product Name" columns</li>
+          <li>• Excel file must contain an "ASIN" column (case-insensitive)</li>
           <li>• The "Seller New Cost" column will be created/updated automatically</li>
           <li>• Make sure your Google Sheets leads are connected in Settings</li>
           <li>• COGS data will be pulled from all worksheets in your leads sheet</li>
@@ -237,7 +237,7 @@ const UpdateSellerCosts = () => {
       <div className="mt-8 border-t pt-6">
         <h3 className="text-sm font-medium text-gray-900 mb-2">Need a template?</h3>
         <p className="text-sm text-gray-600">
-          Your Excel file should have at minimum these columns: ASIN, Product Name. 
+          Your Excel file should have at minimum an ASIN column (case-insensitive: "ASIN" or "Asin"). 
           The "Seller New Cost" column will be added/updated automatically with the latest COGS from your Google Sheets.
         </p>
       </div>

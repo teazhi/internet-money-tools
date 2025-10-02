@@ -35,6 +35,7 @@ import EnhancedAnalytics from './dashboard/EnhancedAnalytics';
 import RetailerLeadAnalysis from './dashboard/RetailerLeadAnalysis';
 import DiscountOpportunities from './dashboard/DiscountOpportunities';
 import AllProductAnalytics from './dashboard/AllProductAnalytics';
+import UpdateSellerCosts from './dashboard/UpdateSellerCosts';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 // FileManager import removed - using URL-based approach
@@ -130,7 +131,7 @@ const Dashboard = () => {
       name: 'Smart Restock', 
       href: '/dashboard/enhanced-analytics', 
       icon: TrendingUp, 
-      current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics'),
+      current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics') || location.pathname.startsWith('/dashboard/update-seller-costs'),
       beta: isFeatureBeta('smart_restock')
     }] : []),
     
@@ -565,6 +566,7 @@ const Dashboard = () => {
                   <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
                   <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
                   <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
+                  <Route path="/update-seller-costs" element={<UpdateSellerCosts />} />
                 </>
               )}
               

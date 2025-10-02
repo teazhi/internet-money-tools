@@ -18139,6 +18139,129 @@ def test_discount_email_patterns():
         return jsonify({'error': f'Failed to test patterns: {str(e)}'}), 500
 
 
+@app.route('/api/update-seller-costs', methods=['POST'])
+@login_required
+def update_seller_costs():
+    """Upload Excel file and update Seller New Cost column with latest COGS from Google Sheets"""
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Check file extension
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({'error': 'Please upload an Excel file (.xlsx or .xls)'}), 400
+        
+        # Get user info
+        discord_id = session['discord_id']
+        user_record = get_user_record(discord_id)
+        if not user_record:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get config user (parent if subuser)
+        config_user_record = user_record
+        if get_user_field(user_record, 'account.user_type') == 'subuser':
+            parent_user_id = get_user_field(user_record, 'account.parent_user_id')
+            if parent_user_id:
+                parent_record = get_user_record(parent_user_id)
+                if parent_record:
+                    config_user_record = parent_record
+        
+        # Check if Google Sheets is configured
+        sheet_id = get_user_field(config_user_record, 'files.sheet_id')
+        google_tokens = get_user_field(config_user_record, 'integrations.google.tokens') or {}
+        column_mapping = get_user_column_mapping(config_user_record)
+        
+        if not sheet_id or not google_tokens.get('access_token'):
+            return jsonify({'error': 'Google Sheets not configured. Please connect your leads sheet in Settings.'}), 400
+        
+        # Read the uploaded Excel file
+        try:
+            df = pd.read_excel(file, engine='openpyxl')
+        except Exception as e:
+            return jsonify({'error': f'Failed to read Excel file: {str(e)}'}), 400
+        
+        # Check for required columns
+        required_columns = ['ASIN', 'Product Name']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return jsonify({'error': f'Missing required columns: {missing_columns}'}), 400
+        
+        # Add Seller New Cost column if it doesn't exist
+        if 'Seller New Cost' not in df.columns:
+            df['Seller New Cost'] = None
+        
+        # Fetch COGS data from all worksheets in Google Sheets
+        print(f"[INFO] Fetching COGS data from Google Sheets for user {discord_id}")
+        
+        from orders_analysis import OrdersAnalysis
+        analyzer = OrdersAnalysis("", "")  # URLs not needed for COGS fetch
+        
+        def api_call(access_token):
+            return analyzer.fetch_google_sheet_cogs_data_all_worksheets(
+                access_token,
+                sheet_id,
+                column_mapping
+            )
+        
+        # Use safe API call with token refresh
+        result = safe_google_api_call(config_user_record, api_call)
+        cogs_data = result[0] if result and isinstance(result, tuple) else result
+        
+        if not cogs_data:
+            return jsonify({
+                'error': 'No COGS data found in your Google Sheets. Make sure your sheets contain ASIN and COGS columns.'
+            }), 404
+        
+        # Update the DataFrame with COGS data
+        updated_count = 0
+        not_found_asins = []
+        
+        for index, row in df.iterrows():
+            asin = str(row['ASIN']).strip().upper()
+            
+            if asin in cogs_data:
+                # Get the most recent COGS value
+                asin_data = cogs_data[asin]
+                new_cost = asin_data.get('cogs')
+                
+                if new_cost is not None and pd.notna(new_cost):
+                    df.at[index, 'Seller New Cost'] = float(new_cost)
+                    updated_count += 1
+                else:
+                    not_found_asins.append(asin)
+            else:
+                not_found_asins.append(asin)
+        
+        # Create a BytesIO object to save the updated Excel file
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Updated Costs')
+        
+        output.seek(0)
+        
+        # Prepare response
+        response = make_response(output.read())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename="updated_seller_costs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+        
+        # Log summary
+        print(f"[SUCCESS] Updated {updated_count} products with new costs")
+        if not_found_asins:
+            print(f"[INFO] {len(not_found_asins)} ASINs not found in Google Sheets: {not_found_asins[:10]}...")
+        
+        return response
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to update seller costs: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to update seller costs: {str(e)}'}), 500
+
 if __name__ == '__main__':
     try:
         # Production configuration for Railway

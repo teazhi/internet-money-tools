@@ -4,7 +4,8 @@ import {
   TrendingUp, 
   ShoppingCart,
   Target,
-  BarChart3
+  BarChart3,
+  FileText
 } from 'lucide-react';
 
 const EnhancedAnalytics = () => {
@@ -32,6 +33,14 @@ const EnhancedAnalytics = () => {
       icon: BarChart3,
       color: 'bg-orange-500',
       href: '/dashboard/all-product-analytics'
+    },
+    {
+      id: 'update-seller-costs',
+      name: 'Update Seller Costs',
+      description: 'Upload Excel files to update seller costs with latest sourcing data from Google Sheets',
+      icon: FileText,
+      color: 'bg-blue-500',
+      href: '/dashboard/update-seller-costs'
     }
   ];
 

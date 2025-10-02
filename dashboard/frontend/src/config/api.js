@@ -35,6 +35,9 @@ export const API_ENDPOINTS = {
   // Settings endpoints
   SETTINGS: `${API_BASE_URL}/api/user/settings`,
   
+  // File processing endpoints
+  UPDATE_SELLER_COSTS: `${API_BASE_URL}/api/update-seller-costs`,
+  
   // Debug endpoints
   DEBUG_STOCK_COLUMNS: `${API_BASE_URL}/api/debug/stock-columns`,
   

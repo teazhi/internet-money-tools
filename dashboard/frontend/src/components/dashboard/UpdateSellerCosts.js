@@ -78,6 +78,11 @@ const UpdateSellerCosts = () => {
         }
       );
 
+      // Extract summary from headers
+      const updatedCount = response.headers['x-updated-count'] || '0';
+      const skippedCount = response.headers['x-skipped-count'] || '0';
+      const notFoundCount = response.headers['x-not-found-count'] || '0';
+
       // Create a download link for the updated file
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -88,7 +93,16 @@ const UpdateSellerCosts = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      setSuccess('File updated successfully! The download should start automatically.');
+      // Create detailed success message
+      let successMessage = `File updated successfully! Updated ${updatedCount} products.`;
+      if (skippedCount > 0) {
+        successMessage += ` Skipped ${skippedCount} products (Latest Approved Cost was higher).`;
+      }
+      if (notFoundCount > 0) {
+        successMessage += ` ${notFoundCount} ASINs not found in Google Sheets.`;
+      }
+
+      setSuccess(successMessage);
       setFile(null);
     } catch (err) {
       console.error('Upload error:', err);
@@ -174,6 +188,7 @@ const UpdateSellerCosts = () => {
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• Excel file must contain an "ASIN" column (case-insensitive)</li>
           <li>• The "Seller New Cost" column will be created/updated automatically</li>
+          <li>• Only updates if fetched cost is higher than "Latest Approved Cost"</li>
           <li>• Make sure your Google Sheets leads are connected in Settings</li>
           <li>• COGS data will be pulled from all worksheets in your leads sheet</li>
         </ul>

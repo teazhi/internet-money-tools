@@ -18224,9 +18224,17 @@ def update_seller_costs():
                 'error': 'No COGS data found in your Google Sheets. Make sure your sheets contain ASIN and COGS columns.'
             }), 404
         
+        # Find Latest Approved Cost column (case-insensitive)
+        latest_cost_column = None
+        for col in df.columns:
+            if 'latest' in col.lower() and 'approved' in col.lower() and 'cost' in col.lower():
+                latest_cost_column = col
+                break
+        
         # Update the DataFrame with COGS data
         updated_count = 0
         not_found_asins = []
+        skipped_count = 0
         
         for index, row in df.iterrows():
             asin = str(row[asin_column]).strip().upper()
@@ -18237,8 +18245,23 @@ def update_seller_costs():
                 new_cost = asin_data.get('cogs')
                 
                 if new_cost is not None and pd.notna(new_cost):
-                    df.at[index, 'Seller New Cost'] = float(new_cost)
-                    updated_count += 1
+                    new_cost_float = float(new_cost)
+                    
+                    # Check if Latest Approved Cost exists and is higher
+                    should_update = True
+                    if latest_cost_column and pd.notna(row.get(latest_cost_column)):
+                        try:
+                            latest_approved = float(row[latest_cost_column])
+                            if latest_approved >= new_cost_float:
+                                should_update = False
+                                skipped_count += 1
+                        except (ValueError, TypeError):
+                            # If we can't parse the latest approved cost, proceed with update
+                            pass
+                    
+                    if should_update:
+                        df.at[index, 'Seller New Cost'] = new_cost_float
+                        updated_count += 1
                 else:
                     not_found_asins.append(asin)
             else:
@@ -18256,8 +18279,15 @@ def update_seller_costs():
         response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         response.headers['Content-Disposition'] = f'attachment; filename="updated_seller_costs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
         
+        # Add summary information in custom headers
+        response.headers['X-Updated-Count'] = str(updated_count)
+        response.headers['X-Skipped-Count'] = str(skipped_count)
+        response.headers['X-Not-Found-Count'] = str(len(not_found_asins))
+        
         # Log summary
         print(f"[SUCCESS] Updated {updated_count} products with new costs")
+        if skipped_count > 0:
+            print(f"[INFO] Skipped {skipped_count} products where Latest Approved Cost was higher")
         if not_found_asins:
             print(f"[INFO] {len(not_found_asins)} ASINs not found in Google Sheets: {not_found_asins[:10]}...")
         

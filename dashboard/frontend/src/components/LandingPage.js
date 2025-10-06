@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, Shield, Zap, Users, CheckCircle, Star, ShoppingCart, Menu, X, TrendingUp, FileText, Database, Package, TrendingDown, Plus, Target, ClipboardList } from 'lucide-react';
+import Pricing from './landing/Pricing';
+import PricingComparison from './landing/PricingComparison';
 
 const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -112,6 +114,7 @@ const LandingPage = () => {
             <div className="hidden md:flex items-center space-x-6">
               <a href="#features" className="text-sm text-gray-700 hover:text-builders-600 transition-colors">Features</a>
               <a href="#dashboard" className="text-sm text-gray-700 hover:text-builders-600 transition-colors">Dashboard</a>
+              <a href="#pricing" className="text-sm text-gray-700 hover:text-builders-600 transition-colors">Pricing</a>
               <a href="#testimonials" className="text-sm text-gray-700 hover:text-builders-600 transition-colors">Reviews</a>
               <Link 
                 to="/login" 
@@ -138,6 +141,7 @@ const LandingPage = () => {
               <div className="space-y-2">
                 <a href="#features" className="block px-3 py-2 text-sm text-gray-700 hover:text-builders-600">Features</a>
                 <a href="#dashboard" className="block px-3 py-2 text-sm text-gray-700 hover:text-builders-600">Dashboard</a>
+                <a href="#pricing" className="block px-3 py-2 text-sm text-gray-700 hover:text-builders-600">Pricing</a>
                 <a href="#testimonials" className="block px-3 py-2 text-sm text-gray-700 hover:text-builders-600">Reviews</a>
                 <Link to="/login" className="block px-3 py-2 text-sm font-medium text-builders-600">Sign In</Link>
               </div>
@@ -438,6 +442,12 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+
+      {/* Pricing Section */}
+      <Pricing />
+      
+      {/* Pricing Comparison Table */}
+      <PricingComparison />
 
       {/* CTA Section */}
       <section className="py-16 bg-gradient-to-r from-builders-500 to-builders-600">

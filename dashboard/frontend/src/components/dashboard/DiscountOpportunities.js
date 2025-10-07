@@ -297,6 +297,52 @@ const DiscountOpportunities = () => {
     setDragOver(false);
   }, []);
 
+  const downloadAnalysisResults = () => {
+    if (!analysisResults) return;
+    
+    // Create CSV content
+    const headers = ['ASIN', 'Status', 'Worksheet', 'Notes'];
+    const rows = [];
+    
+    // Add found ASINs
+    if (analysisResults.asins_found_in_sheets) {
+      analysisResults.asins_found_in_sheets.forEach(item => {
+        rows.push([item.asin, 'Found', item.worksheet, '']);
+      });
+    }
+    
+    // Add not found ASINs
+    if (analysisResults.asins_not_in_sheets) {
+      analysisResults.asins_not_in_sheets.forEach(asin => {
+        rows.push([asin, 'Not Found', '', '']);
+      });
+    }
+    
+    // Add sheet ASINs not monitored
+    if (analysisResults.sheet_asins_not_in_monitors) {
+      analysisResults.sheet_asins_not_in_monitors.forEach(item => {
+        rows.push([item.asin, 'In Sheet Only', item.worksheet, 'Not being monitored']);
+      });
+    }
+    
+    // Convert to CSV
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `distill_analysis_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleFileInputChange = useCallback((e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
@@ -806,7 +852,7 @@ const DiscountOpportunities = () => {
                   >
                     <option value="">Select a retailer</option>
                     <option value="lowes">Lowes</option>
-                    <option value="misc">Misc</option>
+                    <option value="target">Target</option>
                     <option value="vitacost">Vitacost</option>
                     <option value="walmart">Walmart</option>
                     <option value="zoro">Zoro</option>
@@ -898,12 +944,21 @@ const DiscountOpportunities = () => {
             <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Monitor Analysis Results</h3>
-                <button
-                  onClick={() => setShowAnalysisModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={downloadAnalysisResults}
+                    className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                  >
+                    <FileDown className="h-4 w-4" />
+                    <span>Download CSV</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAnalysisModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
               
               {/* File Processing Info */}
@@ -1011,14 +1066,6 @@ const DiscountOpportunities = () => {
                 </div>
               )}
               
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setShowAnalysisModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm"
-                >
-                  Close
-                </button>
-              </div>
             </div>
           </div>
         )}

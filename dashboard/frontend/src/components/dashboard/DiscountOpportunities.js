@@ -304,12 +304,7 @@ const DiscountOpportunities = () => {
     const headers = ['ASIN', 'Status', 'Worksheet', 'Notes'];
     const rows = [];
     
-    // Add found ASINs
-    if (analysisResults.asins_found_in_sheets) {
-      analysisResults.asins_found_in_sheets.forEach(item => {
-        rows.push([item.asin, 'Found', item.worksheet, '']);
-      });
-    }
+    // Skip found ASINs - not needed in export
     
     // Add not found ASINs
     if (analysisResults.asins_not_in_sheets) {
@@ -1008,26 +1003,6 @@ const DiscountOpportunities = () => {
                   </div>
                 </div>
               </div>
-              
-              {/* ASINs Found in Sheets */}
-              {analysisResults.asins_found_in_sheets && analysisResults.asins_found_in_sheets.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="text-md font-semibold text-green-800 mb-3 flex items-center">
-                    <CheckCircle className="h-5 w-5 mr-2" />
-                    ASINs Found in Google Sheets ({analysisResults.asins_found_in_sheets.length})
-                  </h4>
-                  <div className="bg-green-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {analysisResults.asins_found_in_sheets.map((asinData, index) => (
-                        <div key={index} className="text-sm">
-                          <span className="font-mono text-green-700">{asinData.asin}</span>
-                          <span className="text-green-600 ml-2">({asinData.worksheet})</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
               
               {/* ASINs Not Found in Sheets */}
               {analysisResults.asins_not_in_sheets && analysisResults.asins_not_in_sheets.length > 0 && (

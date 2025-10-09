@@ -24,10 +24,7 @@ import {
   Package,
   Zap,
   TestTube,
-  ShoppingBag,
-  Mail,
   Brain,
-  Sparkles
 } from 'lucide-react';
 
 import Overview from './dashboard/Overview';
@@ -44,12 +41,8 @@ import SubUserManager from './dashboard/SubUserManager';
 import ReimbursementAnalyzer from './dashboard/ReimbursementAnalyzer';
 import MissingListings from './dashboard/MissingListings';
 import LambdaDeployment from './dashboard/LambdaDeployment';
-import EbayLister from './dashboard/EbayLister';
-import PurchaseManager from './dashboard/PurchaseManager';
-import EmailMonitoring from './EmailMonitoring';
 import Onboarding from './Onboarding';
 import ImageTest from './ImageTest';
-import AIRestockPage from './dashboard/AIRestockPage';
 
 const Dashboard = () => {
   const { user, logout, refreshUser } = useAuth();
@@ -135,15 +128,6 @@ const Dashboard = () => {
       beta: isFeatureBeta('smart_restock')
     }] : []),
     
-    // AI-Powered Features
-    ...(hasFeatureAccess('ai_analytics') || true ? [{
-      name: 'AI Restock', 
-      href: '/dashboard/ai-restock', 
-      icon: Sparkles, 
-      current: location.pathname === '/dashboard/ai-restock',
-      beta: true
-    }] : []),
-    
     ...(hasFeatureAccess('missing_listings') ? [{
       name: 'Missing Listings', 
       href: '/dashboard/missing-listings', 
@@ -160,29 +144,6 @@ const Dashboard = () => {
       beta: isFeatureBeta('reimbursements')
     }] : []),
     
-    ...(hasFeatureAccess('ebay_lister') ? [{
-      name: 'eBay Lister', 
-      href: '/dashboard/ebay-lister', 
-      icon: ShoppingBag, 
-      current: location.pathname === '/dashboard/ebay-lister',
-      beta: isFeatureBeta('ebay_lister')
-    }] : []),
-    
-    ...(hasFeatureAccess('purchase_manager') ? [{
-      name: 'Purchase Manager', 
-      href: '/dashboard/purchases', 
-      icon: ShoppingCart, 
-      current: location.pathname === '/dashboard/purchases',
-      beta: isFeatureBeta('purchase_manager')
-    }] : []),
-    
-    ...(hasFeatureAccess('email_monitoring') ? [{
-      name: 'Email Monitoring', 
-      href: '/dashboard/email-monitoring', 
-      icon: Mail, 
-      current: location.pathname === '/dashboard/email-monitoring',
-      beta: isFeatureBeta('email_monitoring')
-    }] : []),
     
     // File Manager removed - using URL-based approach
     
@@ -570,9 +531,6 @@ const Dashboard = () => {
                 </>
               )}
               
-              {/* AI-powered routes */}
-              <Route path="/ai-restock" element={<AIRestockPage />} />
-              
               {hasFeatureAccess('missing_listings') && (
                 <Route path="/missing-listings" element={<MissingListings />} />
               )}
@@ -581,17 +539,6 @@ const Dashboard = () => {
                 <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
               )}
               
-              {hasFeatureAccess('ebay_lister') && (
-                <Route path="/ebay-lister" element={<EbayLister />} />
-              )}
-              
-              {hasFeatureAccess('purchase_manager') && (
-                <Route path="/purchases" element={<PurchaseManager />} />
-              )}
-              
-              {hasFeatureAccess('email_monitoring') && (
-                <Route path="/email-monitoring" element={<EmailMonitoring />} />
-              )}
               
               {/* File Manager route removed - using URL-based approach */}
               

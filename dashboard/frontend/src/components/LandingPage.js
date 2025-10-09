@@ -37,11 +37,6 @@ const LandingPage = () => {
       description: "AI-powered inventory recommendations with priority filtering and advanced analytics"
     },
     {
-      icon: <Plus className="h-4 w-4 text-builders-500" />,
-      title: "Purchase Manager",
-      description: "Track and manage purchase orders with automated storage handling"
-    },
-    {
       icon: <Package className="h-4 w-4 text-builders-500" />,
       title: "Missing Listings",
       description: "Track and manage your expected arrivals and inventory gaps"
@@ -211,10 +206,6 @@ const LandingPage = () => {
                         <span className="ml-3 hidden md:block text-sm">Smart Restock</span>
                       </div>
                       <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
-                        <Plus className="h-4 w-4" />
-                        <span className="ml-3 hidden md:block text-sm">Purchase Manager</span>
-                      </div>
-                      <div className="text-slate-300 px-2 md:px-3 py-2 rounded-lg flex items-center hover:bg-slate-700/50">
                         <Package className="h-4 w-4" />
                         <span className="ml-3 hidden md:block text-sm">Missing Listings</span>
                       </div>
@@ -275,7 +266,7 @@ const LandingPage = () => {
                             <div>
                               <p className="caption-text">Active Orders</p>
                               <p className="text-lg md:text-xl font-bold text-purple-600">8</p>
-                              <p className="text-xs text-purple-600">Purchase Manager</p>
+                              <p className="text-xs text-purple-600">Active Orders</p>
                             </div>
                             <div className="p-2 bg-purple-50 rounded-lg">
                               <Plus className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />

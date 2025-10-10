@@ -867,23 +867,6 @@ const Overview = () => {
             </div>
           </div>
 
-          <div className="card">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <AlertTriangle className="h-8 w-8 text-red-500" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Low Stock Alerts</p>
-                {loading && !analytics ? (
-                  <SkeletonMetric />
-                ) : (
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {analyticsStats.lowStockCount || '—'}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
 
           <div className="card">
             <div className="flex items-center">
@@ -997,59 +980,8 @@ const Overview = () => {
           </div>
         </div>
 
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Stock Alerts</h3>
-          <div className="space-y-3">
-            {loading && !analytics ? (
-              // Show skeleton loaders while loading
-              [1, 2, 3, 4, 5].map(i => (
-                <SkeletonStockAlert key={i} />
-              ))
-            ) : stockAlertsData.length > 0 ? (
-              stockAlertsData.map((item) => (
-                <StockAlertItem key={item.asin} item={item} />
-              ))
-            ) : (
-              <p className="text-gray-500 text-sm">No stock alerts</p>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* 30-Day Stockout Risk - Always show */}
-      {loading && !analytics ? (
-        <SkeletonTable columns={6} rows={3} title="30-Day Stockout Risk" />
-      ) : (analytics && analytics.stockout_30d && Object.keys(analytics.stockout_30d).length > 0) ? (
-        <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">30-Day Stockout Risk</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ASIN</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sold</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stock</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Left</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Suggested Reorder</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {analytics.stockout_30d && Object.entries(analytics.stockout_30d).map(([asin, info]) => (
-                  <tr key={asin}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{asin}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{info.title}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{info.sold_today}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{info.current_stock}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-medium">{info.days_left}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{info.suggested_reorder}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
 
       {/* Purchase Insights - Integrated into existing sections above */}
 

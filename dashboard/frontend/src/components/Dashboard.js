@@ -33,6 +33,7 @@ import RetailerLeadAnalysis from './dashboard/RetailerLeadAnalysis';
 import DiscountOpportunities from './dashboard/DiscountOpportunities';
 import AllProductAnalytics from './dashboard/AllProductAnalytics';
 import UpdateSellerCosts from './dashboard/UpdateSellerCosts';
+import AdminTasks from './dashboard/AdminTasks';
 import SettingsPage from './dashboard/Settings';
 import SheetConfig from './dashboard/SheetConfig';
 // FileManager import removed - using URL-based approach
@@ -124,24 +125,17 @@ const Dashboard = () => {
       name: 'Smart Restock', 
       href: '/dashboard/enhanced-analytics', 
       icon: TrendingUp, 
-      current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics') || location.pathname.startsWith('/dashboard/update-seller-costs'),
+      current: location.pathname === '/dashboard/enhanced-analytics' || location.pathname.startsWith('/dashboard/smart-restock') || location.pathname.startsWith('/dashboard/lead-analysis') || location.pathname.startsWith('/dashboard/discount-opportunities') || location.pathname.startsWith('/dashboard/all-product-analytics'),
       beta: isFeatureBeta('smart_restock')
     }] : []),
     
-    ...(hasFeatureAccess('missing_listings') ? [{
-      name: 'Missing Listings', 
-      href: '/dashboard/missing-listings', 
-      icon: Package, 
-      current: location.pathname === '/dashboard/missing-listings',
-      beta: isFeatureBeta('missing_listings')
-    }] : []),
-    
-    ...(hasFeatureAccess('reimbursements') ? [{
-      name: 'Reimbursements', 
-      href: '/dashboard/reimbursements', 
-      icon: TrendingDown, 
-      current: location.pathname === '/dashboard/reimbursements',
-      beta: isFeatureBeta('reimbursements')
+    // Admin Tasks - combines missing listings, reimbursements, and update seller costs
+    ...((hasFeatureAccess('missing_listings') || hasFeatureAccess('reimbursements') || hasFeatureAccess('smart_restock')) ? [{
+      name: 'Admin Tasks', 
+      href: '/dashboard/admin-tasks', 
+      icon: Shield, 
+      current: location.pathname === '/dashboard/admin-tasks' || location.pathname.startsWith('/dashboard/admin-tasks'),
+      beta: false
     }] : []),
     
     
@@ -527,16 +521,17 @@ const Dashboard = () => {
                   <Route path="/lead-analysis" element={<RetailerLeadAnalysis />} />
                   <Route path="/discount-opportunities" element={<DiscountOpportunities />} />
                   <Route path="/all-product-analytics" element={<AllProductAnalytics />} />
-                  <Route path="/update-seller-costs" element={<UpdateSellerCosts />} />
                 </>
               )}
               
-              {hasFeatureAccess('missing_listings') && (
-                <Route path="/missing-listings" element={<MissingListings />} />
-              )}
-              
-              {hasFeatureAccess('reimbursements') && (
-                <Route path="/reimbursements" element={<ReimbursementAnalyzer />} />
+              {/* Admin Tasks routes */}
+              {(hasFeatureAccess('missing_listings') || hasFeatureAccess('reimbursements') || hasFeatureAccess('smart_restock')) && (
+                <>
+                  <Route path="/admin-tasks" element={<AdminTasks />} />
+                  <Route path="/admin-tasks/update-seller-costs" element={<UpdateSellerCosts />} />
+                  <Route path="/admin-tasks/missing-listings" element={<MissingListings />} />
+                  <Route path="/admin-tasks/reimbursements" element={<ReimbursementAnalyzer />} />
+                </>
               )}
               
               

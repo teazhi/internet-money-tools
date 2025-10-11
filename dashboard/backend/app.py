@@ -12256,11 +12256,17 @@ def analyze_retailer_leads():
                             source_link = str(potential_link)
                             break
             
-            # Check if ASIN is in user's inventory - try both cases
+            # Check if ASIN is in user's inventory - try multiple case variations
             inventory_data = enhanced_analytics.get(asin, {})
             if not inventory_data:
                 # Try lowercase version if uppercase didn't work
                 inventory_data = enhanced_analytics.get(asin.lower(), {})
+            if not inventory_data:
+                # Try exact case match from enhanced_analytics keys
+                for existing_asin in enhanced_analytics.keys():
+                    if existing_asin.upper() == asin:
+                        inventory_data = enhanced_analytics.get(existing_asin, {})
+                        break
             
             
             # Get retailer name for this specific row

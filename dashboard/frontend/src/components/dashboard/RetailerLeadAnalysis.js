@@ -268,6 +268,7 @@ const RetailerLeadAnalysis = () => {
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline"
+              onClick={(e) => e.stopPropagation()}
             >
               {item.asin}
             </a>
@@ -283,6 +284,7 @@ const RetailerLeadAnalysis = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink className="h-4 w-4" />
               </a>
@@ -302,6 +304,7 @@ const RetailerLeadAnalysis = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block hover:opacity-80 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <ProductImage 
                     asin={item.asin} 
@@ -320,6 +323,7 @@ const RetailerLeadAnalysis = () => {
                       rel="noopener noreferrer"
                       className="hover:text-blue-600 transition-colors"
                       title={item.product_name}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       {item.product_name.length > 60 ? 
                         `${item.product_name.substring(0, 60)}...` : 
@@ -596,7 +600,10 @@ const RetailerLeadAnalysis = () => {
                     </select>
                   </div>
                   <button
-                    onClick={exportToCSV}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportToCSV();
+                    }}
                     className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 flex items-center"
                   >
                     <Download className="h-3 w-3 mr-1" />

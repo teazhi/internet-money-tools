@@ -17,12 +17,13 @@ import { useProductImages } from '../../hooks/useProductImages';
 // Product image component with fallback
 const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
   const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const imageUrl = batchImages?.[asin];
   const isLoading = imagesLoading && !imageUrl;
 
   if (!asin) {
     return (
-      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
         <Package className="h-6 w-6 text-gray-400" />
       </div>
     );
@@ -30,7 +31,7 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
 
   if (isLoading) {
     return (
-      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+      <div className="h-12 w-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0">
         <div className="h-5 w-5 bg-gray-300 rounded animate-pulse" />
       </div>
     );
@@ -38,20 +39,25 @@ const ProductImage = ({ asin, productName, batchImages, imagesLoading }) => {
 
   if (!imageUrl || imgError) {
     return (
-      <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center">
+      <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 flex items-center justify-center flex-shrink-0">
         <Package className="h-6 w-6 text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="h-12 w-12 rounded-lg overflow-hidden border border-gray-200 bg-white">
+    <div className="h-12 w-12 rounded-lg overflow-hidden border border-gray-200 bg-white flex-shrink-0 relative">
+      {!imgLoaded && (
+        <div className="absolute inset-0 bg-gray-100 animate-pulse" />
+      )}
       <img
         src={imageUrl}
         alt={productName || `Product ${asin}`}
         className="h-full w-full object-cover"
         loading="lazy"
+        onLoad={() => setImgLoaded(true)}
         onError={() => setImgError(true)}
+        style={{ display: imgLoaded ? 'block' : 'none' }}
       />
     </div>
   );
@@ -268,7 +274,6 @@ const RetailerLeadAnalysis = () => {
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-medium text-blue-600 hover:text-blue-800 underline"
-              onClick={(e) => e.stopPropagation()}
             >
               {item.asin}
             </a>
@@ -284,8 +289,7 @@ const RetailerLeadAnalysis = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800 inline-flex items-center justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
+                >
                 <ExternalLink className="h-4 w-4" />
               </a>
             ) : (
@@ -296,7 +300,7 @@ const RetailerLeadAnalysis = () => {
       
       case 'product_name':
         return (
-          <td key={columnKey} className="px-3 py-3">
+          <td key={columnKey} className="px-3 py-3 min-w-[300px]">
             <div className="flex items-center space-x-3">
               <div className="flex-shrink-0">
                 <a 
@@ -304,7 +308,6 @@ const RetailerLeadAnalysis = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block hover:opacity-80 transition-opacity"
-                  onClick={(e) => e.stopPropagation()}
                 >
                   <ProductImage 
                     asin={item.asin} 
@@ -323,8 +326,7 @@ const RetailerLeadAnalysis = () => {
                       rel="noopener noreferrer"
                       className="hover:text-blue-600 transition-colors"
                       title={item.product_name}
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                            >
                       {item.product_name.length > 60 ? 
                         `${item.product_name.substring(0, 60)}...` : 
                         item.product_name
@@ -600,10 +602,7 @@ const RetailerLeadAnalysis = () => {
                     </select>
                   </div>
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      exportToCSV();
-                    }}
+                    onClick={exportToCSV}
                     className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 flex items-center"
                   >
                     <Download className="h-3 w-3 mr-1" />

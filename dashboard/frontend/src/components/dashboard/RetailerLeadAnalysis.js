@@ -621,7 +621,7 @@ const RetailerLeadAnalysis = () => {
               enableSearch={false}  // Search handled in parent component
               enableFilters={false}  // Filters handled in parent component
               enableSorting={true}
-              enableColumnReordering={true}
+              enableColumnReordering={false}
               enableColumnResetting={true}
               emptyIcon={Package}
               emptyTitle="No Recommendations"
